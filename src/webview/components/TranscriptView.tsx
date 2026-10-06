@@ -9,6 +9,7 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails } from "./t3/WorkLog";
 import { TimelineSystemDivider } from "./t3/TimelineSystemDivider";
 import { T3Wordmark } from "./t3/T3Wordmark";
+import { T3VSCodeIcon } from "./T3VSCodeIcon";
 import { findAssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 import { TurnChanges } from "./TurnChanges";
 
@@ -117,7 +118,7 @@ export function TranscriptView({ state, onViewport, citationTarget }: { readonly
   }, [citationTarget, id, sourceIndex, state.threadLoading, state.history.hasMore, state.history.loading, state.transcript.length, run]);
   const renderItem = useCallback(({ item }: { item: TranscriptItem }) => <div className={`timeline-row${item.item.type === "checkpoint" ? " checkpoint-row" : ""}`}><TurnItem row={item} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /></div>, [id, state.environment?.environmentId]);
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source response…"}</p></div>;
-  if (!id || (!state.transcript.length && !state.threadLoading)) return <div className="chat-empty"><T3Wordmark className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
+  if (!id || (!state.transcript.length && !state.threadLoading)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length) return <div className="chat-empty"><p>Loading conversation…</p></div>;
   return <div ref={onViewport} className="transcript-container" data-assistant-citation-viewport="" aria-label="Conversation">
     {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}

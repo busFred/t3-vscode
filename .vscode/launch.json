@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "T3: Run Extension (Isolated Server, Default Profile)",
+      "name": "T3 VSCode: Run Extension (Isolated Server, Default Profile)",
       "type": "extensionHost",
       "request": "launch",
       "runtimeExecutable": "${execPath}",
@@ -23,7 +23,7 @@
       "outFiles": ["${workspaceFolder}/dist/**/*.mjs"],
       "sourceMaps": true,
       "skipFiles": ["<node_internals>/**"],
-      "preLaunchTask": "T3: prepare development host"
+      "preLaunchTask": "T3 VSCode: prepare development host"
     }
   ]
 }

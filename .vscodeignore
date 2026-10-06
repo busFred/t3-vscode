@@ -6,4 +6,8 @@
 !dist/webview.js
 !dist/THIRD_PARTY_NOTICES.txt
 !resources/t3-icon.svg
+!resources/t3-extension.png
+!resources/t3-tab-light.svg
+!resources/t3-tab-dark.svg
+!resources/provider-icons.woff
 !vendor/LICENSE.t3code

@@ -17,6 +17,7 @@ import { ConversationActivity } from "./ConversationActivity";
 import { resolveComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 
 const runtimeLabels: Record<string, string> = { "approval-required": "Ask permission", "auto-accept-edits": "Auto-accept edits", auto: "Auto", "full-access": "Full access" };
+const steerShortcut = navigator.userAgent.includes("Mac") ? "Cmd+Enter" : "Ctrl+Enter";
 export function Composer({ state, onEditCitation, onUsage }: { readonly state: HostStateSnapshot; readonly onEditCitation: (citation: AssistantCitation, index: number) => void; readonly onUsage: () => void }) {
   const draftKey = state.activeThreadId ?? "new";
   const { text, contexts } = useComposerDraft(draftKey);
@@ -26,7 +27,6 @@ export function Composer({ state, onEditCitation, onUsage }: { readonly state: H
   const [cursor, setCursor] = useState(text.length);
   const [dismissedTrigger, setDismissedTrigger] = useState<string | null>(null);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
-  const [delivery, setDelivery] = useState<"steer" | "queue">("steer");
   const closeModels = useCallback(() => setModelsOpen(false), []);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const modelTrigger = useRef<HTMLButtonElement>(null);
@@ -104,12 +104,12 @@ export function Composer({ state, onEditCitation, onUsage }: { readonly state: H
     return () => observer.disconnect();
   }, [modelLabel, effortLabel, Boolean(effort), runtimeMode, state.appearance.fontSizeInterface]);
   const running = Boolean(thread?.activeRunId || state.queue?.activeRunId);
-  const effectiveDelivery = state.queue?.canSteer ? delivery : "queue";
-  const send = async (alternate = false) => {
+  const shortcutHint = `${running ? `Enter to queue${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Enter to send"} · Shift+Enter for a new line`;
+  const send = async (steer = false) => {
     const value = formatComposerMessage(text, contexts);
     if (!value || disabled || !selection) return;
     setBusy(true);
-    const mode = resolveComposerDispatchMode({ running, activeTurnDefault: effectiveDelivery, alternateModifier: alternate && state.queue?.canSteer === true });
+    const mode = resolveComposerDispatchMode({ running, activeTurnDefault: "queue", alternateModifier: steer && state.queue?.canSteer === true });
     const sent = await run("sendMessage", { text: value, mode, ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
     if (sent) clearDraft(draftKey);
     setBusy(false); textarea.current?.focus();
@@ -141,13 +141,13 @@ export function Composer({ state, onEditCitation, onUsage }: { readonly state: H
         }}>{context.type === "file" ? `@${fileReferenceLabel(context)}` : context.citation.comment ? "Assistant quote · Comment" : "Assistant quote"}</button>
         <button className="icon-button" aria-label={`Remove reference ${index + 1}`} onClick={() => updateDraft(draftKey, (draft) => ({ ...draft, contexts: draft.contexts.filter((_, position) => position !== index) }))}><XIcon size={12} /></button>
       </div>)}</div> : null}
-      <textarea ref={textarea} value={text} placeholder={thread?.activeRunId ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" disabled={disabled} rows={2}
+      <textarea ref={textarea} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} disabled={disabled} rows={2}
         aria-controls={suggestionsOpen ? "composer-suggestions" : undefined} aria-expanded={suggestionsOpen} aria-autocomplete="list" aria-activedescendant={suggestionsOpen && items.length ? `composer-suggestion-${highlighted}` : undefined}
         onSelect={(event) => setCursor(event.currentTarget.selectionStart)} onChange={(event) => { setText(event.target.value); setCursor(event.target.selectionStart); setDismissedTrigger(null); }} onKeyDown={(event) => {
         if (suggestionsOpen && !event.nativeEvent.isComposing) {
           if (event.key === "Escape") { event.preventDefault(); setDismissedTrigger(triggerKey); return; }
           if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setSuggestionIndex(items.length ? (highlighted + (event.key === "ArrowDown" ? 1 : items.length - 1)) % items.length : 0); return; }
-          if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") { event.preventDefault(); if (items[highlighted]) chooseSuggestion(items[highlighted]); return; }
+          if ((event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey) || event.key === "Tab") { event.preventDefault(); if (items[highlighted]) chooseSuggestion(items[highlighted]); return; }
         }
         if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(event.ctrlKey || event.metaKey); }
       }} />
@@ -156,8 +156,7 @@ export function Composer({ state, onEditCitation, onUsage }: { readonly state: H
       }}><FolderIcon size={12} /><span>{projectLabel}</span><ChevronDownIcon size={11} /></button> : null}</div>
       {!selection ? <div className="composer-hint">No models available. Configure a provider in T3 Code.</div> : null}
       <div className="composer-send-controls">{thread?.activeRunId ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
-        {running ? <label className="delivery-control"><span className="sr-only">Follow-up delivery</span><select aria-label="Follow-up delivery" value={effectiveDelivery} disabled={disabled} onChange={(event) => setDelivery(event.target.value as "queue" | "steer")}><option value="queue">Queue</option>{state.queue?.canSteer ? <option value="steer">Steer</option> : null}</select></label> : null}
-        <button className="send-button" aria-label="Send message" title={running ? `${effectiveDelivery === "queue" ? "Queue after this turn" : "Steer the current turn"}${state.queue?.canSteer ? " · Ctrl+Enter for the alternate action" : ""}` : "Send message"} disabled={disabled || !selection || (!text.trim() && !contexts.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
+        <button className="send-button" aria-label="Send message" title={running ? `Queue after this turn${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Send message"} disabled={disabled || !selection || (!text.trim() && !contexts.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
       </div></div>
     </div>
     <div ref={controls} className="composer-controls">
@@ -165,6 +164,6 @@ export function Composer({ state, onEditCitation, onUsage }: { readonly state: H
       {modelsOpen && modelTrigger.current ? <ModelPicker state={state} selection={selection} anchor={modelTrigger.current} onClose={closeModels} /> : null}
       {compactControls ? <details ref={overflow} className="composer-options-overflow" onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary className="icon-button" aria-label="Effort and permissions" title="Effort and permissions"><MoreHorizontalIcon size={16} /></summary><div className="composer-options-popup">{traits}</div></details> : traits}
     </div>
-    <div className="composer-footnote"><span>{thread?.activeRunId ? "Agent is working" : ""}</span><span>Enter to send · Shift+Enter for a new line</span></div>
+    <div className="composer-footnote"><span>{running ? "Agent is working" : ""}</span><span>{shortcutHint}</span></div>
   </div></div>;
 }

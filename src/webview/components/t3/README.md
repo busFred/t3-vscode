@@ -20,8 +20,8 @@ Portable helpers from the same revision also retain the upstream algorithms:
 Imports use the local `cn` helper and vendored request types. The system divider
 uses a native title in place of T3's tooltip dependency. Surrounding components
 adapt T3's chat layout and turn-item presentation to host snapshots and VS Code
-intents. Light/dark palette values in `styles/tokens.css` come from
-`vendor/shared/src/themePalettes.ts`.
+intents. Colors in `styles/tokens.css` follow the active VS Code theme's native
+CSS variables, with fallbacks for standalone browser fixtures.
 
 T3 source is MIT-licensed; retain [the notice](../../../../vendor/LICENSE.t3code)
 when distributing it. The local T3 reference repository is not modified.

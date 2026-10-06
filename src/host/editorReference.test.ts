@@ -43,3 +43,22 @@ test("References queue through cold webview startup and route to one focused con
   registry.remove("second-tab"); await host.removeView("second-tab"); assert.equal(registry.focusedViewId, SIDEBAR_VIEW_ID);
   assert.equal(host.snapshot("first-tab").activeThreadId, "second"); assert.equal(host.snapshot().activeThreadId, "first"); assert.equal(client.commands.length, 0);
 });
+
+test("Opening Usage preserves the last chat as the target for editor references", async (t) => {
+  const { host } = await viewsHarness(); t.after(() => host.dispose());
+  host.registerView("chat"); host.registerView("usage", "chat");
+  await host.selectThread("second", "chat");
+  const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry);
+  const chat = new FakeWebview(); const usage = new FakeWebview();
+  registry.add("chat", chat.webview); registry.add("usage", usage.webview, false);
+  bridge.attach(chat.webview, "chat"); bridge.attach(usage.webview, "usage");
+  await chat.request("getState"); await usage.request("getState");
+  await chat.request("focusView"); await usage.request("focusView");
+  registry.focus("usage"); // Native panel activation also reports focus.
+  const target = registry.focusedViewId;
+  registry.postWhenReady(target, Events.insertReference, { draftKey: host.snapshot(target).activeThreadId, reference: { label: "selected.ts" } });
+  assert.equal(target, "chat");
+  assert.equal(chat.messages.filter((raw) => (raw as { event?: string }).event === Events.insertReference).length, 1);
+  assert.equal(usage.messages.some((raw) => (raw as { event?: string }).event === Events.insertReference), false);
+  registry.remove("usage"); assert.equal(registry.focusedViewId, "chat");
+});

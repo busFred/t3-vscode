@@ -19,11 +19,12 @@ export const Methods = {
   threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab",
   searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", refreshUsage: "refreshUsage",
   queueAction: "queueAction",
+  openWebUi: "openWebUi", configureUsage: "configureUsage", showUsage: "showUsage",
 } as const;
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
 export interface RpcResult { readonly id: string; readonly result?: unknown; readonly error?: string }
-export const Events = { stateChanged: "stateChanged", showNavigation: "showNavigation", showUsage: "showUsage", insertReference: "insertReference" } as const;
+export const Events = { stateChanged: "stateChanged", showNavigation: "showNavigation", showUsage: "showUsage", insertReference: "insertReference", openInTab: "openInTab", initializeDraft: "initializeDraft", showChat: "showChat" } as const;
 export type BridgeEvent = (typeof Events)[keyof typeof Events];
 
 export interface ModelSelection {
@@ -49,8 +50,11 @@ export interface ThreadSummary {
   readonly runtimeMode: RuntimeMode; readonly interactionMode: ProviderInteractionMode;
   readonly updatedAt: string; readonly archived: boolean; readonly pinned: boolean;
   readonly activeRunId: string | null;
+  readonly workingStartedAt?: string | null;
   readonly settled?: boolean;
   readonly searchTerms?: ReadonlyArray<string>;
+  readonly pendingRuntimeRequest?: { readonly id: string; readonly kind: string; readonly createdAt: string } | null;
+  readonly branch?: string | null;
 }
 export type ThreadSearchMatch = OrchestrationThreadSearchMatch;
 export interface ComposerSuggestion {

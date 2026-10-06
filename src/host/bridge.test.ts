@@ -6,6 +6,25 @@ import { viewsHarness, publishText } from "./testing/fakeTransport.js";
 import { FakeWebview } from "./testing/fakeWebview.js";
 import { Events, type HostStateSnapshot } from "../shared/bridge.js";
 
+test("Editor handoff and account usage actions retain their originating view despite a different focused tab", async (t) => {
+  const { host } = await viewsHarness(); t.after(() => host.dispose());
+  const registry = new WebviewRegistry(); const received: unknown[] = [];
+  const bridge = new BridgeHandler(host, registry, undefined, undefined, undefined, {
+    openInTab: (id, transfer) => { received.push({ id, transfer }); host.registerView("copied", id); },
+    showUsage: (id, key) => { received.push({ id, key }); },
+  });
+  const sidebar = new FakeWebview(); const other = new FakeWebview();
+  host.registerView("other"); await host.selectThread("third", "other");
+  for (const [id, view] of [[SIDEBAR_VIEW_ID, sidebar], ["other", other]] as const) { registry.add(id, view.webview); bridge.attach(view.webview, id); }
+  registry.focus("other");
+  await sidebar.request("showUsage", { accountKey: "personal" });
+  await sidebar.request("openInTab", { draftKey: "first", draft: { text: "Unsent message", contexts: [] } });
+  assert.deepEqual(received, [{ id: SIDEBAR_VIEW_ID, key: "personal" }, { id: SIDEBAR_VIEW_ID, transfer: { draftKey: "first", draft: { text: "Unsent message", contexts: [] } } }]);
+  assert.equal(host.snapshot("copied").activeThreadId, "first");
+  assert.equal(host.snapshot("other").activeThreadId, "third");
+  await assert.rejects(sidebar.request("openInTab", { draftKey: "third", draft: { text: "Stale session", contexts: [] } }), /changed/);
+});
+
 test("Bridge replies and state pushes are scoped to each originating webview", async (t) => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose());
   const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry);

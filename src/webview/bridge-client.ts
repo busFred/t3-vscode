@@ -75,6 +75,8 @@ class Bridge {
     handlers.add(handler);
     return () => handlers.delete(handler);
   }
+  readViewState<T>(): T | undefined { return this.api?.getState<T>(); }
+  saveViewState<T>(state: T): void { this.api?.setState(state); }
 }
 
 export const bridge = new Bridge();

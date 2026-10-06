@@ -30,6 +30,29 @@ test("Three conversation views select and stream independently on one connection
   assert.equal(client.connections, 1); assert.equal(client.shellStarts, 1);
   await assert.rejects(host.selectThread("outside-thread", "tab-two"), /current workspace/);
 });
+test("An editor handoff copies the current session once and keeps future selections independent", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  await host.selectThread("second");
+  publishText(client, "second", "existing conversation");
+  host.registerView("handoff", SIDEBAR_VIEW_ID);
+  assert.equal(host.snapshot("handoff").activeThreadId, "second");
+  assert.equal(host.snapshot("handoff").transcript[0]?.sourceThreadId, "second");
+  assert.equal(client.threadStarts, 2, "Copying a session reuses its subscription");
+  await host.selectThread("third");
+  assert.equal(host.snapshot("handoff").activeThreadId, "second");
+  await host.selectThread("first", "handoff");
+  assert.equal(host.snapshot().activeThreadId, "third");
+  await host.removeView("handoff");
+  assert.throws(() => host.registerView("orphan", "handoff"), /closed/);
+  assert.throws(() => host.snapshot("orphan"), /closed/);
+});
+test("The browser action opens the current session on the discovered local UI without credentials", async (t) => {
+  const { host } = await viewsHarness(); t.after(() => host.dispose());
+  assert.equal(host.webUiUrl(), "http://audit.invalid/audit/first");
+  host.registerView("second-view"); await host.selectThread("second", "second-view");
+  assert.equal(host.webUiUrl("second-view"), "http://audit.invalid/audit/second");
+  assert.equal(host.webUiUrl().includes("fake"), false);
+});
 test("Views of the same conversation share one subscription until its last view leaves", async (t) => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose());
   host.registerView("tab-one"); host.registerView("tab-two");

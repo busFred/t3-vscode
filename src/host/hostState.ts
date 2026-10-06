@@ -112,11 +112,11 @@ export class HostState {
     this.listeners.set(listener, viewId); listener(this.snapshot(viewId));
     return () => { this.listeners.delete(listener); };
   }
-  registerView(viewId: string): void {
+  registerView(viewId: string, sourceViewId?: string): void {
     if (this.disposed) throw new Error("T3 extension is closed.");
     if (this.views.has(viewId)) throw new Error("This conversation view is already open.");
-    // New editor tabs start blank instead of copying another tab's conversation.
-    this.views.set(viewId, blankView()); this.emit();
+    // A handoff copies the selection once; subsequent changes belong to each view.
+    this.views.set(viewId, sourceViewId ? { ...this.requireView(sourceViewId), sending: false } : blankView()); this.emit();
   }
   removeView(viewId: string): Promise<void> {
     if (viewId === SIDEBAR_VIEW_ID) return Promise.resolve();
@@ -728,7 +728,16 @@ export class HostState {
         modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
         updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
         activeRunId: thread.activeRunId,
+        workingStartedAt: thread.activityRunStartedAt !== undefined
+          ? (thread.activityRunStartedAt ? DateTime.formatIso(thread.activityRunStartedAt) : null)
+          : thread.activeRunId && thread.activeRunId === thread.latestRunId && !thread.latestRunCompletedAt
+            ? (thread.latestRunStartedAt || thread.latestRunRequestedAt ? DateTime.formatIso((thread.latestRunStartedAt ?? thread.latestRunRequestedAt)!) : null) : null,
         settled: thread.settledOverride === "settled", searchTerms: threadPullRequestSearchTerms(thread),
+        branch: thread.branch,
+        pendingRuntimeRequest: (() => {
+          const request = thread.pendingRuntimeRequest ?? this.threads.get(thread.id)?.projection?.runtimeRequests.find((request) => request.status === "pending");
+          return request ? { id: request.id, kind: request.kind, createdAt: DateTime.formatIso(request.createdAt) } : null;
+        })(),
       })),
       providers: this.client.config?.providers ?? [],
       archiveLoaded: this.archive !== null,
@@ -745,6 +754,16 @@ export class HostState {
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
       threadLoading: state?.loading ?? false, sending: view.sending,
     };
+  }
+  webUiUrl(viewId = SIDEBAR_VIEW_ID): string {
+    if (!this.server || this.phase !== "ready") throw new Error("Connect to a local T3 Code server first.");
+    const origin = this.server.runtime?.devUrl || this.server.origin;
+    const url = new URL(origin);
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error("Invalid T3 web UI address.");
+    const threadId = this.snapshot(viewId).activeThreadId;
+    url.pathname = threadId ? `/${encodeURIComponent(this.server.descriptor.environmentId)}/${encodeURIComponent(threadId)}` : "/";
+    url.search = ""; url.hash = "";
+    return url.href;
   }
   private setPhase(phase: HostPhase, notice?: string): void { this.phase = phase; this.notice = notice; this.emit(); }
   private scheduleEmit(): void {

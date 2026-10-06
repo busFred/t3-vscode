@@ -1,4 +1,4 @@
-/* T3 Code base palettes (vendor/shared/src/themePalettes.ts), MIT. */
+/* Native VS Code theme colors drive every surface; upstream T3 typography/layout remains. */
 @import "tailwindcss" source(none);
 @source "../";
 @custom-variant dark (&:is(.dark, .dark *));
@@ -28,48 +28,26 @@
 }
 
 :root {
-  --background: #fcfcfc;
-  --foreground: #27272a;
-  --card: #ffffff;
-  --muted: #fafafa;
-  --muted-foreground: #505b6c;
-  --secondary-label: #505b6c;
-  --icon-muted: #505b6c;
-  --border: #e4e4e7;
-  --input: #d4d4d8;
-  --primary: #1b4ed8;
-  --primary-foreground: #ffffff;
-  --ring: #1b4ed8;
-  --destructive: #c10007;
-  --warning: #bb4d00;
-  --sidebar: #fafafa;
-  --sidebar-foreground: #27272a;
-  --sidebar-row-hover: #fcfcfc;
-  --sidebar-row-active: #ffffff;
-  --message-surface: #f4f4f5;
-  --code-background: #ffffff;
-}
-.dark {
-  --background: #0a0a0a;
-  --foreground: #f5f5f5;
-  --card: #111111;
-  --muted: #111111;
-  --muted-foreground: #b9c1ce;
-  --secondary-label: #b9c1ce;
-  --icon-muted: #b9c1ce;
-  --border: #191919;
-  --input: #1e1e1e;
-  --primary: #346bf1;
-  --primary-foreground: #ffffff;
-  --ring: #346bf1;
-  --destructive: #ff6467;
-  --warning: #ffb900;
-  --sidebar: #000000;
-  --sidebar-foreground: #f1f3f7;
-  --sidebar-row-hover: #131313;
-  --sidebar-row-active: #1a1b1b;
-  --message-surface: #141414;
-  --code-background: #111111;
+  --background: var(--vscode-editor-background, #fcfcfc);
+  --foreground: var(--vscode-foreground, #27272a);
+  --card: var(--vscode-editorWidget-background, var(--background));
+  --muted: var(--vscode-sideBar-background, #fafafa);
+  --muted-foreground: var(--vscode-descriptionForeground, #505b6c);
+  --secondary-label: var(--muted-foreground);
+  --icon-muted: var(--muted-foreground);
+  --border: var(--vscode-panel-border, #e4e4e7);
+  --input: var(--vscode-input-border, var(--vscode-widget-border, #929292));
+  --primary: var(--vscode-textLink-foreground, #1b4ed8);
+  --primary-foreground: var(--vscode-button-foreground, #fff);
+  --ring: var(--vscode-focusBorder, #1b4ed8);
+  --destructive: var(--vscode-errorForeground, #c10007);
+  --warning: var(--vscode-editorWarning-foreground, #bb4d00);
+  --sidebar: var(--vscode-sideBar-background, #fafafa);
+  --sidebar-foreground: var(--vscode-sideBar-foreground, var(--foreground));
+  --sidebar-row-hover: var(--vscode-list-hoverBackground, #f4f4f5);
+  --sidebar-row-active: var(--vscode-list-inactiveSelectionBackground, #e4e4e7);
+  --message-surface: var(--vscode-textBlockQuote-background, var(--muted));
+  --code-background: var(--vscode-textCodeBlock-background, var(--background));
 }
 
 * { box-sizing: border-box; }
@@ -93,7 +71,7 @@ select, input { color: inherit; background: var(--card); }
 .icon-button:hover, .icon-button.selected { color: var(--foreground); background: var(--muted); }
 .btn { display: inline-flex; align-items: center; justify-content: center; padding: 5px 11px; border-radius: 7px; border: 1px solid var(--border); background: var(--card); color: var(--foreground); font-size: 0.75rem; }
 .btn:hover { background: var(--muted); }
-.btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+.btn.primary { background: var(--vscode-button-background, var(--primary)); color: var(--primary-foreground); border-color: var(--vscode-button-background, var(--primary)); }
 .text-button { background: none; border: 0; padding: 0; text-align: left; overflow-wrap: anywhere; }
 .text-button:hover, a:hover { text-decoration: underline; }
 .subtle { color: var(--muted-foreground); font-size: 0.75rem; }
@@ -188,9 +166,9 @@ select, input { color: inherit; background: var(--card); }
 .file-change { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .file-change-heading { display: flex; align-items: center; gap: 7px; padding: 8px; font-size: 0.6875rem; }.file-change-heading button { color: var(--foreground); }
 .file-counts { display: flex; gap: 6px; margin-left: auto; }
-.addition { color: #22c55e; }.deletion { color: var(--destructive); }
+.addition { color: var(--vscode-gitDecoration-addedResourceForeground, #16a34a); }.deletion { color: var(--destructive); }
 .diff { overflow: auto; font-size: var(--font-size-code, 13px); line-height: 1.7; }.diff code > span { display: block; min-height: 1.7em; padding: 0 8px; white-space: pre; }
-.diff-add { background: #22c55e15; color: #16a34a; }.dark .diff-add { color: #86efac; }.diff-remove { background: #ef444415; color: #dc2626; }.dark .diff-remove { color: #fca5a5; }.diff-hunk { color: var(--primary); }
+.diff-add { background: var(--vscode-diffEditor-insertedTextBackground, #22c55e15); color: var(--vscode-gitDecoration-addedResourceForeground, #16a34a); }.diff-remove { background: var(--vscode-diffEditor-removedTextBackground, #ef444415); color: var(--vscode-gitDecoration-deletedResourceForeground, #dc2626); }.diff-hunk { color: var(--primary); }
 .plan-card { border: 1px solid var(--border); background: var(--card); border-radius: 22px; padding: 20px; margin-bottom: 20px; }.plan-card > header { display: flex; align-items: center; gap: 9px; margin-bottom: 16px; font-size: 0.8125rem; }.plan-card .copy-button { margin-left: auto; }.plan-badge { border-radius: 5px; background: var(--muted); padding: 2px 6px; font-size: 0.6875rem; color: var(--muted-foreground); }
 .todo-card { margin: 8px 0 18px; font-size: 0.75rem; }.todo-step { display: flex; gap: 8px; padding: 4px 0; }.todo-step.completed { color: var(--muted-foreground); }.todo-step.running > span:first-child { color: var(--primary); }
 .turn-error { color: var(--destructive); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; font-size: 0.75rem; }
@@ -236,7 +214,7 @@ body[data-surface="sidebar"] .timeline-header { padding-top: 8px; padding-bottom
   .user-bubble { max-width: 95%; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
-body.vscode-high-contrast { --border: var(--vscode-contrastBorder, #fff); --input: var(--vscode-contrastBorder, #fff); }
+body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vscode-contrastBorder, #fff); --input: var(--vscode-contrastBorder, #fff); }
 
 /* Font preferences are supplied by the host from native VS Code settings. */
 .approval-card .font-mono { font-size: var(--font-size-code, 13px); }
@@ -249,7 +227,7 @@ body.vscode-high-contrast { --border: var(--vscode-contrastBorder, #fff); --inpu
 .citation-comment-quote { max-height: 6rem; overflow: auto; border-left: 2px solid var(--input); padding-left: 0.625rem; margin-bottom: 0.5rem; white-space: pre-wrap; font-size: 0.75rem; color: var(--muted-foreground); }
 .citation-comment textarea { width: 100%; min-height: 4rem; resize: vertical; border: 0; outline: none; background: transparent; font-size: var(--font-size-prompt, 14px); }
 .citation-comment-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
-::highlight(t3-citation-comment), ::highlight(t3-assistant-citation) { background: #4c8dff55; }
+::highlight(t3-citation-comment), ::highlight(t3-assistant-citation) { background: var(--vscode-editor-selectionBackground, #4c8dff55); }
 .citation-link { display: inline-block; position: relative; }
 .citation-link > button { color: var(--primary); border-bottom: 1px dotted currentColor; }
 .citation-preview { position: fixed; z-index: 50; width: min(352px, calc(100vw - 16px)); max-height: min(240px, calc(100vh - 16px)); overflow: auto; padding: 0.75rem; border: 1px solid var(--input); border-radius: 0.5rem; background: var(--card); box-shadow: 0 8px 24px #0004; font-size: 0.75rem; }.citation-preview blockquote { border-left: 2px solid var(--input); padding-left: 0.5rem; white-space: pre-wrap; }.citation-preview p { margin: 0.5rem 0; white-space: pre-wrap; }
@@ -277,12 +255,11 @@ body.vscode-high-contrast { --border: var(--vscode-contrastBorder, #fff); --inpu
 .queue-editor > div { display: flex; justify-content: flex-end; gap: 5px; }
 .task-segments { display: flex; width: 65px; gap: 2px; flex-shrink: 0; }
 .task-segments i { flex: 1; height: 3px; border-radius: 2px; background: var(--input); }
-.task-segments i.completed { background: #16a56c; }.task-segments i.running { background: var(--primary); }
+.task-segments i.completed { background: var(--vscode-gitDecoration-addedResourceForeground, #16a56c); }.task-segments i.running { background: var(--primary); }
 .task-list > li { display: flex; align-items: baseline; gap: 7px; padding: 5px 9px; }
 .task-list > li > span { flex: 1; }.task-list > li > svg { align-self: center; flex-shrink: 0; }
 .task-list > li > small { color: var(--muted-foreground); }
-.task-list > li.completed > svg { color: #16a56c; }.task-list > li.running > svg { color: var(--primary); }
-.delivery-control select { width: auto; border: 0; border-radius: 3px; background: transparent; color: var(--foreground); font-size: 0.6875rem; padding: 2px; }
+.task-list > li.completed > svg { color: var(--vscode-gitDecoration-addedResourceForeground, #16a56c); }.task-list > li.running > svg { color: var(--primary); }
 @media (max-width: 400px) { .task-segments { display: none; } .queue-steer span { display: none; } }
 .turn-changes { position: relative; border: 1px solid var(--border); border-radius: 6px; background: var(--muted); margin: 3px 0 10px; font-size: 0.75rem; }
 .turn-changes > details > summary { display: flex; align-items: center; gap: 7px; min-height: 35px; padding: 7px 85px 7px 10px; cursor: pointer; }
@@ -328,3 +305,74 @@ body.vscode-high-contrast { --border: var(--vscode-contrastBorder, #fff); --inpu
 .usage-account-label { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; font-size: 0.75rem; margin: 6px 0; }
 .usage-account-label small { color: var(--muted-foreground); }
 @media (max-width: 440px) { .usage-window { flex-direction: column; align-items: stretch; padding: 12px; gap: 7px; } .usage-remaining strong { font-size: 1.5rem; } .usage-body { padding: 8px 10px 12px; } }
+
+/* Dedicated session management fills the whole sidebar; history never overlays chat. */
+.sidebar-view { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--sidebar); color: var(--sidebar-foreground); }
+.sidebar-modes { display: flex; flex-shrink: 0; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--border); }
+.sidebar-modes button { border: 0; border-bottom: 2px solid transparent; padding: 6px 8px; color: var(--foreground); background: transparent; font-size: .75rem; }
+.sidebar-modes button[aria-pressed=true] { border-bottom-color: var(--ring); }
+.sidebar-view .dedicated-sessions, .sessions-page .dedicated-sessions { display: flex; position: static; inset: auto; flex: 1; width: 100%; min-width: 0; border: 0; box-shadow: none; }
+.sessions-page { flex-direction: column; background: var(--sidebar); }
+.sessions-return { margin: 6px 12px; align-self: flex-start; }
+.dedicated-sessions .history-heading { font-size: .6875rem; font-weight: 600; }
+.thread { color: var(--foreground); border-radius: 3px; padding: 7px 8px; }
+.thread.active { background: var(--vscode-list-activeSelectionBackground, var(--sidebar-row-active)); color: var(--vscode-list-activeSelectionForeground, var(--foreground)); }
+.thread-title { font-size: .8125rem; font-weight: 550; }
+.thread-branch { display: block; font-size: .625rem; color: var(--muted-foreground); }
+.thread.active .thread-branch { color: inherit; opacity: .8; }
+.thread-title-line, .thread-meta { display: flex; align-items: center; min-width: 0; gap: 6px; }
+.thread-title-line .thread-title, .thread-meta > small { flex: 1; min-width: 0; }
+.thread-meta { margin-top: 2px; }
+.thread-working, .thread-input { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: .625rem; color: var(--primary); }
+.thread.active .thread-working { color: inherit; }
+@media (max-width: 240px) { .thread-working > span, .thread-input > span { display: none; } }
+.provider-icon { width: 12px; height: 12px; flex-shrink: 0; }
+.thread-input { display: inline-flex; color: var(--primary); }
+.thread.active .thread-input { color: inherit; }
+.history-settings { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); }
+.history-settings > span { font-size: .625rem; color: var(--muted-foreground); }
+.account-usage { flex-shrink: 0; border-bottom: 1px solid var(--border); max-height: 50%; overflow: auto; }
+.account-usage > summary { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: .625rem; cursor: pointer; list-style: none; }
+.account-usage > summary > svg { transform: rotate(-90deg); }
+.account-usage[open] > summary > svg { transform: none; }
+.account-usage summary > span { margin-left: auto; color: var(--muted-foreground); }
+.account-usage-body { padding: 3px 12px 12px; }
+.usage-account-choice { display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 10px; }
+.usage-account-choice select { flex: 1; min-width: 0; max-width: 100%; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); padding: 3px; font-size: .75rem; }
+.account-limit { margin: 9px 0; }
+.account-limit > div:first-child { display: flex; justify-content: space-between; gap: 5px; font-size: .6875rem; }
+.account-limit-bar { height: 4px; border-radius: 2px; background: var(--input); margin: 3px 0; overflow: hidden; }
+.account-limit-bar i { display: block; height: 100%; background: var(--vscode-progressBar-background, var(--primary)); }
+.account-limit small { color: var(--muted-foreground); font-size: .5625rem; }
+.account-usage-actions { display: flex; justify-content: space-between; gap: 6px; font-size: .6875rem; }
+.usage-page { flex: 1; min-height: 0; overflow: auto; }
+.usage-page .usage-panel { width: 100%; max-height: none; border: 0; border-radius: 0; box-shadow: none; }
+.usage-panel > header { gap: 8px; }
+.usage-panel > header .text-button { font-size: .6875rem; }
+.usage-bar { height: 6px; background: var(--input); }
+.usage-bar > span { background: var(--vscode-progressBar-background, var(--primary)); }
+.usage-window { border-radius: 4px; }
+.usage-remaining { min-width: 100px; }
+.usage-remaining strong { font-size: 1.5rem; }
+.composer-box { background: var(--vscode-input-background, var(--card)); color: var(--vscode-input-foreground, var(--foreground)); border-radius: 3px; }
+.composer-box textarea::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted-foreground)); }
+.thread-search { background: var(--vscode-input-background, var(--card)); color: var(--vscode-input-foreground, var(--foreground)); border-radius: 3px; }
+.chat-heading strong { font-size: .875rem; }
+.server-setup { flex: 1; min-height: 0; overflow: auto; padding: 22px; max-width: 700px; width: 100%; margin: auto; }
+.server-setup > header { display: flex; align-items: center; gap: 10px; }
+.server-setup h1 { font-size: 1.25rem; font-weight: 600; margin: 0; }
+.server-setup h2 { font-size: .875rem; font-weight: 550; margin: 0 0 6px; }
+.server-setup p { color: var(--muted-foreground); font-size: .75rem; margin: 6px 0; }
+.server-setup section { padding: 15px 0; border-bottom: 1px solid var(--border); }
+.server-setup .text-button { font-size: .75rem; }
+.setup-command { display: flex; align-items: center; gap: 7px; justify-content: space-between; background: var(--code-background); border: 1px solid var(--input); border-radius: 3px; padding: 3px 7px; margin: 8px 0; }
+.setup-command code { font-size: var(--font-size-code); overflow-wrap: anywhere; }
+.setup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.setup-actions button { gap: 5px; }
+.setup-diagnostics { color: var(--muted-foreground); font-size: .6875rem; overflow-wrap: anywhere; }
+@media (max-width: 400px) { .server-setup { padding: 16px; } }
+.sidebar-chat-heading { min-height: 30px; flex-shrink: 0; padding: 4px 10px; border-bottom: 1px solid var(--border); font-size: .875rem; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.composer-box textarea { color: var(--vscode-input-foreground, var(--foreground)); }
+.thread-search input::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted-foreground)); }
+.thread.active .thread-match { color: inherit; }

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import "./styles/tokens.css";
 
-// The native VS Code theme selects the T3 light or dark palette.
+// Keep portable dark utility classes aligned; colors come from native VS Code variables.
 const syncTheme = () => {
   const dark = document.body.classList.contains("vscode-dark") || document.body.classList.contains("vscode-high-contrast");
   document.documentElement.classList.toggle("dark", dark);

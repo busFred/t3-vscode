@@ -7,11 +7,16 @@ import { ChatView } from "./components/ChatView";
 import { StatusView } from "./components/StatusView";
 import { DEFAULT_APPEARANCE } from "../shared/appearance";
 import type { InsertReferenceEvent } from "../shared/composerContext";
-import { addDraftContext } from "./composerDrafts";
+import { addDraftContext, readDraft, updateDraft } from "./composerDrafts";
+import type { DraftTransfer } from "../shared/viewDraft";
+import { SidebarView } from "./components/SidebarView";
+import { ServerSetup } from "./components/ServerSetup";
+import { UsagePanel } from "./components/UsagePanel";
 
 export function App() {
   const [state, setState] = useState<HostStateSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [usage, setUsage] = useState<{ accountKey?: string } | null>(null);
   const appearance = state?.appearance ?? DEFAULT_APPEARANCE;
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -30,27 +35,44 @@ export function App() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return false; }
   }, [receive]);
   useEffect(() => {
+    const open = (data?: unknown) => setUsage(typeof data === "string" ? { accountKey: data } : {});
+    const event = (event: Event) => {
+      const accountKey = (event as CustomEvent).detail;
+      void run(Methods.showUsage, typeof accountKey === "string" ? { accountKey } : undefined);
+    };
+    const off = bridge.on(Events.showUsage, open);
+    window.addEventListener("t3-show-usage", event);
+    return () => { off(); window.removeEventListener("t3-show-usage", event); };
+  }, [run]);
+  useEffect(() => bridge.on(Events.openInTab, (data) => {
+    const draftKey = typeof data === "string" ? data : state?.activeThreadId ?? "new";
+    void run(Methods.openInTab, { draftKey, draft: readDraft(draftKey) });
+  }), [state?.activeThreadId, run]);
+  useEffect(() => {
     const off = bridge.on(Events.stateChanged, (data) => receive(data as HostStateSnapshot));
     const offReference = bridge.on(Events.insertReference, (data) => {
       const event = data as InsertReferenceEvent; addDraftContext(event.draftKey, event.reference);
       window.dispatchEvent(new CustomEvent("t3-focus-composer"));
+    });
+    const offDraft = bridge.on(Events.initializeDraft, (data) => {
+      const transfer = data as DraftTransfer;
+      updateDraft(transfer.draftKey, () => transfer.draft);
     });
     let notified = false;
     const focus = () => { if (!notified) { notified = true; void run(Methods.focusView); } };
     const blur = () => { notified = false; };
     window.addEventListener("focus", focus); window.addEventListener("blur", blur); window.addEventListener("pointerdown", focus);
     void run(Methods.getState);
-    return () => { off(); offReference(); window.removeEventListener("focus", focus); window.removeEventListener("blur", blur); window.removeEventListener("pointerdown", focus); };
+    return () => { off(); offReference(); offDraft(); window.removeEventListener("focus", focus); window.removeEventListener("blur", blur); window.removeEventListener("pointerdown", focus); };
   }, [run, receive]);
   let content;
-  if (!state) content = <StatusView title="Opening T3 Code…" detail="Connecting to the extension host." />;
-  else if (state.phase === "ready") content = <ChatView state={state} onAppearance={() => { void run(Methods.openSettings); }} />;
+  if (!state) content = <StatusView title="Opening T3 VSCode…" detail="Connecting to the extension host." />;
+  else if (state.phase === "ready") content = document.body.dataset.surface === "usage" ? <UsagePanel state={state} {...(usage ?? {})} embedded onClose={() => {}} /> : document.body.dataset.surface === "sidebar" ? <SidebarView state={state} onAppearance={() => { void run(Methods.openSettings); }} /> : <ChatView state={state} onAppearance={() => { void run(Methods.openSettings); }} />;
+  else if (state.phase === "no-server") content = <ServerSetup state={state} />;
   else content = <StatusView
-    title={state.phase === "no-server" ? "T3 server unavailable" : state.phase === "error" ? "Connection interrupted" : state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}
-    detail={state.notice ?? (state.phase === "no-server" ? `Start the T3 server for ${state.home}, then retry the connection.` : state.environment?.label ?? state.home)}
-    actions={state.phase === "no-server" ? [
-      { label: "Retry connection", onClick: () => { void run(Methods.reconnect); } },
-    ] : state.phase === "error" ? [
+    title={state.phase === "error" ? "Connection interrupted" : state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}
+    detail={state.notice ?? state.environment?.label ?? state.home}
+    actions={state.phase === "error" ? [
       { label: "Reconnect", onClick: () => { void run(Methods.reconnect); } },
       { label: "Pair again", onClick: () => { void run(Methods.startPairing); } },
     ] : []}
@@ -58,5 +80,6 @@ export function App() {
   return <Actions value={run}><div className="app">
     {error ? <div className="error-banner" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError(null)}><XIcon size={14} /></button></div> : null}
     {content}
+    {usage && state && document.body.dataset.surface !== "usage" ? <UsagePanel state={state} {...usage} onClose={() => setUsage(null)} /> : null}
   </div></Actions>;
 }

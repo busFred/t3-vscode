@@ -17,6 +17,9 @@ import { FONT_SIZE_KEYS, resolveAppearance, type AppearanceSettings } from "./sh
 import { editorReference } from "./host/editorReference.js";
 import type { FileReference } from "./shared/composerContext.js";
 import { registerNativeDiff } from "./host/nativeDiff.js";
+import { UsageStatusBar } from "./host/usageStatusBar.js";
+import { InputNotificationTracker } from "./host/inputNotifications.js";
+import type { DraftTransfer } from "./shared/viewDraft.js";
 
 let hostState: HostState | null = null;
 
@@ -25,7 +28,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const home = resolveT3Home(config.get<string>("t3Home"));
   const serverStartupHint = context.extensionMode === vscode.ExtensionMode.Development
     && resolve(home) === `/tmp/t3-vscode-dev-${basename(context.extensionUri.fsPath)}`
-    ? "This F5 session uses an isolated development server. In the original VS Code window, run Terminal → Run Task → T3: start isolated server. Leave its terminal running, then retry the connection."
+    ? "This F5 session uses an isolated development server. In the original VS Code window, run Terminal → Run Task → T3 VSCode: start isolated server. Leave its terminal running, then retry the connection."
     : undefined;
 
   const client = new T3Client();
@@ -37,29 +40,51 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const registry = new WebviewRegistry();
   const showSettings = () => vscode.commands.executeCommand("workbench.action.openSettings", `@ext:${context.extension.id}`);
-  const bridge = new BridgeHandler(hostState, registry, showSettings, undefined, registerNativeDiff(context));
-  const provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState);
-  hostState.onDidChangeState(() => {
+  let provider: T3WebviewProvider;
+  const meters = new UsageStatusBar(() => hostState!.snapshot(registry.focusedViewId));
+  const bridge = new BridgeHandler(hostState, registry, showSettings, undefined, registerNativeDiff(context), {
+    openInTab: (id, draft) => provider.createPanel(id, draft),
+    showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(),
+  });
+  provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState);
+  const notifications = new InputNotificationTracker();
+  const unlisten = hostState.onDidChangeState((state) => {
     bridge.pushState();
     provider.updateTitles();
+    meters.update();
+    for (const thread of notifications.update(state)) {
+      void vscode.window.showInformationMessage(`T3 VSCode: "${thread.title || "Untitled session"}" needs ${thread.pendingRuntimeRequest?.kind === "user_input" ? "your input" : "your approval"}.`, "Open session").then(async (choice) => {
+        if (choice !== "Open session" || !hostState?.snapshot().threads.some((item) => item.id === thread.id)) return;
+        try { await hostState.selectThread(thread.id); await provider.createPanel(SIDEBAR_VIEW_ID); }
+        catch (cause) { await vscode.window.showErrorMessage(String(cause)); }
+      });
+    }
   });
+  const unfocus = registry.onDidFocusView(() => meters.update());
   context.subscriptions.push(
+    meters, { dispose: unlisten }, { dispose: unfocus },
     vscode.window.registerWebviewViewProvider("t3.webview", provider, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
-    vscode.commands.registerCommand("t3-vscode.openInTab", () => provider.createPanel()),
+    vscode.commands.registerCommand("t3-vscode.openInTab", () => provider.requestEditorHandoff()),
     vscode.commands.registerCommand("t3-vscode.openInSideBar", async () => {
       await vscode.commands.executeCommand("t3.webview.focus");
+      registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showChat, undefined);
     }),
     vscode.commands.registerCommand("t3-vscode.pair", () => hostState?.pairNow()),
     vscode.commands.registerCommand("t3-vscode.reconnect", () => hostState?.reconnect()),
-    vscode.commands.registerCommand("t3-vscode.newThread", () => hostState?.newThread()),
+    vscode.commands.registerCommand("t3-vscode.newThread", async () => { await hostState?.newThread(); await provider.createPanel(SIDEBAR_VIEW_ID); }),
     vscode.commands.registerCommand("t3-vscode.showThreads", () => provider.showThreads()),
-    vscode.commands.registerCommand("t3-vscode.showUsage", () => provider.showUsage()),
+    vscode.commands.registerCommand("t3-vscode.showUsage", (accountKey?: string) => provider.showUsage(accountKey)),
+    vscode.commands.registerCommand("t3-vscode.configureUsage", () => meters.configure()),
+    vscode.commands.registerCommand("t3-vscode.openWebUi", async () => {
+      try { await vscode.env.openExternal(vscode.Uri.parse(hostState!.webUiUrl(SIDEBAR_VIEW_ID))); }
+      catch (cause) { await vscode.window.showInformationMessage(String(cause)); }
+    }),
     vscode.commands.registerCommand("t3-vscode.fontSettings", showSettings),
     vscode.commands.registerCommand("t3-vscode.insertReference", async () => {
       const editor = vscode.window.activeTextEditor;
-      if (!editor) { await vscode.window.showInformationMessage("Select text in a file to reference it in T3 Code."); return; }
+      if (!editor) { await vscode.window.showInformationMessage("Select text in a file to reference it in T3 VSCode."); return; }
       try { await provider.insertReference(editorReference(editor, vscode.workspace.getWorkspaceFolder(editor.document.uri)?.uri.fsPath)); }
       catch (cause) { await vscode.window.showErrorMessage(String(cause)); }
     }),
@@ -82,6 +107,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (FONT_SIZE_KEYS.some((key) => event.affectsConfiguration(`t3-vscode.${key}`))) hostState?.refreshAppearance();
+      if (event.affectsConfiguration("t3-vscode.usage")) meters.update();
       if (event.affectsConfiguration("t3-vscode.t3Home")) {
         void vscode.window
           .showInformationMessage("T3 home setting changed. Reload the window to apply it.", "Reload")
@@ -163,21 +189,28 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
   }
 
   updateTitles(): void {
-    const titleForView = (id: string) => {
-      const state = this.host.snapshot(id);
-      return state.threads.find((thread) => thread.id === state.activeThreadId)?.title;
-    };
-    if (this.sidebar) this.sidebar.title = "T3 Code";
-    for (const [id, panel] of this.panels) panel.title = titleForView(id) || "T3 Code";
+    if (this.sidebar) this.sidebar.title = "T3 VSCode";
+    for (const [id, panel] of this.panels) if (id !== this.usageViewId) panel.title = "T3 VSCode";
   }
 
   async showThreads(): Promise<void> {
     await vscode.commands.executeCommand("t3.webview.focus");
     this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showNavigation, undefined);
   }
-  async showUsage(): Promise<void> {
+  private usageViewId: string | undefined;
+  async showUsage(accountKey?: string, sourceViewId = this.registry.focusedViewId): Promise<void> {
+    let panel = this.usageViewId ? this.panels.get(this.usageViewId) : undefined;
+    if (!panel) {
+      const id = await this.createPanel(sourceViewId, undefined, "usage");
+      this.usageViewId = id; panel = this.panels.get(id);
+      if (panel) panel.title = "T3 VSCode · Usage";
+    }
+    panel?.reveal(panel.viewColumn);
+    this.registry.postWhenReady(this.usageViewId!, Events.showUsage, accountKey);
+  }
+  async requestEditorHandoff(): Promise<void> {
     await vscode.commands.executeCommand("t3.webview.focus");
-    this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, undefined);
+    this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.openInTab, this.host.snapshot(SIDEBAR_VIEW_ID).activeThreadId ?? "new");
   }
   async insertReference(reference: FileReference): Promise<void> {
     const id = this.registry.focusedViewId;
@@ -187,23 +220,26 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
     else await vscode.commands.executeCommand("t3.webview.focus");
   }
 
-  createPanel(): void {
+  async createPanel(sourceViewId = SIDEBAR_VIEW_ID, transfer?: DraftTransfer, surface: "panel" | "usage" = "panel"): Promise<string> {
     const id = `panel_${crypto.randomUUID()}`;
-    const panel = vscode.window.createWebviewPanel("t3Panel", "T3 Code", vscode.ViewColumn.One, {
+    this.host.registerView(id, sourceViewId);
+    const panel = vscode.window.createWebviewPanel("t3Panel", "T3 VSCode", vscode.ViewColumn.One, {
       ...this.webviewOptions(),
       retainContextWhenHidden: true,
     });
-    this.host.registerView(id);
+    panel.iconPath = { light: vscode.Uri.joinPath(this.extensionUri, "resources", "t3-tab-light.svg"), dark: vscode.Uri.joinPath(this.extensionUri, "resources", "t3-tab-dark.svg") };
     this.panels.set(id, panel);
-    this.registry.add(id, panel.webview);
+    this.registry.add(id, panel.webview, surface !== "usage");
     this.registry.focus(id);
     this.bridge.attach(panel.webview, id);
-    panel.webview.html = this.htmlFor(panel.webview, "panel");
+    if (transfer) this.registry.postWhenReady(id, Events.initializeDraft, transfer);
+    panel.webview.html = this.htmlFor(panel.webview, surface);
     panel.onDidChangeViewState(({ webviewPanel }) => { if (webviewPanel.active) this.registry.focus(id); });
     panel.onDidDispose(() => {
       this.registry.remove(id); this.panels.delete(id);
       void this.host.removeView(id).catch((cause) => vscode.window.showErrorMessage(String(cause)));
     });
+    return id;
   }
 
   private webviewOptions(): vscode.WebviewOptions {
@@ -213,7 +249,7 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
     };
   }
 
-  private htmlFor(webview: vscode.Webview, surface: "sidebar" | "panel"): string {
+  private htmlFor(webview: vscode.Webview, surface: "sidebar" | "panel" | "usage"): string {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "webview.js"));
     const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
     const csp = [
@@ -232,7 +268,7 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>T3 Code</title>
+  <title>T3 VSCode</title>
 </head>
 <body data-surface="${surface}">
   <div id="root"></div>

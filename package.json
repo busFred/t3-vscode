@@ -1,8 +1,8 @@
 {
   "name": "t3-vscode",
-  "displayName": "T3 Code",
-  "description": "Thin VS Code client for a T3 Code server — chat with provider agents (Kimi via ACP registry, Codex, Claude, …) from the sidebar or an editor tab.",
-  "version": "0.0.6",
+  "displayName": "T3 VSCode",
+  "description": "Workspace-scoped T3 Code sessions, chat, references and account usage in VS Code.",
+  "version": "0.0.7",
   "publisher": "t3-vscode",
   "repository": {
     "type": "git",
@@ -23,7 +23,7 @@
       "activitybar": [
         {
           "id": "t3-sidebar",
-          "title": "T3 Code",
+          "title": "T3 VSCode",
           "icon": "resources/t3-icon.svg"
         }
       ]
@@ -33,7 +33,7 @@
         {
           "type": "webview",
           "id": "t3.webview",
-          "name": "T3 Code"
+          "name": "T3 VSCode"
         }
       ]
     },
@@ -41,60 +41,72 @@
       {
         "command": "t3-vscode.openInTab",
         "title": "Open Chat in Editor Tab",
-        "category": "T3",
+        "category": "T3 VSCode",
         "icon": "$(link-external)"
       },
       {
         "command": "t3-vscode.newThread",
         "title": "New Thread",
-        "category": "T3",
+        "category": "T3 VSCode",
         "icon": "$(add)"
       },
       {
         "command": "t3-vscode.showUsage",
         "title": "Usage",
-        "category": "T3",
+        "category": "T3 VSCode",
         "icon": "$(graph)"
       },
       {
         "command": "t3-vscode.showThreads",
         "title": "History",
-        "category": "T3",
+        "category": "T3 VSCode",
         "icon": "$(history)"
       },
       {
         "command": "t3-vscode.threadActions",
         "title": "Thread Actions",
-        "category": "T3"
+        "category": "T3 VSCode"
       },
       {
         "command": "t3-vscode.openInSideBar",
         "title": "Open Chat in Sidebar",
-        "category": "T3",
+        "category": "T3 VSCode",
         "icon": "$(layout-sidebar-left)"
       },
       {
         "command": "t3-vscode.pair",
         "title": "Pair with T3 Server",
-        "category": "T3",
+        "category": "T3 VSCode",
         "icon": "$(plug)"
       },
       {
         "command": "t3-vscode.fontSettings",
         "title": "Font Settings",
-        "category": "T3",
+        "category": "T3 VSCode",
         "icon": "$(text-size)"
       },
       {
         "command": "t3-vscode.insertReference",
         "title": "Reference Editor Selection",
-        "category": "T3"
+        "category": "T3 VSCode"
       },
       {
         "command": "t3-vscode.reconnect",
         "title": "Reconnect to T3 Server",
-        "category": "T3",
+        "category": "T3 VSCode",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "t3-vscode.openWebUi",
+        "title": "Open Web UI",
+        "category": "T3 VSCode",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "t3-vscode.configureUsage",
+        "title": "Configure Status Meters",
+        "category": "T3 VSCode",
+        "icon": "$(graph)"
       }
     ],
     "keybindings": [
@@ -148,11 +160,16 @@
           "command": "t3-vscode.pair",
           "when": "view == t3.webview",
           "group": "2_connection"
+        },
+        {
+          "command": "t3-vscode.openWebUi",
+          "when": "view == t3.webview",
+          "group": "navigation@4"
         }
       ]
     },
     "configuration": {
-      "title": "T3 Code",
+      "title": "T3 VSCode",
       "properties": {
         "t3-vscode.t3Home": {
           "type": "string",
@@ -182,6 +199,51 @@
           "maximum": 18,
           "scope": "window",
           "description": "Font size in pixels for code blocks, diffs and tool output, independent of interface and prompt sizes. Changes apply immediately."
+        },
+        "t3-vscode.usage.followActiveConversation": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Show the remaining subscription limits of the provider used by the focused conversation. Month, week and session appear in that order."
+        },
+        "t3-vscode.usage.pinnedAccounts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "window",
+          "markdownDescription": "Accounts to keep in the status bar alongside the active conversation. Use [Configure Status Meters](command:t3-vscode.configureUsage) to choose accounts. Each account has its own meter; missing quota windows show \u2014."
+        }
+      }
+    },
+    "icons": {
+      "t3-vscode-codex": {
+        "description": "T3 VSCode codex provider icon",
+        "default": {
+          "fontPath": "./resources/provider-icons.woff",
+          "fontCharacter": "\\E001"
+        }
+      },
+      "t3-vscode-claude": {
+        "description": "T3 VSCode claude provider icon",
+        "default": {
+          "fontPath": "./resources/provider-icons.woff",
+          "fontCharacter": "\\E002"
+        }
+      },
+      "t3-vscode-kimi": {
+        "description": "T3 VSCode kimi provider icon",
+        "default": {
+          "fontPath": "./resources/provider-icons.woff",
+          "fontCharacter": "\\E003"
+        }
+      },
+      "t3-vscode-other": {
+        "description": "T3 VSCode other provider icon",
+        "default": {
+          "fontPath": "./resources/provider-icons.woff",
+          "fontCharacter": "\\E004"
         }
       }
     }
@@ -230,5 +292,6 @@
     "typescript": "^5.9.0",
     "vite": "^6.3.3",
     "vite-plugin-css-injected-by-js": "^3.5.2"
-  }
+  },
+  "icon": "resources/t3-extension.png"
 }

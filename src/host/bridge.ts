@@ -5,16 +5,20 @@ import { SIDEBAR_VIEW_ID, type HostState } from "./hostState.js";
 import { resolveChatFileLink } from "./fileLinks.js";
 import type { TurnDiff, TurnDiffFile } from "./turnDiff.js";
 import type { ReviewDiffFileContentsResult } from "@t3tools/contracts";
+import { parseDraftTransfer, type DraftTransfer } from "../shared/viewDraft.js";
 
 export class WebviewRegistry {
   private readonly webviews = new Map<string, vscode.Webview>();
+  private readonly chatViews = new Set<string>();
   private readonly ready = new Set<string>();
   private readonly pending = new Map<string, Array<{ event: BridgeEvent; data: unknown }>>();
   private focused = SIDEBAR_VIEW_ID;
-  get focusedViewId(): string { return this.webviews.has(this.focused) ? this.focused : SIDEBAR_VIEW_ID; }
-  focus(id: string): void { if (this.webviews.has(id)) this.focused = id; }
-  add(id: string, webview: vscode.Webview): void { this.webviews.set(id, webview); this.ready.delete(id); }
-  remove(id: string): void { this.webviews.delete(id); this.ready.delete(id); this.pending.delete(id); if (this.focused === id) this.focused = SIDEBAR_VIEW_ID; }
+  private readonly focusListeners = new Set<() => void>();
+  get focusedViewId(): string { return this.chatViews.has(this.focused) ? this.focused : SIDEBAR_VIEW_ID; }
+  focus(id: string): void { if (this.chatViews.has(id) && this.focused !== id) { this.focused = id; this.focusListeners.forEach((listener) => listener()); } }
+  onDidFocusView(listener: () => void): () => void { this.focusListeners.add(listener); return () => this.focusListeners.delete(listener); }
+  add(id: string, webview: vscode.Webview, acceptsChatFocus = true): void { this.webviews.set(id, webview); if (acceptsChatFocus) this.chatViews.add(id); else this.chatViews.delete(id); this.ready.delete(id); }
+  remove(id: string): void { this.webviews.delete(id); this.chatViews.delete(id); this.ready.delete(id); this.pending.delete(id); if (this.focused === id) { this.focused = SIDEBAR_VIEW_ID; this.focusListeners.forEach((listener) => listener()); } }
   postWhenReady(id: string, event: BridgeEvent, data: unknown): void {
     if (this.ready.has(id)) { void this.webviews.get(id)?.postMessage({ event, data }); return; }
     const queue = this.pending.get(id) ?? []; queue.push({ event, data }); this.pending.set(id, queue);
@@ -37,11 +41,17 @@ export class BridgeHandler {
   private readonly showSettings: () => PromiseLike<unknown>;
   private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean> };
   private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
+  private readonly viewActions: { openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:t3-vscode.t3-vscode"),
     prompts = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
       confirmDelete: async (title: string): Promise<boolean> => (await (await import("vscode")).window.showWarningMessage(`Delete "${title}"?`, { modal: true }, "Delete thread")) === "Delete thread",
-    }, openDiff: BridgeHandler["openDiff"] = async () => { throw new Error("Native diff editor is unavailable."); }) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; this.prompts = prompts; this.openDiff = openDiff; }
+    }, openDiff: BridgeHandler["openDiff"] = async () => { throw new Error("Native diff editor is unavailable."); },
+    viewActions: {
+      openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown;
+      showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown;
+      configureUsage?: () => PromiseLike<unknown>;
+    } = {}) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; this.prompts = prompts; this.openDiff = openDiff; this.viewActions = viewActions; }
   async performThreadAction(id: string, action: string, title?: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     const thread = this.hostState.snapshot(viewId).threads.find((thread) => thread.id === id);
     if (!thread) throw new Error("This thread is not available in the current workspace.");
@@ -120,7 +130,22 @@ export class BridgeHandler {
           if (params.title !== undefined && typeof params.title !== "string") throw new Error("Invalid thread title.");
           await this.performThreadAction(id(), stringParam(params, "action"), typeof params.title === "string" ? params.title : undefined, viewId); break;
         case "forkFromResponse": await this.hostState.forkFromResponse(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId"), viewId); break;
-        case "openInTab": await (await import("vscode")).commands.executeCommand("t3-vscode.openInTab"); break;
+        case "openInTab": {
+          const transfer = parseDraftTransfer(params, this.hostState.snapshot(viewId).activeThreadId ?? "new");
+          if (this.viewActions.openInTab) await this.viewActions.openInTab(viewId, transfer);
+          else await (await import("vscode")).commands.executeCommand("t3-vscode.openInTab", viewId);
+          break;
+        }
+        case "configureUsage":
+          if (this.viewActions.configureUsage) await this.viewActions.configureUsage();
+          else await (await import("vscode")).commands.executeCommand("t3-vscode.configureUsage");
+          break;
+        case "showUsage":
+          if (params.accountKey !== undefined && typeof params.accountKey !== "string") throw new Error("Invalid usage account.");
+          if (this.viewActions.showUsage) await this.viewActions.showUsage(viewId, params.accountKey as string | undefined);
+          else await (await import("vscode")).commands.executeCommand("t3-vscode.showUsage", params.accountKey);
+          break;
+        case "openWebUi": await (await import("vscode")).env.openExternal((await import("vscode")).Uri.parse(this.hostState.webUiUrl(viewId))); break;
         case "copyText": {
           if (typeof params.text !== "string") throw new Error("Invalid text.");
           await (await import("vscode")).env.clipboard.writeText(params.text); break;

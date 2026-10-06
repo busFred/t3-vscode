@@ -10,7 +10,9 @@ import { viewsHarness, publishText } from "../src/host/testing/fakeTransport.js"
 import { Events, type RpcMessage } from "../src/shared/bridge.js";
 import { DEFAULT_APPEARANCE, type AppearanceSettings } from "../src/shared/appearance.js";
 import type { FavoriteModel } from "../src/shared/bridge.js";
-import { ProviderInstanceId, ProviderDriverKind, RunId, ThreadId, ProjectId } from "@t3tools/contracts";
+import { ProviderInstanceId, ProviderDriverKind, RunId, ThreadId, ProjectId, RuntimeRequestId } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
+import { v2Now } from "../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 import { collectAssistantCitations, serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
 import { publishTurn, turnPatch } from "../src/host/testing/turnFixture.js";
 import { publishActivity } from "../src/host/testing/activityFixture.js";
@@ -36,7 +38,7 @@ let deleteConfirmed = false;
 const openedDiffs: Array<{ turn: number; path: string; old: string; current: string }> = [];
 const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry, async () => { settingsOpened += 1; }, {
   rename: async () => "Renamed through history", confirmDelete: async () => deleteConfirmed,
-}, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); });
+}, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); }, { showUsage: (id, key) => { registry.postWhenReady(id, Events.showUsage, key); } });
 const views = new Map<string, FakeWebview>(); const sinks = new Map<string, Set<ServerResponse>>();
 for (const id of [SIDEBAR_VIEW_ID, "tab-one", "tab-two", "tab-three"]) {
   if (id !== SIDEBAR_VIEW_ID) host.registerView(id);
@@ -120,7 +122,7 @@ try {
     assert.equal(await page.locator(".chat-heading strong").textContent(), "New conversation");
     assert.equal(await page.locator(".chat-empty h1").textContent(), "What would you like to build?");
     assert.equal(await page.locator(".projects-sidebar").isVisible(), false);
-    assert.equal(await page.locator(".project-heading").count(), 1);
+    assert.equal(await page.locator(".project-heading").count(), 0);
     assert.equal(await page.getByText("Outside workspace", { exact: true }).count(), 0);
     assert.equal(await page.getByRole("button", { name: "Outside conversation", exact: true }).count(), 0);
     return page;
@@ -155,7 +157,7 @@ try {
   const subscriptionsBeforeFonts = client.threadStarts; const commandsBeforeFonts = client.commands.length;
   const drafts = await Promise.all(pages.map((page) => page.getByRole("textbox", { name: "Message", exact: true }).inputValue()));
   await first.getByRole("button", { name: "History", exact: true }).click();
-  await first.getByRole("button", { name: "T3 Code settings", exact: true }).click();
+  await first.getByRole("button", { name: "T3 VSCode settings", exact: true }).click();
   await first.getByRole("button", { name: "Close history", exact: true }).click();
   await first.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some((entry) => entry.method === "openSettings"));
   assert.equal(settingsOpened, 1); assert.equal(await first.getByRole("dialog").count(), 0);
@@ -172,13 +174,30 @@ try {
   assert.equal(host.snapshot("tab-one").activeThreadId, selections[0]);
   const sidebar = await browser.newPage({ viewport: { width: 360, height: 820 } });
   sidebar.on("pageerror", (error) => errors.push(error.message));
-  await sidebar.goto(`http://127.0.0.1:${address.port}/?view=${SIDEBAR_VIEW_ID}`); await expectFonts(sidebar, preferences);
+  await sidebar.goto(`http://127.0.0.1:${address.port}/?view=${SIDEBAR_VIEW_ID}`);
+  await sidebar.locator(".dedicated-sessions").waitFor();
   assert.equal(await sidebar.locator(".chat-header").count(), 0);
+  assert.equal(await sidebar.locator(".dedicated-sessions").isVisible(), true);
+  assert.equal(await sidebar.locator(".account-usage").evaluate((element) => (element as HTMLDetailsElement).open), false);
+  const originalShell = client.shell;
+  client.shell = { ...client.shell, threads: client.shell.threads.map((thread) => thread.id === "second" ? { ...thread, pendingRuntimeRequest: { id: RuntimeRequestId.make("browser-input"), kind: "user_input", createdAt: v2Now } } : thread.id === "third" ? { ...thread, status: "running", activityRunStartedAt: DateTime.makeUnsafe(new Date(Date.now() - 20 * 60_000).toISOString()) } : thread) };
+  client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
+  await sidebar.locator('[data-thread-id="second"] .thread-input').waitFor();
+  await sidebar.locator('[data-thread-id="third"] .thread-working time').waitFor();
+  assert.equal(await sidebar.locator('.thread-working svg').evaluate((node) => getComputedStyle(node).animationName), "none");
+  assert.equal(await sidebar.locator('.thread .provider-icon').first().evaluate((node) => node.getBoundingClientRect().width), 12);
+  assert.equal(await sidebar.locator('.thread-input svg').first().evaluate((node) => node.getBoundingClientRect().width), 13);
+  assert.equal(await sidebar.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+  await sidebar.screenshot({ path: `${evidence}/sessions-input-working.png` });
+  client.shell = originalShell; client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
+  await sidebar.getByRole("button", { name: "Chat", exact: true }).click();
+  await sidebar.getByRole("textbox", { name: "Message", exact: true }).waitFor();
+  await expectFonts(sidebar, preferences);
   assert.equal(await sidebar.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
   preferences = DEFAULT_APPEARANCE; host.refreshAppearance();
   await Promise.all([...pages, sidebar].map((page) => expectFonts(page, preferences)));
   assert.equal(await sidebar.locator(".composer-box select, .composer-box .model-trigger").count(), 0, "Plain selectors must live below the input");
-  assert.equal(await sidebar.locator(".composer-box").evaluate((node) => getComputedStyle(node).borderRadius), "4px");
+  assert.equal(await sidebar.locator(".composer-box").evaluate((node) => getComputedStyle(node).borderRadius), "3px");
   assert.equal(await sidebar.locator(".model-trigger svg").count(), 1, "Model only needs its dropdown arrow");
   await sidebar.setViewportSize({ width: 170, height: 820 });
   await sidebar.getByLabel("Effort and permissions", { exact: true }).click();
@@ -190,7 +209,11 @@ try {
   assert.equal(await sidebar.locator("details[open]").count(), 0);
   assert.equal(await sidebar.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await sidebar.screenshot({ path: `${evidence}/composer-170-light.png` });
-  await sidebar.evaluate(() => { document.body.className = "vscode-dark"; });
+  await sidebar.evaluate(() => {
+    document.body.className = "vscode-dark";
+    const vars = { 'editor-background': '#1f1f1f', foreground: '#cccccc', 'sideBar-background': '#181818', 'input-background': '#313131', 'input-foreground': '#cccccc', 'descriptionForeground': '#9da5b4', 'textLink-foreground': '#4daafc', 'panel-border': '#444444', 'input-border': '#666666' };
+    for (const [key, value] of Object.entries(vars)) document.documentElement.style.setProperty(`--vscode-${key}`, value);
+  });
   await sidebar.waitForFunction(() => document.documentElement.classList.contains("dark"));
   await sidebar.screenshot({ path: `${evidence}/composer-170-dark.png` });
   await sidebar.setViewportSize({ width: 360, height: 820 });
@@ -301,6 +324,7 @@ try {
   await contextTarget.click({ button: "right" });
   await second.getByRole("menuitem", { name: "Rename thread", exact: true }).click();
   await second.getByRole("button", { name: "Renamed through history", exact: true }).waitFor();
+  await second.getByRole("button", { name: "Close history", exact: true }).click();
   assert.equal(await third.locator(".chat-heading strong").textContent(), "Renamed through history");
   publishText(client, "third", "Response with a persisted run for forking", 3, { runId: RunId.make("fork-run") });
   await third.getByRole("button", { name: "Fork from this response", exact: true }).click();
@@ -338,6 +362,7 @@ try {
   assert.equal(client.pathSearches.at(-1)?.cwd, "/tmp/t3-vscode");
   await input.fill("/usage"); await second.getByRole("option").filter({ hasText: "/usage-limits" }).click();
   await second.getByRole("dialog", { name: "Usage / Limits" }).waitFor();
+  await second.getByRole("combobox", { name: "Usage account" }).selectOption({ label: "Codex Personal" });
   await second.getByText("91%", { exact: false }).first().waitFor();
   assert.equal(host.snapshot("tab-two").activeThreadId, "second");
   await second.getByRole("button", { name: "Refresh usage", exact: true }).click();
@@ -346,6 +371,7 @@ try {
   await second.keyboard.press("Escape"); await second.getByRole("dialog", { name: "Usage / Limits" }).waitFor({ state: "hidden" });
   await input.fill("Draft survives navigation");
   client.searchMatches = { matches: [{ threadId: ThreadId.make("second"), projectId: ProjectId.make("project-v2"), source: "assistant", snippet: "Switch the model in the composer", messageCreatedAt: null }, { threadId: ThreadId.make("outside-thread"), projectId: ProjectId.make("outside"), source: "user", snippet: "model", messageCreatedAt: null }] };
+  await second.getByRole("button", { name: "History", exact: true }).click();
   await second.getByRole("textbox", { name: "Search threads" }).fill("model");
   await second.locator('.thread[data-thread-id="second"] .thread-match').waitFor();
   assert.equal(await second.locator('.thread[data-thread-id="outside-thread"]').count(), 0);
@@ -377,7 +403,7 @@ try {
   await third.screenshot({ path: `${evidence}/sidebar-slash-menu.png` });
   assert.equal(await third.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
   await third.keyboard.press("Escape");
-  console.log("PASS: default-closed history at all sizes, compact header ordering, scoped message snippets, separate settlement/archive, keyboard slash and file menus, native quota pools, adjacent-turn file diffs and narrow sidebar without overflow.");
+  console.log("PASS: default-closed history at all sizes, compact header ordering, scoped message snippets, separate settlement/archive, keyboard slash and file menus, account-specific quota windows, adjacent-turn file diffs and narrow sidebar without overflow.");
   publishActivity(client, "second");
   await second.getByRole("button", { name: "Collapse queued messages" }).waitFor();
   await second.getByRole("button", { name: "Expand tasks: 1 of 3 complete" }).click();
@@ -388,21 +414,32 @@ try {
   await second.getByText("Edited queued follow-up", { exact: true }).waitFor();
   await second.getByRole("button", { name: "Reorder queued message" }).nth(1).press("ArrowUp");
   await second.waitForFunction(() => document.querySelector('.queued-preview')?.textContent === "Queued follow-up 2");
-  await second.getByRole("combobox", { name: "Follow-up delivery" }).selectOption("queue");
-  await input.fill("Queued from the editor"); await input.press("Enter");
-  let dispatched = client.commands.findLast((command) => command.type === "message.dispatch");
-  assert.equal(dispatched?.type, "message.dispatch"); if (dispatched?.type === "message.dispatch") assert.equal(dispatched.dispatchMode.type, "queue_after_active");
-  await second.getByRole("combobox", { name: "Follow-up delivery" }).selectOption("steer");
-  await input.fill("Queue with the alternate shortcut"); await input.press("Control+Enter");
-  dispatched = client.commands.findLast((command) => command.type === "message.dispatch"); if (dispatched?.type === "message.dispatch") assert.equal(dispatched.dispatchMode.type, "queue_after_active");
-  await input.fill("Steering from the editor"); await input.press("Enter");
-  dispatched = client.commands.findLast((command) => command.type === "message.dispatch"); if (dispatched?.type === "message.dispatch") assert.equal(dispatched.deliveryIntent, "steer");
+  assert.equal(await second.getByRole("combobox", { name: "Follow-up delivery" }).count(), 0);
+  const submitFollowUp = async (page: Page, text: string, shortcut: string, mode: "auto" | "queue" | "steer") => {
+    const message = page.getByRole("textbox", { name: "Message", exact: true });
+    await message.fill(text); await message.press(shortcut);
+    await page.waitForFunction(() => (document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.value === "");
+    const command = client.commands.findLast((item) => item.type === "message.dispatch");
+    assert.equal(command?.type, "message.dispatch");
+    if (command?.type === "message.dispatch") {
+      assert.equal(command.text, text);
+      assert.equal(command.dispatchMode.type, mode === "queue" ? "queue_after_active" : "start_immediately");
+      assert.equal(command.deliveryIntent, mode === "queue" ? undefined : mode);
+    }
+  };
+  await submitFollowUp(second, "Queued from the editor", "Enter", "queue");
+  await submitFollowUp(second, "Steering from the editor", "Control+Enter", "steer");
+  await submitFollowUp(second, "Steering with the macOS modifier", "Meta+Enter", "steer");
   await input.fill("Independent draft after queue actions");
   await second.screenshot({ path: `${evidence}/queue-and-running-tasks.png` });
   await host.selectThread("second", "tab-three");
   await third.evaluate(() => { document.body.dataset.surface = "sidebar"; });
+  host.refreshAppearance();
+  await third.getByRole("button", { name: "Chat", exact: true }).click();
   await third.getByRole("button", { name: "Collapse queued messages" }).waitFor();
-  await third.getByRole("combobox", { name: "Follow-up delivery" }).selectOption("queue");
+  assert.equal(await third.getByRole("combobox", { name: "Follow-up delivery" }).count(), 0);
+  await submitFollowUp(third, "Queued from the sidebar", "Enter", "queue");
+  await submitFollowUp(third, "Steering from the sidebar", "Control+Enter", "steer");
   await third.getByRole("textbox", { name: "Message", exact: true }).fill("Sidebar queue draft");
   await third.screenshot({ path: `${evidence}/sidebar-queue-and-tasks.png` });
   assert.equal(await third.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
@@ -412,7 +449,15 @@ try {
   await third.getByRole("button", { name: "Collapse queued messages" }).waitFor({ state: "hidden" });
   assert.equal(await input.inputValue(), "Independent draft after queue actions");
   assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Sidebar queue draft");
-  console.log("PASS: queue/steer and Ctrl+Enter alternate, queued-message editing, keyboard reordering, promotion/cancellation across two views, current-run task progress, and independent drafts on a narrow sidebar.");
+  publishActivity(client, "second", false);
+  await second.waitForFunction(() => (document.querySelector('[aria-label="Steer with queued message"]') as HTMLButtonElement)?.disabled);
+  await submitFollowUp(second, "Unsupported steering safely queues", "Control+Enter", "queue");
+  assert.equal((await input.getAttribute("title"))?.includes("to steer"), false);
+  publishTurn(client, "second");
+  await second.waitForFunction(() => document.querySelector('textarea[aria-label="Message"]')?.getAttribute("title")?.startsWith("Enter to send"));
+  await submitFollowUp(second, "Idle Enter sends immediately", "Enter", "auto");
+  await submitFollowUp(second, "Idle Ctrl+Enter sends immediately", "Control+Enter", "auto");
+  console.log("PASS: Enter queues and Ctrl/Cmd+Enter steers in editor/sidebar chat, unsupported steering queues, idle shortcuts send normally; queued-message editing, reordering and promotion/cancellation preserve independent drafts.");
   assert.deepEqual(errors, []);
   console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
   console.log(`Screenshots: ${evidence}`);
