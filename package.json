@@ -126,7 +126,7 @@
     "dev:webview": "vite build --watch",
     "typecheck": "tsc --noEmit",
     "vscode:prepublish": "pnpm run build",
-    "test": "tsx --test src/host/*.test.ts src/shared/*.test.ts"
+    "test": "tsx --test src/host/*.test.ts src/shared/*.test.ts scripts/*.test.mjs"
   },
   "dependencies": {
     "@legendapp/list": "3.3.5",

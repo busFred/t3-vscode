@@ -9,6 +9,8 @@
       "args": [
         "--new-window",
         "--profile=Default",
+        "--user-data-dir=${workspaceFolder}/.t3/vscode-profile",
+        "--extensions-dir=${workspaceFolder}/.t3/vscode-profile/extensions",
         "--extensionDevelopmentPath=${workspaceFolder}",
         "${workspaceFolder}"
       ],
@@ -20,7 +22,7 @@
       "outFiles": ["${workspaceFolder}/dist/**/*.mjs"],
       "sourceMaps": true,
       "skipFiles": ["<node_internals>/**"],
-      "preLaunchTask": "T3: build"
+      "preLaunchTask": "T3: prepare development host"
     }
   ]
 }

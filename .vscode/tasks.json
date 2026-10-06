@@ -5,6 +5,19 @@
   },
   "tasks": [
     {
+      "label": "T3: prepare Default profile copy",
+      "type": "process",
+      "command": "node",
+      "args": ["scripts/prepare-vscode-profile.mjs"],
+      "problemMatcher": []
+    },
+    {
+      "label": "T3: prepare development host",
+      "dependsOn": ["T3: prepare Default profile copy", "T3: build"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
       "label": "T3: build",
       "type": "process",
       "command": "pnpm",
