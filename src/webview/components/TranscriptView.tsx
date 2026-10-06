@@ -10,6 +10,7 @@ import { WorkLogBlock, WorkLogButton, WorkLogDetails } from "./t3/WorkLog";
 import { TimelineSystemDivider } from "./t3/TimelineSystemDivider";
 import { T3Wordmark } from "./t3/T3Wordmark";
 import { findAssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
+import { TurnChanges } from "./TurnChanges";
 
 function CopyButton({ text }: { text: string }) {
   const run = useActions(); const [copied, setCopied] = useState(false);
@@ -20,7 +21,7 @@ function ForkButton({ row, threadId }: { row: TranscriptItem; threadId: string }
   if (!row.canFork) return null;
   return <button className="icon-button fork-button" title="Fork from this response" aria-label="Fork from this response" disabled={busy} onClick={() => {
     setBusy(true); void run("forkFromResponse", { threadId, sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }).finally(() => setBusy(false));
-  }}><GitForkIcon size={13} /><span>Fork</span></button>;
+  }}><GitForkIcon size={13} /></button>;
 }
 function Disclosure({ label, icon, children, row, threadId }: { label: string; icon: ReactNode; children: ReactNode; row: TranscriptItem; threadId: string }) {
   const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false);
@@ -65,7 +66,7 @@ const TurnItem = memo(function TurnItem({ row, threadId, environmentId }: { row:
     case "web_search": return <Disclosure label={item.title ?? `Searched the web${item.patterns?.length ? `: ${item.patterns.join(", ")}` : ""}`} icon={<GlobeIcon size={14} />} row={row} threadId={threadId}>{item.results?.map((result, index) => <div className="search-result" key={index}><button className="text-button" onClick={() => { if (result.url) void run("openLink", { href: result.url }); }}>{result.title ?? result.url ?? "Search result"}</button>{result.snippet ? <p>{result.snippet}</p> : null}</div>)}</Disclosure>;
     case "approval_request": return <TimelineSystemDivider label={item.status === "waiting" || item.status === "pending" ? "Approval requested" : "Approval handled"} detail={item.prompt} />;
     case "user_input_request": return <section className="question-history">{item.questions.map((question) => <div key={question.id}><strong>{question.question}</strong>{item.questionAnswer?.answers[question.id] !== undefined ? <p>{getQuestionAnswerText(item.questionAnswer.answers[question.id])}</p> : <p className="subtle">{item.status === "pending" || item.status === "waiting" ? "Answer below to continue." : item.status}</p>}</div>)}</section>;
-    case "checkpoint": return item.files.length ? <details className="checkpoint"><summary><FileIcon size={13} />{item.files.length} changed {item.files.length === 1 ? "file" : "files"}</summary>{item.files.map((file) => <button className="text-button" key={file.path} onClick={() => { void run("openLink", { href: file.path, threadId }); }}>{file.path}<span className="addition">+{file.additions}</span><span className="deletion">−{file.deletions}</span></button>)}</details> : null;
+    case "checkpoint": return <TurnChanges row={row} threadId={threadId} />;
     case "run_interrupt_request": return <TimelineSystemDivider label="Interrupt requested" detail={item.message} tone="danger" icon={XIcon} />;
     case "run_interrupt_result": return <TimelineSystemDivider label="Run interrupted" detail={item.message} tone="danger" icon={XIcon} />;
     case "system_notice": return <TimelineSystemDivider label={item.message} />;
@@ -114,7 +115,7 @@ export function TranscriptView({ state, onViewport, citationTarget }: { readonly
     frame = requestAnimationFrame(show);
     return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-assistant-citation"); };
   }, [citationTarget, id, sourceIndex, state.threadLoading, state.history.hasMore, state.history.loading, state.transcript.length, run]);
-  const renderItem = useCallback(({ item }: { item: TranscriptItem }) => <div className="timeline-row"><TurnItem row={item} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /></div>, [id, state.environment?.environmentId]);
+  const renderItem = useCallback(({ item }: { item: TranscriptItem }) => <div className={`timeline-row${item.item.type === "checkpoint" ? " checkpoint-row" : ""}`}><TurnItem row={item} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /></div>, [id, state.environment?.environmentId]);
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source response…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading)) return <div className="chat-empty"><T3Wordmark className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length) return <div className="chat-empty"><p>Loading conversation…</p></div>;

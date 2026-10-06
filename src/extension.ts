@@ -16,6 +16,7 @@ import { Events, type ProjectSelection, type ProjectSummary, type FavoriteModel 
 import { FONT_SIZE_KEYS, resolveAppearance, type AppearanceSettings } from "./shared/appearance.js";
 import { editorReference } from "./host/editorReference.js";
 import type { FileReference } from "./shared/composerContext.js";
+import { registerNativeDiff } from "./host/nativeDiff.js";
 
 let hostState: HostState | null = null;
 
@@ -36,7 +37,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const registry = new WebviewRegistry();
   const showSettings = () => vscode.commands.executeCommand("workbench.action.openSettings", `@ext:${context.extension.id}`);
-  const bridge = new BridgeHandler(hostState, registry, showSettings);
+  const bridge = new BridgeHandler(hostState, registry, showSettings, undefined, registerNativeDiff(context));
   const provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState);
   hostState.onDidChangeState(() => {
     bridge.pushState();
@@ -54,6 +55,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("t3-vscode.reconnect", () => hostState?.reconnect()),
     vscode.commands.registerCommand("t3-vscode.newThread", () => hostState?.newThread()),
     vscode.commands.registerCommand("t3-vscode.showThreads", () => provider.showThreads()),
+    vscode.commands.registerCommand("t3-vscode.showUsage", () => provider.showUsage()),
     vscode.commands.registerCommand("t3-vscode.fontSettings", showSettings),
     vscode.commands.registerCommand("t3-vscode.insertReference", async () => {
       const editor = vscode.window.activeTextEditor;
@@ -71,6 +73,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const choice = await vscode.window.showQuickPick([
         { label: "$(edit) Rename thread", action: "rename" },
         { label: thread.pinned ? "$(pinned) Unpin thread" : "$(pin) Pin thread", action: thread.pinned ? "unpin" : "pin" },
+        ...(!thread.archived ? [{ label: thread.settled ? "$(debug-restart) Unsettle thread" : "$(check) Settle thread", action: thread.settled ? "unsettle" : "settle" }] : []),
         { label: thread.archived ? "$(archive) Restore thread" : "$(archive) Archive thread", action: thread.archived ? "unarchive" : "archive" },
         { label: "$(trash) Delete thread", action: "delete" },
       ], { title: thread.title, placeHolder: "Thread actions" });
@@ -170,7 +173,11 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
 
   async showThreads(): Promise<void> {
     await vscode.commands.executeCommand("t3.webview.focus");
-    await this.sidebar?.webview.postMessage({ event: Events.showNavigation });
+    this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showNavigation, undefined);
+  }
+  async showUsage(): Promise<void> {
+    await vscode.commands.executeCommand("t3.webview.focus");
+    this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, undefined);
   }
   async insertReference(reference: FileReference): Promise<void> {
     const id = this.registry.focusedViewId;

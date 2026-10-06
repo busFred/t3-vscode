@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createWriteStream, watch } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,7 @@ const evidence = process.env.T3_VSCODE_UI_EVIDENCE ?? "/tmp/t3-vscode-ui";
 await mkdir(evidence, { recursive: true });
 await mkdir(join(profile, "User"));
 await mkdir(join(home, "workspace"), { recursive: true });
+if (process.argv.includes("--deep")) await rm(join(home, "workspace/roundtrip.txt"), { force: true });
 // Carry Default preferences into disposable storage; never share its extension catalog.
 for (const file of ["settings.json", "keybindings.json"]) {
   await cp(join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "Code/User", file), join(profile, "User", file)).catch((error) => { if (error.code !== "ENOENT") throw error; });
@@ -39,6 +40,7 @@ await mkdir(join(home, "workspace/.vscode"), { recursive: true });
 await writeFile(join(home, "workspace/.vscode/settings.json"), JSON.stringify({
   "t3-vscode.t3Home": home, "workbench.startupEditor": "none", "workbench.colorTheme": "Default Dark Modern",
   "workbench.iconTheme": null,
+  "diffEditor.renderSideBySide": true, "diffEditor.useInlineViewWhenSpaceIsLimited": false,
   "chat.disableAIFeatures": true,
 }));
 const portServer = createServer();
@@ -168,6 +170,8 @@ try {
   await panel.wait('document.querySelector(".chat-empty")');
   assert.equal(await panel.evaluate('document.querySelector(".chat-empty h1")?.textContent'), "What would you like to build?");
   assert.equal(await panel.evaluate('document.querySelector(".chat-heading strong")?.textContent'), "New conversation");
+  assert.equal(await panel.evaluate('!!document.querySelector(".navigation-open")'), false);
+  await panel.evaluate(`document.querySelector('.chat-header [aria-label="History"]').click()`);
   await panel.evaluate(`(() => {
     const thread = [...document.querySelectorAll('.thread')].find(button => button.dataset.threadId === ${JSON.stringify(selectedId)});
     if (!thread) throw new Error('Sidebar conversation missing from the scoped thread list.');
@@ -180,7 +184,7 @@ try {
   await panel.wait('document.querySelector(".chat-empty")');
   await sidebar.wait(reply);
   console.log("PASS: editor tab starts blank, can select the sidebar conversation, and creates a new thread without switching the sidebar");
-  await panel.evaluate(`document.querySelector('.chat-header [aria-label="T3 Code settings"]').click()`);
+  await panel.evaluate(`document.querySelector('.chat-header [aria-label="History"]').click(); document.querySelector('[aria-label="T3 Code settings"]').click()`);
   await workbench.locator('.settings-editor').waitFor();
   const settings = ['fontSizeInterface', 'fontSizePrompt', 'fontSizeCode'];
   for (const [index, key] of settings.entries()) {
@@ -295,6 +299,67 @@ try {
   await sidebar.wait(`!document.querySelector('.thread[data-thread-id="${forkId}"]')`);
   assert.equal(await panel.evaluate('document.querySelector(".chat-main").dataset.threadId'), panelBeforeFork);
   console.log("PASS: real response fork retains native history and changes only its sidebar; context-menu rename uses VS Code's input prompt; cancel/confirm delete leaves the other tab intact");
+  if (process.argv.includes("--deep")) {
+    await sidebar.evaluate(`document.querySelector('.thread[data-thread-id="${selectedId}"]').click()`);
+    await sidebar.wait(`document.querySelector('.chat-main').dataset.threadId === ${JSON.stringify(selectedId)} && ${reply}`);
+    await sidebar.evaluate(`document.querySelector('[aria-label="Close history"]')?.click(); document.querySelectorAll('.context-chip button[aria-label^="Remove reference"]').forEach(button => button.click())`);
+    const setMessage = async (text) => {
+      await sidebar.evaluate(`(() => { const input = document.querySelector('textarea[aria-label="Message"]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${JSON.stringify(text)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    };
+    const sendMessage = async (text) => { await setMessage(text); await sidebar.wait('!document.querySelector(".send-button").disabled'); await sidebar.evaluate('document.querySelector(".send-button").click()'); };
+    const complete = (marker) => sidebar.wait(`[...document.querySelectorAll('.assistant-message')].some(node => node.textContent.includes(${JSON.stringify(marker)}) && !node.querySelector('.streaming-label')) && !document.querySelector('.stop-button')`, 150_000);
+    await nativeAction("Usage").click(); await sidebar.wait('document.querySelector(".usage-panel")');
+    await workbench.screenshot({ path: join(evidence, "edh-usage.png") });
+    await sidebar.evaluate('document.querySelector("[aria-label=\\"Close usage\\"]").click()');
+    await setMessage("/"); await sidebar.wait('document.querySelector(".composer-suggestions [role=option]")');
+    await workbench.screenshot({ path: join(evidence, "edh-slash-commands.png") });
+    await setMessage("Inspect @example"); await sidebar.wait('document.querySelector(".composer-suggestions")?.textContent.includes("example.ts")');
+    await workbench.screenshot({ path: join(evidence, "edh-file-suggestions.png") });
+    await setMessage("");
+    await sendMessage("In this temporary workspace, create roundtrip.txt containing exactly TURN-TWO followed by a newline. Use a file editing tool. Do not commit. Reply FIRST-DIFF-DONE after creating it.");
+    await complete("FIRST-DIFF-DONE");
+    await sidebar.wait('[...document.querySelectorAll(".turn-changes")].some(node => node.textContent.includes("roundtrip.txt"))');
+    const firstCheckpoint = await sidebar.evaluate('document.querySelectorAll(".turn-changes").item(document.querySelectorAll(".turn-changes").length - 1).dataset.checkpointId');
+    await sendMessage("Append exactly TURN-THREE followed by a newline to roundtrip.txt, keeping its existing TURN-TWO line unchanged. Use a file editing tool. Do not commit. Reply SECOND-DIFF-DONE after editing it.");
+    await complete("SECOND-DIFF-DONE");
+    await sidebar.wait(`document.querySelectorAll('.turn-changes').item(document.querySelectorAll('.turn-changes').length - 1)?.dataset.checkpointId !== ${JSON.stringify(firstCheckpoint)}`);
+    const secondCheckpoint = await sidebar.evaluate('document.querySelectorAll(".turn-changes").item(document.querySelectorAll(".turn-changes").length - 1).dataset.checkpointId');
+    assert.equal(await readFile(join(home, "workspace/roundtrip.txt"), "utf8"), "TURN-TWO\nTURN-THREE\n");
+    const openSavedDiff = async (checkpoint, oldText, newText) => {
+      await sidebar.evaluate(`(() => { const card = document.querySelector('.turn-changes[data-checkpoint-id="${checkpoint}"]'); const details = card.querySelector('details'); details.open = true; card.querySelector('[aria-label="Open turn diff: roundtrip.txt"]').click(); })()`);
+      const diff = workbench.locator('.monaco-diff-editor').filter({ visible: true }).first(); await diff.waitFor();
+      const original = diff.locator('.editor.original .view-lines'); const modified = diff.locator('.editor.modified .view-lines');
+      // The preview tab can reuse the existing diff widget while loading new models.
+      await workbench.waitForFunction(({ oldText, newText }) => {
+        const diff = [...document.querySelectorAll('.monaco-diff-editor')].find(node => node.getBoundingClientRect().height > 0);
+        const before = diff?.querySelector('.editor.original .view-lines')?.textContent;
+        const after = diff?.querySelector('.editor.modified .view-lines')?.textContent;
+        return before !== undefined && after?.includes(newText) && before.includes(oldText) && (oldText || !before.includes('TURN-TWO')) && (newText !== 'TURN-TWO' || !after.includes('TURN-THREE'));
+      }, { oldText, newText });
+      const before = (await original.textContent()).replaceAll('\u00a0', ''); const after = (await modified.textContent()).replaceAll('\u00a0', '');
+      assert.ok(before.includes(oldText)); assert.ok(after.includes(newText));
+      if (!oldText) assert.ok(!before.includes('TURN-TWO'));
+      if (newText === 'TURN-TWO') assert.ok(!after.includes('TURN-THREE'), 'Earlier saved diffs must not read the current working file');
+    };
+    await openSavedDiff(secondCheckpoint, "TURN-TWO", "TURN-THREE");
+    await workbench.screenshot({ path: join(evidence, "edh-adjacent-turn-diff.png") });
+    await openSavedDiff(firstCheckpoint, "", "TURN-TWO");
+    await workbench.screenshot({ path: join(evidence, "edh-earlier-turn-diff.png") });
+    console.log("PASS: native saved-turn diff compares adjacent checkpoints; an earlier creation diff remains unchanged after the next turn edits the working file");
+    await sendMessage("This is a Queue/Steer integration check in a disposable workspace. First use update_plan to record three steps: Start the integration check (completed), Wait for a follow-up (in_progress), Finish verification (pending). Then use your terminal tool to run sleep 20. Wait for that command to finish before responding. Include any follow-up marker in your final reply and mark all plan steps complete.");
+    await sidebar.wait('document.querySelector(".tasks-section") && document.querySelector("select[aria-label=\\"Follow-up delivery\\"]")', 90_000);
+    await sidebar.evaluate(`(() => { const select = document.querySelector('select[aria-label="Follow-up delivery"]'); select.value = 'queue'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await sendMessage("Include QUEUE-STEER-OK in your final response.");
+    await sidebar.wait('document.querySelector(".queued-preview")?.textContent.includes("QUEUE-STEER-OK")');
+    await workbench.screenshot({ path: join(evidence, "edh-queue-and-tasks.png") });
+    await sidebar.wait('!document.querySelector("[aria-label=\\"Steer with queued message\\"]").disabled');
+    await sidebar.evaluate('document.querySelector("[aria-label=\\"Steer with queued message\\"]").click()');
+    await sidebar.wait('!document.querySelector(".queued-message")');
+    await complete("QUEUE-STEER-OK");
+    await sidebar.wait('!document.querySelector(".tasks-section")');
+    await workbench.screenshot({ path: join(evidence, "edh-queue-steer-finished.png") });
+    console.log("PASS: real native command/file suggestions and Usage; queued follow-up is promoted to active steering, delivered to the provider, and current-run task progress clears at completion");
+  }
   await workbench.screenshot({ path: join(evidence, "edh-both.png") });
   console.log(`Evidence: ${evidence}; isolated VS Code profile: ${profile}`);
 } catch (error) {

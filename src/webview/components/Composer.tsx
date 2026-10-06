@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon } from "lucide-react";
-import type { HostStateSnapshot } from "../../shared/bridge";
+import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
 import { clearDraft, updateDraft, useComposerDraft } from "../composerDrafts";
@@ -9,14 +9,24 @@ import type { AssistantCitation } from "@t3tools/contracts";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
 import { effortDescriptor } from "../../shared/modelOptions";
 import { ModelPicker } from "./ModelPicker";
+import { detectComposerTrigger } from "../../shared/composerSuggestions";
+import { replaceTextRange, serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
+import { useBridgeQuery } from "../useBridgeQuery";
+import { ComposerSuggestions } from "./ComposerSuggestions";
+import { ConversationActivity } from "./ConversationActivity";
+import { resolveComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 
 const runtimeLabels: Record<string, string> = { "approval-required": "Ask permission", "auto-accept-edits": "Auto-accept edits", auto: "Auto", "full-access": "Full access" };
-export function Composer({ state, onEditCitation }: { readonly state: HostStateSnapshot; readonly onEditCitation: (citation: AssistantCitation, index: number) => void }) {
+export function Composer({ state, onEditCitation, onUsage }: { readonly state: HostStateSnapshot; readonly onEditCitation: (citation: AssistantCitation, index: number) => void; readonly onUsage: () => void }) {
   const draftKey = state.activeThreadId ?? "new";
   const { text, contexts } = useComposerDraft(draftKey);
   const setText = (value: string) => updateDraft(draftKey, (draft) => ({ ...draft, text: value }));
   const [busy, setBusy] = useState(false);
   const [modelsOpen, setModelsOpen] = useState(false);
+  const [cursor, setCursor] = useState(text.length);
+  const [dismissedTrigger, setDismissedTrigger] = useState<string | null>(null);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [delivery, setDelivery] = useState<"steer" | "queue">("steer");
   const closeModels = useCallback(() => setModelsOpen(false), []);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const modelTrigger = useRef<HTMLButtonElement>(null);
@@ -39,6 +49,25 @@ export function Composer({ state, onEditCitation }: { readonly state: HostStateS
   const projectLabel = project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1)
     ?? (state.draft.supportsNoProject ? "No project" : "Choose project");
   const disabled = busy || state.sending || thread?.archived === true;
+  const trigger = detectComposerTrigger(text, cursor);
+  const queryKind = trigger?.kind;
+  const canSuggest = queryKind === "path" || queryKind === "slash-command" || queryKind === "skill";
+  const triggerKey = canSuggest && trigger ? `${draftKey}:${state.draft.projectId ?? state.draft.workspaceRoot}:${selection?.instanceId}:${trigger.kind}:${trigger.rangeStart}:${trigger.query}` : null;
+  const suggestions = useBridgeQuery<ReadonlyArray<ComposerSuggestion>>("composerSuggestions", { kind: queryKind, query: trigger?.query ?? "", atPromptStart: trigger?.rangeStart === 0 }, triggerKey);
+  const items = suggestions.data ?? [];
+  const suggestionsOpen = triggerKey !== null && triggerKey !== dismissedTrigger && !disabled;
+  const highlighted = Math.min(suggestionIndex, Math.max(0, items.length - 1));
+  useEffect(() => setSuggestionIndex(0), [triggerKey]);
+  useEffect(() => { if (suggestionsOpen) document.getElementById(`composer-suggestion-${highlighted}`)?.scrollIntoView({ block: "nearest" }); }, [highlighted, suggestionsOpen]);
+  const chooseSuggestion = (item: ComposerSuggestion) => {
+    if (!trigger) return;
+    const replacement = item.kind === "file" || item.kind === "directory" ? `${serializeComposerFileLink(item.value)} ` : item.value;
+    const next = replaceTextRange(text, trigger.rangeStart, trigger.rangeEnd, replacement);
+    setText(next.text); setCursor(next.cursor); setDismissedTrigger(triggerKey);
+    if (item.kind === "model") setModelsOpen(true);
+    else if (item.kind === "usage") onUsage();
+    else requestAnimationFrame(() => { textarea.current?.focus(); textarea.current?.setSelectionRange(next.cursor, next.cursor); });
+  };
   useEffect(() => {
     const focus = () => textarea.current?.focus(); window.addEventListener("t3-focus-composer", focus);
     return () => window.removeEventListener("t3-focus-composer", focus);
@@ -74,11 +103,14 @@ export function Composer({ state, onEditCitation }: { readonly state: HostStateS
     observer.observe(row); measure();
     return () => observer.disconnect();
   }, [modelLabel, effortLabel, Boolean(effort), runtimeMode, state.appearance.fontSizeInterface]);
-  const send = async () => {
+  const running = Boolean(thread?.activeRunId || state.queue?.activeRunId);
+  const effectiveDelivery = state.queue?.canSteer ? delivery : "queue";
+  const send = async (alternate = false) => {
     const value = formatComposerMessage(text, contexts);
     if (!value || disabled || !selection) return;
     setBusy(true);
-    const sent = await run("sendMessage", { text: value, ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
+    const mode = resolveComposerDispatchMode({ running, activeTurnDefault: effectiveDelivery, alternateModifier: alternate && state.queue?.canSteer === true });
+    const sent = await run("sendMessage", { text: value, mode, ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
     if (sent) clearDraft(draftKey);
     setBusy(false); textarea.current?.focus();
   };
@@ -98,8 +130,10 @@ export function Composer({ state, onEditCitation }: { readonly state: HostStateS
   </div>;
   return <div className="composer-area"><div className="composer-column">
     <PendingRequests state={state} />
+    <ConversationActivity key={draftKey} state={state} />
     {thread?.archived ? <div className="archived-banner">This thread is archived.<button className="text-button" onClick={() => { void run("threadAction", { threadId: thread.id, action: "unarchive" }); }}>Restore thread</button></div> : null}
     <div className="composer-box">
+      {suggestionsOpen ? <ComposerSuggestions items={items} selected={highlighted} pending={suggestions.pending} error={suggestions.error} onSelect={chooseSuggestion} onHighlight={setSuggestionIndex} /> : null}
       {contexts.length ? <div className="composer-contexts" aria-label="Message references">{contexts.map((context, index) => <div className="context-chip" key={index}>
         <button className="context-label" title={context.type === "file" ? context.text || context.path : `${context.citation.text}${context.citation.comment ? `\nComment: ${context.citation.comment}` : ""}`} onClick={() => {
           if (context.type === "assistant") onEditCitation(context.citation, index);
@@ -107,15 +141,23 @@ export function Composer({ state, onEditCitation }: { readonly state: HostStateS
         }}>{context.type === "file" ? `@${fileReferenceLabel(context)}` : context.citation.comment ? "Assistant quote · Comment" : "Assistant quote"}</button>
         <button className="icon-button" aria-label={`Remove reference ${index + 1}`} onClick={() => updateDraft(draftKey, (draft) => ({ ...draft, contexts: draft.contexts.filter((_, position) => position !== index) }))}><XIcon size={12} /></button>
       </div>)}</div> : null}
-      <textarea ref={textarea} value={text} placeholder={thread?.activeRunId ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" disabled={disabled} rows={2} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
-        if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); }
+      <textarea ref={textarea} value={text} placeholder={thread?.activeRunId ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" disabled={disabled} rows={2}
+        aria-controls={suggestionsOpen ? "composer-suggestions" : undefined} aria-expanded={suggestionsOpen} aria-autocomplete="list" aria-activedescendant={suggestionsOpen && items.length ? `composer-suggestion-${highlighted}` : undefined}
+        onSelect={(event) => setCursor(event.currentTarget.selectionStart)} onChange={(event) => { setText(event.target.value); setCursor(event.target.selectionStart); setDismissedTrigger(null); }} onKeyDown={(event) => {
+        if (suggestionsOpen && !event.nativeEvent.isComposing) {
+          if (event.key === "Escape") { event.preventDefault(); setDismissedTrigger(triggerKey); return; }
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setSuggestionIndex(items.length ? (highlighted + (event.key === "ArrowDown" ? 1 : items.length - 1)) % items.length : 0); return; }
+          if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") { event.preventDefault(); if (items[highlighted]) chooseSuggestion(items[highlighted]); return; }
+        }
+        if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(event.ctrlKey || event.metaKey); }
       }} />
       <div className="composer-toolbar"><div className="composer-project">{!thread ? <button className="project-trigger" aria-label="Choose project" title={state.draft.workspaceRoot ?? projectLabel} disabled={busy || state.workspaceRoots.length === 1} onClick={() => {
         setBusy(true); void run("chooseProject").finally(() => setBusy(false));
       }}><FolderIcon size={12} /><span>{projectLabel}</span><ChevronDownIcon size={11} /></button> : null}</div>
       {!selection ? <div className="composer-hint">No models available. Configure a provider in T3 Code.</div> : null}
       <div className="composer-send-controls">{thread?.activeRunId ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
-        <button className="send-button" aria-label="Send message" title="Send message" disabled={disabled || !selection || (!text.trim() && !contexts.length)} onClick={() => { void send(); }}><ArrowUpIcon size={17} /></button>
+        {running ? <label className="delivery-control"><span className="sr-only">Follow-up delivery</span><select aria-label="Follow-up delivery" value={effectiveDelivery} disabled={disabled} onChange={(event) => setDelivery(event.target.value as "queue" | "steer")}><option value="queue">Queue</option>{state.queue?.canSteer ? <option value="steer">Steer</option> : null}</select></label> : null}
+        <button className="send-button" aria-label="Send message" title={running ? `${effectiveDelivery === "queue" ? "Queue after this turn" : "Steer the current turn"}${state.queue?.canSteer ? " · Ctrl+Enter for the alternate action" : ""}` : "Send message"} disabled={disabled || !selection || (!text.trim() && !contexts.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
       </div></div>
     </div>
     <div ref={controls} className="composer-controls">
