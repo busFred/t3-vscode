@@ -91,7 +91,12 @@ export class BridgeHandler {
         case "selectThread": await this.hostState.selectThread(id(), viewId); break;
         case "newThread": await this.hostState.newThread(params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
         case "chooseProject": await this.hostState.chooseProject(params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
-        case "sendMessage": await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id(), viewId); break;
+        case "sendMessage": await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id(), viewId, params.mode === undefined ? "auto" : stringParam(params, "mode")); break;
+        case "queueAction": {
+          if (params.beforeRunId !== undefined && params.beforeRunId !== null && typeof params.beforeRunId !== "string") throw new Error("Invalid queue destination.");
+          await this.hostState.queueAction(id(), stringParam(params, "action"), typeof params.runId === "string" ? params.runId : undefined, typeof params.text === "string" ? params.text : undefined,
+            params.beforeRunId as string | null | undefined, viewId); break;
+        }
         case "reconnect": await this.hostState.reconnect(); break;
         case "startPairing": await this.hostState.pairNow(); break;
         case "setModel": await this.hostState.setModel(params.threadId === undefined ? undefined : id(), params.modelSelection, viewId); break;

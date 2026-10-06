@@ -61,6 +61,23 @@ export class FakeTransport implements HostTransport {
   }
   async dispatch(raw: unknown) {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(raw); this.commands.push(command);
+    const queueCommand = command.type === "queued-run.cancel" || command.type === "queued-run.edit" || command.type === "queued-run.reorder" || command.type === "queued-message.promote-to-steer" || command.type === "queue.resume";
+    if (queueCommand) {
+      const snapshot = this.snapshots.get(command.threadId);
+      if (snapshot) {
+        let projection = snapshot.projection;
+        if (command.type === "queued-run.edit") { const run = projection.runs.find((run) => run.id === command.runId); projection = { ...projection, messages: projection.messages.map((message) => message.id === run?.userMessageId ? { ...message, text: command.text } : message) }; }
+        if (command.type === "queued-run.cancel" || command.type === "queued-message.promote-to-steer") { const id = command.type === "queued-run.cancel" ? command.runId : command.queuedRunId; projection = { ...projection, runs: projection.runs.map((run) => run.id === id ? { ...run, status: "cancelled" } : run) }; }
+        if (command.type === "queue.resume") projection = { ...projection, runs: projection.runs.map((run) => ({ ...run, queueHeld: false })) };
+        if (command.type === "queued-run.reorder") {
+          const queue = projection.runs.filter((run) => run.status === "queued").sort((a, b) => (a.queuePosition ?? a.ordinal) - (b.queuePosition ?? b.ordinal));
+          const entry = queue.find((run) => run.id === command.runId)!; const order = queue.filter((run) => run.id !== command.runId);
+          const at = command.beforeRunId === null ? order.length : order.findIndex((run) => run.id === command.beforeRunId); order.splice(at, 0, entry);
+          projection = { ...projection, runs: projection.runs.map((run) => run.status === "queued" ? { ...run, queuePosition: order.findIndex((entry) => entry.id === run.id) + 1 } : run) };
+        }
+        this.threadHandlers.get(command.threadId)?.({ ...snapshot, snapshotSequence: snapshot.snapshotSequence + 1, projection });
+      }
+    }
     if (command.type === "thread.create") this.shell = { ...this.shell, threads: [...this.shell.threads, { ...v2ThreadShell, id: command.threadId, projectId: command.projectId, title: command.title, modelSelection: command.modelSelection, runtimeMode: command.runtimeMode, interactionMode: command.interactionMode }] };
     if (command.type === "thread.model-selection.set") {
       this.shell = { ...this.shell, snapshotSequence: this.shell.snapshotSequence + 1, threads: this.shell.threads.map((thread) => thread.id === command.threadId ? { ...thread, modelSelection: command.modelSelection } : thread) };

@@ -18,6 +18,7 @@ export const Methods = {
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
   threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab",
   searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", refreshUsage: "refreshUsage",
+  queueAction: "queueAction",
 } as const;
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
@@ -57,6 +58,17 @@ export interface ComposerSuggestion {
   readonly kind: "file" | "directory" | "thread" | "model" | "usage" | "command" | "skill";
   readonly value: string;
 }
+export interface ConversationQueue {
+  readonly activeRunId: string | null;
+  readonly canSteer: boolean;
+  readonly canReorder: boolean;
+  readonly held: boolean;
+  readonly entries: ReadonlyArray<{ readonly runId: string; readonly text: string; readonly attachmentNames: ReadonlyArray<string> }>;
+}
+export interface ConversationTasks {
+  readonly runId: string;
+  readonly steps: ReadonlyArray<{ readonly text: string; readonly status: "pending" | "running" | "completed"; readonly durationMs?: number }>;
+}
 export type WireTurnItem = typeof OrchestrationV2TurnItemJson.Encoded;
 export interface TranscriptItem {
   readonly key: string;
@@ -69,6 +81,8 @@ export interface TranscriptItem {
   readonly canFork?: boolean;
 }
 export interface HostStateSnapshot {
+  readonly queue?: ConversationQueue | null;
+  readonly tasks?: ConversationTasks | null;
   /** Monotonic within a host instance; prevents slow RPC responses replacing a newer push. */
   readonly revision: number;
   readonly phase: HostPhase;

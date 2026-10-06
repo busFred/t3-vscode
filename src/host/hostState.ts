@@ -14,7 +14,7 @@ import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operation
 import { applyOrchestrationV2ProjectionEvent } from "@t3tools/client-runtime/state/orchestration-v2-projection";
 import { derivePendingThreadRequests, createQuestionHistoryProjector } from "@t3tools/client-runtime/state/thread-requests";
 import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/turn-item-presentation";
-import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
+import { canForkProjectedAssistantItem, deriveThreadQueueWorkflowState } from "@t3tools/client-runtime/state/thread-workflows";
 import { mergeOlderHistoryIntoProjection, EMPTY_THREAD_HISTORY_META, applyHistoryPageMeta, type ThreadHistoryMeta } from "@t3tools/client-runtime/state/thread-history-merge";
 import { resolveWorkEntryToolPresentation } from "@t3tools/client-runtime/work-log/presentation";
 import { turnItemNeedsDetailFetch, turnItemOutputText } from "@t3tools/client-runtime/work-log/item-detail";
@@ -26,6 +26,7 @@ import { slashSuggestions } from "../shared/composerSuggestions.js";
 import { hasCompleteProviderWorkspaceSnapshot } from "@t3tools/client-runtime/providerSkills";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import { turnCheckpointRange, turnDiffFiles, turnDiffFileRequest, type TurnDiff, type TurnDiffFile } from "./turnDiff.js";
+import { conversationActivity } from "./conversationActivity.js";
 import { pairWithServer } from "./pairing.js";
 import { discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
 import type { CredentialStore } from "./sessionStore.js";
@@ -437,9 +438,10 @@ export class HostState {
     await this.syncThreadSubscriptions(); this.emit();
     return id;
   }
-  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
+  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID, mode = "auto"): Promise<void> {
     return this.enqueue(async () => {
       this.requireView(viewId);
+      if (!["auto", "queue", "steer"].includes(mode)) throw new Error("Unknown message delivery mode.");
       if (!text.trim()) throw new Error("Enter a message.");
       const id = targetThreadId ?? await this.createThread(undefined, viewId);
       const view = this.requireView(viewId);
@@ -449,7 +451,7 @@ export class HostState {
       try {
         await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id,
           createdBy: "user", creationSource: "web", messageId: randomUUID(), text, attachments: [],
-          titleSeed: deriveThreadTitleSeed({ text, attachments: [] }), deliveryIntent: "auto", dispatchMode: { type: "start_immediately" } });
+          titleSeed: deriveThreadTitleSeed({ text, attachments: [] }), ...(mode !== "queue" ? { deliveryIntent: mode } : {}), dispatchMode: { type: mode === "queue" ? "queue_after_active" : "start_immediately" } });
       } finally { view.sending = false; this.emit(); }
     });
   }
@@ -653,6 +655,33 @@ export class HostState {
     return kind === "skill" ? items.filter((item) => item.kind === "skill") : items;
   }
   async refreshUsage(): Promise<void> { await this.client.refreshProviders(); this.emit(); }
+  queueAction(id: string, action: string, runId: string | undefined, text: string | undefined, beforeRunId: string | null | undefined, viewId = SIDEBAR_VIEW_ID): Promise<void> {
+    return this.enqueue(async () => {
+      this.requireView(viewId); this.requireThread(id);
+      const projection = this.threads.get(id)?.projection;
+      if (!projection) throw new Error("This conversation's queue is not available.");
+      const workflow = deriveThreadQueueWorkflowState(projection);
+      const command = { commandId: randomUUID(), threadId: id };
+      if (action === "resume") {
+        if (!workflow.isHeld) throw new Error("This queue is not paused.");
+        await this.client.dispatch({ ...command, type: "queue.resume" }); return;
+      }
+      const entry = workflow.queuedRuns.find((entry) => entry.run.id === runId);
+      if (!entry) throw new Error("This message is no longer queued.");
+      if (action === "steer") {
+        if (!workflow.canPromoteToSteer || !workflow.activeRun) throw new Error("This provider cannot steer the current turn.");
+        await this.client.dispatch({ ...command, type: "queued-message.promote-to-steer", queuedRunId: entry.run.id, targetRunId: workflow.activeRun.id });
+      } else if (action === "cancel") await this.client.dispatch({ ...command, type: "queued-run.cancel", runId: entry.run.id });
+      else if (action === "edit") {
+        if (!text?.trim()) throw new Error("Enter a queued message.");
+        await this.client.dispatch({ ...command, type: "queued-run.edit", runId: entry.run.id, text, ...(entry.context ? { context: entry.context } : {}) });
+      } else if (action === "reorder") {
+        if (!workflow.canReorder) throw new Error("This provider cannot reorder queued messages.");
+        if (beforeRunId !== null && !workflow.queuedRuns.some((entry) => entry.run.id === beforeRunId)) throw new Error("The destination message is no longer queued.");
+        await this.client.dispatch({ ...command, type: "queued-run.reorder", runId: entry.run.id, beforeRunId });
+      } else throw new Error("Unknown queue action.");
+    });
+  }
   async prepareTurnDiff(id: string, sourceId: string, itemId: string, viewId = SIDEBAR_VIEW_ID): Promise<TurnDiff> {
     this.requireView(viewId); this.requireThread(id); this.requireThread(sourceId);
     const row = this.threads.get(id)?.projection?.visibleTurnItems.find((row) => row.sourceThreadId === sourceId && row.sourceItemId === itemId);
@@ -707,6 +736,7 @@ export class HostState {
       favoriteModels: this.options.favoriteModels?.() ?? [],
       draft: this.conversationDraft(view),
       ...(activeThreadId ? { activeThreadId } : {}),
+      ...conversationActivity(projection),
       transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => ({
         key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId,
         ...this.presentItem(row.item), canFork: visibleThreadIds.has(row.sourceThreadId) && this.canForkRow(projection, row),
