@@ -60,12 +60,12 @@ pnpm install --frozen-lockfile
 pnpm run package
 ```
 
-This rebuilds both bundles and produces `t3-vscode-0.0.1.vsix`. The archive includes compiled code, the icon and license notices; development profiles, server data, source maps and `node_modules` are excluded.
+This rebuilds both bundles and produces `t3-vscode-0.0.2.vsix`. The archive includes compiled code, the icon and license notices; development profiles, server data, source maps and `node_modules` are excluded.
 
 In the VS Code window/profile where you want to use it, open **Extensions → ⋯ → Install from VSIX…**, choose that file, then reload the window if prompted. The CLI alternative installs into the named profile:
 
 ```sh
-code --profile Default --install-extension ./t3-vscode-0.0.1.vsix
+code --profile Default --install-extension ./t3-vscode-0.0.2.vsix
 ```
 
 The installed extension normally discovers your already-running T3 service under `~/.t3`. Leave **T3 Code: T3 Home** empty to use that default; an explicit setting or `T3CODE_HOME` overrides it. Packaging does not install the extension or start a server.
