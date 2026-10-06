@@ -51,6 +51,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "t3-vscode.showUsage",
+        "title": "Usage",
+        "category": "T3",
+        "icon": "$(graph)"
+      },
+      {
         "command": "t3-vscode.showThreads",
         "title": "History",
         "category": "T3",
@@ -92,27 +98,41 @@
       }
     ],
     "keybindings": [
-      { "command": "t3-vscode.insertReference", "key": "alt+k", "mac": "alt+k", "when": "editorTextFocus" }
+      {
+        "command": "t3-vscode.insertReference",
+        "key": "alt+k",
+        "mac": "alt+k",
+        "when": "editorTextFocus"
+      }
     ],
     "menus": {
       "editor/context": [
-        { "command": "t3-vscode.insertReference", "when": "editorTextFocus", "group": "t3" }
+        {
+          "command": "t3-vscode.insertReference",
+          "when": "editorTextFocus",
+          "group": "t3"
+        }
       ],
       "view/title": [
         {
-          "command": "t3-vscode.showThreads",
+          "command": "t3-vscode.showUsage",
           "when": "view == t3.webview",
           "group": "navigation@0"
         },
         {
-          "command": "t3-vscode.newThread",
+          "command": "t3-vscode.showThreads",
           "when": "view == t3.webview",
           "group": "navigation@1"
         },
         {
-          "command": "t3-vscode.openInTab",
+          "command": "t3-vscode.newThread",
           "when": "view == t3.webview",
           "group": "navigation@2"
+        },
+        {
+          "command": "t3-vscode.openInTab",
+          "when": "view == t3.webview",
+          "group": "navigation@3"
         },
         {
           "command": "t3-vscode.threadActions",
@@ -140,15 +160,27 @@
           "description": "T3 home directory (the server's data dir, default ~/.t3 or $T3CODE_HOME). Empty = auto. Change only to point at an isolated/dev server."
         },
         "t3-vscode.fontSizeInterface": {
-          "type": "integer", "default": 16, "minimum": 12, "maximum": 20, "scope": "window",
+          "type": "integer",
+          "default": 16,
+          "minimum": 12,
+          "maximum": 20,
+          "scope": "window",
           "markdownDescription": "Base font size in pixels for T3 chat text, navigation and labels. Matches T3 Code's interface scaling. Changes apply immediately to the sidebar and all T3 editor tabs."
         },
         "t3-vscode.fontSizePrompt": {
-          "type": "integer", "default": 14, "minimum": 12, "maximum": 20, "scope": "window",
+          "type": "integer",
+          "default": 14,
+          "minimum": 12,
+          "maximum": 20,
+          "scope": "window",
           "description": "Font size in pixels for the message input, independent of interface and code sizes. Changes apply immediately."
         },
         "t3-vscode.fontSizeCode": {
-          "type": "integer", "default": 13, "minimum": 10, "maximum": 18, "scope": "window",
+          "type": "integer",
+          "default": 13,
+          "minimum": 10,
+          "maximum": 18,
+          "scope": "window",
           "description": "Font size in pixels for code blocks, diffs and tool output, independent of interface and prompt sizes. Changes apply immediately."
         }
       }
@@ -169,6 +201,7 @@
   },
   "dependencies": {
     "@legendapp/list": "3.3.5",
+    "@pierre/diffs": "1.3.0-beta.10",
     "@t3tools/client-runtime": "workspace:*",
     "@t3tools/contracts": "workspace:*",
     "@t3tools/shared": "workspace:*",

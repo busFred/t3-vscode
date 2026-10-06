@@ -6,6 +6,7 @@ import {
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadStreamItem, type OrchestrationV2ArchivedShellStreamItem, type ServerConfig,
+  type ReviewDiffFileContentsInput, ProviderInstanceId,
 } from "@t3tools/contracts";
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import * as Rpc from "@t3tools/client-runtime/rpc/session";
@@ -51,7 +52,7 @@ export class T3Client {
       })));
       socketUrl.searchParams.set("orchestrationProtocol", "2");
       const session = await this.run(Effect.gen(function* () {
-        const factory = yield* Rpc.make();
+        const factory = yield* Rpc.make({ usageLimitSources: true, usageLimitsCommand: true });
         return yield* factory.connect({
           environmentId: server.descriptor.environmentId, label: server.descriptor.label,
           httpBaseUrl: server.origin, socketUrl: socketUrl.toString(),
@@ -66,7 +67,7 @@ export class T3Client {
       this.server = server;
       this.accessToken = accessToken;
       this.configState = applyServerConfigProjection(Option.none(), { version: 1, type: "snapshot", config });
-      await this.subscribe(session.subscribeServerConfig({}), (event) => {
+      await this.subscribe(session.subscribeServerConfig({ usageLimitSources: true }), (event) => {
         this.configState = applyServerConfigProjection(this.configState, event);
         if (this.config) this.onConfig?.(this.config);
       });
@@ -117,6 +118,7 @@ export class T3Client {
       threadId: threadId(id), requestCompletionMarker: true, acceptBoundedSnapshot: true,
     }), handler);
   }
+  getThreadProjection(id: string) { return this.run(this.requireSession().client[V2.getThreadProjection]({ threadId: threadId(id) })); }
   async dispatch(input: unknown): Promise<void> {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(input);
     await this.run(this.requireSession().client[V2.dispatchCommand](command));
@@ -149,6 +151,26 @@ export class T3Client {
     return this.run(this.requireSession().client[V2.getTurnItem]({
       threadId: threadId(id), itemId: Schema.decodeUnknownSync(TurnItemId)(itemId),
     }));
+  }
+  searchThreads(query: string) {
+    return this.run(this.requireSession().client[V2.searchThreads]({ query, limit: 50 }));
+  }
+  searchPaths(cwd: string, query: string) {
+    return this.run(this.requireSession().client[WS_METHODS.projectsSearchEntries]({ cwd, query, limit: 50 }));
+  }
+  async refreshProviders(instanceId?: string, cwd?: string) {
+    const payload = await this.run(this.requireSession().client[WS_METHODS.serverRefreshProviders]({
+      ...(instanceId ? { instanceId: ProviderInstanceId.make(instanceId) } : {}), ...(cwd ? { cwd } : {}),
+    }));
+    this.configState = applyServerConfigProjection(this.configState, { version: 1, type: "providerStatuses", payload });
+    if (this.config) this.onConfig?.(this.config);
+    return payload;
+  }
+  getTurnDiff(id: string, fromTurnCount: number, toTurnCount: number) {
+    return this.run(this.requireSession().client[V2.getTurnDiff]({ threadId: threadId(id), fromTurnCount, toTurnCount, ignoreWhitespace: false }));
+  }
+  getDiffFileContents(input: ReviewDiffFileContentsInput) {
+    return this.run(this.requireSession().client[WS_METHODS.reviewGetDiffFileContents](input));
   }
   // Retained for the standalone M0 transport diagnostic.
   sendMessage(id: string, text: string): Promise<void> {

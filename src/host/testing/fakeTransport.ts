@@ -24,6 +24,18 @@ export class FakeTransport implements HostTransport {
   commands: OrchestrationV2Command[] = [];
   projectCreates = 0;
   scratchCalls = 0;
+  searchMatches: Awaited<ReturnType<HostTransport["searchThreads"]>> = { matches: [] };
+  pathEntries: Awaited<ReturnType<HostTransport["searchPaths"]>> = { entries: [], truncated: false };
+  searches: string[] = [];
+  pathSearches: Array<{ cwd: string; query: string }> = [];
+  providerRefreshes: Array<{ instanceId: string | undefined; cwd: string | undefined }> = [];
+  diffRequests: Array<{ id: string; from: number; to: number }> = [];
+  diffFileRequests: Parameters<HostTransport["getDiffFileContents"]>[0][] = [];
+  async searchThreads(query: string) { this.searches.push(query); return this.searchMatches; }
+  async searchPaths(cwd: string, query: string) { this.pathSearches.push({ cwd, query }); return this.pathEntries; }
+  async refreshProviders(instanceId?: string, cwd?: string) { this.providerRefreshes.push({ instanceId, cwd }); return { providers: this.config.providers }; }
+  async getTurnDiff(id: string, from: number, to: number) { this.diffRequests.push({ id, from, to }); return { threadId: ThreadId.make(id), fromTurnCount: from, toTurnCount: to, diff: "" }; }
+  getDiffFileContents: HostTransport["getDiffFileContents"] = async (input) => { this.diffFileRequests.push(input); return { oldContents: "before\n", newContents: "after\n" }; };
   async connect() { this.connected = true; this.connections += 1; }
   async disconnect() { this.connected = false; }
   async snapshotShell() { return this.shell; }
@@ -76,6 +88,10 @@ export class FakeTransport implements HostTransport {
       this.shell = { ...this.shell, threads: this.shell.threads.map(update) };
       this.archive = { ...this.archive, threads: this.archive.threads.map(update) };
     }
+    if (command.type === "thread.settle" || command.type === "thread.unsettle") {
+      this.shell = { ...this.shell, threads: this.shell.threads.map((thread) => thread.id !== command.threadId ? thread : { ...thread,
+        settledOverride: command.type === "thread.settle" ? "settled" as const : "active" as const, settledAt: command.type === "thread.settle" ? v2Now : null }) };
+    }
     if (command.type === "thread.fork") {
       const source = [...this.shell.threads, ...this.archive.threads].find((thread) => thread.id === command.sourceThreadId)!;
       const child = { ...source, id: command.targetThreadId, title: `Fork of ${source.title}`, archivedAt: null,
@@ -104,6 +120,9 @@ export class FakeTransport implements HostTransport {
     return id;
   }
   getHistory: HostTransport["getHistory"] = async () => ({ snapshotSequence: 0, items: [], nextCursor: null, hasMoreHistory: false });
+  getThreadProjection: HostTransport["getThreadProjection"] = async (id) => {
+    const snapshot = this.snapshots.get(id); if (snapshot?.kind !== "snapshot") throw new Error("Projection not found."); return snapshot.projection;
+  };
   getTurnItem: HostTransport["getTurnItem"] = async () => ({ item: null });
 }
 function structuredCloneShell() { return { ...v2ShellSnapshot, projects: [...v2ShellSnapshot.projects], threads: [...v2ShellSnapshot.threads], archivedThreads: [] }; }

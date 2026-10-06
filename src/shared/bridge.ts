@@ -4,6 +4,8 @@ import type {
   ProviderInteractionMode,
   RuntimeMode,
   ServerProvider,
+  UsageLimitSourceSnapshots,
+  OrchestrationThreadSearchMatch,
 } from "@t3tools/contracts";
 import type { PendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
 import type { AppearanceSettings } from "./appearance.js";
@@ -15,11 +17,12 @@ export const Methods = {
   respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
   threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab",
+  searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", refreshUsage: "refreshUsage",
 } as const;
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
 export interface RpcResult { readonly id: string; readonly result?: unknown; readonly error?: string }
-export const Events = { stateChanged: "stateChanged", showNavigation: "showNavigation", insertReference: "insertReference" } as const;
+export const Events = { stateChanged: "stateChanged", showNavigation: "showNavigation", showUsage: "showUsage", insertReference: "insertReference" } as const;
 export type BridgeEvent = (typeof Events)[keyof typeof Events];
 
 export interface ModelSelection {
@@ -45,6 +48,14 @@ export interface ThreadSummary {
   readonly runtimeMode: RuntimeMode; readonly interactionMode: ProviderInteractionMode;
   readonly updatedAt: string; readonly archived: boolean; readonly pinned: boolean;
   readonly activeRunId: string | null;
+  readonly settled?: boolean;
+  readonly searchTerms?: ReadonlyArray<string>;
+}
+export type ThreadSearchMatch = OrchestrationThreadSearchMatch;
+export interface ComposerSuggestion {
+  readonly id: string; readonly label: string; readonly description: string;
+  readonly kind: "file" | "directory" | "thread" | "model" | "usage" | "command" | "skill";
+  readonly value: string;
 }
 export type WireTurnItem = typeof OrchestrationV2TurnItemJson.Encoded;
 export interface TranscriptItem {
@@ -68,7 +79,9 @@ export interface HostStateSnapshot {
   readonly environment?: { readonly environmentId: string; readonly label: string; readonly serverVersion?: string };
   readonly projects: ReadonlyArray<ProjectSummary>;
   readonly threads: ReadonlyArray<ThreadSummary>;
+  readonly archiveLoaded?: boolean;
   readonly providers: ReadonlyArray<ServerProvider>;
+  readonly usageLimitSources?: UsageLimitSourceSnapshots;
   readonly favoriteModels: ReadonlyArray<FavoriteModel>;
   readonly draft: ConversationDraft;
   readonly activeThreadId?: string;

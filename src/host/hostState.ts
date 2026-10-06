@@ -21,14 +21,18 @@ import { turnItemNeedsDetailFetch, turnItemOutputText } from "@t3tools/client-ru
 import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
-import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel } from "../shared/bridge.js";
+import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch } from "../shared/bridge.js";
+import { slashSuggestions } from "../shared/composerSuggestions.js";
+import { hasCompleteProviderWorkspaceSnapshot } from "@t3tools/client-runtime/providerSkills";
+import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
+import { turnCheckpointRange, turnDiffFiles, turnDiffFileRequest, type TurnDiff, type TurnDiffFile } from "./turnDiff.js";
 import { pairWithServer } from "./pairing.js";
 import { discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
 import type { CredentialStore } from "./sessionStore.js";
 import type { T3Client, Subscription } from "./t3Client.js";
 import { DEFAULT_APPEARANCE, resolveAppearance, type AppearanceSettings } from "../shared/appearance.js";
 
-export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot"> | null };
+export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getTurnDiff" | "getDiffFileContents"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
   readonly home: string;
   readonly credentials: CredentialStore;
@@ -89,6 +93,7 @@ export class HostState {
   private readonly encodedItems = new WeakMap<OrchestrationV2TurnItem, Omit<TranscriptItem, "key" | "sourceThreadId">>();
   private readonly projectQuestionHistory = createQuestionHistoryProjector();
   private readonly pathIdentities = new Map<string, string>();
+  private readonly workspaceRefreshes = new Map<string, Promise<unknown>>();
 
   private readonly options: HostStateOptions;
   private readonly client: HostTransport;
@@ -542,8 +547,8 @@ export class HostState {
       if (action === "rename") {
         if (!title?.trim()) throw new Error("Enter a thread title.");
         await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, title });
-      } else if (["archive", "unarchive", "pin", "unpin", "delete"].includes(action)) {
-        await this.client.dispatch({ type: `thread.${action}`, commandId: randomUUID(), threadId: id });
+      } else if (["archive", "unarchive", "pin", "unpin", "delete", "settle", "unsettle"].includes(action)) {
+        await this.client.dispatch({ type: `thread.${action}`, commandId: randomUUID(), threadId: id, ...(action === "unsettle" ? { reason: "user" } : {}) });
       } else throw new Error("Unknown thread action.");
       this.shell = await this.client.snapshotShell();
       if (action === "archive" || action === "unarchive" || action === "delete") {
@@ -609,6 +614,63 @@ export class HostState {
     if (id && !thread) throw new Error("This thread is not available in the current workspace.");
     return thread?.worktreePath ?? this.visibleProjects().find((project) => project.id === thread?.projectId)?.workspaceRoot ?? this.workspaceRoots()[0] ?? null;
   }
+  async searchThreads(query: string, viewId = SIDEBAR_VIEW_ID): Promise<ReadonlyArray<ThreadSearchMatch>> {
+    this.requireView(viewId);
+    const normalized = query.trim();
+    if (normalized.length < 2) return [];
+    if (normalized.length > 200) throw new Error("Search is limited to 200 characters.");
+    const result = await this.client.searchThreads(normalized);
+    this.requireView(viewId);
+    const visible = new Set(this.visibleThreads().map((thread) => thread.id));
+    return result.matches.filter((match) => visible.has(match.threadId));
+  }
+  async composerSuggestions(kind: string, query: string, atPromptStart: boolean, viewId = SIDEBAR_VIEW_ID): Promise<ReadonlyArray<ComposerSuggestion>> {
+    const view = this.requireView(viewId);
+    if (query.length > 256) throw new Error("Suggestion query is too long.");
+    const thread = this.findThread(view.activeThreadId);
+    const draft = this.conversationDraft(view);
+    const cwd = thread ? this.workspaceForThread(thread.id) : draft.workspaceRoot ?? this.visibleProjects().find((project) => project.id === draft.projectId)?.workspaceRoot ?? null;
+    const selection = thread?.modelSelection ?? draft.modelSelection;
+    const instanceId = selection?.instanceId;
+    if (kind === "path") {
+      if (!cwd) return [];
+      const result = await this.client.searchPaths(cwd, query);
+      this.requireView(viewId);
+      // Returned paths and their server ordering come from T3's workspace index.
+      return result.entries.map((entry) => ({ id: `path:${entry.kind}:${entry.path}`, kind: entry.kind, value: entry.path, label: basename(entry.path), description: entry.path.includes("/") ? entry.path.slice(0, entry.path.lastIndexOf("/")) : "" }));
+    }
+    if (kind !== "slash-command" && kind !== "skill") throw new Error("Unknown composer trigger.");
+    let provider = this.client.config?.providers.find((provider) => provider.instanceId === instanceId);
+    if (instanceId && cwd && !hasCompleteProviderWorkspaceSnapshot(provider, cwd)) {
+      const key = `${instanceId}:${cwd}`;
+      const pending = this.workspaceRefreshes.get(key) ?? this.client.refreshProviders(instanceId, cwd).finally(() => this.workspaceRefreshes.delete(key));
+      this.workspaceRefreshes.set(key, pending);
+      await pending;
+      provider = this.client.config?.providers.find((provider) => provider.instanceId === instanceId);
+    }
+    this.requireView(viewId);
+    const items = slashSuggestions(provider, cwd, kind === "skill" ? `skill:${query}` : query, atPromptStart);
+    return kind === "skill" ? items.filter((item) => item.kind === "skill") : items;
+  }
+  async refreshUsage(): Promise<void> { await this.client.refreshProviders(); this.emit(); }
+  async prepareTurnDiff(id: string, sourceId: string, itemId: string, viewId = SIDEBAR_VIEW_ID): Promise<TurnDiff> {
+    this.requireView(viewId); this.requireThread(id); this.requireThread(sourceId);
+    const row = this.threads.get(id)?.projection?.visibleTurnItems.find((row) => row.sourceThreadId === sourceId && row.sourceItemId === itemId);
+    if (row?.item.type !== "checkpoint") throw new Error("The selected item is not a saved turn checkpoint.");
+    const projection = await this.client.getThreadProjection(sourceId);
+    const range = turnCheckpointRange(projection, row.item.checkpointId);
+    const result = await this.client.getTurnDiff(sourceId, range.turnNumber - 1, range.turnNumber);
+    this.requireView(viewId); this.requireThread(id); this.requireThread(sourceId);
+    const files = turnDiffFiles(result.diff);
+    if (!files.length) throw new Error("This turn has no saved file changes.");
+    return { ...range, files };
+  }
+  async loadTurnDiffFile(diff: TurnDiff, file: TurnDiffFile, viewId = SIDEBAR_VIEW_ID) {
+    this.requireView(viewId); this.requireThread(diff.threadId);
+    const result = await this.client.getDiffFileContents(turnDiffFileRequest(diff, file));
+    this.requireView(viewId); this.requireThread(diff.threadId);
+    return result;
+  }
   private presentItem(item: OrchestrationV2TurnItem): Omit<TranscriptItem, "key" | "sourceThreadId"> {
     const cached = this.encodedItems.get(item);
     if (cached) return cached;
@@ -637,8 +699,11 @@ export class HostState {
         modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
         updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
         activeRunId: thread.activeRunId,
+        settled: thread.settledOverride === "settled", searchTerms: threadPullRequestSearchTerms(thread),
       })),
       providers: this.client.config?.providers ?? [],
+      archiveLoaded: this.archive !== null,
+      usageLimitSources: this.client.config?.usageLimitSources ?? [],
       favoriteModels: this.options.favoriteModels?.() ?? [],
       draft: this.conversationDraft(view),
       ...(activeThreadId ? { activeThreadId } : {}),

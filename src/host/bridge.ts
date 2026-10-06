@@ -3,6 +3,8 @@ import type * as vscode from "vscode";
 import { Events, isObject, paramsObject, stringParam, validateRpcMessage, type BridgeEvent, type HostStateSnapshot, type RpcResult } from "../shared/bridge.js";
 import { SIDEBAR_VIEW_ID, type HostState } from "./hostState.js";
 import { resolveChatFileLink } from "./fileLinks.js";
+import type { TurnDiff, TurnDiffFile } from "./turnDiff.js";
+import type { ReviewDiffFileContentsResult } from "@t3tools/contracts";
 
 export class WebviewRegistry {
   private readonly webviews = new Map<string, vscode.Webview>();
@@ -34,11 +36,12 @@ export class BridgeHandler {
   private readonly registry: WebviewRegistry;
   private readonly showSettings: () => PromiseLike<unknown>;
   private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean> };
+  private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:t3-vscode.t3-vscode"),
     prompts = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
       confirmDelete: async (title: string): Promise<boolean> => (await (await import("vscode")).window.showWarningMessage(`Delete "${title}"?`, { modal: true }, "Delete thread")) === "Delete thread",
-    }) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; this.prompts = prompts; }
+    }, openDiff: BridgeHandler["openDiff"] = async () => { throw new Error("Native diff editor is unavailable."); }) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; this.prompts = prompts; this.openDiff = openDiff; }
   async performThreadAction(id: string, action: string, title?: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     const thread = this.hostState.snapshot(viewId).threads.find((thread) => thread.id === id);
     if (!thread) throw new Error("This thread is not available in the current workspace.");
@@ -69,6 +72,20 @@ export class BridgeHandler {
       const id = () => stringParam(params, "threadId");
       switch (message.method) {
         case "getState": break;
+        case "searchThreads": {
+          if (typeof params.query !== "string") throw new Error("Invalid search query.");
+          return { id: message.id, result: await this.hostState.searchThreads(params.query, viewId) };
+        }
+        case "composerSuggestions": {
+          if (typeof params.query !== "string" || typeof params.atPromptStart !== "boolean") throw new Error("Invalid composer query.");
+          return { id: message.id, result: await this.hostState.composerSuggestions(stringParam(params, "kind"), params.query, params.atPromptStart, viewId) };
+        }
+        case "refreshUsage": await this.hostState.refreshUsage(); break;
+        case "openTurnDiff": {
+          if (params.path !== undefined && typeof params.path !== "string") throw new Error("Invalid diff path.");
+          const diff = await this.hostState.prepareTurnDiff(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId"), viewId);
+          await this.openDiff(diff, (file) => this.hostState.loadTurnDiffFile(diff, file, viewId), params.path as string | undefined); break;
+        }
         case "focusView": this.registry.focus(viewId); break;
         case "loadArchive": await this.hostState.loadArchive(); break;
         case "selectThread": await this.hostState.selectThread(id(), viewId); break;
