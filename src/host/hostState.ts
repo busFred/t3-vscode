@@ -1,0 +1,401 @@
+/** Single host-owned T3 projection shared by the sidebar and every editor tab. */
+import { randomUUID } from "node:crypto";
+import { basename, resolve } from "node:path";
+import {
+  OrchestrationV2TurnItemJson, ModelSelection as ModelSelectionSchema,
+  ProviderApprovalDecision, ProviderInteractionMode, RuntimeMode,
+  type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
+  type OrchestrationV2ThreadProjection, type OrchestrationV2ThreadStreamItem,
+  type OrchestrationV2TurnItem, type OrchestrationV2ThreadShell, type ServerConfig,
+} from "@t3tools/contracts";
+import * as ShellState from "@t3tools/client-runtime/state/shell";
+import { applyOrchestrationV2ProjectionEvent } from "@t3tools/client-runtime/state/orchestration-v2-projection";
+import { derivePendingThreadRequests, createQuestionHistoryProjector } from "@t3tools/client-runtime/state/thread-requests";
+import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/turn-item-presentation";
+import { mergeOlderHistoryIntoProjection, EMPTY_THREAD_HISTORY_META, applyHistoryPageMeta, type ThreadHistoryMeta } from "@t3tools/client-runtime/state/thread-history-merge";
+import { resolveWorkEntryToolPresentation } from "@t3tools/client-runtime/work-log/presentation";
+import { turnItemNeedsDetailFetch, turnItemOutputText } from "@t3tools/client-runtime/work-log/item-detail";
+import * as DateTime from "effect/DateTime";
+import * as Schema from "effect/Schema";
+import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse } from "../shared/bridge.js";
+import { pairWithServer } from "./pairing.js";
+import { discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
+import type { CredentialStore } from "./sessionStore.js";
+import type { T3Client, Subscription } from "./t3Client.js";
+
+export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "dispatch" | "ensureScratchProject" | "createProject" | "getHistory" | "getTurnItem"> & { readonly config: Pick<ServerConfig, "providers"> | null };
+export interface HostStateOptions {
+  readonly home: string;
+  readonly credentials: CredentialStore;
+  readonly workspaceRoot?: () => string | null;
+  readonly discover?: typeof discoverServer;
+  readonly pair?: typeof pairWithServer;
+  readonly reconnectDelayMs?: number;
+}
+interface ThreadState {
+  projection: OrchestrationV2ThreadProjection | null;
+  sequence: number;
+  history: ThreadHistoryMeta;
+  loading: boolean;
+}
+const blankThread = (): ThreadState => ({ projection: null, sequence: -1, history: EMPTY_THREAD_HISTORY_META, loading: true });
+const describeError = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
+function authFailure(cause: unknown): boolean {
+  return typeof cause === "object" && cause !== null && (
+    ("reason" in cause && cause.reason === "authentication") ||
+    ("_tag" in cause && cause._tag === "EnvironmentAuthInvalidError") ||
+    ("status" in cause && cause.status === 401));
+}
+
+export class HostState {
+  private phase: HostPhase = "discovering";
+  private notice: string | undefined;
+  private server: DiscoveredServer | null = null;
+  private shell: OrchestrationV2ShellSnapshot | null = null;
+  private activeThreadId: string | undefined;
+  private readonly threads = new Map<string, ThreadState>();
+  private shellSubscription: Subscription | null = null;
+  private threadSubscription: Subscription | null = null;
+  private threadGeneration = 0;
+  private sending = false;
+  private chain: Promise<unknown> = Promise.resolve();
+  private disposed = false;
+  private revision = 0;
+  private emitTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly listeners = new Set<(state: HostStateSnapshot) => void>();
+  private readonly encodedItems = new WeakMap<OrchestrationV2TurnItem, Omit<TranscriptItem, "key" | "sourceThreadId">>();
+  private readonly projectQuestionHistory = createQuestionHistoryProjector();
+
+  private readonly options: HostStateOptions;
+  private readonly client: HostTransport;
+  constructor(options: HostStateOptions, client: HostTransport) {
+    this.options = options; this.client = client;
+    client.onClose = () => { void this.enqueue(() => this.recoverConnection()); };
+    client.onConfig = () => this.scheduleEmit();
+  }
+  onDidChangeState(listener: (state: HostStateSnapshot) => void): () => void {
+    this.listeners.add(listener); listener(this.snapshot());
+    return () => { this.listeners.delete(listener); };
+  }
+  private enqueue<T>(action: () => Promise<T>): Promise<T> {
+    const next = this.chain.then(() => {
+      if (this.disposed) throw new Error("T3 extension is closed.");
+      return action();
+    });
+    this.chain = next.catch(() => undefined);
+    return next;
+  }
+  start(): Promise<void> { return this.enqueue(() => this.connect(false)); }
+  reconnect(): Promise<void> { return this.enqueue(() => this.connect(false)); }
+  pairNow(): Promise<void> { return this.enqueue(() => this.connect(true)); }
+
+  private async stopSubscriptions(): Promise<void> {
+    this.threadGeneration += 1;
+    const shell = this.shellSubscription; const thread = this.threadSubscription;
+    this.shellSubscription = null; this.threadSubscription = null;
+    await shell?.(); await thread?.();
+  }
+  private async connect(forcePair: boolean): Promise<void> {
+    await this.stopSubscriptions();
+    await this.client.disconnect();
+    this.setPhase("discovering");
+    const discovered = await (this.options.discover ?? discoverServer)(this.options.home);
+    if (!discovered.ok) { this.server = null; this.setPhase("no-server", discovered.reason); return; }
+    if (this.server?.descriptor.environmentId !== discovered.server.descriptor.environmentId) {
+      this.shell = null; this.threads.clear(); this.activeThreadId = undefined;
+    }
+    this.server = discovered.server;
+    try {
+      const stored = forcePair ? null : await this.options.credentials.get();
+      if (stored && stored.environmentId === this.server.descriptor.environmentId) {
+        this.setPhase("connecting");
+        try { await this.client.connect(this.server, stored.accessToken); }
+        catch (cause) {
+          if (!authFailure(cause)) throw cause;
+          await this.options.credentials.clear();
+        }
+      }
+      if (!this.client.connected) {
+        this.setPhase("pairing");
+        const session = await (this.options.pair ?? pairWithServer)({ home: this.options.home,
+          origin: this.server.origin, environmentId: this.server.descriptor.environmentId });
+        await this.options.credentials.save(session);
+        this.setPhase("connecting");
+        await this.client.connect(this.server, session.accessToken);
+      }
+      if (this.disposed) { await this.client.disconnect(); return; }
+      this.shell = await this.client.snapshotShell();
+      this.shellSubscription = await this.client.subscribeShell((item) => this.handleShell(item));
+      const selected = this.findThread(this.activeThreadId);
+      const latest = [...this.shell.threads].sort((a, b) => DateTime.toEpochMillis(b.updatedAt) - DateTime.toEpochMillis(a.updatedAt))[0];
+      this.activeThreadId = selected?.id ?? latest?.id;
+      if (this.activeThreadId) await this.subscribeActiveThread();
+      this.setPhase("ready");
+    } catch (cause) {
+      this.setPhase("error", describeError(cause));
+    }
+  }
+  private async recoverConnection(): Promise<void> {
+    for (let attempt = 0; attempt < 3 && !this.disposed; attempt += 1) {
+      this.setPhase("connecting", "Connection lost. Reconnecting…");
+      await new Promise((resolve) => setTimeout(resolve, (this.options.reconnectDelayMs ?? 1000) * (attempt + 1)));
+      if (this.disposed) return;
+      await this.connect(false); // Re-discovers the origin and recreates every subscription.
+      if (this.client.connected && this.phase === "ready") return;
+    }
+  }
+  private handleShell(item: OrchestrationV2ShellStreamItem): void {
+    if (item.kind === "synchronized") return;
+    if (item.kind === "snapshot") {
+      this.shell = ShellState.mergeShellSnapshotProjects(this.shell, item.snapshot,
+        item.resolvedRepositoryIdentityRoots === undefined ? undefined : { resolvedRepositoryIdentityRoots: item.resolvedRepositoryIdentityRoots });
+    } else if (this.shell) {
+      this.shell = ShellState.applyShellStreamEvent(this.shell, item);
+    }
+    this.scheduleEmit();
+  }
+  private allThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
+    return [...(this.shell?.threads ?? []), ...(this.shell?.archivedThreads ?? [])];
+  }
+  private findThread(id: string | undefined) { return this.allThreads().find((thread) => thread.id === id); }
+  private requireThread(id: string): OrchestrationV2ThreadShell {
+    if (!this.client.connected) throw new Error("T3 is disconnected.");
+    const thread = this.findThread(id);
+    if (!thread) throw new Error("This thread is no longer available. Refresh the thread list.");
+    return thread;
+  }
+  selectThread(id: string): Promise<void> {
+    return this.enqueue(async () => {
+      this.requireThread(id);
+      if (this.activeThreadId === id && this.threadSubscription) return;
+      this.activeThreadId = id;
+      await this.subscribeActiveThread(); this.emit();
+    });
+  }
+  private async subscribeActiveThread(): Promise<void> {
+    const id = this.activeThreadId;
+    const generation = ++this.threadGeneration;
+    await this.threadSubscription?.(); this.threadSubscription = null;
+    if (!id) return;
+    const state = blankThread();
+    this.threads.set(id, state);
+    // Only the selected thread stays subscribed; bound cached projections too.
+    for (const key of this.threads.keys()) {
+      if (this.threads.size <= 5) break;
+      if (key !== id) this.threads.delete(key);
+    }
+    this.threadSubscription = await this.client.subscribeThread(id, (item) => {
+      if (generation !== this.threadGeneration || this.disposed) return;
+      this.handleThread(state, item);
+    });
+  }
+  private handleThread(state: ThreadState, item: OrchestrationV2ThreadStreamItem): void {
+    if (item.kind === "snapshot") {
+      state.projection = item.projection; state.sequence = item.snapshotSequence; state.loading = false;
+      state.history = { ...EMPTY_THREAD_HISTORY_META, historyCursor: item.historyCursor ?? null,
+        hasMoreHistory: item.hasMoreHistory ?? false, latestLocalTurnOrdinal: item.latestLocalTurnOrdinal ?? null };
+    } else if (item.kind === "event" && item.sequence > state.sequence) {
+      state.projection = applyOrchestrationV2ProjectionEvent(state.projection, item.event, {
+        partialTimeline: state.history.hasMoreHistory || state.history.expanded,
+        latestLocalTurnOrdinal: state.history.latestLocalTurnOrdinal,
+      });
+      state.sequence = item.sequence;
+      if (item.event.type === "turn-item.updated") {
+        state.history = { ...state.history, latestLocalTurnOrdinal: Math.max(state.history.latestLocalTurnOrdinal ?? 0, item.event.payload.ordinal) };
+      }
+    } else if (item.kind === "synchronized") { state.loading = false; }
+    this.scheduleEmit();
+  }
+  newThread(projectId?: string): Promise<string> { return this.enqueue(() => this.createThread(projectId)); }
+  private chooseModel(preferred?: ModelSelection | null): ModelSelection {
+    const providers = this.client.config?.providers.filter((provider) => provider.enabled && provider.installed && provider.availability !== "unavailable") ?? [];
+    if (preferred && providers.some((provider) => provider.instanceId === preferred.instanceId && provider.models.some((model) => model.slug === preferred.model))) return preferred;
+    for (const provider of providers) {
+      const model = provider.models.find((item) => item.isDefault) ?? provider.models[0];
+      if (model) return { instanceId: provider.instanceId, model: model.slug };
+    }
+    throw new Error("No available provider models. Configure a provider in T3 Code, then reconnect.");
+  }
+  private async createThread(requestedProjectId?: string): Promise<string> {
+    if (!this.client.connected) throw new Error("T3 is disconnected.");
+    let projectId = requestedProjectId;
+    if (projectId && !this.shell?.projects.some((project) => project.id === projectId)) throw new Error("Project not found.");
+    if (!projectId) {
+      const root = this.options.workspaceRoot?.();
+      if (root) {
+        projectId = this.shell?.projects.find((project) => resolve(project.workspaceRoot) === resolve(root))?.id;
+        if (!projectId) projectId = await this.client.createProject(root, basename(root));
+      } else { projectId = this.findThread(this.activeThreadId)?.projectId; }
+    }
+    projectId ??= await this.client.ensureScratchProject();
+    this.shell = await this.client.snapshotShell();
+    const project = this.shell.projects.find((candidate) => candidate.id === projectId);
+    const model = this.chooseModel(project?.defaultModelSelection ?? this.findThread(this.activeThreadId)?.modelSelection);
+    const id = randomUUID();
+    await this.client.dispatch({ type: "thread.create", commandId: randomUUID(), threadId: id, projectId,
+      createdBy: "user", creationSource: "web", title: "New thread", modelSelection: model,
+      runtimeMode: "auto", interactionMode: "default", branch: null, worktreePath: null });
+    this.shell = await this.client.snapshotShell();
+    this.activeThreadId = id;
+    await this.subscribeActiveThread(); this.emit();
+    return id;
+  }
+  sendMessage(text: string, targetThreadId?: string): Promise<void> {
+    return this.enqueue(async () => {
+      if (!text.trim()) throw new Error("Enter a message.");
+      const id = targetThreadId ?? await this.createThread();
+      const thread = this.requireThread(id);
+      if (thread.archivedAt) throw new Error("Restore this thread before sending a message.");
+      this.sending = true; this.emit();
+      try {
+        await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id,
+          createdBy: "user", creationSource: "web", messageId: randomUUID(), text, attachments: [],
+          titleSeed: text.trim().slice(0, 160), deliveryIntent: "auto", dispatchMode: { type: "start_immediately" } });
+      } finally { this.sending = false; this.emit(); }
+    });
+  }
+  setModel(id: string, input: unknown): Promise<void> {
+    return this.enqueue(async () => {
+      const thread = this.requireThread(id);
+      const selection = Schema.decodeUnknownSync(ModelSelectionSchema)(input);
+      const provider = this.client.config?.providers.find((item) => item.instanceId === selection.instanceId);
+      if (!provider?.enabled || !provider.installed || !provider.models.some((model) => model.slug === selection.model)) throw new Error("This model is unavailable.");
+      if (provider.requiresNewThreadForModelChange && thread.itemCount > 0 && (selection.model !== thread.modelSelection.model || selection.instanceId !== thread.modelSelection.instanceId)) throw new Error("This provider requires a new thread to change models.");
+      await this.client.dispatch({ type: "thread.model-selection.set", commandId: randomUUID(), threadId: id, modelSelection: selection });
+    });
+  }
+  setModes(id: string, input: { runtimeMode?: unknown; interactionMode?: unknown }): Promise<void> {
+    return this.enqueue(async () => {
+      const thread = this.requireThread(id);
+      if (input.runtimeMode !== undefined) {
+        const mode = Schema.decodeUnknownSync(RuntimeMode)(input.runtimeMode);
+        const supported = this.client.config?.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId)?.supportedRuntimeModes;
+        if (supported && !supported.includes(mode)) throw new Error("This provider does not support that permission mode.");
+        await this.client.dispatch({ type: "thread.runtime-mode.set", commandId: randomUUID(), threadId: id, runtimeMode: mode });
+      }
+      if (input.interactionMode !== undefined) await this.client.dispatch({ type: "thread.interaction-mode.set", commandId: randomUUID(), threadId: id,
+        interactionMode: Schema.decodeUnknownSync(ProviderInteractionMode)(input.interactionMode) });
+    });
+  }
+  interrupt(id: string): Promise<void> {
+    return this.enqueue(async () => {
+      const thread = this.requireThread(id);
+      const runId = thread.activeRunId;
+      if (!runId) return;
+      await this.client.dispatch({ type: "run.interrupt", commandId: randomUUID(), threadId: id, runId, holdQueue: true });
+    });
+  }
+  respondToRequest(input: RequestResponse): Promise<void> {
+    return this.enqueue(async () => {
+      this.requireThread(input.threadId);
+      const state = this.threads.get(input.threadId)?.projection;
+      const request = state?.runtimeRequests.find((request) => request.id === input.requestId && request.status === "pending");
+      if (!request) throw new Error("This request is no longer pending.");
+      if (request.responseCapability.type === "not_resumable") throw new Error("The provider process has ended. Restart the turn to respond.");
+      const response = input.decision !== undefined
+        ? { decision: Schema.decodeUnknownSync(ProviderApprovalDecision)(input.decision) }
+        : { answers: input.answers ?? {} };
+      await this.client.dispatch({ type: "runtime-request.respond", commandId: randomUUID(), ...input, ...response });
+    });
+  }
+  dismissRequest(id: string, requestId: string): Promise<void> {
+    return this.enqueue(async () => {
+      this.requireThread(id);
+      await this.client.dispatch({ type: "thread.user-input.dismiss", commandId: randomUUID(), threadId: id, requestId });
+    });
+  }
+  threadAction(id: string, action: string, title?: string): Promise<void> {
+    return this.enqueue(async () => {
+      this.requireThread(id);
+      if (action === "rename") {
+        if (!title?.trim()) throw new Error("Enter a thread title.");
+        await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, title });
+      } else if (["archive", "unarchive", "pin", "unpin"].includes(action)) {
+        await this.client.dispatch({ type: `thread.${action}`, commandId: randomUUID(), threadId: id });
+      } else throw new Error("Unknown thread action.");
+      this.shell = await this.client.snapshotShell(); this.emit();
+    });
+  }
+  async loadHistory(id: string): Promise<void> {
+    this.requireThread(id);
+    const state = this.threads.get(id);
+    const cursor = state?.history.historyCursor;
+    if (!state?.projection || !cursor || state.history.loading) return;
+    state.history = { ...state.history, loading: true, error: null }; this.emit();
+    try {
+      const page = await this.client.getHistory(id, cursor);
+      if (this.threads.get(id) !== state || state.history.historyCursor !== cursor) return;
+      state.projection = mergeOlderHistoryIntoProjection(state.projection, page.items);
+      state.history = applyHistoryPageMeta(state.history, page);
+    } catch (cause) { state.history = { ...state.history, loading: false, error: describeError(cause) }; }
+    this.emit();
+  }
+  async loadItemDetail(id: string, sourceId: string, itemId: string): Promise<void> {
+    this.requireThread(id);
+    const state = this.threads.get(id);
+    const row = state?.projection?.visibleTurnItems.find((row) => row.sourceThreadId === sourceId && row.sourceItemId === itemId);
+    if (!state?.projection || !row) throw new Error("Timeline item not found.");
+    const result = await this.client.getTurnItem(sourceId, itemId);
+    if (this.threads.get(id) !== state || !result.item) return;
+    const fullItem = result.item;
+    // Do not replace a newer streamed revision with a late detail response.
+    if (!state.projection.visibleTurnItems.some((current) => current.item === row.item)) return;
+    state.projection = { ...state.projection,
+      turnItems: state.projection.turnItems.map((item) => item.id === fullItem.id ? fullItem : item),
+      visibleTurnItems: state.projection.visibleTurnItems.map((current) => current === row ? { ...row, item: fullItem } : current) };
+    this.emit();
+  }
+  workspaceForThread(id?: string): string | null {
+    const thread = this.findThread(id);
+    return thread?.worktreePath ?? this.shell?.projects.find((project) => project.id === thread?.projectId)?.workspaceRoot ?? this.options.workspaceRoot?.() ?? null;
+  }
+  private presentItem(item: OrchestrationV2TurnItem): Omit<TranscriptItem, "key" | "sourceThreadId"> {
+    const cached = this.encodedItems.get(item);
+    if (cached) return cached;
+    const tool = resolveWorkEntryToolPresentation({ label: item.title ?? item.type, structuredPayload: item });
+    const result = { item: Schema.encodeSync(OrchestrationV2TurnItemJson)(item), toolLabel: tool?.displayName ?? null,
+      output: turnItemOutputText(item), needsDetail: turnItemNeedsDetailFetch(item) };
+    this.encodedItems.set(item, result); return result;
+  }
+  snapshot(): HostStateSnapshot {
+    const state = this.activeThreadId ? this.threads.get(this.activeThreadId) : undefined;
+    const projection = state?.projection;
+    const descriptor = this.server?.descriptor;
+    return {
+      revision: this.revision, phase: this.phase, home: this.options.home,
+      ...(this.notice ? { notice: this.notice } : {}),
+      ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
+      projects: this.shell?.projects.map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })) ?? [],
+      threads: this.allThreads().filter((thread) => !thread.deletedAt).map((thread) => ({
+        id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
+        modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
+        updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
+        activeRunId: thread.activeRunId,
+      })),
+      providers: this.client.config?.providers ?? [],
+      ...(this.activeThreadId ? { activeThreadId: this.activeThreadId } : {}),
+      transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => ({
+        key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, ...this.presentItem(row.item),
+      })) : [],
+      pending: projection ? derivePendingThreadRequests(projection) : { approvals: [], userInputs: [] },
+      history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
+      threadLoading: state?.loading ?? false, sending: this.sending,
+    };
+  }
+  private setPhase(phase: HostPhase, notice?: string): void { this.phase = phase; this.notice = notice; this.emit(); }
+  private scheduleEmit(): void {
+    if (this.disposed || this.emitTimer) return;
+    this.emitTimer = setTimeout(() => { this.emitTimer = null; this.emit(); }, 32);
+  }
+  private emit(): void {
+    if (this.disposed) return;
+    this.revision += 1;
+    const snapshot = this.snapshot();
+    for (const listener of this.listeners) listener(snapshot);
+  }
+  async dispose(): Promise<void> {
+    this.disposed = true; this.client.onClose = null; this.client.onConfig = null;
+    if (this.emitTimer) clearTimeout(this.emitTimer);
+    await this.stopSubscriptions(); await this.client.disconnect(); this.listeners.clear();
+  }
+}
