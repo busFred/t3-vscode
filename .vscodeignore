@@ -1,0 +1,9 @@
+# The host and webview bundle their runtime dependencies. Ship only these files.
+**/*
+!package.json
+!README.md
+!dist/extension.mjs
+!dist/webview.js
+!dist/THIRD_PARTY_NOTICES.txt
+!resources/t3-icon.svg
+!vendor/LICENSE.t3code

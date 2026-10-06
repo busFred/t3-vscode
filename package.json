@@ -1,9 +1,13 @@
 {
   "name": "t3-vscode",
   "displayName": "T3 Code",
-  "description": "Thin VS Code client for a T3 Code server \u2014 chat with provider agents (Kimi via ACP registry, Codex, Claude, \u2026) from the sidebar or an editor tab.",
+  "description": "Thin VS Code client for a T3 Code server — chat with provider agents (Kimi via ACP registry, Codex, Claude, …) from the sidebar or an editor tab.",
   "version": "0.0.1",
   "publisher": "t3-vscode",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/busFred/t3-vscode.git"
+  },
   "private": true,
   "type": "module",
   "main": "./dist/extension.mjs",
@@ -125,7 +129,8 @@
     "dev:extension": "tsdown --watch",
     "dev:webview": "vite build --watch",
     "typecheck": "tsc --noEmit",
-    "vscode:prepublish": "pnpm run build",
+    "vscode:prepublish": "pnpm run build && node scripts/generate-notices.mjs",
+    "package": "vsce package --no-dependencies --skip-license",
     "test": "tsx --test src/host/*.test.ts src/shared/*.test.ts scripts/*.test.mjs"
   },
   "dependencies": {
@@ -149,6 +154,7 @@
     "@types/react-dom": "^19.1.0",
     "@types/vscode": "1.100.0",
     "@vitejs/plugin-react": "^4.4.1",
+    "@vscode/vsce": "4.0.0",
     "micromark-util-types": "^2.0.2",
     "playwright-core": "^1.63.0",
     "tailwindcss": "4.3.3",

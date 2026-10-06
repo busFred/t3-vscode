@@ -29,7 +29,7 @@ The launch configuration passes `--profile=Default` and points both `--user-data
 
 If the development window says **T3 server unavailable**, run **T3: start isolated server** in the original repository window, keep its terminal open, then choose **Retry connection**. A running background service under `~/.t3` does not satisfy this isolated development configuration. Pairing happens after the development server is available.
 
-The repository's gitignored `.t3` directory holds the development server and isolated VS Code profile. Normal extension use discovers the shared T3 home (`~/.t3` by default); it does not create `.t3` in each project.
+The repository's gitignored `.t3` directory holds the isolated VS Code profile and any previous development-server data. The current debug server uses `/tmp` instead. Normal extension use discovers the shared T3 home (`~/.t3` by default); it does not create `.t3` in each project.
 
 Open the **T3 Code** activity bar view. **T3: Open Chat in Editor Tab** opens the same app in an editor. All projects are visible regardless of the current VS Code workspace. New threads default to the open workspace, or to the selected project when there is no workspace.
 
@@ -47,12 +47,32 @@ node scripts/verify-edh.mjs --base-dir /tmp/t3-vscode-dev
 
 For deterministic browser checks without a server, run `node scripts/verify-ui.mjs` after building. It verifies rich rows, models, modes, approvals/questions, light/dark layouts and 1,000-item virtualization. It uses `/usr/bin/chromium` by default (`CHROMIUM_PATH` overrides it). The VS Code check uses `/usr/share/code/code` (`VSCODE_BIN` overrides it). Screenshots go to `/tmp/t3-vscode-ui`; neither check changes your normal VS Code profile.
 
+## Package and install locally
+
+With Node.js 22 or later, run from this repository:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm run package
+```
+
+This rebuilds both bundles and produces `t3-vscode-0.0.1.vsix`. The archive includes compiled code, the icon and license notices; development profiles, server data, source maps and `node_modules` are excluded.
+
+In the VS Code window/profile where you want to use it, open **Extensions → ⋯ → Install from VSIX…**, choose that file, then reload the window if prompted. The CLI alternative installs into the named profile:
+
+```sh
+code --profile Default --install-extension ./t3-vscode-0.0.1.vsix
+```
+
+The installed extension normally discovers your already-running T3 service under `~/.t3`. Leave **T3 Code: T3 Home** empty to use that default; an explicit setting or `T3CODE_HOME` overrides it. Packaging does not install the extension or start a server.
+
 ## Where things live
 
 | Path | Purpose |
 | --- | --- |
 | `.vscode/launch.json`, `tasks.json`, `settings.json` | Default-profile F5 launch, build/check tasks and an explicitly started isolated development server |
 | `scripts/prepare-vscode-profile.mjs` | Copies Default settings and extensions into isolated F5 storage without changing the normal installation |
+| `.vscodeignore`, `scripts/generate-notices.mjs` | Limits the VSIX to bundled runtime files and retains third-party license notices |
 | `src/extension.ts` | VS Code activation, commands, sidebar and editor containers, webview CSP |
 | `src/host/serverDiscovery.ts` | Runtime-file discovery, PID check and environment probe |
 | `src/host/pairing.ts`, `sessionStore.ts` | CLI pairing, headless bearer exchange and SecretStorage |
@@ -74,6 +94,6 @@ See [the architecture](docs/t3-vscode-architecture.md) for the host/webview boun
 
 ## Current scope
 
-The core chat migration supports projects/threads, server-advertised models (including ACP instances), modes, message streaming, rich turn items, approvals, questions, Stop and progressive history. Attachment upload, terminal/preview panels, usage dashboards, checkpoint restore and VSIX distribution are later work. Images currently have an Open action rather than an authenticated inline asset pipeline. Specialized tool previews and cross-window behavior still need a fidelity pass. ACP model selection is covered by fixtures; the isolated live-server checks used Codex.
+The core chat migration supports projects/threads, server-advertised models (including ACP instances), modes, message streaming, rich turn items, approvals, questions, Stop, progressive history and local VSIX packaging. Attachment upload, terminal/preview panels, usage dashboards and checkpoint restore are later work. Images currently have an Open action rather than an authenticated inline asset pipeline. Specialized tool previews and cross-window behavior still need a fidelity pass. ACP model selection is covered by fixtures; the isolated live-server checks used Codex.
 
 T3-derived source is MIT-licensed; retain [the upstream notice](vendor/LICENSE.t3code) in distributions.

@@ -5,3 +5,5 @@ overrides:
 allowBuilds:
   esbuild: true
   '@tailwindcss/oxide': true
+  # Local VSIX packaging does not use Microsoft's signing binary.
+  '@vscode/vsce-sign': false
