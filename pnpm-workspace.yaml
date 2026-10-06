@@ -1,0 +1,7 @@
+packages:
+  - vendor/*
+overrides:
+  effect: 4.0.0-rc.115
+allowBuilds:
+  esbuild: true
+  '@tailwindcss/oxide': true

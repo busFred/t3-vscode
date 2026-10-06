@@ -1,0 +1,6 @@
+node_modules/
+dist/
+dist-spike/
+*.vsix
+.t3/
+.plans/
