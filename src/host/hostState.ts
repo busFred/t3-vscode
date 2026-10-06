@@ -1,4 +1,4 @@
-/** Single host-owned T3 projection shared by the sidebar and every editor tab. */
+/** Shared T3 connection and projections, with navigation and drafts owned by each webview. */
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { basename, isAbsolute, resolve } from "node:path";
@@ -42,8 +42,21 @@ interface ThreadState {
   sequence: number;
   history: ThreadHistoryMeta;
   loading: boolean;
+  subscription: Subscription | null;
 }
-const blankThread = (): ThreadState => ({ projection: null, sequence: -1, history: EMPTY_THREAD_HISTORY_META, loading: true });
+const blankThread = (): ThreadState => ({ projection: null, sequence: -1, history: EMPTY_THREAD_HISTORY_META, loading: true, subscription: null });
+export const SIDEBAR_VIEW_ID = "sidebar";
+interface ViewState {
+  activeThreadId: string | undefined;
+  draftProjectId: string | undefined;
+  draftWorkspaceRoot: string | null | undefined;
+  draftModelSelection: ModelSelection | undefined;
+  draftRuntimeMode: RuntimeMode;
+  draftInteractionMode: ProviderInteractionMode;
+  sending: boolean;
+}
+const blankView = (): ViewState => ({ activeThreadId: undefined, draftProjectId: undefined, draftWorkspaceRoot: undefined,
+  draftModelSelection: undefined, draftRuntimeMode: "auto", draftInteractionMode: "default", sending: false });
 const describeError = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
 function authFailure(cause: unknown): boolean {
   return typeof cause === "object" && cause !== null && (
@@ -57,25 +70,16 @@ export class HostState {
   private notice: string | undefined;
   private server: DiscoveredServer | null = null;
   private shell: OrchestrationV2ShellSnapshot | null = null;
-  private activeThreadId: string | undefined;
-  private draftProjectId: string | undefined;
-  // null explicitly selects "No project", even when a VS Code folder is open.
-  private draftWorkspaceRoot: string | null | undefined;
-  private draftModelSelection: ModelSelection | undefined;
-  private draftRuntimeMode: RuntimeMode = "auto";
-  private draftInteractionMode: ProviderInteractionMode = "default";
+  private readonly views = new Map<string, ViewState>([[SIDEBAR_VIEW_ID, blankView()]]);
   private archive: OrchestrationV2ArchivedShellSnapshot | null = null;
   private archiveSubscription: Subscription | null = null;
   private readonly threads = new Map<string, ThreadState>();
   private shellSubscription: Subscription | null = null;
-  private threadSubscription: Subscription | null = null;
-  private threadGeneration = 0;
-  private sending = false;
   private chain: Promise<unknown> = Promise.resolve();
   private disposed = false;
   private revision = 0;
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly listeners = new Set<(state: HostStateSnapshot) => void>();
+  private readonly listeners = new Map<(state: HostStateSnapshot) => void, string>();
   private readonly encodedItems = new WeakMap<OrchestrationV2TurnItem, Omit<TranscriptItem, "key" | "sourceThreadId">>();
   private readonly projectQuestionHistory = createQuestionHistoryProjector();
   private readonly pathIdentities = new Map<string, string>();
@@ -91,9 +95,28 @@ export class HostState {
     };
     client.onConfig = () => this.scheduleEmit();
   }
-  onDidChangeState(listener: (state: HostStateSnapshot) => void): () => void {
-    this.listeners.add(listener); listener(this.snapshot());
+  onDidChangeState(listener: (state: HostStateSnapshot) => void, viewId = SIDEBAR_VIEW_ID): () => void {
+    this.requireView(viewId);
+    this.listeners.set(listener, viewId); listener(this.snapshot(viewId));
     return () => { this.listeners.delete(listener); };
+  }
+  registerView(viewId: string): void {
+    if (this.disposed) throw new Error("T3 extension is closed.");
+    if (this.views.has(viewId)) throw new Error("This conversation view is already open.");
+    // New editor tabs start blank instead of copying another tab's conversation.
+    this.views.set(viewId, blankView()); this.emit();
+  }
+  removeView(viewId: string): Promise<void> {
+    if (viewId === SIDEBAR_VIEW_ID) return Promise.resolve();
+    this.views.delete(viewId);
+    for (const [listener, id] of this.listeners) if (id === viewId) this.listeners.delete(listener);
+    if (this.disposed) return Promise.resolve();
+    return this.enqueue(async () => { await this.syncThreadSubscriptions(); this.emit(); });
+  }
+  private requireView(viewId: string): ViewState {
+    const view = this.views.get(viewId);
+    if (!view) throw new Error("This conversation tab has been closed.");
+    return view;
   }
   private enqueue<T>(action: () => Promise<T>): Promise<T> {
     const next = this.chain.then(() => {
@@ -108,22 +131,23 @@ export class HostState {
   pairNow(): Promise<void> { return this.enqueue(() => this.connect(true)); }
 
   private async stopSubscriptions(): Promise<void> {
-    this.threadGeneration += 1;
-    const shell = this.shellSubscription; const thread = this.threadSubscription; const archive = this.archiveSubscription;
+    const shell = this.shellSubscription; const archive = this.archiveSubscription;
+    const threads = [...this.threads.values()]; this.threads.clear();
     this.archiveSubscription = null;
-    this.shellSubscription = null; this.threadSubscription = null;
-    await shell?.(); await thread?.(); await archive?.();
+    this.shellSubscription = null;
+    await shell?.();
+    for (const state of threads) await state.subscription?.();
+    await archive?.();
   }
   private async connect(forcePair: boolean): Promise<void> {
     await this.stopSubscriptions();
     await this.client.disconnect();
     this.setPhase("discovering");
     const discovered = await (this.options.discover ?? discoverServer)(this.options.home, this.options.serverStartupHint);
-    if (!discovered.ok) { this.server = null; this.setPhase("no-server", discovered.reason); return; }
+    if (!discovered.ok) { this.setPhase("no-server", discovered.reason); return; }
     if (this.server?.descriptor.environmentId !== discovered.server.descriptor.environmentId) {
-      this.shell = null; this.archive = null; this.threads.clear(); this.activeThreadId = undefined;
-      this.draftProjectId = undefined; this.draftWorkspaceRoot = undefined; this.draftModelSelection = undefined;
-      this.draftRuntimeMode = "auto"; this.draftInteractionMode = "default";
+      this.shell = null; this.archive = null;
+      for (const view of this.views.values()) Object.assign(view, blankView());
     }
     this.server = discovered.server;
     try {
@@ -148,10 +172,7 @@ export class HostState {
       this.shell = await this.client.snapshotShell();
       this.shellSubscription = await this.client.subscribeShell((item) => this.handleShell(item));
       if (this.archive) await this.subscribeArchive();
-      const selected = this.findThread(this.activeThreadId);
-      const latest = [...this.visibleThreads()].filter((thread) => !thread.archivedAt).sort((a, b) => DateTime.toEpochMillis(b.updatedAt) - DateTime.toEpochMillis(a.updatedAt))[0];
-      this.activeThreadId = selected?.id ?? latest?.id;
-      if (this.activeThreadId) await this.subscribeActiveThread();
+      await this.reconcileViews(true);
       this.setPhase("ready");
     } catch (cause) {
       this.setPhase("error", describeError(cause));
@@ -174,9 +195,7 @@ export class HostState {
     } else if (this.shell) {
       this.shell = ShellState.applyShellStreamEvent(this.shell, item);
     }
-    if (this.activeThreadId && !this.findThread(this.activeThreadId)) {
-      void this.workspaceChanged().catch((cause) => { if (!this.disposed) this.setPhase("error", describeError(cause)); });
-    }
+    this.reconcileRemovedThreads();
     this.scheduleEmit();
   }
   loadArchive(): Promise<void> { return this.enqueue(() => this.subscribeArchive()); }
@@ -193,6 +212,7 @@ export class HostState {
       this.archive = { ...this.archive, snapshotSequence: item.sequence,
         threads: [...this.archive.threads.filter((thread) => thread.id !== id), ...(item.kind === "thread.updated" ? [item.thread] : [])] };
     }
+    this.reconcileRemovedThreads();
     this.scheduleEmit();
   }
   private allThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
@@ -223,16 +243,32 @@ export class HostState {
     return this.allThreads().filter((thread) => !thread.deletedAt && projects.has(thread.projectId));
   }
   private findThread(id: string | undefined) { return this.visibleThreads().find((thread) => thread.id === id); }
+  private latestThreadId(): string | undefined {
+    return [...this.visibleThreads()].filter((thread) => !thread.archivedAt)
+      .sort((a, b) => DateTime.toEpochMillis(b.updatedAt) - DateTime.toEpochMillis(a.updatedAt))[0]?.id;
+  }
+  private reconcileRemovedThreads(): void {
+    if ([...this.views.values()].some((view) => view.activeThreadId && !this.findThread(view.activeThreadId))) {
+      void this.enqueue(() => this.reconcileViews()).catch((cause) => { if (!this.disposed) this.setPhase("error", describeError(cause)); });
+    }
+  }
+  private async reconcileViews(selectSidebar = false): Promise<void> {
+    for (const [viewId, view] of this.views) {
+      if (view.activeThreadId && !this.findThread(view.activeThreadId)) {
+        view.activeThreadId = viewId === SIDEBAR_VIEW_ID ? this.latestThreadId() : undefined;
+      } else if (selectSidebar && viewId === SIDEBAR_VIEW_ID && !view.activeThreadId) {
+        view.activeThreadId = this.latestThreadId();
+      }
+    }
+    await this.syncThreadSubscriptions(); this.emit();
+  }
   workspaceChanged(): Promise<void> {
     return this.enqueue(async () => {
       this.pathIdentities.clear();
-      this.draftProjectId = undefined; this.draftWorkspaceRoot = undefined;
-      if (this.activeThreadId && !this.findThread(this.activeThreadId)) {
-        this.activeThreadId = [...this.visibleThreads()].filter((thread) => !thread.archivedAt)
-          .sort((a, b) => DateTime.toEpochMillis(b.updatedAt) - DateTime.toEpochMillis(a.updatedAt))[0]?.id;
-        await this.subscribeActiveThread();
+      for (const view of this.views.values()) {
+        view.draftProjectId = undefined; view.draftWorkspaceRoot = undefined;
       }
-      this.emit();
+      await this.reconcileViews(true);
     });
   }
   private requireThread(id: string): OrchestrationV2ThreadShell {
@@ -241,30 +277,36 @@ export class HostState {
     if (!thread) throw new Error("This thread is not available in the current workspace. Refresh the thread list.");
     return thread;
   }
-  selectThread(id: string): Promise<void> {
+  selectThread(id: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     return this.enqueue(async () => {
       this.requireThread(id);
-      if (this.activeThreadId === id && this.threadSubscription) return;
-      this.activeThreadId = id;
-      await this.subscribeActiveThread(); this.emit();
+      const view = this.requireView(viewId);
+      if (view.activeThreadId === id && this.threads.get(id)?.subscription) return;
+      view.activeThreadId = id;
+      await this.syncThreadSubscriptions(); this.emit();
     });
   }
-  private async subscribeActiveThread(): Promise<void> {
-    const id = this.activeThreadId;
-    const generation = ++this.threadGeneration;
-    await this.threadSubscription?.(); this.threadSubscription = null;
-    if (!id) return;
-    const state = blankThread();
-    this.threads.set(id, state);
-    // Only the selected thread stays subscribed; bound cached projections too.
-    for (const key of this.threads.keys()) {
-      if (this.threads.size <= 5) break;
-      if (key !== id) this.threads.delete(key);
+  private async syncThreadSubscriptions(): Promise<void> {
+    const selected = new Set<string>(this.client.connected
+      ? [...this.views.values()].map((view) => this.findThread(view.activeThreadId)?.id).filter((id) => id !== undefined) : []);
+    for (const [id, state] of this.threads) {
+      if (selected.has(id)) continue;
+      // Delete first so callbacks and history responses in flight cannot revive this projection.
+      this.threads.delete(id); await state.subscription?.();
     }
-    this.threadSubscription = await this.client.subscribeThread(id, (item) => {
-      if (generation !== this.threadGeneration || this.disposed) return;
-      this.handleThread(state, item);
-    });
+    for (const id of selected) {
+      if (![...this.views.values()].some((view) => view.activeThreadId === id)) continue;
+      if (this.threads.has(id)) continue;
+      const state = blankThread(); this.threads.set(id, state);
+      try {
+        const subscription = await this.client.subscribeThread(id, (item) => {
+          if (this.disposed || this.threads.get(id) !== state) return;
+          this.handleThread(state, item);
+        });
+        if (this.disposed || this.threads.get(id) !== state) await subscription();
+        else state.subscription = subscription;
+      } catch (cause) { this.threads.delete(id); throw cause; }
+    }
   }
   private handleThread(state: ThreadState, item: OrchestrationV2ThreadStreamItem): void {
     if (item.kind === "snapshot") {
@@ -283,7 +325,7 @@ export class HostState {
     } else if (item.kind === "synchronized") { state.loading = false; }
     this.scheduleEmit();
   }
-  newThread(projectId?: string): Promise<string> { return this.enqueue(() => this.createThread(projectId)); }
+  newThread(projectId?: string, viewId = SIDEBAR_VIEW_ID): Promise<string> { return this.enqueue(() => this.createThread(projectId, viewId)); }
   private availableModel(preferred?: ModelSelection | null): ModelSelection | null {
     const providers = this.client.config?.providers.filter((provider) => provider.enabled && provider.installed && provider.availability !== "unavailable") ?? [];
     if (preferred && providers.some((provider) => provider.instanceId === preferred.instanceId && provider.models.some((model) => model.slug === preferred.model))) return preferred;
@@ -303,59 +345,62 @@ export class HostState {
     if (!supported?.length || supported.includes(preferred)) return preferred;
     return supported.includes("approval-required") ? "approval-required" : supported[0]!;
   }
-  private conversationDraft(): ConversationDraft {
+  private conversationDraft(view: ViewState): ConversationDraft {
     const roots = this.workspaceRoots();
-    const chosenRoot = this.draftWorkspaceRoot === undefined ? roots[0] ?? null : this.draftWorkspaceRoot;
+    const chosenRoot = view.draftWorkspaceRoot === undefined ? roots[0] ?? null : view.draftWorkspaceRoot;
     const root = roots.length && (!chosenRoot || !this.pathInWorkspace(chosenRoot)) ? roots[0]! : chosenRoot;
-    const active = this.findThread(this.activeThreadId);
+    const active = this.findThread(view.activeThreadId);
     const projects = this.visibleProjects();
-    const project = projects.find((item) => item.id === this.draftProjectId)
+    const project = projects.find((item) => item.id === view.draftProjectId)
       ?? (root ? projects.find((item) => this.pathIdentity(item.workspaceRoot) === this.pathIdentity(root))
-        : this.draftWorkspaceRoot === null ? undefined : projects.find((item) => item.id === active?.projectId));
-    const modelSelection = this.availableModel(this.draftModelSelection ?? project?.defaultModelSelection ?? active?.modelSelection);
+        : view.draftWorkspaceRoot === null ? undefined : projects.find((item) => item.id === active?.projectId));
+    const modelSelection = this.availableModel(view.draftModelSelection ?? project?.defaultModelSelection ?? active?.modelSelection);
     const supportsNoProject = !roots.length && availableScratchWorkspaceRoot(this.client.connected ? "connected" : null, this.client.config) !== null;
     return { projectId: project?.id ?? null, workspaceRoot: project?.workspaceRoot ?? root, supportsNoProject, modelSelection,
-      runtimeMode: this.compatibleRuntimeMode(modelSelection, this.draftRuntimeMode), interactionMode: this.draftInteractionMode };
+      runtimeMode: this.compatibleRuntimeMode(modelSelection, view.draftRuntimeMode), interactionMode: view.draftInteractionMode };
   }
-  chooseProject(projectId?: string): Promise<void> {
+  chooseProject(projectId?: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     return this.enqueue(async () => {
-      if (projectId) this.applyProjectSelection({ projectId });
-      else await this.pickDraftProject();
+      const view = this.requireView(viewId);
+      if (projectId) this.applyProjectSelection(view, { projectId });
+      else await this.pickDraftProject(viewId);
       this.emit();
     });
   }
-  private applyProjectSelection(selection: ProjectSelection): void {
+  private applyProjectSelection(view: ViewState, selection: ProjectSelection): void {
     if ("noProject" in selection) {
-      if (!this.conversationDraft().supportsNoProject) throw new Error("This server requires a project. Choose a project folder.");
-      this.draftProjectId = undefined; this.draftWorkspaceRoot = null;
+      if (!this.conversationDraft(view).supportsNoProject) throw new Error("This server requires a project. Choose a project folder.");
+      view.draftProjectId = undefined; view.draftWorkspaceRoot = null;
     } else if ("projectId" in selection) {
       const project = this.visibleProjects().find((item) => item.id === selection.projectId);
       if (!project) throw new Error("Project not found in the current workspace.");
-      this.draftProjectId = project.id; this.draftWorkspaceRoot = project.workspaceRoot;
+      view.draftProjectId = project.id; view.draftWorkspaceRoot = project.workspaceRoot;
     } else {
       if (!isAbsolute(selection.workspaceRoot)) throw new Error("Choose an absolute project folder.");
       if (!this.pathInWorkspace(selection.workspaceRoot)) throw new Error("Choose a folder from the current VS Code workspace.");
-      this.draftProjectId = undefined; this.draftWorkspaceRoot = resolve(selection.workspaceRoot);
+      view.draftProjectId = undefined; view.draftWorkspaceRoot = resolve(selection.workspaceRoot);
     }
   }
-  private async pickDraftProject(): Promise<boolean> {
+  private async pickDraftProject(viewId: string): Promise<boolean> {
+    const view = this.requireView(viewId);
     const projects = this.visibleProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot }));
-    const selected = await this.options.pickProject?.(projects, this.conversationDraft().supportsNoProject, this.workspaceRoots());
+    const selected = await this.options.pickProject?.(projects, this.conversationDraft(view).supportsNoProject, this.workspaceRoots());
     if (!selected) return false;
-    this.applyProjectSelection(selected);
+    this.applyProjectSelection(this.requireView(viewId), selected);
     return true;
   }
-  private async createThread(requestedProjectId?: string): Promise<string> {
+  private async createThread(requestedProjectId: string | undefined, viewId: string): Promise<string> {
+    const view = this.requireView(viewId);
     if (!this.client.connected) throw new Error("T3 is disconnected.");
     this.chooseModel();
-    let draft = this.conversationDraft();
+    let draft = this.conversationDraft(view);
     let projectId = requestedProjectId ?? draft.projectId ?? undefined;
     if (projectId && !this.visibleProjects().some((project) => project.id === projectId)) throw new Error("Project not found in the current workspace.");
     if (!projectId && !draft.workspaceRoot) {
       if (draft.supportsNoProject) projectId = await this.client.ensureScratchProject();
       else {
-        if (!await this.pickDraftProject()) throw new Error("Choose a project or open a folder before starting a conversation.");
-        draft = this.conversationDraft();
+        if (!await this.pickDraftProject(viewId)) throw new Error("Choose a project or open a folder before starting a conversation.");
+        draft = this.conversationDraft(view);
         projectId = draft.projectId ?? undefined;
       }
     }
@@ -369,38 +414,42 @@ export class HostState {
     if (!projectId) throw new Error("Choose a project before starting a conversation.");
     this.shell = await this.client.snapshotShell();
     const project = this.shell.projects.find((candidate) => candidate.id === projectId);
-    const model = this.chooseModel(this.draftModelSelection ?? project?.defaultModelSelection ?? draft.modelSelection);
+    this.requireView(viewId);
+    const model = this.chooseModel(view.draftModelSelection ?? project?.defaultModelSelection ?? draft.modelSelection);
     const id = randomUUID();
     await this.client.dispatch({ type: "thread.create", commandId: randomUUID(), threadId: id, projectId,
       createdBy: "user", creationSource: "web", title: "New thread", modelSelection: model,
       runtimeMode: this.compatibleRuntimeMode(model, draft.runtimeMode), interactionMode: draft.interactionMode, branch: null, worktreePath: null });
     this.shell = await this.client.snapshotShell();
-    this.activeThreadId = id;
-    await this.subscribeActiveThread(); this.emit();
+    if (this.views.get(viewId) === view) view.activeThreadId = id;
+    await this.syncThreadSubscriptions(); this.emit();
     return id;
   }
-  sendMessage(text: string, targetThreadId?: string): Promise<void> {
+  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     return this.enqueue(async () => {
+      this.requireView(viewId);
       if (!text.trim()) throw new Error("Enter a message.");
-      const id = targetThreadId ?? await this.createThread();
+      const id = targetThreadId ?? await this.createThread(undefined, viewId);
+      const view = this.requireView(viewId);
       const thread = this.requireThread(id);
       if (thread.archivedAt) throw new Error("Restore this thread before sending a message.");
-      this.sending = true; this.emit();
+      view.sending = true; this.emit();
       try {
         await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id,
           createdBy: "user", creationSource: "web", messageId: randomUUID(), text, attachments: [],
           titleSeed: text.trim().slice(0, 160), deliveryIntent: "auto", dispatchMode: { type: "start_immediately" } });
-      } finally { this.sending = false; this.emit(); }
+      } finally { view.sending = false; this.emit(); }
     });
   }
-  setModel(id: string | undefined, input: unknown): Promise<void> {
+  setModel(id: string | undefined, input: unknown, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     return this.enqueue(async () => {
+      const view = this.requireView(viewId);
       const selection = Schema.decodeUnknownSync(ModelSelectionSchema)(input);
       const provider = this.client.config?.providers.find((item) => item.instanceId === selection.instanceId);
       if (!provider?.enabled || !provider.installed || provider.availability === "unavailable" || !provider.models.some((model) => model.slug === selection.model)) throw new Error("This model is unavailable.");
       if (id === undefined) {
-        this.draftModelSelection = selection;
-        this.draftRuntimeMode = this.compatibleRuntimeMode(selection, this.draftRuntimeMode);
+        view.draftModelSelection = selection;
+        view.draftRuntimeMode = this.compatibleRuntimeMode(selection, view.draftRuntimeMode);
         this.emit(); return;
       }
       const thread = this.requireThread(id);
@@ -408,14 +457,15 @@ export class HostState {
       await this.client.dispatch({ type: "thread.model-selection.set", commandId: randomUUID(), threadId: id, modelSelection: selection });
     });
   }
-  setModes(id: string | undefined, input: { runtimeMode?: unknown; interactionMode?: unknown }): Promise<void> {
+  setModes(id: string | undefined, input: { runtimeMode?: unknown; interactionMode?: unknown }, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     return this.enqueue(async () => {
+      const view = this.requireView(viewId);
       if (id === undefined) {
-        const draft = this.conversationDraft();
+        const draft = this.conversationDraft(view);
         const mode = input.runtimeMode === undefined ? draft.runtimeMode : Schema.decodeUnknownSync(RuntimeMode)(input.runtimeMode);
         const interaction = input.interactionMode === undefined ? draft.interactionMode : Schema.decodeUnknownSync(ProviderInteractionMode)(input.interactionMode);
         if (this.compatibleRuntimeMode(draft.modelSelection, mode) !== mode) throw new Error("This provider does not support that permission mode.");
-        this.draftRuntimeMode = mode; this.draftInteractionMode = interaction; this.emit(); return;
+        view.draftRuntimeMode = mode; view.draftInteractionMode = interaction; this.emit(); return;
       }
       const thread = this.requireThread(id);
       if (input.runtimeMode !== undefined) {
@@ -514,8 +564,9 @@ export class HostState {
       output: turnItemOutputText(item), needsDetail: turnItemNeedsDetailFetch(item) };
     this.encodedItems.set(item, result); return result;
   }
-  snapshot(): HostStateSnapshot {
-    const activeThreadId = this.findThread(this.activeThreadId)?.id;
+  snapshot(viewId = SIDEBAR_VIEW_ID): HostStateSnapshot {
+    const view = this.requireView(viewId);
+    const activeThreadId = this.findThread(view.activeThreadId)?.id;
     const state = activeThreadId ? this.threads.get(activeThreadId) : undefined;
     const projection = state?.projection;
     const descriptor = this.server?.descriptor;
@@ -532,14 +583,14 @@ export class HostState {
         activeRunId: thread.activeRunId,
       })),
       providers: this.client.config?.providers ?? [],
-      draft: this.conversationDraft(),
+      draft: this.conversationDraft(view),
       ...(activeThreadId ? { activeThreadId } : {}),
       transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => ({
         key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, ...this.presentItem(row.item),
       })) : [],
       pending: projection ? derivePendingThreadRequests(projection) : { approvals: [], userInputs: [] },
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
-      threadLoading: state?.loading ?? false, sending: this.sending,
+      threadLoading: state?.loading ?? false, sending: view.sending,
     };
   }
   private setPhase(phase: HostPhase, notice?: string): void { this.phase = phase; this.notice = notice; this.emit(); }
@@ -550,8 +601,7 @@ export class HostState {
   private emit(): void {
     if (this.disposed) return;
     this.revision += 1;
-    const snapshot = this.snapshot();
-    for (const listener of this.listeners) listener(snapshot);
+    for (const [listener, viewId] of this.listeners) listener(this.snapshot(viewId));
   }
   async dispose(): Promise<void> {
     this.disposed = true; this.client.onClose = null; this.client.onConfig = null;

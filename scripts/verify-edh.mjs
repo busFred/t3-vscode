@@ -117,8 +117,7 @@ try {
   assert.equal(await sidebar.evaluate('!!document.querySelector(".chat-header")'), false, "Sidebar must use the native title toolbar only");
   const nativeAction = (label) => workbench.locator(`[aria-label="${label}"]`).filter({ visible: true }).first();
   await nativeAction("Projects and Threads").click();
-  await sidebar.wait('document.querySelector(".navigation-open .thread")');
-  assert.ok(await sidebar.evaluate('document.querySelectorAll(".project-group").length') > 0);
+  await sidebar.wait('document.querySelector(".navigation-open .project-groups")');
   await nativeAction("Projects and Threads").click();
   await sidebar.wait('!document.querySelector(".navigation-open")');
   await nativeAction("New Thread").click();
@@ -132,16 +131,25 @@ try {
   await sidebar.evaluate('document.querySelector(".send-button").click()');
   const reply = '[...document.querySelectorAll(".assistant-message")].some(node => node.textContent.includes("VSCODE-EDH-M1-OK") && !node.querySelector(".streaming-label"))';
   await sidebar.wait(reply, 150_000);
+  const selectedTitle = await sidebar.evaluate('document.querySelector(".thread.active .thread-title")?.textContent');
+  assert.ok(selectedTitle);
   console.log("PASS: native thread navigation, new thread, real message/reply, no duplicate sidebar header");
   await workbench.screenshot({ path: join(evidence, "edh-sidebar.png") });
   await nativeAction("Open Chat in Editor Tab").click();
   const panel = await findWebview("panel");
+  await panel.wait('document.querySelector(".chat-empty")');
+  assert.equal(await panel.evaluate('document.querySelector(".chat-heading strong")?.textContent'), "New conversation");
+  await panel.evaluate(`(() => {
+    const thread = [...document.querySelectorAll('.thread')].find(button => button.querySelector('.thread-title')?.textContent === ${JSON.stringify(selectedTitle)});
+    if (!thread) throw new Error('Sidebar conversation missing from the scoped thread list.');
+    thread.click();
+  })()`);
   await panel.wait(reply);
   assert.equal(await panel.evaluate('!!document.querySelector(".chat-header")'), true);
   await panel.evaluate(`document.querySelector('.chat-header [aria-label="New thread"]').click()`);
   await panel.wait('document.querySelector(".chat-empty")');
-  await sidebar.wait('document.querySelector(".chat-empty")');
-  console.log("PASS: editor tab opens the same conversation; selecting a new thread synchronizes both surfaces");
+  await sidebar.wait(reply);
+  console.log("PASS: editor tab starts blank, can select the sidebar conversation, and creates a new thread without switching the sidebar");
   await workbench.screenshot({ path: join(evidence, "edh-both.png") });
   console.log(`Evidence: ${evidence}; isolated VS Code profile: ${profile}`);
 } finally {

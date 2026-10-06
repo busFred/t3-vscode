@@ -1,9 +1,9 @@
-/** Verify new-conversation settings and No project against a fresh, isolated server; no provider turn runs. */
+/** Verify drafts, independent views and workspace scope against a fresh isolated server; no provider turn runs. */
 import assert from "node:assert/strict";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { HostState } from "../src/host/hostState.js";
+import { HostState, SIDEBAR_VIEW_ID } from "../src/host/hostState.js";
 import { T3Client } from "../src/host/t3Client.js";
 import type { PairedSession } from "../src/host/pairing.js";
 import type { HostStateSnapshot } from "../src/shared/bridge.js";
@@ -16,14 +16,16 @@ if (home === live || home.startsWith(`${live}/`)) throw new Error("Verification 
 const workspace = join(home, "workspace");
 let session: PairedSession | null = null;
 let pickerCalls = 0;
-const host = new HostState({ home, credentials: {
+const credentials = {
   get: async () => session, save: async (next) => { session = next; }, clear: async () => { session = null; },
-}, pickProject: async () => { pickerCalls += 1; return { workspaceRoot: workspace }; } }, new T3Client());
-function waitFor(predicate: (state: HostStateSnapshot) => boolean): Promise<HostStateSnapshot> {
+} satisfies import("../src/host/sessionStore.js").CredentialStore;
+const host = new HostState({ home, credentials, pickProject: async () => { pickerCalls += 1; return { workspaceRoot: workspace }; } }, new T3Client());
+let scoped: HostState | undefined;
+function waitFor(predicate: (state: HostStateSnapshot) => boolean, viewId = SIDEBAR_VIEW_ID): Promise<HostStateSnapshot> {
   return new Promise((resolve, reject) => {
     let off = () => {};
     const timer = setTimeout(() => { off(); reject(new Error("Timed out waiting for the isolated server's thread projection.")); }, 30_000);
-    off = host.onDidChangeState((state) => { if (predicate(state)) { clearTimeout(timer); queueMicrotask(() => off()); resolve(state); } });
+    off = host.onDidChangeState((state) => { if (predicate(state)) { clearTimeout(timer); queueMicrotask(() => off()); resolve(state); } }, viewId);
   });
 }
 try {
@@ -66,4 +68,35 @@ try {
   assert.equal(pickerCalls, 1);
   await writeFile(join(home, "verified-draft.json"), JSON.stringify(folderState, null, 2));
   console.log("PASS: optional folder selection creates a project and keeps No project conversations visible");
-} finally { await host.dispose(); }
+  host.registerView("scratch-tab"); host.registerView("folder-tab"); host.registerView("blank-tab");
+  await host.setModes(undefined, { interactionMode: "plan" }, "blank-tab");
+  await host.selectThread(id, "scratch-tab"); await host.selectThread(folderThreadId, "folder-tab");
+  await waitFor((state) => state.activeThreadId === id && !state.threadLoading, "scratch-tab");
+  const secondFolderId = await host.newThread(folderThread.projectId, "folder-tab");
+  await waitFor((state) => state.activeThreadId === secondFolderId && !state.threadLoading, "folder-tab");
+  assert.equal(host.snapshot().activeThreadId, folderThreadId);
+  assert.equal(host.snapshot("scratch-tab").activeThreadId, id);
+  assert.equal(host.snapshot("blank-tab").activeThreadId, undefined);
+  await host.reconnect();
+  await waitFor((state) => state.activeThreadId === id && !state.threadLoading, "scratch-tab");
+  await waitFor((state) => state.activeThreadId === secondFolderId && !state.threadLoading, "folder-tab");
+  assert.equal(host.snapshot().activeThreadId, folderThreadId);
+  assert.equal(host.snapshot("blank-tab").draft.interactionMode, "plan");
+  await host.removeView("folder-tab");
+  assert.equal(host.snapshot("scratch-tab").activeThreadId, id);
+  assert.equal(host.snapshot().activeThreadId, folderThreadId);
+  console.log("PASS: distinct view selections and a blank Plan draft survive thread creation, reconnect and closing another view");
+  scoped = new HostState({ home, credentials, workspaceRoots: () => [workspace] }, new T3Client());
+  await scoped.start();
+  const scopedState = scoped.snapshot();
+  assert.equal(scopedState.phase, "ready", scopedState.notice);
+  assert.deepEqual(scopedState.projects.map((project) => project.id), [folderThread.projectId]);
+  assert.deepEqual(new Set(scopedState.threads.map((thread) => thread.id)), new Set([folderThreadId, secondFolderId]));
+  assert.equal(scopedState.draft.supportsNoProject, false);
+  await assert.rejects(scoped.selectThread(id), /current workspace/);
+  await scoped.newThread();
+  assert.equal(scoped.snapshot().projects.length, 1);
+  assert.equal(scoped.snapshot().threads.length, 3);
+  assert.ok(scoped.snapshot().threads.every((thread) => thread.projectId === folderThread.projectId));
+  console.log("PASS: an opened folder hides Scratch, rejects outside threads and reuses its existing project for new conversations");
+} finally { await scoped?.dispose(); await host.dispose(); }

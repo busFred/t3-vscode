@@ -7,7 +7,7 @@
 import { basename, resolve } from "node:path";
 import * as vscode from "vscode";
 import { BridgeHandler, WebviewRegistry } from "./host/bridge.js";
-import { HostState } from "./host/hostState.js";
+import { HostState, SIDEBAR_VIEW_ID } from "./host/hostState.js";
 import { resolveT3Home } from "./host/serverDiscovery.js";
 import { SecretCredentialStore } from "./host/sessionStore.js";
 import { T3Client } from "./host/t3Client.js";
@@ -30,10 +30,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const registry = new WebviewRegistry();
   const bridge = new BridgeHandler(hostState, registry);
-  const provider = new T3WebviewProvider(context.extensionUri, registry, bridge);
-  hostState.onDidChangeState((state) => {
-    bridge.pushState(state);
-    provider.updateTitle(state.threads.find((thread) => thread.id === state.activeThreadId)?.title);
+  const provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState);
+  hostState.onDidChangeState(() => {
+    bridge.pushState();
+    provider.updateTitles();
   });
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("t3.webview", provider, {
@@ -118,33 +118,37 @@ async function pickConversationProject(projects: ReadonlyArray<ProjectSummary>, 
  */
 class T3WebviewProvider implements vscode.WebviewViewProvider {
   private sidebar: vscode.WebviewView | undefined;
-  private title = "Chat";
+  private readonly panels = new Map<string, vscode.WebviewPanel>();
   private readonly extensionUri: vscode.Uri;
   private readonly registry: WebviewRegistry;
   private readonly bridge: BridgeHandler;
+  private readonly host: HostState;
 
-  constructor(extensionUri: vscode.Uri, registry: WebviewRegistry, bridge: BridgeHandler) {
+  constructor(extensionUri: vscode.Uri, registry: WebviewRegistry, bridge: BridgeHandler, host: HostState) {
     this.extensionUri = extensionUri;
     this.registry = registry;
     this.bridge = bridge;
+    this.host = host;
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.sidebar = webviewView;
-    webviewView.title = this.title;
-    const id = `sidebar_${crypto.randomUUID()}`;
+    const id = SIDEBAR_VIEW_ID;
     webviewView.webview.options = this.webviewOptions();
-    webviewView.webview.html = this.htmlFor(webviewView.webview, "sidebar");
     this.registry.add(id, webviewView.webview);
-    this.bridge.attach(webviewView.webview);
-    webviewView.onDidDispose(() => { this.registry.remove(id); if (this.sidebar === webviewView) this.sidebar = undefined; });
+    this.bridge.attach(webviewView.webview, id);
+    webviewView.webview.html = this.htmlFor(webviewView.webview, "sidebar");
+    webviewView.onDidDispose(() => { if (this.sidebar === webviewView) { this.registry.remove(id); this.sidebar = undefined; } });
+    this.updateTitles();
   }
 
-  updateTitle(title?: string): void {
-    const next = title || "Chat";
-    if (next === this.title) return;
-    this.title = next;
-    if (this.sidebar) this.sidebar.title = this.title;
+  updateTitles(): void {
+    const titleForView = (id: string) => {
+      const state = this.host.snapshot(id);
+      return state.threads.find((thread) => thread.id === state.activeThreadId)?.title;
+    };
+    if (this.sidebar) this.sidebar.title = titleForView(SIDEBAR_VIEW_ID) || "Chat";
+    for (const [id, panel] of this.panels) panel.title = titleForView(id) || "T3 Code";
   }
 
   async showThreads(): Promise<void> {
@@ -158,11 +162,15 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
       ...this.webviewOptions(),
       retainContextWhenHidden: true,
     });
-    // Selection and live state are shared with the sidebar.
-    panel.webview.html = this.htmlFor(panel.webview, "panel");
+    this.host.registerView(id);
+    this.panels.set(id, panel);
     this.registry.add(id, panel.webview);
-    this.bridge.attach(panel.webview);
-    panel.onDidDispose(() => this.registry.remove(id));
+    this.bridge.attach(panel.webview, id);
+    panel.webview.html = this.htmlFor(panel.webview, "panel");
+    panel.onDidDispose(() => {
+      this.registry.remove(id); this.panels.delete(id);
+      void this.host.removeView(id).catch((cause) => vscode.window.showErrorMessage(String(cause)));
+    });
   }
 
   private webviewOptions(): vscode.WebviewOptions {

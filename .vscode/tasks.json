@@ -74,6 +74,15 @@
       "problemMatcher": []
     },
     {
+      "label": "T3: verify independent tabs",
+      "detail": "Exercise workspace filtering and three built webviews with the real host/bridge and a test transport; no VS Code launch.",
+      "type": "process",
+      "command": "node",
+      "args": ["--import", "tsx", "scripts/verify-views.ts"],
+      "dependsOn": "T3: build",
+      "problemMatcher": []
+    },
+    {
       "label": "T3: verify isolated host",
       "detail": "Requires the isolated server task and an authenticated provider CLI; sends one real test message.",
       "type": "process",

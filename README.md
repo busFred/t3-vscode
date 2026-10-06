@@ -19,7 +19,7 @@ code --new-window --profile Default .
 1. Open this repository in VS Code and run `pnpm install` once.
 2. Run **Terminal → Run Task → T3: start isolated server**. Leave its terminal running. The server uses `/tmp/t3-vscode-dev-t3-vscode` for state and port `47777`; stop it with Ctrl+C in that terminal when finished.
 3. Select **T3: Run Extension (Isolated Server, Default Profile)** in **Run and Debug**, then press **F5**. The pre-launch task copies your **Default** profile into isolated development storage on first use, builds both bundles, and opens a new Extension Development Host window using that copy.
-4. In that new window, open **T3 Code** in the activity bar. Before sending the first message, choose a model, Code/Plan and permission mode in the composer. The project picker offers **No project**, existing T3 projects, or a folder. Use **Projects and Threads** to browse, and **Open Chat in Editor Tab** to check that both surfaces follow the same selected conversation. Try **Thread Actions** in the sidebar overflow menu to rename, pin, archive and restore a thread.
+4. In that new window, open **T3 Code** in the activity bar. Only conversations for the opened repository appear. Before sending the first message, choose a model, Code/Plan and permission mode in the composer. In a multi-root workspace, choose an opened folder; in an empty window, the project picker also offers **No project** when supported. Open several editor tabs with **Open Chat in Editor Tab**, select different conversations, and check that each tab and the sidebar keep their own selection and drafts. Try **Thread Actions** in the sidebar overflow menu to rename, pin, archive and restore a thread.
 
 After editing the extension or UI, stop debugging and press F5 again to rebuild. Breakpoints in the host TypeScript use the generated source maps. **T3: checks** runs typechecking and regression tests; **T3: verify UI** checks the built UI with browser fixtures; **T3: verify isolated host** sends a real provider turn to the development server.
 
@@ -35,6 +35,8 @@ Open the **T3 Code** activity bar view. **T3: Open Chat in Editor Tab** opens th
 
 The sidebar uses VS Code's native title toolbar: **Projects and Threads**, **New Thread**, and **Open Chat in Editor Tab**. Its overflow menu contains **Thread Actions** (rename, pin, archive/restore) and pairing. There is no duplicate header inside the sidebar. The editor tab retains the T3 app header.
 
+Each editor tab opens a blank conversation view. Selecting or creating a thread in one view leaves the other tabs and sidebar on their conversations. Draft project, model and mode choices also belong to that view. Tab titles follow their selected conversations. Opening the same thread deliberately in two views shares its live messages and server settings; closing a tab keeps conversations running in other views.
+
 For development, start a separate server with an explicit home and point `t3-vscode.t3Home` at that directory. Never verify against the live `~/.t3` service:
 
 ```sh
@@ -46,6 +48,8 @@ node scripts/verify-edh.mjs --base-dir /tmp/t3-vscode-dev
 `verify-host.ts` creates a project/thread, runs one provider turn, and verifies rename, pin, archive/restore and reconnect. `verify-edh.mjs` launches its own temporary VS Code profile, sends a real message, and checks synchronization between the sidebar and editor tab. Both require an explicit isolated home and reject `~/.t3`. An authenticated provider CLI must be available to the isolated server. When starting it from a T3-owned terminal, remove inherited `T3_SERVICE_LAUNCHER_CONTEXT` and `T3_BOOT_SERVICE_UNIT` variables from the child environment so it does not try to use the live service launcher.
 
 For deterministic browser checks without a server, run `node scripts/verify-ui.mjs` after building. It verifies rich rows, models, modes, approvals/questions, light/dark layouts and 1,000-item virtualization. It uses `/usr/bin/chromium` by default (`CHROMIUM_PATH` overrides it). The VS Code check uses `/usr/share/code/code` (`VSCODE_BIN` overrides it). Screenshots go to `/tmp/t3-vscode-ui`; neither check changes your normal VS Code profile.
+
+`node --import tsx scripts/verify-views.ts` checks the built UI in three headless pages sharing the actual host and bridge with a deterministic transport. It covers workspace filtering, independent selections and text drafts, new threads, reconnect and closing a view. Screenshots go to `/tmp/t3-vscode-views-ui`. It does not launch VS Code. `scripts/verify-draft.ts --base-dir <fresh-isolated-home>` additionally verifies draft settings, workspace scope and independent subscriptions against a real isolated server without running a provider turn.
 
 ## Package and install locally
 
@@ -77,10 +81,10 @@ The installed extension normally discovers your already-running T3 service under
 | `src/host/serverDiscovery.ts` | Runtime-file discovery, PID check and environment probe |
 | `src/host/pairing.ts`, `sessionStore.ts` | CLI pairing, headless bearer exchange and SecretStorage |
 | `src/host/t3Client.ts` | Vendored Effect RPC transport and authenticated history requests |
-| `src/host/hostState.ts` | Connection lifecycle, authoritative projections, subscriptions and user actions |
-| `src/host/bridge.ts` | Validated webview intents and native clipboard/file/link actions |
+| `src/host/hostState.ts` | Shared connection and projections, workspace scope, per-view navigation and drafts, subscription ownership |
+| `src/host/bridge.ts` | Validated intents and state replies tied to each webview; native clipboard/file/link actions |
 | `src/shared/bridge.ts` | Snapshot DTOs and the allowed postMessage methods |
-| `src/webview/components/ChatView.tsx`, `ThreadList.tsx` | Responsive chat shell and all-project navigation |
+| `src/webview/components/ChatView.tsx`, `ThreadList.tsx` | Responsive chat shell and workspace-scoped navigation |
 | `src/webview/components/Composer.tsx` | Message drafts, model catalog, permission modes and Stop |
 | `src/webview/components/TranscriptView.tsx`, `ChatMarkdown.tsx` | Virtualized typed turn items, markdown and native file/link intents |
 | `src/webview/components/PendingRequests.tsx` | Provider approval choices and question forms |
@@ -88,6 +92,7 @@ The installed extension normally discovers your already-running T3 service under
 | `src/webview/styles/tokens.css` | T3 palettes, Tailwind tokens and VS Code surface layout |
 | `vendor/` | Pinned T3 contracts and client runtime; provenance and license |
 | `scripts/verify-host.ts`, `verify-edh.mjs`, `verify-ui.mjs` | Real-server, real-VS-Code and deterministic browser verification |
+| `scripts/verify-views.ts`, `src/host/testing/` | Three built webviews sharing the real bridge/host with test transports, without launching VS Code |
 | `src/host/*.test.ts`, `src/shared/*.test.ts` | Host behavior and bridge boundary regression tests |
 
 See [the architecture](docs/t3-vscode-architecture.md) for the host/webview boundary and milestones. The [feature comparison](docs/kilo-kimi-t3-feature-matrix.md) remains reference material.
