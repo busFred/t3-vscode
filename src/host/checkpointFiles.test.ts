@@ -1,0 +1,25 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { readCheckpointFiles } from "./checkpointFiles.js";
+
+test("Saved diff files read exact checkpoint blobs even when HEAD and the working file differ", async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), "t3-checkpoint-files-")); t.after(() => rm(cwd, { recursive: true, force: true }));
+  const exec = promisify(execFile);
+  const git = (...args: string[]) => exec("git", ["-C", cwd, ...args]);
+  await git("init", "-q"); await git("config", "user.name", "Test"); await git("config", "user.email", "test@example.invalid");
+  const path = "café file.txt";
+  await writeFile(join(cwd, path), "first\n"); await git("add", path); await git("commit", "-qm", "First"); await git("update-ref", "refs/t3/test/1", "HEAD");
+  await writeFile(join(cwd, path), "second\n"); await git("add", path); await git("commit", "-qm", "Second"); await git("update-ref", "refs/t3/test/2", "HEAD");
+  await writeFile(join(cwd, path), "third on disk\n"); await git("add", path); await git("commit", "-qm", "Later");
+  const input = { cwd, sourceKind: "branch-range" as const, changeType: "change" as const, baseRef: "refs/t3/test/1", headRef: "refs/t3/test/2", oldPath: path, newPath: path };
+  assert.deepEqual(await readCheckpointFiles(input), { oldContents: "first\n", newContents: "second\n" });
+  assert.deepEqual(await readCheckpointFiles({ ...input, changeType: "new", baseRef: null }), { oldContents: "", newContents: "second\n" });
+  assert.deepEqual(await readCheckpointFiles({ ...input, changeType: "deleted", headRef: null }), { oldContents: "first\n", newContents: "" });
+  await assert.rejects(readCheckpointFiles({ ...input, headRef: "HEAD" }), /Invalid saved checkpoint/);
+  await assert.rejects(readCheckpointFiles({ ...input, newPath: "../outside" }), /Invalid saved checkpoint/);
+});

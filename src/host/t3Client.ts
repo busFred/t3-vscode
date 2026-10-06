@@ -24,6 +24,7 @@ import * as Stream from "effect/Stream";
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import * as Socket from "effect/unstable/socket/Socket";
 import type { DiscoveredServer } from "./serverDiscovery.js";
+import { readCheckpointFiles } from "./checkpointFiles.js";
 
 export type Subscription = () => Promise<void>;
 const services = Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal);
@@ -170,7 +171,7 @@ export class T3Client {
     return this.run(this.requireSession().client[V2.getTurnDiff]({ threadId: threadId(id), fromTurnCount, toTurnCount, ignoreWhitespace: false }));
   }
   getDiffFileContents(input: ReviewDiffFileContentsInput) {
-    return this.run(this.requireSession().client[WS_METHODS.reviewGetDiffFileContents](input));
+    return readCheckpointFiles(input);
   }
   // Retained for the standalone M0 transport diagnostic.
   sendMessage(id: string, text: string): Promise<void> {

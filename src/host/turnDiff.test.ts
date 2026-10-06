@@ -28,4 +28,6 @@ test("T3's diff parser preserves add, delete, rename, and quoted Git path metada
   const patch = turnPatch + 'diff --git a/old.ts b/new.ts\nsimilarity index 100%\nrename from old.ts\nrename to new.ts\n' + 'diff --git a/added.ts b/added.ts\nnew file mode 100644\n--- /dev/null\n+++ b/added.ts\n@@ -0,0 +1 @@\n+new\n' + 'diff --git a/deleted.ts b/deleted.ts\ndeleted file mode 100644\n--- a/deleted.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n';
   assert.deepEqual(turnDiffFiles(patch).map(({ changeType }) => changeType), ["change", "rename-pure", "new", "deleted"]);
   assert.deepEqual(turnDiffFiles(patch)[1], { changeType: "rename-pure", oldPath: "old.ts", newPath: "new.ts" });
+  const quoted = 'diff --git "a/caf\\303\\251.ts" "b/caf\\303\\251.ts"\n--- "a/caf\\303\\251.ts"\n+++ "b/caf\\303\\251.ts"\n@@ -1 +1 @@\n-before\n+after\n';
+  assert.deepEqual(turnDiffFiles(quoted), [{ changeType: "change", oldPath: "café.ts", newPath: "café.ts" }]);
 });
