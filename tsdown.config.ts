@@ -7,16 +7,11 @@ export default defineConfig({
   format: ["esm"],
   target: "node20",
   outDir: "dist",
+  clean: false,
   sourcemap: true,
-  external: ["vscode"],
-  banner: {
-    js: [
-      "import { createRequire } from 'module';",
-      "import { fileURLToPath } from 'url';",
-      "import { dirname } from 'path';",
-      "const require = createRequire(import.meta.url);",
-      "const __filename = fileURLToPath(import.meta.url);",
-      "const __dirname = dirname(__filename);",
-    ].join("\n"),
-  },
+  platform: "node",
+  shims: true,
+  // Workspace packages export TypeScript. VS Code must load compiled code,
+  // without depending on pnpm symlinks or Node's TypeScript loader.
+  deps: { neverBundle: ["vscode"], alwaysBundle: [/^(?!vscode$|node:)[^./]/], onlyImport: ["vscode"], onlyBundle: false },
 });
