@@ -11,8 +11,19 @@ pnpm install
 pnpm run build
 pnpm run typecheck
 pnpm run test
-code --extensionDevelopmentPath="$PWD"
+code --new-window --profile Default .
 ```
+
+## Test from VS Code
+
+1. Open this repository in VS Code and run `pnpm install` once.
+2. Run **Terminal → Run Task → T3: start isolated server**. Leave its terminal running. The server uses `.t3/vscode-dev` for state and port `47777`; stop it with Ctrl+C in that terminal when finished.
+3. Select **T3: Run Extension (Default Profile)** in **Run and Debug**, then press **F5**. The pre-launch task builds both bundles and opens a new Extension Development Host window using your **Default** profile.
+4. In that new window, open **T3 Code** in the activity bar. Use **Projects and Threads** to browse, create a thread, and send a short message. Use **Open Chat in Editor Tab** and check that both surfaces follow the same selected conversation. Try **Thread Actions** in the sidebar overflow menu to rename, pin, archive and restore a thread.
+
+After editing the extension or UI, stop debugging and press F5 again to rebuild. Breakpoints in the host TypeScript use the generated source maps. **T3: checks** runs typechecking and regression tests; **T3: verify UI** checks the built UI with browser fixtures; **T3: verify isolated host** sends a real provider turn to the development server.
+
+The launch configuration explicitly passes `--profile=Default`; it uses the Default profile's settings, themes and installed extensions. Profile selection is a [VS Code launch option](https://code.visualstudio.com/docs/configure/profiles#_command-line). `launch.json` sets `T3CODE_HOME` to this repository's `.t3/vscode-dev`, and workspace settings leave `t3-vscode.t3Home` empty so that environment value takes effect. Start the server task before F5; the extension discovers the existing server.
 
 Open the **T3 Code** activity bar view. **T3: Open Chat in Editor Tab** opens the same app in an editor. All projects are visible regardless of the current VS Code workspace. New threads default to the open workspace, or to the selected project when there is no workspace.
 
@@ -34,6 +45,7 @@ For deterministic browser checks without a server, run `node scripts/verify-ui.m
 
 | Path | Purpose |
 | --- | --- |
+| `.vscode/launch.json`, `tasks.json`, `settings.json` | Default-profile F5 launch, build/check tasks and an explicitly started isolated development server |
 | `src/extension.ts` | VS Code activation, commands, sidebar and editor containers, webview CSP |
 | `src/host/serverDiscovery.ts` | Runtime-file discovery, PID check and environment probe |
 | `src/host/pairing.ts`, `sessionStore.ts` | CLI pairing, headless bearer exchange and SecretStorage |

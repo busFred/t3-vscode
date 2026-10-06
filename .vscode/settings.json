@@ -1,0 +1,5 @@
+{
+  // Let launch.json's T3CODE_HOME select the repo-local development server.
+  // VS Code does not expand ${workspaceFolder} in this extension setting.
+  "t3-vscode.t3Home": ""
+}

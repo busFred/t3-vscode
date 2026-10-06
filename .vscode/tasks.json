@@ -1,0 +1,75 @@
+{
+  "version": "2.0.0",
+  "options": {
+    "cwd": "${workspaceFolder}"
+  },
+  "tasks": [
+    {
+      "label": "T3: build",
+      "type": "process",
+      "command": "pnpm",
+      "args": ["run", "build"],
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "T3: typecheck",
+      "type": "process",
+      "command": "pnpm",
+      "args": ["run", "typecheck"],
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "T3: test",
+      "type": "process",
+      "command": "pnpm",
+      "args": ["run", "test"],
+      "problemMatcher": [],
+      "group": "test"
+    },
+    {
+      "label": "T3: checks",
+      "dependsOn": ["T3: typecheck", "T3: test"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "T3: start isolated server",
+      "detail": "Start T3 explicitly with state in .t3/vscode-dev; leave this terminal running while testing.",
+      "type": "process",
+      "command": "env",
+      "args": [
+        "-u", "T3_SERVICE_LAUNCHER_CONTEXT",
+        "-u", "T3_BOOT_SERVICE_UNIT",
+        "t3", "serve",
+        "--base-dir", "${workspaceFolder}/.t3/vscode-dev",
+        "--host", "127.0.0.1",
+        "--port", "47777",
+        "--no-browser"
+      ],
+      "isBackground": true,
+      "problemMatcher": [],
+      "runOptions": { "instanceLimit": 1 },
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "T3: verify UI",
+      "type": "process",
+      "command": "node",
+      "args": ["scripts/verify-ui.mjs"],
+      "dependsOn": "T3: build",
+      "problemMatcher": []
+    },
+    {
+      "label": "T3: verify isolated host",
+      "detail": "Requires the isolated server task and an authenticated provider CLI; sends one real test message.",
+      "type": "process",
+      "command": "pnpm",
+      "args": [
+        "exec", "tsx", "scripts/verify-host.ts",
+        "--base-dir", "${workspaceFolder}/.t3/vscode-dev"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

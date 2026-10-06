@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "T3: Run Extension (Default Profile)",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--new-window",
+        "--profile=Default",
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}"
+      ],
+      "env": {
+        "T3CODE_HOME": "${workspaceFolder}/.t3/vscode-dev",
+        "T3_SERVICE_LAUNCHER_CONTEXT": null,
+        "T3_BOOT_SERVICE_UNIT": null
+      },
+      "outFiles": ["${workspaceFolder}/dist/**/*.mjs"],
+      "sourceMaps": true,
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "T3: build"
+    }
+  ]
+}
