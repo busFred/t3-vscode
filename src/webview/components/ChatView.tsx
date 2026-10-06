@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { PanelLeftIcon, PlusIcon, ChevronDownIcon, PinIcon, ArchiveIcon, PencilIcon, XIcon } from "lucide-react";
+import { PanelLeftIcon, PlusIcon, ChevronDownIcon, PinIcon, ArchiveIcon, PencilIcon, XIcon, SettingsIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { Composer } from "./Composer";
@@ -8,7 +8,7 @@ import { TranscriptView } from "./TranscriptView";
 import { T3Wordmark } from "./t3/T3Wordmark";
 import { bridge, Events } from "../bridge-client";
 
-export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
+export function ChatView({ state, onAppearance }: { readonly state: HostStateSnapshot; readonly onAppearance: () => void }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState("");
@@ -31,6 +31,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
         <button className="icon-button nav-toggle" title="Projects and threads" aria-label="Projects and threads" onClick={() => setNavigationOpen(!navigationOpen)}><PanelLeftIcon size={16} /></button>
         <T3Wordmark className="header-wordmark" aria-label="T3 Code" />
         <div className="chat-heading"><span className="project-label">{project?.title ?? state.environment?.label}</span><strong>{thread?.title || "New conversation"}</strong></div>
+        <button className="icon-button" aria-label="Font settings" title="Font settings" onClick={onAppearance}><SettingsIcon size={15} /></button>
         <button className="icon-button" aria-label="New thread" title="New thread" onClick={() => { void run("newThread"); }}><PlusIcon size={16} /></button>
         {thread ? <details className="thread-menu"><summary className="icon-button" aria-label="Thread actions"><ChevronDownIcon size={14} /></summary>
           <div className="menu-popup">

@@ -73,11 +73,11 @@ export class FakeTransport implements HostTransport {
   getTurnItem: HostTransport["getTurnItem"] = async () => ({ item: null });
 }
 function structuredCloneShell() { return { ...v2ShellSnapshot, projects: [...v2ShellSnapshot.projects], threads: [...v2ShellSnapshot.threads], archivedThreads: [] }; }
-export async function harness(options: Pick<HostStateOptions, "workspaceRoot" | "workspaceRoots" | "pickProject"> = {}, client = new FakeTransport()) {
+export async function harness(options: Pick<HostStateOptions, "workspaceRoot" | "workspaceRoots" | "pickProject" | "appearance" | "saveAppearance"> = {}, client = new FakeTransport()) {
   const host = new HostState({ home: "/tmp/fake-t3-test", credentials, discover: async () => ({ ok: true, server }), reconnectDelayMs: 0, ...options }, client);
   await host.start(); return { host, client };
 }
-export async function viewsHarness() {
+export async function viewsHarness(options: Pick<HostStateOptions, "appearance" | "saveAppearance"> = {}) {
   const client = new FakeTransport();
   client.shell = { ...client.shell, projects: [
     { ...v2Project, workspaceRoot: "/tmp/t3-vscode", title: "t3-vscode" },
@@ -87,7 +87,7 @@ export async function viewsHarness() {
       modelSelection: { instanceId: provider.instanceId, model: provider.models[0]!.slug } })),
     { ...v2ThreadShell, id: ThreadId.make("outside-thread"), projectId: ProjectId.make("outside"), title: "Outside conversation" },
   ] };
-  return harness({ workspaceRoots: () => ["/tmp/t3-vscode"] }, client);
+  return harness({ workspaceRoots: () => ["/tmp/t3-vscode"], ...options }, client);
 }
 export function publishText(client: FakeTransport, id: string, text: string, sequence = 1) {
   const item: OrchestrationV2TurnItem = { id: TurnItemId.make(`text-${id}`), threadId: ThreadId.make(id), type: "assistant_message",

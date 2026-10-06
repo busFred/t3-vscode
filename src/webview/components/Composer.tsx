@@ -33,7 +33,7 @@ export function Composer({ state }: { readonly state: HostStateSnapshot }) {
     if (!textarea.current) return;
     textarea.current.style.height = "auto";
     textarea.current.style.height = `${Math.min(textarea.current.scrollHeight, 220)}px`;
-  }, [text]);
+  }, [text, state.appearance.fontSizePrompt]);
   useEffect(() => {
     if (!modelsOpen) return;
     const close = (event: PointerEvent) => { if (!modelPopup.current?.contains(event.target as Node)) setModelsOpen(false); };

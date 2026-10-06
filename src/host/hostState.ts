@@ -24,6 +24,8 @@ import { pairWithServer } from "./pairing.js";
 import { discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
 import type { CredentialStore } from "./sessionStore.js";
 import type { T3Client, Subscription } from "./t3Client.js";
+import { DEFAULT_APPEARANCE, resolveAppearance, type AppearanceSettings } from "../shared/appearance.js";
+import { parseAppearanceUpdate } from "./appearanceSettings.js";
 
 export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot"> | null };
 export interface HostStateOptions {
@@ -32,6 +34,8 @@ export interface HostStateOptions {
   readonly serverStartupHint?: string | undefined;
   readonly workspaceRoot?: () => string | null;
   readonly workspaceRoots?: () => ReadonlyArray<string>;
+  readonly appearance?: () => AppearanceSettings;
+  readonly saveAppearance?: (update: Partial<AppearanceSettings>) => Promise<void>;
   readonly pickProject?: (projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean, workspaceRoots: ReadonlyArray<string>) => Promise<ProjectSelection | null>;
   readonly discover?: typeof discoverServer;
   readonly pair?: typeof pairWithServer;
@@ -129,6 +133,14 @@ export class HostState {
   start(): Promise<void> { return this.enqueue(() => this.connect(false)); }
   reconnect(): Promise<void> { return this.enqueue(() => this.connect(false)); }
   pairNow(): Promise<void> { return this.enqueue(() => this.connect(true)); }
+  refreshAppearance(): void { this.emit(); }
+  setAppearance(input: unknown): Promise<void> {
+    return this.enqueue(async () => {
+      const update = parseAppearanceUpdate(input);
+      if (!this.options.saveAppearance) throw new Error("Font settings are unavailable in this client.");
+      await this.options.saveAppearance(update); this.emit();
+    });
+  }
 
   private async stopSubscriptions(): Promise<void> {
     const shell = this.shellSubscription; const archive = this.archiveSubscription;
@@ -573,6 +585,7 @@ export class HostState {
     return {
       revision: this.revision, phase: this.phase, home: this.options.home,
       workspaceRoots: this.workspaceRoots(),
+      appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
       ...(this.notice ? { notice: this.notice } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
       projects: this.visibleProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })),

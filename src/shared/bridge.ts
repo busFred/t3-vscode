@@ -6,11 +6,12 @@ import type {
   ServerProvider,
 } from "@t3tools/contracts";
 import type { PendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
+import type { AppearanceSettings } from "./appearance.js";
 
 export const Methods = {
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
   newThread: "newThread", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
-  setModel: "setModel", setModes: "setModes", interrupt: "interrupt",
+  setModel: "setModel", setModes: "setModes", setAppearance: "setAppearance", interrupt: "interrupt",
   respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
   threadAction: "threadAction", openLink: "openLink", copyText: "copyText", openInTab: "openInTab",
@@ -18,7 +19,7 @@ export const Methods = {
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
 export interface RpcResult { readonly id: string; readonly result?: unknown; readonly error?: string }
-export const Events = { stateChanged: "stateChanged", showNavigation: "showNavigation" } as const;
+export const Events = { stateChanged: "stateChanged", showNavigation: "showNavigation", showAppearance: "showAppearance" } as const;
 export type BridgeEvent = (typeof Events)[keyof typeof Events];
 
 export interface ModelSelection {
@@ -59,6 +60,7 @@ export interface HostStateSnapshot {
   readonly phase: HostPhase;
   readonly home: string;
   readonly workspaceRoots: ReadonlyArray<string>;
+  readonly appearance: AppearanceSettings;
   readonly notice?: string;
   readonly environment?: { readonly environmentId: string; readonly label: string; readonly serverVersion?: string };
   readonly projects: ReadonlyArray<ProjectSummary>;

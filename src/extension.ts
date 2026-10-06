@@ -13,6 +13,7 @@ import { SecretCredentialStore } from "./host/sessionStore.js";
 import { T3Client } from "./host/t3Client.js";
 import { getWorkspaceContext } from "./host/workspaceContext.js";
 import { Events, type ProjectSelection, type ProjectSummary } from "./shared/bridge.js";
+import { FONT_SIZE_KEYS, resolveAppearance, type AppearanceSettings } from "./shared/appearance.js";
 
 let hostState: HostState | null = null;
 
@@ -26,7 +27,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const client = new T3Client();
   hostState = new HostState({ home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
-    workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject }, client);
+    workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject,
+    appearance: readAppearance, saveAppearance }, client);
 
   const registry = new WebviewRegistry();
   const bridge = new BridgeHandler(hostState, registry);
@@ -47,6 +49,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("t3-vscode.reconnect", () => hostState?.reconnect()),
     vscode.commands.registerCommand("t3-vscode.newThread", () => hostState?.newThread()),
     vscode.commands.registerCommand("t3-vscode.showThreads", () => provider.showThreads()),
+    vscode.commands.registerCommand("t3-vscode.fontSettings", () => provider.showAppearance()),
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       void hostState?.workspaceChanged().catch((cause) => vscode.window.showErrorMessage(String(cause)));
     }),
@@ -67,6 +70,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await hostState.threadAction(thread.id, choice.action, title);
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
+      if (FONT_SIZE_KEYS.some((key) => event.affectsConfiguration(`t3-vscode.${key}`))) hostState?.refreshAppearance();
       if (event.affectsConfiguration("t3-vscode.t3Home")) {
         void vscode.window
           .showInformationMessage("T3 home setting changed. Reload the window to apply it.", "Reload")
@@ -85,6 +89,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 export async function deactivate(): Promise<void> {
   await hostState?.dispose();
   hostState = null;
+}
+
+function readAppearance(): AppearanceSettings {
+  const config = vscode.workspace.getConfiguration("t3-vscode");
+  return resolveAppearance({ fontSizeInterface: config.get("fontSizeInterface"), fontSizePrompt: config.get("fontSizePrompt"), fontSizeCode: config.get("fontSizeCode") });
+}
+async function saveAppearance(update: Partial<AppearanceSettings>): Promise<void> {
+  const config = vscode.workspace.getConfiguration("t3-vscode");
+  for (const key of FONT_SIZE_KEYS) {
+    if (update[key] === undefined) continue;
+    // Respect an existing workspace override; otherwise save in the user's current profile.
+    const target = config.inspect(key)?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+    await config.update(key, update[key], target);
+  }
 }
 
 async function pickConversationProject(projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean, workspaceRoots: ReadonlyArray<string>): Promise<ProjectSelection | null> {
@@ -118,6 +136,8 @@ async function pickConversationProject(projects: ReadonlyArray<ProjectSummary>, 
  */
 class T3WebviewProvider implements vscode.WebviewViewProvider {
   private sidebar: vscode.WebviewView | undefined;
+  private sidebarReady = false;
+  private appearanceRequested = false;
   private readonly panels = new Map<string, vscode.WebviewPanel>();
   private readonly extensionUri: vscode.Uri;
   private readonly registry: WebviewRegistry;
@@ -129,16 +149,18 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
     this.registry = registry;
     this.bridge = bridge;
     this.host = host;
+    this.bridge.onReady = (id) => { if (id === SIDEBAR_VIEW_ID) { this.sidebarReady = true; this.flushAppearance(); } };
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.sidebar = webviewView;
+    this.sidebarReady = false;
     const id = SIDEBAR_VIEW_ID;
     webviewView.webview.options = this.webviewOptions();
     this.registry.add(id, webviewView.webview);
     this.bridge.attach(webviewView.webview, id);
     webviewView.webview.html = this.htmlFor(webviewView.webview, "sidebar");
-    webviewView.onDidDispose(() => { if (this.sidebar === webviewView) { this.registry.remove(id); this.sidebar = undefined; } });
+    webviewView.onDidDispose(() => { if (this.sidebar === webviewView) { this.registry.remove(id); this.sidebar = undefined; this.sidebarReady = false; } });
     this.updateTitles();
   }
 
@@ -154,6 +176,16 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
   async showThreads(): Promise<void> {
     await vscode.commands.executeCommand("t3.webview.focus");
     await this.sidebar?.webview.postMessage({ event: Events.showNavigation });
+  }
+  async showAppearance(): Promise<void> {
+    this.appearanceRequested = true;
+    await vscode.commands.executeCommand("t3.webview.focus");
+    this.flushAppearance();
+  }
+  private flushAppearance(): void {
+    if (!this.appearanceRequested || !this.sidebarReady || !this.sidebar) return;
+    this.appearanceRequested = false;
+    void this.sidebar.webview.postMessage({ event: Events.showAppearance });
   }
 
   createPanel(): void {

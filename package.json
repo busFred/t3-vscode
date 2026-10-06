@@ -74,6 +74,12 @@
         "icon": "$(plug)"
       },
       {
+        "command": "t3-vscode.fontSettings",
+        "title": "Font Settings",
+        "category": "T3",
+        "icon": "$(text-size)"
+      },
+      {
         "command": "t3-vscode.reconnect",
         "title": "Reconnect to T3 Server",
         "category": "T3",
@@ -103,6 +109,11 @@
           "group": "1_thread"
         },
         {
+          "command": "t3-vscode.fontSettings",
+          "when": "view == t3.webview",
+          "group": "3_appearance"
+        },
+        {
           "command": "t3-vscode.pair",
           "when": "view == t3.webview",
           "group": "2_connection"
@@ -116,6 +127,18 @@
           "type": "string",
           "default": "",
           "description": "T3 home directory (the server's data dir, default ~/.t3 or $T3CODE_HOME). Empty = auto. Change only to point at an isolated/dev server."
+        },
+        "t3-vscode.fontSizeInterface": {
+          "type": "integer", "default": 16, "minimum": 12, "maximum": 20, "scope": "window",
+          "markdownDescription": "Base font size in pixels for T3 chat text, navigation and labels. Matches T3 Code's interface scaling. Changes apply immediately to the sidebar and all T3 editor tabs."
+        },
+        "t3-vscode.fontSizePrompt": {
+          "type": "integer", "default": 14, "minimum": 12, "maximum": 20, "scope": "window",
+          "description": "Font size in pixels for the message input, independent of interface and code sizes. Changes apply immediately."
+        },
+        "t3-vscode.fontSizeCode": {
+          "type": "integer", "default": 13, "minimum": 10, "maximum": 18, "scope": "window",
+          "description": "Font size in pixels for code blocks, diffs and tool output, independent of interface and prompt sizes. Changes apply immediately."
         }
       }
     }

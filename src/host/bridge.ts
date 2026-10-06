@@ -16,12 +16,16 @@ export class WebviewRegistry {
   }
 }
 export class BridgeHandler {
+  onReady: ((viewId: string) => void) | null = null;
   private readonly hostState: HostState;
   private readonly registry: WebviewRegistry;
   constructor(hostState: HostState, registry: WebviewRegistry) { this.hostState = hostState; this.registry = registry; }
   attach(webview: vscode.Webview, viewId: string): void {
     webview.onDidReceiveMessage((raw: unknown) => {
-      void this.handle(raw, viewId).then((result) => webview.postMessage(result));
+      void this.handle(raw, viewId).then(async (result) => {
+        await webview.postMessage(result);
+        if (!result.error && isObject(raw) && raw.method === "getState") this.onReady?.(viewId);
+      });
     });
   }
   private async handle(raw: unknown, viewId: string): Promise<RpcResult> {
@@ -43,6 +47,7 @@ export class BridgeHandler {
         case "startPairing": await this.hostState.pairNow(); break;
         case "setModel": await this.hostState.setModel(params.threadId === undefined ? undefined : id(), params.modelSelection, viewId); break;
         case "setModes": await this.hostState.setModes(params.threadId === undefined ? undefined : id(), params, viewId); break;
+        case "setAppearance": await this.hostState.setAppearance(params); break;
         case "interrupt": await this.hostState.interrupt(id()); break;
         case "respondToRequest": {
           if (params.decision !== undefined && typeof params.decision !== "string") throw new Error("Invalid approval decision.");
