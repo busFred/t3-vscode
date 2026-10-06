@@ -37,6 +37,8 @@ The sidebar uses VS Code's native title toolbar: **Projects and Threads**, **New
 
 Each editor tab opens a blank conversation view. Selecting or creating a thread in one view leaves the other tabs and sidebar on their conversations. Draft project, model and mode choices also belong to that view. Tab titles follow their selected conversations. Opening the same thread deliberately in two views shares its live messages and server settings; closing a tab keeps conversations running in other views.
 
+Use **T3: Font Settings** from the command palette or the sidebar overflow menu, or the settings button in an editor tab, to adjust T3's three font sizes. **Interface** scales chat text and navigation (12–20 px, default 16); **Prompt** changes the message input (12–20 px, default 14); **Code** changes code blocks, diffs and tool output (10–18 px, default 13). Changes apply immediately to the sidebar and every editor tab, while preserving their conversations and drafts. **Reset font sizes** restores T3's defaults. These preferences persist in VS Code; if a workspace already overrides a size, the dialog updates that override. They are also available in VS Code Settings as `t3-vscode.fontSizeInterface`, `t3-vscode.fontSizePrompt` and `t3-vscode.fontSizeCode`.
+
 For development, start a separate server with an explicit home and point `t3-vscode.t3Home` at that directory. Never verify against the live `~/.t3` service:
 
 ```sh
@@ -49,7 +51,7 @@ node scripts/verify-edh.mjs --base-dir /tmp/t3-vscode-dev
 
 For deterministic browser checks without a server, run `node scripts/verify-ui.mjs` after building. It verifies rich rows, models, modes, approvals/questions, light/dark layouts and 1,000-item virtualization. It uses `/usr/bin/chromium` by default (`CHROMIUM_PATH` overrides it). The VS Code check uses `/usr/share/code/code` (`VSCODE_BIN` overrides it). Screenshots go to `/tmp/t3-vscode-ui`; neither check changes your normal VS Code profile.
 
-`node --import tsx scripts/verify-views.ts` checks the built UI in three headless pages sharing the actual host and bridge with a deterministic transport. It covers workspace filtering, independent selections and text drafts, new threads, reconnect and closing a view. Screenshots go to `/tmp/t3-vscode-views-ui`. It does not launch VS Code. `scripts/verify-draft.ts --base-dir <fresh-isolated-home>` additionally verifies draft settings, workspace scope and independent subscriptions against a real isolated server without running a provider turn.
+`node --import tsx scripts/verify-views.ts` checks the built UI in headless editor and sidebar pages sharing the actual host and bridge with a deterministic transport. It covers workspace filtering, independent selections and text drafts, new threads, reconnect, closing a view, and live font settings including reset, reload and external edits. Screenshots go to `/tmp/t3-vscode-views-ui`. It does not launch VS Code. `scripts/verify-draft.ts --base-dir <fresh-isolated-home>` additionally verifies draft settings, workspace scope and independent subscriptions against a real isolated server without running a provider turn.
 
 ## Package and install locally
 
@@ -60,12 +62,12 @@ pnpm install --frozen-lockfile
 pnpm run package
 ```
 
-This rebuilds both bundles and produces `t3-vscode-0.0.2.vsix`. The archive includes compiled code, the icon and license notices; development profiles, server data, source maps and `node_modules` are excluded.
+This rebuilds both bundles and produces `target-installer/t3-vscode-0.0.3.vsix`. All packaged VSIX installers go into `target-installer/`, which is excluded from Git. The archive includes compiled code, the icon and license notices; development profiles, server data, source maps and `node_modules` are excluded.
 
 In the VS Code window/profile where you want to use it, open **Extensions → ⋯ → Install from VSIX…**, choose that file, then reload the window if prompted. The CLI alternative installs into the named profile:
 
 ```sh
-code --profile Default --install-extension ./t3-vscode-0.0.2.vsix
+code --profile Default --install-extension ./target-installer/t3-vscode-0.0.3.vsix
 ```
 
 The installed extension normally discovers your already-running T3 service under `~/.t3`. Leave **T3 Code: T3 Home** empty to use that default; an explicit setting or `T3CODE_HOME` overrides it. Packaging does not install the extension or start a server.
@@ -77,6 +79,7 @@ The installed extension normally discovers your already-running T3 service under
 | `.vscode/launch.json`, `tasks.json`, `settings.json` | Default-profile F5 launch, build/check tasks and an explicitly started isolated development server |
 | `scripts/prepare-vscode-profile.mjs` | Copies Default settings and extensions into isolated F5 storage without changing the normal installation |
 | `.vscodeignore`, `scripts/generate-notices.mjs` | Limits the VSIX to bundled runtime files and retains third-party license notices |
+| `scripts/package-vsix.mjs`, `target-installer/` | Builds local VSIX installers into one output directory without installing them |
 | `src/extension.ts` | VS Code activation, commands, sidebar and editor containers, webview CSP |
 | `src/host/serverDiscovery.ts` | Runtime-file discovery, PID check and environment probe |
 | `src/host/pairing.ts`, `sessionStore.ts` | CLI pairing, headless bearer exchange and SecretStorage |
@@ -84,8 +87,10 @@ The installed extension normally discovers your already-running T3 service under
 | `src/host/hostState.ts` | Shared connection and projections, workspace scope, per-view navigation and drafts, subscription ownership |
 | `src/host/bridge.ts` | Validated intents and state replies tied to each webview; native clipboard/file/link actions |
 | `src/shared/bridge.ts` | Snapshot DTOs and the allowed postMessage methods |
+| `src/shared/appearance.ts`, `src/host/appearanceSettings.ts` | T3 font defaults and bounds, configuration normalization and validated font edits |
 | `src/webview/components/ChatView.tsx`, `ThreadList.tsx` | Responsive chat shell and workspace-scoped navigation |
 | `src/webview/components/Composer.tsx` | Message drafts, model catalog, permission modes and Stop |
+| `src/webview/components/FontSettings.tsx` | Font dialog shared by the sidebar and editor tabs |
 | `src/webview/components/TranscriptView.tsx`, `ChatMarkdown.tsx` | Virtualized typed turn items, markdown and native file/link intents |
 | `src/webview/components/PendingRequests.tsx` | Provider approval choices and question forms |
 | `src/webview/components/t3/` | Portable components copied from T3, retaining upstream presentation |

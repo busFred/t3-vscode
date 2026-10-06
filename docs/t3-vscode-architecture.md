@@ -36,6 +36,7 @@ t3-vscode/
 │   ├── contracts/                # copied from t3-code (license permitting)
 │   ├── client-runtime/           # copied; only needed subpaths
 │   └── shared/                   # transitive dep of the two above
+├── target-installer/             # gitignored compiled VSIX packages
 └── docs/
 ```
 
@@ -71,6 +72,7 @@ Tech: TypeScript ESM, Vite for the webview bundle, `effect` (comes with vendored
 - Port T3 web chat components for the turn-item taxonomy (`contracts/src/orchestrationV2.ts:1293-1495`): `user_message`, `assistant_message`, `reasoning`, `proposed_plan`, `todo_list`, `user_input_request`, `file_change`, `command_execution`, `file_search`, `web_search`, `approval_request`, `checkpoint`, `run_interrupt_*`, `system_notice`, `error`, `compaction`, `handoff`, `fork`, `thread_created`, `subagent`, `dynamic_tool`, `notification`.
 - Reuse `client-runtime` `work-log/presentation` + `turn-item-presentation` for labels/summaries instead of re-deriving them.
 - Reuse T3’s work-log rows, typography, chat layout and light/dark palette. Preserve portable components and adapt web-only router, clipboard, file-open and state dependencies at the bridge boundary. VS Code theme classes choose light/dark appearance.
+- Font preferences use T3's interface/prompt/code defaults and bounds. The host reads and saves VS Code configuration and broadcasts the resolved preferences to every surface; renderers scale interface typography through the root font size and use independent pixel values for the prompt and code. Appearance edits preserve each view's conversation and draft and work without a server connection.
 - Long threads: virtualized list from day one (T3's perf ethos; high-refresh users notice dropped frames).
 
 ## 7. Migration priorities

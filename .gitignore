@@ -2,5 +2,6 @@ node_modules/
 dist/
 dist-spike/
 *.vsix
+/target-installer/
 .t3/
 .plans/
