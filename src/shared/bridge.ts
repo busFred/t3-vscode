@@ -11,7 +11,7 @@ import type { AppearanceSettings } from "./appearance.js";
 export const Methods = {
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
   newThread: "newThread", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
-  setModel: "setModel", setModes: "setModes", setAppearance: "setAppearance", interrupt: "interrupt",
+  setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt",
   respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
   threadAction: "threadAction", openLink: "openLink", copyText: "copyText", openInTab: "openInTab",
@@ -19,7 +19,7 @@ export const Methods = {
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
 export interface RpcResult { readonly id: string; readonly result?: unknown; readonly error?: string }
-export const Events = { stateChanged: "stateChanged", showNavigation: "showNavigation", showAppearance: "showAppearance" } as const;
+export const Events = { stateChanged: "stateChanged", showNavigation: "showNavigation", insertReference: "insertReference" } as const;
 export type BridgeEvent = (typeof Events)[keyof typeof Events];
 
 export interface ModelSelection {
@@ -27,6 +27,7 @@ export interface ModelSelection {
   readonly model: string;
   readonly options?: ReadonlyArray<{ readonly id: string; readonly value: string | boolean }>;
 }
+export interface FavoriteModel { readonly instanceId: string; readonly model: string }
 export type HostPhase = "discovering" | "no-server" | "pairing" | "connecting" | "ready" | "error";
 export interface ProjectSummary { readonly id: string; readonly title: string; readonly workspaceRoot: string }
 export type ProjectSelection = { readonly projectId: string } | { readonly workspaceRoot: string } | { readonly noProject: true };
@@ -66,6 +67,7 @@ export interface HostStateSnapshot {
   readonly projects: ReadonlyArray<ProjectSummary>;
   readonly threads: ReadonlyArray<ThreadSummary>;
   readonly providers: ReadonlyArray<ServerProvider>;
+  readonly favoriteModels: ReadonlyArray<FavoriteModel>;
   readonly draft: ConversationDraft;
   readonly activeThreadId?: string;
   readonly transcript: ReadonlyArray<TranscriptItem>;

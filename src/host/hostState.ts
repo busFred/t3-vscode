@@ -17,15 +17,15 @@ import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/tu
 import { mergeOlderHistoryIntoProjection, EMPTY_THREAD_HISTORY_META, applyHistoryPageMeta, type ThreadHistoryMeta } from "@t3tools/client-runtime/state/thread-history-merge";
 import { resolveWorkEntryToolPresentation } from "@t3tools/client-runtime/work-log/presentation";
 import { turnItemNeedsDetailFetch, turnItemOutputText } from "@t3tools/client-runtime/work-log/item-detail";
+import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
-import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, ConversationDraft, ProjectSelection, ProjectSummary } from "../shared/bridge.js";
+import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel } from "../shared/bridge.js";
 import { pairWithServer } from "./pairing.js";
 import { discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
 import type { CredentialStore } from "./sessionStore.js";
 import type { T3Client, Subscription } from "./t3Client.js";
 import { DEFAULT_APPEARANCE, resolveAppearance, type AppearanceSettings } from "../shared/appearance.js";
-import { parseAppearanceUpdate } from "./appearanceSettings.js";
 
 export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot"> | null };
 export interface HostStateOptions {
@@ -35,7 +35,8 @@ export interface HostStateOptions {
   readonly workspaceRoot?: () => string | null;
   readonly workspaceRoots?: () => ReadonlyArray<string>;
   readonly appearance?: () => AppearanceSettings;
-  readonly saveAppearance?: (update: Partial<AppearanceSettings>) => Promise<void>;
+  readonly favoriteModels?: () => ReadonlyArray<FavoriteModel>;
+  readonly saveFavoriteModels?: (favorites: ReadonlyArray<FavoriteModel>) => PromiseLike<void>;
   readonly pickProject?: (projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean, workspaceRoots: ReadonlyArray<string>) => Promise<ProjectSelection | null>;
   readonly discover?: typeof discoverServer;
   readonly pair?: typeof pairWithServer;
@@ -134,13 +135,6 @@ export class HostState {
   reconnect(): Promise<void> { return this.enqueue(() => this.connect(false)); }
   pairNow(): Promise<void> { return this.enqueue(() => this.connect(true)); }
   refreshAppearance(): void { this.emit(); }
-  setAppearance(input: unknown): Promise<void> {
-    return this.enqueue(async () => {
-      const update = parseAppearanceUpdate(input);
-      if (!this.options.saveAppearance) throw new Error("Font settings are unavailable in this client.");
-      await this.options.saveAppearance(update); this.emit();
-    });
-  }
 
   private async stopSubscriptions(): Promise<void> {
     const shell = this.shellSubscription; const archive = this.archiveSubscription;
@@ -449,12 +443,14 @@ export class HostState {
       try {
         await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id,
           createdBy: "user", creationSource: "web", messageId: randomUUID(), text, attachments: [],
-          titleSeed: text.trim().slice(0, 160), deliveryIntent: "auto", dispatchMode: { type: "start_immediately" } });
+          titleSeed: deriveThreadTitleSeed({ text, attachments: [] }), deliveryIntent: "auto", dispatchMode: { type: "start_immediately" } });
       } finally { view.sending = false; this.emit(); }
     });
   }
   setModel(id: string | undefined, input: unknown, viewId = SIDEBAR_VIEW_ID): Promise<void> {
-    return this.enqueue(async () => {
+    return this.enqueue(() => this.applyModelSelection(id, input, viewId));
+  }
+  private async applyModelSelection(id: string | undefined, input: unknown, viewId: string): Promise<void> {
       const view = this.requireView(viewId);
       const selection = Schema.decodeUnknownSync(ModelSelectionSchema)(input);
       const provider = this.client.config?.providers.find((item) => item.instanceId === selection.instanceId);
@@ -467,6 +463,27 @@ export class HostState {
       const thread = this.requireThread(id);
       if (provider.requiresNewThreadForModelChange && thread.itemCount > 0 && (selection.model !== thread.modelSelection.model || selection.instanceId !== thread.modelSelection.instanceId)) throw new Error("This provider requires a new thread to change models.");
       await this.client.dispatch({ type: "thread.model-selection.set", commandId: randomUUID(), threadId: id, modelSelection: selection });
+  }
+  setModelOption(id: string | undefined, optionId: string, value: unknown, viewId = SIDEBAR_VIEW_ID): Promise<void> {
+    return this.enqueue(async () => {
+      const view = this.requireView(viewId);
+      const selection = id === undefined ? this.conversationDraft(view).modelSelection : this.requireThread(id).modelSelection;
+      if (!selection) throw new Error("Choose a model first.");
+      const model = this.client.config?.providers.find((provider) => provider.instanceId === selection.instanceId)?.models.find((model) => model.slug === selection.model);
+      const descriptor = model?.capabilities?.optionDescriptors?.find((option) => option.id === optionId);
+      if (!descriptor || (descriptor.type === "boolean" ? typeof value !== "boolean" : typeof value !== "string" || !descriptor.options.some((option) => option.id === value))) throw new Error("This model does not support that option value.");
+      const options = [...(selection.options ?? []).filter((option) => option.id !== optionId), { id: optionId, value: value as string | boolean }];
+      await this.applyModelSelection(id, { ...selection, options }, viewId);
+    });
+  }
+  toggleFavoriteModel(instanceId: string, model: string): Promise<void> {
+    return this.enqueue(async () => {
+      const favorites = this.options.favoriteModels?.() ?? [];
+      const exists = favorites.some((favorite) => favorite.instanceId === instanceId && favorite.model === model);
+      if (!exists && !this.client.config?.providers.some((provider) => provider.instanceId === instanceId && provider.models.some((entry) => entry.slug === model))) throw new Error("Model not found.");
+      if (!this.options.saveFavoriteModels) throw new Error("Model favorites are unavailable.");
+      await this.options.saveFavoriteModels(exists ? favorites.filter((favorite) => favorite.instanceId !== instanceId || favorite.model !== model) : [...favorites, { instanceId, model }]);
+      this.emit();
     });
   }
   setModes(id: string | undefined, input: { runtimeMode?: unknown; interactionMode?: unknown }, viewId = SIDEBAR_VIEW_ID): Promise<void> {
@@ -596,6 +613,7 @@ export class HostState {
         activeRunId: thread.activeRunId,
       })),
       providers: this.client.config?.providers ?? [],
+      favoriteModels: this.options.favoriteModels?.() ?? [],
       draft: this.conversationDraft(view),
       ...(activeThreadId ? { activeThreadId } : {}),
       transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => ({

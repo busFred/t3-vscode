@@ -80,13 +80,24 @@
         "icon": "$(text-size)"
       },
       {
+        "command": "t3-vscode.insertReference",
+        "title": "Reference Editor Selection",
+        "category": "T3"
+      },
+      {
         "command": "t3-vscode.reconnect",
         "title": "Reconnect to T3 Server",
         "category": "T3",
         "icon": "$(refresh)"
       }
     ],
+    "keybindings": [
+      { "command": "t3-vscode.insertReference", "key": "alt+k", "mac": "alt+k", "when": "editorTextFocus" }
+    ],
     "menus": {
+      "editor/context": [
+        { "command": "t3-vscode.insertReference", "when": "editorTextFocus", "group": "t3" }
+      ],
       "view/title": [
         {
           "command": "t3-vscode.showThreads",

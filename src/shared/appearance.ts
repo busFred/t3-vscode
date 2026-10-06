@@ -20,7 +20,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = Object.freeze({
   fontSizeInterface: DEFAULT_INTERFACE_FONT_SIZE, fontSizePrompt: DEFAULT_PROMPT_FONT_SIZE, fontSizeCode: DEFAULT_CODE_FONT_SIZE,
 });
 
-/** Match T3's rounding/clamping for settings edited outside the in-app controls. */
+/** Match T3's rounding/clamping when reading native VS Code configuration. */
 export function resolveAppearance(input: Partial<Record<keyof AppearanceSettings, unknown>>): AppearanceSettings {
   const size = (key: keyof AppearanceSettings) => {
     const value = input[key]; const options = FONT_SIZE_OPTIONS[key];

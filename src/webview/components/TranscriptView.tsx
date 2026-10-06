@@ -1,5 +1,6 @@
-import { memo, useCallback, useState, type ReactNode } from "react";
-import { LegendList } from "@legendapp/list/react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { LegendList, type LegendListRef } from "@legendapp/list/react";
+import type { AssistantCitation } from "@t3tools/contracts";
 import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, WrenchIcon, BotIcon, ArrowRightLeftIcon, MinusIcon, XIcon } from "lucide-react";
 import type { HostStateSnapshot, TranscriptItem, WireTurnItem } from "../../shared/bridge";
 import { useActions } from "../actions";
@@ -8,6 +9,7 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails } from "./t3/WorkLog";
 import { TimelineSystemDivider } from "./t3/TimelineSystemDivider";
 import { T3Wordmark } from "./t3/T3Wordmark";
+import { findAssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 
 function CopyButton({ text }: { text: string }) {
   const run = useActions(); const [copied, setCopied] = useState(false);
@@ -39,13 +41,13 @@ function FileChange({ item, threadId }: { item: Extract<WireTurnItem, { type: "f
     {item.diffStr ? <Diff text={item.diffStr} /> : item.oldStr !== undefined || item.newStr !== undefined ? <Diff text={[...(item.oldStr?.split("\n").map((line) => `-${line}`) ?? []), ...(item.newStr?.split("\n").map((line) => `+${line}`) ?? [])].join("\n")} /> : <p className="subtle">File change recorded.</p>}
   </div>;
 }
-const TurnItem = memo(function TurnItem({ row, threadId }: { row: TranscriptItem; threadId: string }) {
+const TurnItem = memo(function TurnItem({ row, threadId, environmentId }: { row: TranscriptItem; threadId: string; environmentId: string }) {
   const { item } = row; const run = useActions();
   const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} />;
   const openThread = (id: string) => { void run("selectThread", { threadId: id }); };
   switch (item.type) {
     case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{markdown(item.text)}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}</div><CopyButton text={item.text} /></article>;
-    case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}><div className="message-author"><T3Wordmark className="size-5" /><span>Assistant</span>{item.streaming ? <span className="streaming-label">Writing…</span> : null}</div>{markdown(item.text)}{!item.streaming ? <CopyButton text={item.text} /> : null}</article>;
+    case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}><div className="message-author"><T3Wordmark className="size-5" /><span>Assistant</span>{item.streaming ? <span className="streaming-label">Writing…</span> : null}</div><ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} />{!item.streaming ? <CopyButton text={item.text} /> : null}</article>;
     case "reasoning": return <Disclosure label={item.streaming ? "Thinking…" : "Thought process"} icon={<BrainIcon size={14} />} row={row} threadId={threadId}>{markdown(item.text)}</Disclosure>;
     case "proposed_plan": return <section className="plan-card"><header><span className="plan-badge">Plan</span><strong>Proposed plan</strong><CopyButton text={item.markdown} /></header>{markdown(item.markdown)}</section>;
     case "todo_list": return <section className="todo-card">{item.explanation ? <p>{item.explanation}</p> : null}{item.steps.map((step, index) => <div key={index} className={`todo-step ${step.status}`}><span>{step.status === "completed" ? "✓" : step.status === "running" ? "◉" : "○"}</span><span>{step.text}</span></div>)}</section>;
@@ -70,15 +72,46 @@ const TurnItem = memo(function TurnItem({ row, threadId }: { row: TranscriptItem
   }
 });
 
-export function TranscriptView({ state }: { readonly state: HostStateSnapshot }) {
+export function TranscriptView({ state, onViewport, citationTarget }: { readonly state: HostStateSnapshot; readonly onViewport?: (element: HTMLDivElement | null) => void; readonly citationTarget?: AssistantCitation | null }) {
   const run = useActions();
   const id = state.activeThreadId;
-  const renderItem = useCallback(({ item }: { item: TranscriptItem }) => <div className="timeline-row"><TurnItem row={item} threadId={id ?? ""} /></div>, [id]);
+  const list = useRef<LegendListRef>(null);
+  const attempts = useRef<{ target: AssistantCitation | null; pages: number }>({ target: null, pages: 0 });
+  const [citationNotice, setCitationNotice] = useState<string | null>(null);
+  const sourceIndex = citationTarget ? state.transcript.findIndex((row) => row.sourceThreadId === citationTarget.threadId && row.item.type === "assistant_message" && row.item.messageId === citationTarget.messageId) : -1;
+  useEffect(() => {
+    if (!citationTarget || citationTarget.threadId !== id) return;
+    if (attempts.current.target !== citationTarget) { attempts.current = { target: citationTarget, pages: 0 }; setCitationNotice(null); }
+    if (sourceIndex < 0) {
+      if (state.history.hasMore && attempts.current.pages < 20) {
+        if (!state.history.loading) { attempts.current.pages += 1; void run("loadHistory", { threadId: id }); }
+      } else setCitationNotice("The source response is unavailable. Your saved quote is unchanged.");
+      return;
+    }
+    let stopped = false; let frame = 0;
+    void list.current?.scrollToIndex({ index: sourceIndex, animated: false, viewPosition: 0.25 }).then(() => {
+      let checks = 0;
+      const show = () => {
+        if (stopped) return;
+        const anchor = findAssistantCitationSourceAnchor(document, citationTarget);
+        if (!anchor && ++checks < 20) { frame = requestAnimationFrame(show); return; }
+        if (anchor) {
+          anchor.range.startContainer.parentElement?.scrollIntoView({ block: "center" });
+          if (typeof Highlight !== "undefined" && CSS.highlights) CSS.highlights.set("t3-assistant-citation", new Highlight(anchor.range));
+        } else setCitationNotice("The quoted text has changed. Your saved quote is unchanged.");
+      };
+      frame = requestAnimationFrame(show);
+    }).catch(() => { if (!stopped) setCitationNotice("Could not open the source response. Your saved quote is unchanged."); });
+    return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-assistant-citation"); };
+  }, [citationTarget, id, sourceIndex, state.history.hasMore, state.history.loading, state.transcript.length, run]);
+  const renderItem = useCallback(({ item }: { item: TranscriptItem }) => <div className="timeline-row"><TurnItem row={item} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /></div>, [id, state.environment?.environmentId]);
   if (!id || (!state.transcript.length && !state.threadLoading)) return <div className="chat-empty"><T3Wordmark className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length) return <div className="chat-empty"><p>Loading conversation…</p></div>;
-  return <div className="transcript-container" aria-label="Conversation">
-    <LegendList key={id} data={state.transcript} keyExtractor={(row) => row.key} renderItem={renderItem} estimatedItemSize={100}
-      initialScrollAtEnd maintainScrollAtEnd maintainScrollAtEndThreshold={0.15} maintainVisibleContentPosition
+  return <div ref={onViewport} className="transcript-container" data-assistant-citation-viewport="" aria-label="Conversation">
+    {citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
+    <LegendList ref={list} key={id} data={state.transcript} keyExtractor={(row) => row.key} renderItem={renderItem} estimatedItemSize={100}
+      {...(sourceIndex >= 0 ? { alwaysRender: { keys: [state.transcript[sourceIndex]!.key] } } : {})}
+      initialScrollAtEnd maintainScrollAtEnd={!citationTarget || citationTarget.threadId !== id} maintainScrollAtEndThreshold={0.15} maintainVisibleContentPosition
       className="transcript-list" style={{ height: "100%" }}
       ListHeaderComponent={<div className="timeline-header">{state.history.hasMore || state.history.error ? <button className="btn" disabled={state.history.loading} onClick={() => { void run("loadHistory", { threadId: id }); }}>{state.history.loading ? "Loading…" : state.history.error ? "Retry loading earlier messages" : "Load earlier messages"}</button> : null}{state.history.error ? <p className="turn-error">{state.history.error}</p> : null}</div>}
       ListFooterComponent={<div className="timeline-footer" />}

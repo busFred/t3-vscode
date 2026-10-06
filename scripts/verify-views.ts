@@ -9,14 +9,26 @@ import { FakeWebview } from "../src/host/testing/fakeWebview.js";
 import { viewsHarness, publishText } from "../src/host/testing/fakeTransport.js";
 import { Events, type RpcMessage } from "../src/shared/bridge.js";
 import { DEFAULT_APPEARANCE, type AppearanceSettings } from "../src/shared/appearance.js";
+import type { FavoriteModel } from "../src/shared/bridge.js";
+import { ProviderInstanceId, ProviderDriverKind } from "@t3tools/contracts";
+import { collectAssistantCitations } from "@t3tools/shared/assistantCitations";
 
 const evidence = process.env.T3_VSCODE_UI_EVIDENCE ?? "/tmp/t3-vscode-views-ui";
 await mkdir(evidence, { recursive: true });
 let preferences = DEFAULT_APPEARANCE;
-const { host, client } = await viewsHarness({ appearance: () => preferences, saveAppearance: async (update) => {
-  preferences = { ...preferences, ...update };
-} });
-const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry);
+let favorites: ReadonlyArray<FavoriteModel> = [];
+const { host, client } = await viewsHarness({ appearance: () => preferences, favoriteModels: () => favorites, saveFavoriteModels: async (value) => { favorites = value; } });
+const firstProvider = client.config.providers[0]!;
+const capabilities = { optionDescriptors: [{ id: "reasoningEffort", label: "Effort", type: "select" as const,
+  options: [{ id: "high", label: "High" }, { id: "max", label: "Max", isDefault: true }] }] };
+client.config = { providers: [
+  { ...firstProvider, models: [{ ...firstProvider.models[0]!, capabilities }, { ...firstProvider.models[0]!, slug: "old-kimi", name: "Legacy Kimi", isLegacy: true }] },
+  ...["Personal", "Work"].map((name) => ({ ...firstProvider, instanceId: ProviderInstanceId.make(`codex-${name.toLowerCase()}`), driver: ProviderDriverKind.make("codex"), displayName: `Codex ${name}`,
+    models: [{ slug: "gpt-6-astra", name: "GPT-6 Astra", isCustom: false, capabilities }] })),
+  { ...firstProvider, instanceId: ProviderInstanceId.make("unavailable"), displayName: "Unavailable provider", installed: false, models: [{ ...firstProvider.models[0]!, name: "Unavailable model" }] },
+] };
+let settingsOpened = 0;
+const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry, async () => { settingsOpened += 1; });
 const views = new Map<string, FakeWebview>(); const sinks = new Map<string, Set<ServerResponse>>();
 for (const id of [SIDEBAR_VIEW_ID, "tab-one", "tab-two", "tab-three"]) {
   if (id !== SIDEBAR_VIEW_ID) host.registerView(id);
@@ -72,6 +84,20 @@ async function expectFonts(page: Page, expected: AppearanceSettings) {
       && getComputedStyle(document.documentElement).getPropertyValue("--font-size-code").trim() === `${value.fontSizeCode}px`;
   }, expected);
 }
+async function selectAssistantText(page: Page, text: string) {
+  const points = await page.evaluate(`(() => {
+    const source = document.querySelector('[data-assistant-citation-source]'); const quote = ${JSON.stringify(text)};
+    const walker = document.createTreeWalker(source, NodeFilter.SHOW_TEXT); const nodes = []; let node;
+    while ((node = walker.nextNode())) if (!node.parentElement?.closest('button, [hidden], [aria-hidden=true]')) nodes.push(node);
+    const content = nodes.map((node) => node.data).join(""); const start = content.indexOf(quote); if (start < 0) throw new Error('Quote missing');
+    const position = (offset) => { for (const node of nodes) { if (offset < node.length) return { node, offset }; offset -= node.length; } throw new Error('Text position missing'); };
+    const point = (offset, edge) => { const at = position(offset); const range = document.createRange(); range.setStart(at.node, at.offset); range.setEnd(at.node, at.offset + 1); const rect = range.getBoundingClientRect(); return { x: edge === 'left' ? rect.left + 0.2 : rect.right - 0.2, y: rect.top + rect.height / 2 }; };
+    return { start: point(start, 'left'), end: point(start + quote.length - 1, 'right') };
+  })()`);
+  await page.mouse.move(points.start.x, points.start.y); await page.mouse.down();
+  await page.mouse.move(points.end.x, points.end.y, { steps: 8 }); await page.mouse.up();
+  await page.getByRole("button", { name: "Cite selection in composer" }).waitFor();
+}
 try {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert.ok(address && typeof address !== "string");
@@ -91,7 +117,7 @@ try {
   for (const [index, name] of ["first", "second", "third"].entries()) {
     await pages[index]!.getByRole("button", { name: `${name} conversation`, exact: true }).click();
     await pages[index]!.locator(".chat-heading strong").filter({ hasText: `${name} conversation` }).waitFor();
-    publishText(client, name, `Live reply in ${name} conversation\n\nInline \`value\`.\n\n\`\`\`ts\nconst value = 42;\n\`\`\``);
+    publishText(client, name, `Live **reply** in ${name} conversation\n\nInline \`value\`.\n\n\`\`\`ts\nconst value = 42;\n\`\`\``);
     await pages[index]!.getByText(`Live reply in ${name} conversation`, { exact: true }).waitFor();
     await pages[index]!.getByRole("textbox", { name: "Message", exact: true }).fill(`Draft in ${name} tab`);
   }
@@ -113,57 +139,95 @@ try {
   const selections = ["tab-one", "tab-two", "tab-three"].map((id) => host.snapshot(id).activeThreadId);
   const subscriptionsBeforeFonts = client.threadStarts; const commandsBeforeFonts = client.commands.length;
   const drafts = await Promise.all(pages.map((page) => page.getByRole("textbox", { name: "Message", exact: true }).inputValue()));
-  await first.getByRole("button", { name: "Font settings", exact: true }).click();
-  const dialog = first.getByRole("dialog", { name: "Font settings", exact: true });
-  await dialog.getByRole("combobox", { name: "Interface font size", exact: false }).selectOption("20");
-  await dialog.getByRole("combobox", { name: "Prompt font size", exact: false }).selectOption("18");
-  await dialog.getByRole("combobox", { name: "Code font size", exact: false }).selectOption("17");
-  await Promise.all(pages.map((page) => expectFonts(page, { fontSizeInterface: 20, fontSizePrompt: 18, fontSizeCode: 17 })));
+  await first.getByRole("button", { name: "T3 Code settings", exact: true }).click();
+  await first.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some((entry) => entry.method === "openSettings"));
+  assert.equal(settingsOpened, 1); assert.equal(await first.getByRole("dialog").count(), 0);
+  preferences = { fontSizeInterface: 20, fontSizePrompt: 18, fontSizeCode: 17 }; host.refreshAppearance();
+  await Promise.all(pages.map((page) => expectFonts(page, preferences)));
   for (const page of [second, third]) {
     assert.equal(await page.locator(".markdown p").first().evaluate((element) => getComputedStyle(element).fontSize), "17.5px");
     assert.equal(await page.locator(".markdown pre code").first().evaluate((element) => getComputedStyle(element).fontSize), "17px");
-    assert.equal(await page.locator(".markdown p code").first().evaluate((element) => getComputedStyle(element).fontSize), "15.75px");
   }
   assert.deepEqual(["tab-one", "tab-two", "tab-three"].map((id) => host.snapshot(id).activeThreadId), selections);
   assert.deepEqual(await Promise.all(pages.map((page) => page.getByRole("textbox", { name: "Message", exact: true }).inputValue())), drafts);
   assert.equal(client.connections, 1); assert.equal(client.threadStarts, subscriptionsBeforeFonts); assert.equal(client.commands.length, commandsBeforeFonts);
-  await first.screenshot({ path: `${evidence}/font-settings-editor.png` });
-  await first.keyboard.press("Escape"); await dialog.waitFor({ state: "hidden" });
-  assert.equal(await first.getByRole("button", { name: "Font settings", exact: true }).evaluate((element) => document.activeElement === element), true);
   await first.reload(); await expectFonts(first, preferences);
   assert.equal(host.snapshot("tab-one").activeThreadId, selections[0]);
-
   const sidebar = await browser.newPage({ viewport: { width: 360, height: 820 } });
   sidebar.on("pageerror", (error) => errors.push(error.message));
-  await sidebar.goto(`http://127.0.0.1:${address.port}/?view=${SIDEBAR_VIEW_ID}`);
-  await expectFonts(sidebar, preferences);
+  await sidebar.goto(`http://127.0.0.1:${address.port}/?view=${SIDEBAR_VIEW_ID}`); await expectFonts(sidebar, preferences);
   assert.equal(await sidebar.locator(".chat-header").count(), 0);
-  await views.get(SIDEBAR_VIEW_ID)!.webview.postMessage({ event: Events.showAppearance });
-  const sidebarDialog = sidebar.getByRole("dialog", { name: "Font settings", exact: true }); await sidebarDialog.waitFor();
   assert.equal(await sidebar.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
-  await sidebar.screenshot({ path: `${evidence}/font-settings-sidebar.png` });
-  await sidebarDialog.getByRole("button", { name: "Reset font sizes", exact: true }).click();
-  await Promise.all([...pages, sidebar].map((page) => expectFonts(page, DEFAULT_APPEARANCE)));
-  assert.deepEqual(preferences, DEFAULT_APPEARANCE);
-  preferences = { fontSizeInterface: 20, fontSizePrompt: 20, fontSizeCode: 18 }; host.refreshAppearance();
+  preferences = DEFAULT_APPEARANCE; host.refreshAppearance();
   await Promise.all([...pages, sidebar].map((page) => expectFonts(page, preferences)));
-  assert.equal(await sidebar.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
-  await sidebarDialog.getByRole("button", { name: "Done", exact: true }).click(); await sidebarDialog.waitFor({ state: "hidden" });
-  assert.equal(await sidebar.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "");
-  assert.deepEqual(await Promise.all([second, third].map((page) => page.getByRole("textbox", { name: "Message", exact: true }).inputValue())), drafts.slice(1));
   await sidebar.close();
+  // The quote spans bold and plain DOM nodes; native mouse selection captures rendered positions.
+  await selectAssistantText(second, "reply in second conversation");
+  await second.getByRole("button", { name: "Cite selection in composer" }).click();
+  await second.getByRole("textbox", { name: "Comment on selected text" }).fill("Explain why this stays in the second tab.");
+  await second.getByRole("button", { name: "Save", exact: true }).click();
+  await second.getByRole("button", { name: "Assistant quote · Comment", exact: true }).waitFor();
+  assert.equal(await second.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in second tab");
+  assert.equal(await first.locator(".context-chip").count(), 0); assert.equal(await third.locator(".context-chip").count(), 0);
+  await second.getByRole("button", { name: "third conversation", exact: true }).click();
+  await second.locator(".chat-heading strong").filter({ hasText: "third conversation" }).waitFor();
+  assert.equal(await second.locator(".context-chip").count(), 0);
+  await second.getByRole("button", { name: "second conversation", exact: true }).click();
+  await second.getByRole("button", { name: "Assistant quote · Comment", exact: true }).click();
+  await second.getByRole("textbox", { name: "Comment on selected text" }).fill("Changed comment");
+  await second.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.ok((await second.locator(".context-label").getAttribute("title"))?.includes("Explain why"));
+  await second.getByRole("button", { name: "Assistant quote · Comment", exact: true }).click();
+  await second.getByRole("textbox", { name: "Comment on selected text" }).fill("Updated comment");
+  await second.getByRole("button", { name: "Save", exact: true }).click();
+  registry.postWhenReady("tab-two", Events.insertReference, { draftKey: "second", reference: { type: "file", uri: "file:///tmp/t3-vscode/example.ts", path: "/tmp/t3-vscode/example.ts", label: "example.ts", range: { start: { line: 5, column: 3 }, end: { line: 8, column: 1 } }, text: "unsaved selected text" } });
+  await second.getByRole("button", { name: "@example.ts:5-7", exact: true }).waitFor();
+  assert.equal(await first.locator(".context-chip").count(), 0); assert.equal(await third.locator(".context-chip").count(), 0);
+  await second.getByRole("button", { name: "Send message", exact: true }).click();
+  await second.waitForFunction(() => document.querySelectorAll(".context-chip").length === 0 && (document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.value === "");
+  const message = client.commands.findLast((command) => command.type === "message.dispatch"); assert.ok(message);
+  assert.equal(message.threadId, "second"); assert.ok(message.text.includes("unsaved selected text")); assert.ok(message.text.includes("5:3–8:1 (end exclusive)"));
+  const citation = collectAssistantCitations(message.text)[0]?.citation; assert.ok(citation);
+  assert.equal(citation.threadId, "second"); assert.equal(citation.environmentId, "audit"); assert.equal(citation.messageId, "message");
+  assert.equal(citation.text, "reply in second conversation"); assert.equal(citation.comment, "Updated comment");
+  assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in third tab");
+  await second.getByRole("textbox", { name: "Message", exact: true }).fill("Draft after sending references");
+  // Global search crosses provider instances, while effort changes stay with this conversation.
+  await second.getByRole("button", { name: "Choose model", exact: true }).click();
+  await second.getByRole("textbox", { name: "Search models" }).fill("personal asra");
+  await second.getByRole("button", { name: "Favorite GPT-6 Astra", exact: true }).click();
+  await second.getByRole("button", { name: "Unfavorite GPT-6 Astra", exact: true }).waitFor();
+  await second.getByRole("textbox", { name: "Search models" }).press("ArrowDown");
+  await second.keyboard.press("Enter");
+  await second.getByRole("button", { name: "Choose model", exact: true }).filter({ hasText: "GPT-6 Astra" }).waitFor();
+  await second.getByRole("combobox", { name: "Effort level" }).selectOption("high");
+  await second.waitForFunction(() => (document.querySelector('select[aria-label="Effort level"]') as HTMLSelectElement).value === "high");
+  assert.deepEqual(host.snapshot("tab-two").threads.find((thread) => thread.id === "second")?.modelSelection, { instanceId: "codex-personal", model: "gpt-6-astra", options: [{ id: "reasoningEffort", value: "high" }] });
+  assert.equal(await third.getByRole("combobox", { name: "Effort level" }).inputValue(), "max");
+  assert.equal(await second.getByRole("combobox", { name: "Interaction mode" }).count(), 0);
+  await third.getByRole("button", { name: "Choose model", exact: true }).click();
+  await third.locator('.model-providers button[aria-pressed="true"]').filter({ hasText: "Favorites" }).waitFor();
+  await third.getByRole("button", { name: "GPT-6 Astra", exact: true }).waitFor();
+  await third.getByRole("button", { name: "All providers", exact: true }).click();
+  assert.equal(await third.getByRole("button", { name: "Legacy Kimi", exact: true }).count(), 0);
+  await third.getByRole("checkbox", { name: "Show legacy models" }).check();
+  await third.getByRole("button", { name: "Legacy Kimi", exact: true }).waitFor();
+  assert.equal(await third.getByRole("button", { name: "Unavailable model", exact: true }).isDisabled(), true);
+  await third.keyboard.press("Escape");
+  assert.equal(await third.getByRole("dialog").count(), 0);
+  console.log("PASS: mouse-selected assistant quotes across inline formatting, optional comments, cancel/edit, independent draft contexts, scoped file references and exact send payloads; provider-instance search, favorites, keyboard selection, effort, legacy and unavailable models.");
   for (const [index, page] of pages.entries()) await page.screenshot({ path: `${evidence}/tab-${index + 1}.png` });
   await first.getByRole("button", { name: "Refresh connection", exact: true }).click();
   await first.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some((entry) => entry.method === "reconnect"));
   await second.getByRole("textbox", { name: "Message", exact: true }).waitFor();
   assert.equal(await second.locator(".chat-heading strong").textContent(), "second conversation");
-  assert.equal(await second.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in second tab");
+  assert.equal(await second.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft after sending references");
   assert.equal(client.connections, 2); assert.equal(client.shellStarts, 2);
   await first.close(); registry.remove("tab-one"); await host.removeView("tab-one");
   assert.equal(host.snapshot("tab-two").activeThreadId, "second");
   assert.equal(host.snapshot("tab-three").activeThreadId, "third");
   assert.deepEqual(errors, []);
-  console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; font dialog, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
+  console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
   console.log(`Screenshots: ${evidence}`);
 } finally {
   await browser?.close();

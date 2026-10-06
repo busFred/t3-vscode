@@ -9,6 +9,7 @@ await mkdir(evidence, { recursive: true });
 const now = "2026-10-06T12:00:00.000Z";
 const appearance = { fontSizeInterface: 16, fontSizePrompt: 14, fontSizeCode: 13 };
 const selection = { instanceId: "codex", model: "gpt-6-astra" };
+const capabilities = { optionDescriptors: [{ id: "effort", type: "select", label: "Effort", options: [{ id: "low", label: "Low" }, { id: "max", label: "Max", isDefault: true }] }] };
 const baseItem = { threadId: "thread-one", runId: null, nodeId: null, providerThreadId: null, providerTurnId: null, nativeItemRef: null, parentItemId: null, title: null, startedAt: now, completedAt: now, updatedAt: now, status: "completed" };
 let ordinal = 0;
 const row = (type, fields) => { const id = `${type}-${++ordinal}`; return { key: id, sourceThreadId: "thread-one", toolLabel: null, output: null, needsDetail: false, item: { ...baseItem, id, ordinal, type, ...fields } }; };
@@ -21,7 +22,8 @@ const initial = {
   revision: 1, phase: "ready", home: "/tmp/t3-vscode-fixture", workspaceRoots: [], appearance, environment: { environmentId: "fixture", label: "Local development", serverVersion: "0.0.46" },
   projects: [{ id: "project-one", title: "t3-vscode", workspaceRoot: "/tmp/t3-vscode" }, { id: "project-two", title: "myt3code", workspaceRoot: "/tmp/myt3code" }],
   threads: [{ id: "thread-one", projectId: "project-one", title: "Migrate the T3 chat experience", status: "idle", modelSelection: selection, runtimeMode: "auto", interactionMode: "default", updatedAt: now, archived: false, pinned: true, activeRunId: null }, { id: "thread-two", projectId: "project-two", title: "Server integration checks", status: "idle", modelSelection: selection, runtimeMode: "auto", interactionMode: "default", updatedAt: now, archived: false, pinned: false, activeRunId: null }],
-  providers: [{ instanceId: "codex", driver: "codex", displayName: "Codex", installed: true, enabled: true, supportedRuntimeModes: ["approval-required", "auto", "full-access"], models: [{ slug: "gpt-6-astra", name: "GPT-6 Astra", isCustom: false }] }, { instanceId: "kimi-acp", driver: "acp", displayName: "Kimi via ACP", installed: true, enabled: true, models: [{ slug: "kimi-for-coding", name: "Kimi for Coding", isCustom: false }] }],
+  favoriteModels: [],
+  providers: [{ instanceId: "codex", driver: "codex", displayName: "Codex", installed: true, enabled: true, supportedRuntimeModes: ["approval-required", "auto", "full-access"], models: [{ slug: "gpt-6-astra", name: "GPT-6 Astra", isCustom: false, capabilities }] }, { instanceId: "kimi-acp", driver: "acp", displayName: "Kimi via ACP", installed: true, enabled: true, models: [{ slug: "kimi-for-coding", name: "Kimi for Coding", isCustom: false, capabilities }] }],
   draft: { projectId: "project-one", workspaceRoot: "/tmp/t3-vscode", supportsNoProject: true, modelSelection: selection, runtimeMode: "auto", interactionMode: "default" },
   activeThreadId: "thread-one", transcript: [user, assistant, command, diff], pending: { approvals: [], userInputs: [] }, history: { hasMore: false, loading: false, error: null }, threadLoading: false, sending: false,
 };
@@ -35,6 +37,16 @@ function mockBridge() {
     if (request.method === "setModel") window.__replace(params.threadId
       ? { threads: window.__state.threads.map((thread) => thread.id === params.threadId ? { ...thread, modelSelection: params.modelSelection } : thread) }
       : { draft: { ...window.__state.draft, modelSelection: params.modelSelection } });
+    if (request.method === "setModelOption") {
+      const selection = params.threadId ? window.__state.threads.find((thread) => thread.id === params.threadId).modelSelection : window.__state.draft.modelSelection;
+      const modelSelection = { ...selection, options: [...(selection.options ?? []).filter((option) => option.id !== params.optionId), { id: params.optionId, value: params.value }] };
+      window.__replace(params.threadId ? { threads: window.__state.threads.map((thread) => thread.id === params.threadId ? { ...thread, modelSelection } : thread) }
+        : { draft: { ...window.__state.draft, modelSelection } });
+    }
+    if (request.method === "toggleFavoriteModel") {
+      const exists = window.__state.favoriteModels.some((favorite) => favorite.instanceId === params.instanceId && favorite.model === params.model);
+      window.__replace({ favoriteModels: exists ? window.__state.favoriteModels.filter((favorite) => favorite.instanceId !== params.instanceId || favorite.model !== params.model) : [...window.__state.favoriteModels, params] });
+    }
     if (request.method === "setModes") window.__replace(params.threadId
       ? { threads: window.__state.threads.map((thread) => thread.id === params.threadId ? { ...thread, ...params } : thread) }
       : { draft: { ...window.__state.draft, ...params } });
@@ -81,8 +93,9 @@ try {
   await page.getByRole("textbox", { name: "Search models" }).fill("kimi");
   await page.getByRole("button", { name: "Kimi for Coding", exact: true }).click();
   await page.getByRole("button", { name: "Choose model", exact: true }).filter({ hasText: "Kimi for Coding" }).waitFor();
-  await page.getByRole("combobox", { name: "Interaction mode" }).selectOption("plan");
-  const mode = await page.getByRole("combobox", { name: "Interaction mode" }).inputValue(); assert.equal(mode, "plan");
+  assert.equal(await page.getByRole("combobox", { name: "Interaction mode" }).count(), 0);
+  await page.getByRole("combobox", { name: "Effort level" }).selectOption("low");
+  assert.equal(await page.getByRole("combobox", { name: "Effort level" }).inputValue(), "low");
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("Browser fixture message");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await page.getByText("UI verification reply", { exact: true }).waitFor();
@@ -138,7 +151,7 @@ try {
   await page.getByRole("button", { name: "Choose model", exact: true }).click();
   await page.getByRole("textbox", { name: "Search models" }).fill("kimi");
   await page.getByRole("button", { name: "Kimi for Coding", exact: true }).click();
-  await page.getByRole("combobox", { name: "Interaction mode" }).selectOption("plan");
+  await page.getByRole("combobox", { name: "Effort level" }).selectOption("max");
   await page.getByRole("combobox", { name: "Permission mode" }).selectOption("full-access");
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("First message without a project");
   await page.screenshot({ path: `${evidence}/empty-sidebar.png` });
@@ -148,7 +161,8 @@ try {
   const firstThread = await page.evaluate(() => window.__state.threads[0]);
   assert.equal(firstThread.modelSelection.instanceId, "kimi-acp");
   assert.equal(firstThread.runtimeMode, "full-access");
-  assert.equal(firstThread.interactionMode, "plan");
+  assert.equal(firstThread.interactionMode, "default");
+  assert.deepEqual(firstThread.modelSelection.options, [{ id: "effort", value: "max" }]);
   assert.equal(await page.evaluate(() => window.__state.projects[0].title), "No project");
   assert.equal(await page.evaluate(() => window.__requests.findLast((request) => request.method === "sendMessage").params.threadId), undefined);
   assert.ok(await page.evaluate(() => window.__requests.some((request) => request.method === "setModel" && !request.params.threadId)));

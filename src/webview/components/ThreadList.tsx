@@ -20,7 +20,7 @@ export function ThreadList({ state, onSelect }: { readonly state: HostStateSnaps
     <nav className="project-groups">
       {groups.map(({ project, threads }) => <section className="project-group" key={project.id}>
         <div className="project-heading"><FolderIcon size={14} /><span title={project.workspaceRoot}>{project.title}</span><button className="icon-button" aria-label={`New thread in ${project.title}`} onClick={() => { void run("newThread", { projectId: project.id }).then((ok) => { if (ok) onSelect(); }); }}><PlusIcon size={13} /></button></div>
-        {threads.map((thread) => <button key={thread.id} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={() => { void run("selectThread", { threadId: thread.id }).then((ok) => { if (ok) onSelect(); }); }} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>
+        {threads.map((thread) => <button key={thread.id} data-thread-id={thread.id} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={() => { void run("selectThread", { threadId: thread.id }).then((ok) => { if (ok) onSelect(); }); }} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>
           {thread.pinned ? <PinIcon size={12} /> : <MessageSquareIcon size={12} />}
           <span className="thread-title">{thread.title || "Untitled"}</span>
           {thread.status === "running" || thread.status === "starting" || thread.status === "waiting" ? <span className={`thread-dot ${thread.status}`} title={thread.status} /> : null}

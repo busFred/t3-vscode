@@ -43,6 +43,10 @@ export class FakeTransport implements HostTransport {
   async dispatch(raw: unknown) {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(raw); this.commands.push(command);
     if (command.type === "thread.create") this.shell = { ...this.shell, threads: [...this.shell.threads, { ...v2ThreadShell, id: command.threadId, projectId: command.projectId, title: command.title, modelSelection: command.modelSelection, runtimeMode: command.runtimeMode, interactionMode: command.interactionMode }] };
+    if (command.type === "thread.model-selection.set") {
+      this.shell = { ...this.shell, snapshotSequence: this.shell.snapshotSequence + 1, threads: this.shell.threads.map((thread) => thread.id === command.threadId ? { ...thread, modelSelection: command.modelSelection } : thread) };
+      this.shellHandler?.({ kind: "snapshot", snapshot: this.shell });
+    }
     if (command.type === "thread.archive") {
       const thread = this.shell.threads.find((thread) => thread.id === command.threadId)!;
       this.shell = { ...this.shell, threads: this.shell.threads.filter((thread) => thread.id !== command.threadId) };
@@ -73,11 +77,11 @@ export class FakeTransport implements HostTransport {
   getTurnItem: HostTransport["getTurnItem"] = async () => ({ item: null });
 }
 function structuredCloneShell() { return { ...v2ShellSnapshot, projects: [...v2ShellSnapshot.projects], threads: [...v2ShellSnapshot.threads], archivedThreads: [] }; }
-export async function harness(options: Pick<HostStateOptions, "workspaceRoot" | "workspaceRoots" | "pickProject" | "appearance" | "saveAppearance"> = {}, client = new FakeTransport()) {
+export async function harness(options: Pick<HostStateOptions, "workspaceRoot" | "workspaceRoots" | "pickProject" | "appearance" | "favoriteModels" | "saveFavoriteModels"> = {}, client = new FakeTransport()) {
   const host = new HostState({ home: "/tmp/fake-t3-test", credentials, discover: async () => ({ ok: true, server }), reconnectDelayMs: 0, ...options }, client);
   await host.start(); return { host, client };
 }
-export async function viewsHarness(options: Pick<HostStateOptions, "appearance" | "saveAppearance"> = {}) {
+export async function viewsHarness(options: Pick<HostStateOptions, "appearance" | "favoriteModels" | "saveFavoriteModels"> = {}) {
   const client = new FakeTransport();
   client.shell = { ...client.shell, projects: [
     { ...v2Project, workspaceRoot: "/tmp/t3-vscode", title: "t3-vscode" },

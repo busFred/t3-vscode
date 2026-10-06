@@ -2,13 +2,28 @@
 import type * as vscode from "vscode";
 import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Events, isObject, paramsObject, stringParam, validateRpcMessage, type HostStateSnapshot, type RpcResult } from "../shared/bridge.js";
-import type { HostState } from "./hostState.js";
+import { Events, isObject, paramsObject, stringParam, validateRpcMessage, type BridgeEvent, type HostStateSnapshot, type RpcResult } from "../shared/bridge.js";
+import { SIDEBAR_VIEW_ID, type HostState } from "./hostState.js";
 
 export class WebviewRegistry {
   private readonly webviews = new Map<string, vscode.Webview>();
-  add(id: string, webview: vscode.Webview): void { this.webviews.set(id, webview); }
-  remove(id: string): void { this.webviews.delete(id); }
+  private readonly ready = new Set<string>();
+  private readonly pending = new Map<string, Array<{ event: BridgeEvent; data: unknown }>>();
+  private focused = SIDEBAR_VIEW_ID;
+  get focusedViewId(): string { return this.webviews.has(this.focused) ? this.focused : SIDEBAR_VIEW_ID; }
+  focus(id: string): void { if (this.webviews.has(id)) this.focused = id; }
+  add(id: string, webview: vscode.Webview): void { this.webviews.set(id, webview); this.ready.delete(id); }
+  remove(id: string): void { this.webviews.delete(id); this.ready.delete(id); this.pending.delete(id); if (this.focused === id) this.focused = SIDEBAR_VIEW_ID; }
+  postWhenReady(id: string, event: BridgeEvent, data: unknown): void {
+    if (this.ready.has(id)) { void this.webviews.get(id)?.postMessage({ event, data }); return; }
+    const queue = this.pending.get(id) ?? []; queue.push({ event, data }); this.pending.set(id, queue);
+  }
+  markReady(id: string): void {
+    const webview = this.webviews.get(id); if (!webview) return;
+    this.ready.add(id);
+    const queue = this.pending.get(id); this.pending.delete(id);
+    for (const message of queue ?? []) void webview.postMessage(message);
+  }
   pushStates(stateForView: (viewId: string) => HostStateSnapshot): void {
     for (const [viewId, webview] of this.webviews) {
       void webview.postMessage({ event: Events.stateChanged, data: stateForView(viewId) });
@@ -16,21 +31,21 @@ export class WebviewRegistry {
   }
 }
 export class BridgeHandler {
-  onReady: ((viewId: string) => void) | null = null;
   private readonly hostState: HostState;
   private readonly registry: WebviewRegistry;
-  constructor(hostState: HostState, registry: WebviewRegistry) { this.hostState = hostState; this.registry = registry; }
+  private readonly showSettings: () => PromiseLike<unknown>;
+  constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:t3-vscode.t3-vscode")) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; }
   attach(webview: vscode.Webview, viewId: string): void {
     webview.onDidReceiveMessage((raw: unknown) => {
       void this.handle(raw, viewId).then(async (result) => {
         await webview.postMessage(result);
-        if (!result.error && isObject(raw) && raw.method === "getState") this.onReady?.(viewId);
+        if (!result.error && isObject(raw) && raw.method === "getState") this.registry.markReady(viewId);
       });
     });
   }
   private async handle(raw: unknown, viewId: string): Promise<RpcResult> {
     const message = validateRpcMessage(raw);
-    if (!message) return { id: "", error: "Invalid bridge request." };
+    if (!message) return { id: isObject(raw) && typeof raw.id === "string" ? raw.id : "", error: "Invalid bridge request." };
     try {
       // Identity is captured by the host, never supplied by a renderer.
       this.hostState.snapshot(viewId);
@@ -38,6 +53,7 @@ export class BridgeHandler {
       const id = () => stringParam(params, "threadId");
       switch (message.method) {
         case "getState": break;
+        case "focusView": this.registry.focus(viewId); break;
         case "loadArchive": await this.hostState.loadArchive(); break;
         case "selectThread": await this.hostState.selectThread(id(), viewId); break;
         case "newThread": await this.hostState.newThread(params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
@@ -46,8 +62,10 @@ export class BridgeHandler {
         case "reconnect": await this.hostState.reconnect(); break;
         case "startPairing": await this.hostState.pairNow(); break;
         case "setModel": await this.hostState.setModel(params.threadId === undefined ? undefined : id(), params.modelSelection, viewId); break;
+        case "setModelOption": await this.hostState.setModelOption(params.threadId === undefined ? undefined : id(), stringParam(params, "optionId"), params.value, viewId); break;
+        case "toggleFavoriteModel": await this.hostState.toggleFavoriteModel(stringParam(params, "instanceId"), stringParam(params, "model")); break;
         case "setModes": await this.hostState.setModes(params.threadId === undefined ? undefined : id(), params, viewId); break;
-        case "setAppearance": await this.hostState.setAppearance(params); break;
+        case "openSettings": await this.showSettings(); break;
         case "interrupt": await this.hostState.interrupt(id()); break;
         case "respondToRequest": {
           if (params.decision !== undefined && typeof params.decision !== "string") throw new Error("Invalid approval decision.");

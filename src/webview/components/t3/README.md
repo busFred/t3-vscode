@@ -8,6 +8,15 @@ These components were copied from `apps/web/src/components/` in T3 Code at
 - `TimelineSystemDivider.tsx`: system-event rows.
 - `T3Wordmark.tsx`: upstream wordmark.
 
+Portable helpers from the same revision also retain the upstream algorithms:
+
+- `assistantTextSelection.ts` from `apps/web/src/lib/`: rendered text ranges,
+  normalized positions and source matching for assistant citations.
+- `selectionActions.ts` from `apps/web/src/lib/`: mouse and keyboard selection
+  gestures, dismissal and toolbar positioning.
+- `modelPickerSearch.ts` from `apps/web/src/components/chat/`: fuzzy model search
+  by provider instance, driver and model name, with favorite ranking.
+
 Imports use the local `cn` helper and vendored request types. The system divider
 uses a native title in place of T3's tooltip dependency. Surrounding components
 adapt T3's chat layout and turn-item presentation to host snapshots and VS Code
