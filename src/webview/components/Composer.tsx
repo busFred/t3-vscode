@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, SquareIcon, ChevronDownIcon, BotIcon } from "lucide-react";
+import { ArrowUpIcon, SquareIcon, ChevronDownIcon, BotIcon, FolderIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
@@ -16,8 +16,17 @@ export function Composer({ state }: { readonly state: HostStateSnapshot }) {
   const modelPopup = useRef<HTMLDivElement>(null);
   const run = useActions();
   const thread = state.threads.find((item) => item.id === state.activeThreadId);
-  const provider = state.providers.find((item) => item.instanceId === thread?.modelSelection.instanceId);
-  const model = provider?.models.find((item) => item.slug === thread?.modelSelection.model);
+  const selection = thread?.modelSelection ?? state.draft.modelSelection;
+  const provider = state.providers.find((item) => item.instanceId === selection?.instanceId);
+  const model = provider?.models.find((item) => item.slug === selection?.model);
+  const target = thread ? { threadId: thread.id } : {};
+  const runtimeMode = thread?.runtimeMode ?? state.draft.runtimeMode;
+  const interactionMode = thread?.interactionMode ?? state.draft.interactionMode;
+  const project = state.projects.find((item) => item.id === state.draft.projectId);
+  const projectLabel = project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1)
+    ?? (state.draft.supportsNoProject ? "No project" : "Choose project");
+  const modelGroups = state.providers.filter((item) => item.enabled).map((entry) => ({ entry,
+    models: entry.models.filter((item) => `${entry.displayName ?? entry.instanceId} ${item.name} ${item.slug}`.toLowerCase().includes(modelSearch.toLowerCase())) }));
   const disabled = busy || state.sending || thread?.archived === true;
   useEffect(() => { drafts.set(draftKey, text); }, [draftKey, text]);
   useEffect(() => {
@@ -33,7 +42,7 @@ export function Composer({ state }: { readonly state: HostStateSnapshot }) {
   }, [modelsOpen]);
   const send = async () => {
     const value = text.trim();
-    if (!value || disabled) return;
+    if (!value || disabled || !selection) return;
     setBusy(true);
     const sent = await run("sendMessage", { text: value, ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
     if (sent) { setText(""); drafts.delete(draftKey); }
@@ -46,22 +55,26 @@ export function Composer({ state }: { readonly state: HostStateSnapshot }) {
       <textarea ref={textarea} value={text} placeholder={thread?.activeRunId ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" disabled={disabled} rows={2} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
         if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); }
       }} />
+      {!thread ? <div className="composer-project"><button className="project-trigger" aria-label="Choose project" title={state.draft.workspaceRoot ?? projectLabel} disabled={busy} onClick={() => {
+        setBusy(true); void run("chooseProject").finally(() => setBusy(false));
+      }}><FolderIcon size={12} /><span>{projectLabel}</span><ChevronDownIcon size={11} /></button></div> : null}
+      {!selection ? <div className="composer-hint">No models available. Configure a provider in T3 Code.</div> : null}
       <div className="composer-toolbar"><div className="composer-controls">
-        {thread ? <><div className="model-control" ref={modelPopup}>
-          <button className="model-trigger" disabled={busy} onClick={() => setModelsOpen(!modelsOpen)} aria-expanded={modelsOpen} aria-label="Choose model"><BotIcon size={13} /><span>{model?.name ?? thread.modelSelection.model}</span><ChevronDownIcon size={12} /></button>
+        <div className="model-control" ref={modelPopup}>
+          <button className="model-trigger" disabled={busy} onClick={() => setModelsOpen(!modelsOpen)} aria-expanded={modelsOpen} aria-label="Choose model"><BotIcon size={13} /><span>{model?.name ?? selection?.model ?? "Choose model"}</span><ChevronDownIcon size={12} /></button>
           {modelsOpen ? <div className="model-picker" role="dialog" aria-label="Choose model" onKeyDown={(event) => { if (event.key === "Escape") setModelsOpen(false); }}>
             <input autoFocus aria-label="Search models" placeholder="Search models…" value={modelSearch} onChange={(event) => setModelSearch(event.target.value)} />
-            <div className="model-options">{state.providers.filter((item) => item.enabled).map((entry) => <section key={entry.instanceId}><header>{entry.displayName ?? entry.instanceId}{!entry.installed ? " · Not installed" : ""}</header>{entry.models.filter((item) => `${entry.displayName ?? entry.instanceId} ${item.name} ${item.slug}`.toLowerCase().includes(modelSearch.toLowerCase())).map((item) => <button key={item.slug} disabled={!entry.installed || entry.availability === "unavailable"} className={entry.instanceId === thread.modelSelection.instanceId && item.slug === thread.modelSelection.model ? "selected" : ""} onClick={() => {
-              setBusy(true); void run("setModel", { threadId: thread.id, modelSelection: { instanceId: entry.instanceId, model: item.slug } }).then((ok) => { if (ok) setModelsOpen(false); }).finally(() => setBusy(false));
+            <div className="model-options">{modelGroups.map(({ entry, models }) => <section key={entry.instanceId}><header>{entry.displayName ?? entry.instanceId}{!entry.installed ? " · Not installed" : ""}{entry.availability === "unavailable" ? " · Unavailable" : ""}</header>{models.map((item) => <button key={item.slug} disabled={!entry.installed || entry.availability === "unavailable"} className={entry.instanceId === selection?.instanceId && item.slug === selection.model ? "selected" : ""} onClick={() => {
+              setBusy(true); void run("setModel", { ...target, modelSelection: { instanceId: entry.instanceId, model: item.slug } }).then((ok) => { if (ok) setModelsOpen(false); }).finally(() => setBusy(false));
             }}><span>{item.name}</span>{item.isCustom ? <small>Custom</small> : null}</button>)}</section>)}</div>
+            {!modelGroups.some((group) => group.models.length) ? <div className="model-empty">{modelSearch ? "No matching models." : "No models available. Configure a provider in T3 Code."}</div> : null}
           </div> : null}
         </div>
-        <select aria-label="Interaction mode" value={thread.interactionMode} disabled={busy} onChange={(event) => { void run("setModes", { threadId: thread.id, interactionMode: event.target.value }); }}><option value="default">Code</option><option value="plan">Plan</option></select>
-        <select aria-label="Permission mode" value={thread.runtimeMode} disabled={busy} onChange={(event) => { void run("setModes", { threadId: thread.id, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes ?? ["approval-required", "auto", "full-access"]).map((mode) => <option key={mode} value={mode}>{runtimeLabels[mode]}</option>)}</select>
-        </> : <span className="composer-hint">A new thread will use your workspace</span>}
+        <select aria-label="Interaction mode" value={interactionMode} disabled={busy || !selection} onChange={(event) => { void run("setModes", { ...target, interactionMode: event.target.value }); }}><option value="default">Code</option><option value="plan">Plan</option></select>
+        <select aria-label="Permission mode" value={runtimeMode} disabled={busy || !selection} onChange={(event) => { void run("setModes", { ...target, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes ?? ["approval-required", "auto", "full-access"]).map((mode) => <option key={mode} value={mode}>{runtimeLabels[mode]}</option>)}</select>
       </div>
       <div className="composer-send-controls">{thread?.activeRunId ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
-        <button className="send-button" aria-label="Send message" title="Send message" disabled={disabled || !text.trim()} onClick={() => { void send(); }}><ArrowUpIcon size={17} /></button>
+        <button className="send-button" aria-label="Send message" title="Send message" disabled={disabled || !selection || !text.trim()} onClick={() => { void send(); }}><ArrowUpIcon size={17} /></button>
       </div></div>
     </div>
     <div className="composer-footnote"><span>{thread?.activeRunId ? "Agent is working" : provider?.displayName ?? provider?.instanceId ?? "T3 Code"}</span><span>Enter to send · Shift+Enter for a new line</span></div>

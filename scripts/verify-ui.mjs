@@ -21,6 +21,7 @@ const initial = {
   projects: [{ id: "project-one", title: "t3-vscode", workspaceRoot: "/tmp/t3-vscode" }, { id: "project-two", title: "myt3code", workspaceRoot: "/tmp/myt3code" }],
   threads: [{ id: "thread-one", projectId: "project-one", title: "Migrate the T3 chat experience", status: "idle", modelSelection: selection, runtimeMode: "auto", interactionMode: "default", updatedAt: now, archived: false, pinned: true, activeRunId: null }, { id: "thread-two", projectId: "project-two", title: "Server integration checks", status: "idle", modelSelection: selection, runtimeMode: "auto", interactionMode: "default", updatedAt: now, archived: false, pinned: false, activeRunId: null }],
   providers: [{ instanceId: "codex", driver: "codex", displayName: "Codex", installed: true, enabled: true, supportedRuntimeModes: ["approval-required", "auto", "full-access"], models: [{ slug: "gpt-6-astra", name: "GPT-6 Astra", isCustom: false }] }, { instanceId: "kimi-acp", driver: "acp", displayName: "Kimi via ACP", installed: true, enabled: true, models: [{ slug: "kimi-for-coding", name: "Kimi for Coding", isCustom: false }] }],
+  draft: { projectId: "project-one", workspaceRoot: "/tmp/t3-vscode", supportsNoProject: true, modelSelection: selection, runtimeMode: "auto", interactionMode: "default" },
   activeThreadId: "thread-one", transcript: [user, assistant, command, diff], pending: { approvals: [], userInputs: [] }, history: { hasMore: false, loading: false, error: null }, threadLoading: false, sending: false,
 };
 function mockBridge() {
@@ -30,10 +31,24 @@ function mockBridge() {
     window.__requests.push(request);
     const params = request.params ?? {};
     if (request.method === "selectThread") window.__replace({ activeThreadId: params.threadId });
-    if (request.method === "setModel") window.__replace({ threads: window.__state.threads.map((thread) => thread.id === params.threadId ? { ...thread, modelSelection: params.modelSelection } : thread) });
-    if (request.method === "setModes") window.__replace({ threads: window.__state.threads.map((thread) => thread.id === params.threadId ? { ...thread, ...params } : thread) });
+    if (request.method === "setModel") window.__replace(params.threadId
+      ? { threads: window.__state.threads.map((thread) => thread.id === params.threadId ? { ...thread, modelSelection: params.modelSelection } : thread) }
+      : { draft: { ...window.__state.draft, modelSelection: params.modelSelection } });
+    if (request.method === "setModes") window.__replace(params.threadId
+      ? { threads: window.__state.threads.map((thread) => thread.id === params.threadId ? { ...thread, ...params } : thread) }
+      : { draft: { ...window.__state.draft, ...params } });
+    if (request.method === "chooseProject") window.__replace({ draft: { ...window.__state.draft, projectId: null, workspaceRoot: "/tmp/picked-project" } });
     if (request.method === "respondToRequest") window.__replace({ pending: { approvals: [], userInputs: [] } });
-    if (request.method === "sendMessage") window.__replace({ transcript: [...window.__state.transcript, { ...window.__fixtures.assistant, key: "new-response", item: { ...window.__fixtures.assistant.item, id: "new-response", text: "UI verification reply" } }] });
+    if (request.method === "sendMessage") {
+      if (!params.threadId) {
+        const draft = window.__state.draft;
+        const project = { id: "first-project", title: draft.workspaceRoot ? "picked-project" : "No project", workspaceRoot: draft.workspaceRoot ?? "/tmp/fixture/scratch" };
+        const thread = { id: "first-thread", projectId: project.id, title: "First conversation", status: "idle", modelSelection: draft.modelSelection,
+          runtimeMode: draft.runtimeMode, interactionMode: draft.interactionMode, updatedAt: new Date().toISOString(), archived: false, pinned: false, activeRunId: null };
+        window.__replace({ activeThreadId: thread.id, projects: [project], threads: [thread] });
+      }
+      window.__replace({ transcript: [...window.__state.transcript, { ...window.__fixtures.assistant, key: "new-response", item: { ...window.__fixtures.assistant.item, id: "new-response", text: "UI verification reply" } }] });
+    }
     if (request.method === "loadHistory") window.__replace({ history: { hasMore: false, loading: false, error: null } });
     setTimeout(() => window.postMessage({ id: request.id, result: window.__state }, "*"), 0);
   } });
@@ -116,7 +131,34 @@ try {
     return true;
   });
   assert.ok(await page.locator(".timeline-row").count() < 100, "Long conversations must be virtualized");
+  await page.evaluate(() => window.__replace({ activeThreadId: undefined, projects: [], threads: [], transcript: [],
+    draft: { projectId: null, workspaceRoot: null, supportsNoProject: true, modelSelection: { instanceId: "codex", model: "gpt-6-astra" }, runtimeMode: "auto", interactionMode: "default" } }));
+  await page.getByRole("button", { name: "Choose project", exact: true }).filter({ hasText: "No project" }).waitFor();
+  await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  await page.getByRole("textbox", { name: "Search models" }).fill("kimi");
+  await page.getByRole("button", { name: "Kimi for Coding", exact: true }).click();
+  await page.getByRole("combobox", { name: "Interaction mode" }).selectOption("plan");
+  await page.getByRole("combobox", { name: "Permission mode" }).selectOption("full-access");
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("First message without a project");
+  await page.screenshot({ path: `${evidence}/empty-sidebar.png` });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await page.getByText("UI verification reply", { exact: true }).waitFor();
+  const firstThread = await page.evaluate(() => window.__state.threads[0]);
+  assert.equal(firstThread.modelSelection.instanceId, "kimi-acp");
+  assert.equal(firstThread.runtimeMode, "full-access");
+  assert.equal(firstThread.interactionMode, "plan");
+  assert.equal(await page.evaluate(() => window.__state.projects[0].title), "No project");
+  assert.equal(await page.evaluate(() => window.__requests.findLast((request) => request.method === "sendMessage").params.threadId), undefined);
+  assert.ok(await page.evaluate(() => window.__requests.some((request) => request.method === "setModel" && !request.params.threadId)));
+  await page.evaluate(() => window.__replace({ activeThreadId: undefined, projects: [], threads: [], transcript: [], draft: { ...window.__state.draft, supportsNoProject: false } }));
+  await page.getByRole("button", { name: "Choose project", exact: true }).filter({ hasText: "Choose project" }).waitFor();
+  await page.getByRole("button", { name: "Choose project", exact: true }).click();
+  await page.getByRole("button", { name: "Choose project", exact: true }).filter({ hasText: "picked-project" }).waitFor();
+  await page.evaluate(() => window.__replace({ providers: [], draft: { ...window.__state.draft, modelSelection: null } }));
+  await page.getByText("No models available. Configure a provider in T3 Code.", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "Send message", exact: true }).isDisabled(), true);
   assert.deepEqual(errors, []);
-  console.log("PASS: markdown, tool details, diff, model catalog, modes, send, approvals, questions, narrow navigation, light/dark themes, 1000-item virtualization");
+  console.log("PASS: markdown, tool details, diff, model catalog, modes, send, approvals, questions, narrow navigation, themes, virtualization, projectless first message, draft controls, folder selection, empty model catalog");
   console.log(`Screenshots: ${evidence}`);
 } finally { await browser.close(); await new Promise((resolve) => server.close(resolve)); }
