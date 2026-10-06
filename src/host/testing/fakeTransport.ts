@@ -20,6 +20,7 @@ export class FakeTransport implements HostTransport {
   archiveStarts = 0;
   shellHandler: ((item: OrchestrationV2ShellStreamItem) => void) | null = null;
   threadHandlers = new Map<string, (item: OrchestrationV2ThreadStreamItem) => void>();
+  private readonly snapshots = new Map<string, Extract<OrchestrationV2ThreadStreamItem, { kind: "snapshot" }>>();
   commands: OrchestrationV2Command[] = [];
   projectCreates = 0;
   scratchCalls = 0;
@@ -33,12 +34,18 @@ export class FakeTransport implements HostTransport {
   };
   async subscribeShell(handler: (item: OrchestrationV2ShellStreamItem) => void) { this.shellStarts += 1; this.shellHandler = handler; return async () => { this.shellHandler = null; }; }
   async subscribeThread(id: string, handler: (item: OrchestrationV2ThreadStreamItem) => void) {
-    this.threadStarts += 1; this.threadHandlers.set(id, handler);
+    this.threadStarts += 1;
+    // Like the server, retain published history when the last client leaves.
+    const receive = (item: OrchestrationV2ThreadStreamItem) => {
+      if (item.kind === "snapshot" && this.threadHandlers.get(id) === receive) this.snapshots.set(id, item);
+      handler(item);
+    };
+    this.threadHandlers.set(id, receive);
     const thread = this.shell.threads.find((thread) => thread.id === id);
-    handler({ kind: "snapshot", snapshotSequence: 0, projection: { ...v2Projection, thread: { ...v2Projection.thread, id: ThreadId.make(id),
+    receive(this.snapshots.get(id) ?? { kind: "snapshot", snapshotSequence: 0, projection: { ...v2Projection, thread: { ...v2Projection.thread, id: ThreadId.make(id),
       modelSelection: thread?.modelSelection ?? v2Projection.thread.modelSelection, runtimeMode: thread?.runtimeMode ?? v2Projection.thread.runtimeMode,
       interactionMode: thread?.interactionMode ?? v2Projection.thread.interactionMode } } });
-    return async () => { this.threadStops += 1; if (this.threadHandlers.get(id) === handler) this.threadHandlers.delete(id); };
+    return async () => { this.threadStops += 1; if (this.threadHandlers.get(id) === receive) this.threadHandlers.delete(id); };
   }
   async dispatch(raw: unknown) {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(raw); this.commands.push(command);

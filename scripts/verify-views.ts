@@ -11,7 +11,7 @@ import { Events, type RpcMessage } from "../src/shared/bridge.js";
 import { DEFAULT_APPEARANCE, type AppearanceSettings } from "../src/shared/appearance.js";
 import type { FavoriteModel } from "../src/shared/bridge.js";
 import { ProviderInstanceId, ProviderDriverKind } from "@t3tools/contracts";
-import { collectAssistantCitations } from "@t3tools/shared/assistantCitations";
+import { collectAssistantCitations, serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
 
 const evidence = process.env.T3_VSCODE_UI_EVIDENCE ?? "/tmp/t3-vscode-views-ui";
 await mkdir(evidence, { recursive: true });
@@ -26,6 +26,7 @@ client.config = { providers: [
   ...["Personal", "Work"].map((name) => ({ ...firstProvider, instanceId: ProviderInstanceId.make(`codex-${name.toLowerCase()}`), driver: ProviderDriverKind.make("codex"), displayName: `Codex ${name}`,
     models: [{ slug: "gpt-6-astra", name: "GPT-6 Astra", isCustom: false, capabilities }] })),
   { ...firstProvider, instanceId: ProviderInstanceId.make("unavailable"), displayName: "Unavailable provider", installed: false, models: [{ ...firstProvider.models[0]!, name: "Unavailable model" }] },
+  { ...firstProvider, instanceId: ProviderInstanceId.make("claude"), driver: ProviderDriverKind.make("claudeAgent"), displayName: "Claude", models: [{ slug: "claude-sonnet", name: "Claude Sonnet", isCustom: false, capabilities: { optionDescriptors: [{ id: "effort", type: "select", label: "Effort", promptInjectedValues: ["ultrathink"], options: [{ id: "high", label: "High", isDefault: true }, { id: "ultrathink", label: "Ultrathink" }] }] } }] },
 ] };
 let settingsOpened = 0;
 const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry, async () => { settingsOpened += 1; });
@@ -76,6 +77,7 @@ const server = createServer(async (request, response) => {
 });
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 const errors: string[] = [];
+let debugPages: Page[] = [];
 async function expectFonts(page: Page, expected: AppearanceSettings) {
   await page.waitForFunction((value) => {
     const prompt = document.querySelector("textarea");
@@ -93,7 +95,7 @@ async function selectAssistantText(page: Page, text: string) {
     const position = (offset) => { for (const node of nodes) { if (offset < node.length) return { node, offset }; offset -= node.length; } throw new Error('Text position missing'); };
     const point = (offset, edge) => { const at = position(offset); const range = document.createRange(); range.setStart(at.node, at.offset); range.setEnd(at.node, at.offset + 1); const rect = range.getBoundingClientRect(); return { x: edge === 'left' ? rect.left + 0.2 : rect.right - 0.2, y: rect.top + rect.height / 2 }; };
     return { start: point(start, 'left'), end: point(start + quote.length - 1, 'right') };
-  })()`);
+  })()`) as { start: { x: number; y: number }; end: { x: number; y: number } };
   await page.mouse.move(points.start.x, points.start.y); await page.mouse.down();
   await page.mouse.move(points.end.x, points.end.y, { steps: 8 }); await page.mouse.up();
   await page.getByRole("button", { name: "Cite selection in composer" }).waitFor();
@@ -109,11 +111,13 @@ try {
     await page.goto(`http://127.0.0.1:${address.port}/?view=${id}`);
     await page.getByRole("textbox", { name: "Message", exact: true }).waitFor();
     assert.equal(await page.locator(".chat-heading strong").textContent(), "New conversation");
+    assert.equal(await page.locator(".chat-empty h1").textContent(), "What would you like to build?");
     assert.equal(await page.locator(".project-heading").count(), 1);
     assert.equal(await page.getByText("Outside workspace", { exact: true }).count(), 0);
     assert.equal(await page.getByRole("button", { name: "Outside conversation", exact: true }).count(), 0);
     return page;
   }));
+  debugPages = pages;
   for (const [index, name] of ["first", "second", "third"].entries()) {
     await pages[index]!.getByRole("button", { name: `${name} conversation`, exact: true }).click();
     await pages[index]!.locator(".chat-heading strong").filter({ hasText: `${name} conversation` }).waitFor();
@@ -215,6 +219,28 @@ try {
   assert.equal(await third.getByRole("button", { name: "Unavailable model", exact: true }).isDisabled(), true);
   await third.keyboard.press("Escape");
   assert.equal(await third.getByRole("dialog").count(), 0);
+  await third.getByRole("button", { name: "Choose model", exact: true }).click();
+  await third.getByRole("textbox", { name: "Search models" }).fill("claude");
+  await third.getByRole("button", { name: "Claude Sonnet", exact: true }).click();
+  await third.getByRole("combobox", { name: "Effort level" }).selectOption("ultrathink");
+  assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Ultrathink:\nDraft in third tab");
+  assert.equal(await third.getByRole("combobox", { name: "Effort level" }).inputValue(), "ultrathink");
+  assert.ok(!client.commands.some((command) => command.type === "thread.model-selection.set" && command.modelSelection.options?.some((option) => option.value === "ultrathink")));
+  await third.getByRole("combobox", { name: "Effort level" }).selectOption("high");
+  await third.waitForFunction(() => (document.querySelector('select[aria-label="Effort level"]') as HTMLSelectElement).value === "high");
+  assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in third tab");
+  publishText(client, "third", `Saved source: ${serializeAssistantCitation(citation)}`, 2);
+  await third.getByRole("button", { name: "Assistant quote", exact: true }).click();
+  await third.getByRole("dialog", { name: "Saved assistant quote" }).waitFor();
+  await third.getByRole("button", { name: "Open source", exact: true }).click();
+  await third.locator(".chat-heading strong").filter({ hasText: "second conversation" }).waitFor();
+  await third.waitForFunction(() => CSS.highlights?.has("t3-assistant-citation"));
+  assert.equal(host.snapshot("tab-two").activeThreadId, "second"); assert.equal(host.snapshot("tab-three").activeThreadId, "second");
+  await third.getByRole("textbox", { name: "Message", exact: true }).focus();
+  await third.waitForFunction(() => !CSS.highlights?.has("t3-assistant-citation"));
+  await third.getByRole("button", { name: "third conversation", exact: true }).click();
+  await third.locator(".chat-heading strong").filter({ hasText: "third conversation" }).waitFor();
+  assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in third tab");
   console.log("PASS: mouse-selected assistant quotes across inline formatting, optional comments, cancel/edit, independent draft contexts, scoped file references and exact send payloads; provider-instance search, favorites, keyboard selection, effort, legacy and unavailable models.");
   for (const [index, page] of pages.entries()) await page.screenshot({ path: `${evidence}/tab-${index + 1}.png` });
   await first.getByRole("button", { name: "Refresh connection", exact: true }).click();
@@ -229,6 +255,14 @@ try {
   assert.deepEqual(errors, []);
   console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
   console.log(`Screenshots: ${evidence}`);
+} catch (error) {
+  console.error("Browser errors:", errors);
+  if (debugPages[2]) {
+    console.error(await debugPages[2].evaluate(() => ({ thread: document.querySelector(".chat-main")?.getAttribute("data-thread-id"), notice: document.querySelector(".citation-source-notice")?.textContent,
+      sources: [...document.querySelectorAll<HTMLElement>("[data-assistant-citation-source]")].map((source) => ({ data: { ...source.dataset }, text: source.textContent, visible: source.getBoundingClientRect().height })), highlights: [...CSS.highlights.keys()] })));
+    await debugPages[2].screenshot({ path: `${evidence}/citation-source-failure.png` });
+  }
+  throw error;
 } finally {
   await browser?.close();
   server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve()));

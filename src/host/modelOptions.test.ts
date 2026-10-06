@@ -63,3 +63,17 @@ test("Favorites persist by provider instance, broadcast to all views and never s
   await host.dispose(); const restarted = await harness(options, transport()); t.after(() => restarted.host.dispose());
   assert.deepEqual(restarted.host.snapshot().favoriteModels, favorites);
 });
+test("Prompt-injected efforts cannot be dispatched as provider options", async (t) => {
+  const client = transport();
+  client.config = { providers: [{ ...provider, models: [{ ...effortModel, capabilities: { optionDescriptors: [
+    { id: "effort", type: "select", label: "Effort", promptInjectedValues: ["ultrathink"], options: [{ id: "high", label: "High" }, { id: "ultrathink", label: "Ultrathink" }] },
+  ] } }] }] };
+  const { host } = await harness({}, client); t.after(() => host.dispose());
+  await host.setModel(undefined, { instanceId: provider.instanceId, model: effortModel.slug });
+  await assert.rejects(host.setModelOption(undefined, "effort", "ultrathink"), /message text/);
+  assert.equal(client.commands.length, 0);
+  await host.sendMessage("Ultrathink:\nReason about this");
+  assert.equal(client.commands.findLast((command) => command.type === "message.dispatch")?.text, "Ultrathink:\nReason about this");
+  await host.sendMessage("/deploy.prod", host.snapshot().activeThreadId);
+  assert.equal(client.commands.findLast((command) => command.type === "message.dispatch")?.text, "/deploy.prod");
+});

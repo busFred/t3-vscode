@@ -472,6 +472,7 @@ export class HostState {
       const model = this.client.config?.providers.find((provider) => provider.instanceId === selection.instanceId)?.models.find((model) => model.slug === selection.model);
       const descriptor = model?.capabilities?.optionDescriptors?.find((option) => option.id === optionId);
       if (!descriptor || (descriptor.type === "boolean" ? typeof value !== "boolean" : typeof value !== "string" || !descriptor.options.some((option) => option.id === value))) throw new Error("This model does not support that option value.");
+      if (descriptor.type === "select" && typeof value === "string" && descriptor.promptInjectedValues?.includes(value)) throw new Error("This effort is controlled by the message text.");
       const options = [...(selection.options ?? []).filter((option) => option.id !== optionId), { id: optionId, value: value as string | boolean }];
       await this.applyModelSelection(id, { ...selection, options }, viewId);
     });

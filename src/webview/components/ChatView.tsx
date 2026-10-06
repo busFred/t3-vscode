@@ -45,7 +45,7 @@ export function ChatView({ state, onAppearance }: { readonly state: HostStateSna
   return <div className={`chat-view${navigationOpen ? " navigation-open" : ""}`}>
     {navigationOpen ? <button className="navigation-backdrop" aria-label="Close navigation" onClick={() => setNavigationOpen(false)} /> : null}
     <ThreadList state={state} onSelect={() => setNavigationOpen(false)} />
-    <main className="chat-main" data-thread-id={state.activeThreadId ?? ""} onPointerDown={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }}>
+    <main className="chat-main" data-thread-id={state.activeThreadId ?? ""} onPointerDown={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }} onFocusCapture={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }}>
       {!isSidebar ? <header className="chat-header">
         <button className="icon-button nav-toggle" title="Projects and threads" aria-label="Projects and threads" onClick={() => setNavigationOpen(!navigationOpen)}><PanelLeftIcon size={16} /></button>
         <T3Wordmark className="header-wordmark" aria-label="T3 Code" />

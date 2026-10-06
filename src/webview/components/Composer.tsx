@@ -6,7 +6,7 @@ import { PendingRequests } from "./PendingRequests";
 import { clearDraft, updateDraft, useComposerDraft } from "../composerDrafts";
 import { fileReferenceLabel, formatComposerMessage } from "../../shared/composerContext";
 import type { AssistantCitation } from "@t3tools/contracts";
-import { getProviderOptionCurrentValue } from "@t3tools/shared/model";
+import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
 import { effortDescriptor } from "../../shared/modelOptions";
 import { ModelPicker } from "./ModelPicker";
 
@@ -28,6 +28,7 @@ export function Composer({ state, onEditCitation }: { readonly state: HostStateS
   const target = thread ? { threadId: thread.id } : {};
   const runtimeMode = thread?.runtimeMode ?? state.draft.runtimeMode;
   const effort = effortDescriptor(model, selection);
+  const promptEffort = effort?.promptInjectedValues?.includes("ultrathink") && isClaudeUltrathinkPrompt(text);
   const project = state.projects.find((item) => item.id === state.draft.projectId);
   const projectLabel = project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1)
     ?? (state.draft.supportsNoProject ? "No project" : "Choose project");
@@ -71,7 +72,15 @@ export function Composer({ state, onEditCitation }: { readonly state: HostStateS
       <div className="composer-toolbar"><div className="composer-controls">
         <button ref={modelTrigger} className="model-trigger" disabled={busy} onClick={() => setModelsOpen(!modelsOpen)} aria-expanded={modelsOpen} aria-label="Choose model"><BotIcon size={13} /><span>{model?.name ?? selection?.model ?? "Choose model"}</span><ChevronDownIcon size={12} /></button>
         {modelsOpen && modelTrigger.current ? <ModelPicker state={state} selection={selection} anchor={modelTrigger.current} onClose={closeModels} /> : null}
-        {effort ? <label className="effort-control" title={effort.description ?? effort.label}><BrainIcon size={13} /><select aria-label="Effort level" value={String(getProviderOptionCurrentValue(effort) ?? "")} disabled={busy || !selection} onChange={(event) => {
+        {effort ? <label className="effort-control" title={effort.description ?? effort.label}><BrainIcon size={13} /><select aria-label="Effort level" value={promptEffort ? "ultrathink" : String(getProviderOptionCurrentValue(effort) ?? "")} disabled={busy || !selection} onChange={(event) => {
+          if (effort.promptInjectedValues?.includes(event.target.value)) {
+            setText(text.trim() ? applyClaudePromptEffortPrefix(text, "ultrathink") : "Ultrathink:\n"); return;
+          }
+          if (promptEffort) {
+            const body = text.replace(/^Ultrathink:\s*/i, "");
+            if (isClaudeUltrathinkPrompt(body)) return;
+            setText(body);
+          }
           setBusy(true); void run("setModelOption", { ...target, optionId: effort.id, value: event.target.value }).finally(() => setBusy(false));
         }}>{getProviderOptionCurrentValue(effort) === undefined ? <option value="" disabled>Default</option> : null}{effort.options.map((option) => <option key={option.id} value={option.id} title={option.description}>{option.label}</option>)}</select></label> : null}
         <select aria-label="Permission mode" value={runtimeMode} disabled={busy || !selection} onChange={(event) => { void run("setModes", { ...target, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes ?? ["approval-required", "auto", "full-access"]).map((mode) => <option key={mode} value={mode}>{runtimeLabels[mode]}</option>)}</select>

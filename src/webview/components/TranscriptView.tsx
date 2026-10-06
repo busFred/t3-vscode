@@ -83,35 +83,39 @@ export function TranscriptView({ state, onViewport, citationTarget }: { readonly
     if (!citationTarget || citationTarget.threadId !== id) return;
     if (attempts.current.target !== citationTarget) { attempts.current = { target: citationTarget, pages: 0 }; setCitationNotice(null); }
     if (sourceIndex < 0) {
+      if (state.threadLoading) return;
       if (state.history.hasMore && attempts.current.pages < 20) {
         if (!state.history.loading) { attempts.current.pages += 1; void run("loadHistory", { threadId: id }); }
       } else setCitationNotice("The source response is unavailable. Your saved quote is unchanged.");
       return;
     }
+    setCitationNotice(null);
     let stopped = false; let frame = 0;
-    void list.current?.scrollToIndex({ index: sourceIndex, animated: false, viewPosition: 0.25 }).then(() => {
-      let checks = 0;
-      const show = () => {
-        if (stopped) return;
-        const anchor = findAssistantCitationSourceAnchor(document, citationTarget);
-        if (!anchor && ++checks < 20) { frame = requestAnimationFrame(show); return; }
-        if (anchor) {
-          anchor.range.startContainer.parentElement?.scrollIntoView({ block: "center" });
-          if (typeof Highlight !== "undefined" && CSS.highlights) CSS.highlights.set("t3-assistant-citation", new Highlight(anchor.range));
-        } else setCitationNotice("The quoted text has changed. Your saved quote is unchanged.");
-      };
-      frame = requestAnimationFrame(show);
-    }).catch(() => { if (!stopped) setCitationNotice("Could not open the source response. Your saved quote is unchanged."); });
+    // A new list's initial scroll can supersede scrollToIndex's completion.
+    // Source matching uses its rendered DOM instead of waiting on that promise.
+    void list.current?.scrollToIndex({ index: sourceIndex, animated: false, viewPosition: 0.25 }).catch(() => { if (!stopped) setCitationNotice("Could not open the source response. Your saved quote is unchanged."); });
+    let checks = 0;
+    const show = () => {
+      if (stopped) return;
+      const anchor = findAssistantCitationSourceAnchor(document, citationTarget);
+      if (!anchor && ++checks < 20) { frame = requestAnimationFrame(show); return; }
+      if (anchor) {
+        anchor.range.startContainer.parentElement?.scrollIntoView({ block: "center" });
+        if (typeof Highlight !== "undefined" && CSS.highlights) CSS.highlights.set("t3-assistant-citation", new Highlight(anchor.range));
+      } else setCitationNotice("The quoted text has changed. Your saved quote is unchanged.");
+    };
+    frame = requestAnimationFrame(show);
     return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-assistant-citation"); };
-  }, [citationTarget, id, sourceIndex, state.history.hasMore, state.history.loading, state.transcript.length, run]);
+  }, [citationTarget, id, sourceIndex, state.threadLoading, state.history.hasMore, state.history.loading, state.transcript.length, run]);
   const renderItem = useCallback(({ item }: { item: TranscriptItem }) => <div className="timeline-row"><TurnItem row={item} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /></div>, [id, state.environment?.environmentId]);
+  if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source response…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading)) return <div className="chat-empty"><T3Wordmark className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length) return <div className="chat-empty"><p>Loading conversation…</p></div>;
   return <div ref={onViewport} className="transcript-container" data-assistant-citation-viewport="" aria-label="Conversation">
-    {citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
+    {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
     <LegendList ref={list} key={id} data={state.transcript} keyExtractor={(row) => row.key} renderItem={renderItem} estimatedItemSize={100}
       {...(sourceIndex >= 0 ? { alwaysRender: { keys: [state.transcript[sourceIndex]!.key] } } : {})}
-      initialScrollAtEnd maintainScrollAtEnd={!citationTarget || citationTarget.threadId !== id} maintainScrollAtEndThreshold={0.15} maintainVisibleContentPosition
+      initialScrollAtEnd={!citationTarget || citationTarget.threadId !== id} maintainScrollAtEnd={!citationTarget || citationTarget.threadId !== id} maintainScrollAtEndThreshold={0.15} maintainVisibleContentPosition
       className="transcript-list" style={{ height: "100%" }}
       ListHeaderComponent={<div className="timeline-header">{state.history.hasMore || state.history.error ? <button className="btn" disabled={state.history.loading} onClick={() => { void run("loadHistory", { threadId: id }); }}>{state.history.loading ? "Loading…" : state.history.error ? "Retry loading earlier messages" : "Load earlier messages"}</button> : null}{state.history.error ? <p className="turn-error">{state.history.error}</p> : null}</div>}
       ListFooterComponent={<div className="timeline-footer" />}
