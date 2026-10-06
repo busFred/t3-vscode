@@ -1,6 +1,6 @@
 /** Single host-owned T3 projection shared by the sidebar and every editor tab. */
 import { randomUUID } from "node:crypto";
-import { basename, resolve } from "node:path";
+import { basename, isAbsolute, resolve } from "node:path";
 import {
   OrchestrationV2TurnItemJson, ModelSelection as ModelSelectionSchema,
   ProviderApprovalDecision, ProviderInteractionMode, RuntimeMode,
@@ -9,6 +9,7 @@ import {
   type OrchestrationV2TurnItem, type OrchestrationV2ThreadShell, type ServerConfig, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem,
 } from "@t3tools/contracts";
 import * as ShellState from "@t3tools/client-runtime/state/shell";
+import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
 import { applyOrchestrationV2ProjectionEvent } from "@t3tools/client-runtime/state/orchestration-v2-projection";
 import { derivePendingThreadRequests, createQuestionHistoryProjector } from "@t3tools/client-runtime/state/thread-requests";
 import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/turn-item-presentation";
@@ -17,18 +18,19 @@ import { resolveWorkEntryToolPresentation } from "@t3tools/client-runtime/work-l
 import { turnItemNeedsDetailFetch, turnItemOutputText } from "@t3tools/client-runtime/work-log/item-detail";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
-import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse } from "../shared/bridge.js";
+import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, ConversationDraft, ProjectSelection, ProjectSummary } from "../shared/bridge.js";
 import { pairWithServer } from "./pairing.js";
 import { discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
 import type { CredentialStore } from "./sessionStore.js";
 import type { T3Client, Subscription } from "./t3Client.js";
 
-export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "dispatch" | "ensureScratchProject" | "createProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive"> & { readonly config: Pick<ServerConfig, "providers"> | null };
+export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot"> | null };
 export interface HostStateOptions {
   readonly home: string;
   readonly credentials: CredentialStore;
   readonly serverStartupHint?: string | undefined;
   readonly workspaceRoot?: () => string | null;
+  readonly pickProject?: (projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean) => Promise<ProjectSelection | null>;
   readonly discover?: typeof discoverServer;
   readonly pair?: typeof pairWithServer;
   readonly reconnectDelayMs?: number;
@@ -54,6 +56,12 @@ export class HostState {
   private server: DiscoveredServer | null = null;
   private shell: OrchestrationV2ShellSnapshot | null = null;
   private activeThreadId: string | undefined;
+  private draftProjectId: string | undefined;
+  // null explicitly selects "No project", even when a VS Code folder is open.
+  private draftWorkspaceRoot: string | null | undefined;
+  private draftModelSelection: ModelSelection | undefined;
+  private draftRuntimeMode: RuntimeMode = "auto";
+  private draftInteractionMode: ProviderInteractionMode = "default";
   private archive: OrchestrationV2ArchivedShellSnapshot | null = null;
   private archiveSubscription: Subscription | null = null;
   private readonly threads = new Map<string, ThreadState>();
@@ -111,6 +119,8 @@ export class HostState {
     if (!discovered.ok) { this.server = null; this.setPhase("no-server", discovered.reason); return; }
     if (this.server?.descriptor.environmentId !== discovered.server.descriptor.environmentId) {
       this.shell = null; this.archive = null; this.threads.clear(); this.activeThreadId = undefined;
+      this.draftProjectId = undefined; this.draftWorkspaceRoot = undefined; this.draftModelSelection = undefined;
+      this.draftRuntimeMode = "auto"; this.draftInteractionMode = "default";
     }
     this.server = discovered.server;
     try {
@@ -234,34 +244,92 @@ export class HostState {
     this.scheduleEmit();
   }
   newThread(projectId?: string): Promise<string> { return this.enqueue(() => this.createThread(projectId)); }
-  private chooseModel(preferred?: ModelSelection | null): ModelSelection {
+  private availableModel(preferred?: ModelSelection | null): ModelSelection | null {
     const providers = this.client.config?.providers.filter((provider) => provider.enabled && provider.installed && provider.availability !== "unavailable") ?? [];
     if (preferred && providers.some((provider) => provider.instanceId === preferred.instanceId && provider.models.some((model) => model.slug === preferred.model))) return preferred;
     for (const provider of providers) {
       const model = provider.models.find((item) => item.isDefault) ?? provider.models[0];
       if (model) return { instanceId: provider.instanceId, model: model.slug };
     }
-    throw new Error("No available provider models. Configure a provider in T3 Code, then reconnect.");
+    return null;
+  }
+  private chooseModel(preferred?: ModelSelection | null): ModelSelection {
+    const model = this.availableModel(preferred);
+    if (!model) throw new Error("No available provider models. Configure a provider in T3 Code, then reconnect.");
+    return model;
+  }
+  private compatibleRuntimeMode(selection: ModelSelection | null, preferred: RuntimeMode): RuntimeMode {
+    const supported = this.client.config?.providers.find((provider) => provider.instanceId === selection?.instanceId)?.supportedRuntimeModes;
+    if (!supported?.length || supported.includes(preferred)) return preferred;
+    return supported.includes("approval-required") ? "approval-required" : supported[0]!;
+  }
+  private conversationDraft(): ConversationDraft {
+    const root = this.draftWorkspaceRoot === undefined ? this.options.workspaceRoot?.() ?? null : this.draftWorkspaceRoot;
+    const active = this.findThread(this.activeThreadId);
+    const project = this.shell?.projects.find((item) => item.id === this.draftProjectId)
+      ?? (root ? this.shell?.projects.find((item) => resolve(item.workspaceRoot) === resolve(root))
+        : this.draftWorkspaceRoot === null ? undefined : this.shell?.projects.find((item) => item.id === active?.projectId));
+    const modelSelection = this.availableModel(this.draftModelSelection ?? project?.defaultModelSelection ?? active?.modelSelection);
+    const supportsNoProject = availableScratchWorkspaceRoot(this.client.connected ? "connected" : null, this.client.config) !== null;
+    return { projectId: project?.id ?? null, workspaceRoot: project?.workspaceRoot ?? root, supportsNoProject, modelSelection,
+      runtimeMode: this.compatibleRuntimeMode(modelSelection, this.draftRuntimeMode), interactionMode: this.draftInteractionMode };
+  }
+  chooseProject(projectId?: string): Promise<void> {
+    return this.enqueue(async () => {
+      if (projectId) this.applyProjectSelection({ projectId });
+      else await this.pickDraftProject();
+      this.emit();
+    });
+  }
+  private applyProjectSelection(selection: ProjectSelection): void {
+    if ("noProject" in selection) {
+      if (!this.conversationDraft().supportsNoProject) throw new Error("This server requires a project. Choose a project folder.");
+      this.draftProjectId = undefined; this.draftWorkspaceRoot = null;
+    } else if ("projectId" in selection) {
+      const project = this.shell?.projects.find((item) => item.id === selection.projectId);
+      if (!project) throw new Error("Project not found.");
+      this.draftProjectId = project.id; this.draftWorkspaceRoot = project.workspaceRoot;
+    } else {
+      if (!isAbsolute(selection.workspaceRoot)) throw new Error("Choose an absolute project folder.");
+      this.draftProjectId = undefined; this.draftWorkspaceRoot = resolve(selection.workspaceRoot);
+    }
+  }
+  private async pickDraftProject(): Promise<boolean> {
+    const projects = this.shell?.projects.map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })) ?? [];
+    const selected = await this.options.pickProject?.(projects, this.conversationDraft().supportsNoProject);
+    if (!selected) return false;
+    this.applyProjectSelection(selected);
+    return true;
   }
   private async createThread(requestedProjectId?: string): Promise<string> {
     if (!this.client.connected) throw new Error("T3 is disconnected.");
-    let projectId = requestedProjectId;
+    this.chooseModel();
+    let draft = this.conversationDraft();
+    let projectId = requestedProjectId ?? draft.projectId ?? undefined;
     if (projectId && !this.shell?.projects.some((project) => project.id === projectId)) throw new Error("Project not found.");
+    if (!projectId && !draft.workspaceRoot) {
+      if (draft.supportsNoProject) projectId = await this.client.ensureScratchProject();
+      else {
+        if (!await this.pickDraftProject()) throw new Error("Choose a project or open a folder before starting a conversation.");
+        draft = this.conversationDraft();
+        projectId = draft.projectId ?? undefined;
+      }
+    }
     if (!projectId) {
-      const root = this.options.workspaceRoot?.();
+      const root = draft.workspaceRoot;
       if (root) {
         projectId = this.shell?.projects.find((project) => resolve(project.workspaceRoot) === resolve(root))?.id;
         if (!projectId) projectId = await this.client.createProject(root, basename(root));
-      } else { projectId = this.findThread(this.activeThreadId)?.projectId; }
+      }
     }
-    projectId ??= await this.client.ensureScratchProject();
+    if (!projectId) throw new Error("Choose a project before starting a conversation.");
     this.shell = await this.client.snapshotShell();
     const project = this.shell.projects.find((candidate) => candidate.id === projectId);
-    const model = this.chooseModel(project?.defaultModelSelection ?? this.findThread(this.activeThreadId)?.modelSelection);
+    const model = this.chooseModel(this.draftModelSelection ?? project?.defaultModelSelection ?? draft.modelSelection);
     const id = randomUUID();
     await this.client.dispatch({ type: "thread.create", commandId: randomUUID(), threadId: id, projectId,
       createdBy: "user", creationSource: "web", title: "New thread", modelSelection: model,
-      runtimeMode: "auto", interactionMode: "default", branch: null, worktreePath: null });
+      runtimeMode: this.compatibleRuntimeMode(model, draft.runtimeMode), interactionMode: draft.interactionMode, branch: null, worktreePath: null });
     this.shell = await this.client.snapshotShell();
     this.activeThreadId = id;
     await this.subscribeActiveThread(); this.emit();
@@ -281,18 +349,30 @@ export class HostState {
       } finally { this.sending = false; this.emit(); }
     });
   }
-  setModel(id: string, input: unknown): Promise<void> {
+  setModel(id: string | undefined, input: unknown): Promise<void> {
     return this.enqueue(async () => {
-      const thread = this.requireThread(id);
       const selection = Schema.decodeUnknownSync(ModelSelectionSchema)(input);
       const provider = this.client.config?.providers.find((item) => item.instanceId === selection.instanceId);
-      if (!provider?.enabled || !provider.installed || !provider.models.some((model) => model.slug === selection.model)) throw new Error("This model is unavailable.");
+      if (!provider?.enabled || !provider.installed || provider.availability === "unavailable" || !provider.models.some((model) => model.slug === selection.model)) throw new Error("This model is unavailable.");
+      if (id === undefined) {
+        this.draftModelSelection = selection;
+        this.draftRuntimeMode = this.compatibleRuntimeMode(selection, this.draftRuntimeMode);
+        this.emit(); return;
+      }
+      const thread = this.requireThread(id);
       if (provider.requiresNewThreadForModelChange && thread.itemCount > 0 && (selection.model !== thread.modelSelection.model || selection.instanceId !== thread.modelSelection.instanceId)) throw new Error("This provider requires a new thread to change models.");
       await this.client.dispatch({ type: "thread.model-selection.set", commandId: randomUUID(), threadId: id, modelSelection: selection });
     });
   }
-  setModes(id: string, input: { runtimeMode?: unknown; interactionMode?: unknown }): Promise<void> {
+  setModes(id: string | undefined, input: { runtimeMode?: unknown; interactionMode?: unknown }): Promise<void> {
     return this.enqueue(async () => {
+      if (id === undefined) {
+        const draft = this.conversationDraft();
+        const mode = input.runtimeMode === undefined ? draft.runtimeMode : Schema.decodeUnknownSync(RuntimeMode)(input.runtimeMode);
+        const interaction = input.interactionMode === undefined ? draft.interactionMode : Schema.decodeUnknownSync(ProviderInteractionMode)(input.interactionMode);
+        if (this.compatibleRuntimeMode(draft.modelSelection, mode) !== mode) throw new Error("This provider does not support that permission mode.");
+        this.draftRuntimeMode = mode; this.draftInteractionMode = interaction; this.emit(); return;
+      }
       const thread = this.requireThread(id);
       if (input.runtimeMode !== undefined) {
         const mode = Schema.decodeUnknownSync(RuntimeMode)(input.runtimeMode);
@@ -405,6 +485,7 @@ export class HostState {
         activeRunId: thread.activeRunId,
       })),
       providers: this.client.config?.providers ?? [],
+      draft: this.conversationDraft(),
       ...(this.activeThreadId ? { activeThreadId: this.activeThreadId } : {}),
       transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => ({
         key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, ...this.presentItem(row.item),

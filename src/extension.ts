@@ -12,7 +12,7 @@ import { resolveT3Home } from "./host/serverDiscovery.js";
 import { SecretCredentialStore } from "./host/sessionStore.js";
 import { T3Client } from "./host/t3Client.js";
 import { getWorkspaceContext } from "./host/workspaceContext.js";
-import { Events } from "./shared/bridge.js";
+import { Events, type ProjectSelection, type ProjectSummary } from "./shared/bridge.js";
 
 let hostState: HostState | null = null;
 
@@ -25,7 +25,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     : undefined;
 
   const client = new T3Client();
-  hostState = new HostState({ home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets), workspaceRoot: () => getWorkspaceContext().root }, client);
+  hostState = new HostState({ home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
+    workspaceRoot: () => getWorkspaceContext().root, pickProject: pickConversationProject }, client);
 
   const registry = new WebviewRegistry();
   const bridge = new BridgeHandler(hostState, registry);
@@ -81,6 +82,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 export async function deactivate(): Promise<void> {
   await hostState?.dispose();
   hostState = null;
+}
+
+async function pickConversationProject(projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean): Promise<ProjectSelection | null> {
+  if (projects.length || supportsNoProject) {
+    const choices: Array<vscode.QuickPickItem & { selection: ProjectSelection | null }> = [
+      ...(supportsNoProject ? [{ label: "$(comment-discussion) No project", description: "Start without a project", selection: { noProject: true } as const }] : []),
+      ...projects.map((project) => ({ label: project.title, description: project.workspaceRoot, selection: { projectId: project.id } })),
+      { label: "$(folder-opened) Choose folder…", description: "Use a folder as a T3 project", selection: null },
+    ];
+    const choice = await vscode.window.showQuickPick(choices, { title: "Conversation project", matchOnDescription: true });
+    if (!choice) return null;
+    if (choice.selection) return choice.selection;
+  }
+  const folders = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false,
+    title: "Choose a T3 project folder", openLabel: "Use project folder" });
+  return folders?.[0] ? { workspaceRoot: folders[0].fsPath } : null;
 }
 
 /**

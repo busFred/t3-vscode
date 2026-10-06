@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { OrchestrationV2Command, ProviderInstanceId, ThreadId, ProjectId, TurnItemId, EventId, RuntimeRequestId, NodeId, ProviderSessionId, type OrchestrationV2ShellStreamItem, type OrchestrationV2ThreadStreamItem, type OrchestrationV2TurnItem, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem, type OrchestrationV2ProjectedTurnItem, type OrchestrationV2RuntimeRequest, type ServerProvider } from "@t3tools/contracts";
+import { OrchestrationV2Command, ProviderInstanceId, ProviderDriverKind, ThreadId, ProjectId, TurnItemId, EventId, RuntimeRequestId, NodeId, ProviderSessionId, type OrchestrationV2ShellStreamItem, type OrchestrationV2ThreadStreamItem, type OrchestrationV2TurnItem, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem, type OrchestrationV2ProjectedTurnItem, type OrchestrationV2RuntimeRequest, type ServerProvider } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { v2Now, v2Project, v2ThreadShell, v2Projection, v2ShellSnapshot } from "../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
-import { HostState, type HostTransport } from "./hostState.js";
+import { HostState, type HostTransport, type HostStateOptions } from "./hostState.js";
 import type { DiscoveredServer } from "./serverDiscovery.js";
 import type { HostStateSnapshot } from "../shared/bridge.js";
 
@@ -12,7 +12,7 @@ const server = { origin: "http://audit.invalid", descriptor: { environmentId: "a
 const credentials = { get: async () => ({ origin: server.origin, environmentId: server.descriptor.environmentId, accessToken: "fake", expiresAt: Date.now() + 100_000, scopes: [] }), save: async () => {}, clear: async () => {} };
 class FakeTransport implements HostTransport {
   connected = false;
-  config = { providers: [provider] };
+  config: NonNullable<HostTransport["config"]> = { providers: [provider] };
   onClose: HostTransport["onClose"] = null;
   onConfig: HostTransport["onConfig"] = null;
   connections = 0; shellStarts = 0; threadStops = 0;
@@ -23,6 +23,8 @@ class FakeTransport implements HostTransport {
   shellHandler: ((item: OrchestrationV2ShellStreamItem) => void) | null = null;
   threadHandlers = new Map<string, (item: OrchestrationV2ThreadStreamItem) => void>();
   commands: OrchestrationV2Command[] = [];
+  projectCreates = 0;
+  scratchCalls = 0;
   async connect() { this.connected = true; this.connections += 1; }
   async disconnect() { this.connected = false; }
   async snapshotShell() { return this.shell; }
@@ -34,12 +36,15 @@ class FakeTransport implements HostTransport {
   async subscribeShell(handler: (item: OrchestrationV2ShellStreamItem) => void) { this.shellStarts += 1; this.shellHandler = handler; return async () => { this.shellHandler = null; }; }
   async subscribeThread(id: string, handler: (item: OrchestrationV2ThreadStreamItem) => void) {
     this.threadHandlers.set(id, handler);
-    handler({ kind: "snapshot", snapshotSequence: 0, projection: { ...v2Projection, thread: { ...v2Projection.thread, id: ThreadId.make(id) } } });
+    const thread = this.shell.threads.find((thread) => thread.id === id);
+    handler({ kind: "snapshot", snapshotSequence: 0, projection: { ...v2Projection, thread: { ...v2Projection.thread, id: ThreadId.make(id),
+      modelSelection: thread?.modelSelection ?? v2Projection.thread.modelSelection, runtimeMode: thread?.runtimeMode ?? v2Projection.thread.runtimeMode,
+      interactionMode: thread?.interactionMode ?? v2Projection.thread.interactionMode } } });
     return async () => { this.threadStops += 1; };
   }
   async dispatch(raw: unknown) {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(raw); this.commands.push(command);
-    if (command.type === "thread.create") this.shell = { ...this.shell, threads: [...this.shell.threads, { ...v2ThreadShell, id: command.threadId, projectId: command.projectId, modelSelection: command.modelSelection }] };
+    if (command.type === "thread.create") this.shell = { ...this.shell, threads: [...this.shell.threads, { ...v2ThreadShell, id: command.threadId, projectId: command.projectId, modelSelection: command.modelSelection, runtimeMode: command.runtimeMode, interactionMode: command.interactionMode }] };
     if (command.type === "thread.archive") {
       const thread = this.shell.threads.find((thread) => thread.id === command.threadId)!;
       this.shell = { ...this.shell, threads: this.shell.threads.filter((thread) => thread.id !== command.threadId) };
@@ -52,16 +57,25 @@ class FakeTransport implements HostTransport {
     }
   }
   async createProject(workspaceRoot: string, title: string) {
+    this.projectCreates += 1;
     const id = ProjectId.make("workspace-project");
     this.shell = { ...this.shell, projects: [...this.shell.projects, { ...v2Project, id, workspaceRoot, title }] }; return id;
   }
-  async ensureScratchProject() { return v2Project.id; }
+  async ensureScratchProject() {
+    this.scratchCalls += 1;
+    const workspaceRoot = this.config.scratchWorkspaceRoot;
+    if (!workspaceRoot) throw new Error("Threads without a project are not available on this environment.");
+    const existing = this.shell.projects.find((project) => project.workspaceRoot === workspaceRoot);
+    if (existing) return existing.id;
+    const id = ProjectId.make("scratch-project");
+    this.shell = { ...this.shell, projects: [...this.shell.projects, { ...v2Project, id, workspaceRoot, title: "No project" }] };
+    return id;
+  }
   getHistory: HostTransport["getHistory"] = async () => ({ snapshotSequence: 0, items: [], nextCursor: null, hasMoreHistory: false });
   getTurnItem: HostTransport["getTurnItem"] = async () => ({ item: null });
 }
 function structuredCloneShell() { return { ...v2ShellSnapshot, projects: [...v2ShellSnapshot.projects], threads: [...v2ShellSnapshot.threads], archivedThreads: [] }; }
-async function harness(options: { workspaceRoot?: () => string | null } = {}) {
-  const client = new FakeTransport();
+async function harness(options: Pick<HostStateOptions, "workspaceRoot" | "pickProject"> = {}, client = new FakeTransport()) {
   const host = new HostState({ home: "/tmp/fake-t3-test", credentials, discover: async () => ({ ok: true, server }), reconnectDelayMs: 0, ...options }, client);
   await host.start(); return { host, client };
 }
@@ -133,6 +147,130 @@ test("New threads default to the open workspace without filtering other projects
   await host.newThread();
   assert.equal(host.snapshot().projects.length, 2);
   assert.equal(client.commands.find((command) => command.type === "thread.create")?.projectId, "workspace-project");
+});
+test("The first message without a project uses Scratch and preserves draft model and modes", async (t) => {
+  const client = new FakeTransport();
+  client.shell = { ...client.shell, projects: [], threads: [] };
+  client.config = { scratchWorkspaceRoot: "/tmp/fake-t3-test/scratch", providers: [
+    { ...provider, instanceId: ProviderInstanceId.make("codex"), driver: ProviderDriverKind.make("codex"), models: [{ slug: "default", name: "Default", isCustom: false, capabilities: null }] },
+    { ...provider, supportedRuntimeModes: ["approval-required", "full-access"], models: [
+      ...provider.models, { slug: "custom-kimi", name: "Custom Kimi", isCustom: true, capabilities: null },
+    ] },
+  ] };
+  const { host } = await harness({ pickProject: async () => { throw new Error("Scratch must not prompt for a folder."); } }, client);
+  t.after(() => host.dispose());
+  assert.equal(host.snapshot().activeThreadId, undefined);
+  assert.equal(host.snapshot().draft.supportsNoProject, true);
+  assert.equal(host.snapshot().draft.modelSelection?.instanceId, "codex");
+  const selection = { instanceId: "kimi", model: "custom-kimi" };
+  await host.setModel(undefined, selection);
+  assert.equal(host.snapshot().draft.runtimeMode, "approval-required");
+  await host.setModes(undefined, { runtimeMode: "full-access", interactionMode: "plan" });
+  assert.equal(client.commands.length, 0);
+  assert.equal(client.shell.projects.length, 0);
+  await host.sendMessage("hello without a project");
+  const created = client.commands.find((command) => command.type === "thread.create");
+  assert.equal(created?.projectId, "scratch-project");
+  assert.deepEqual(created?.modelSelection, selection);
+  assert.equal(created?.runtimeMode, "full-access");
+  assert.equal(created?.interactionMode, "plan");
+  assert.equal(client.commands.findLast((command) => command.type === "message.dispatch")?.threadId, created?.threadId);
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === created?.threadId)?.interactionMode, "plan");
+  assert.equal(client.scratchCalls, 1);
+  assert.equal(client.projectCreates, 0);
+});
+test("Choosing No project overrides an open workspace and reuses the server's Scratch project", async (t) => {
+  const client = new FakeTransport();
+  client.config = { ...client.config, scratchWorkspaceRoot: "/tmp/fake-t3-test/scratch" };
+  const { host } = await harness({ workspaceRoot: () => "/tmp/open-workspace", pickProject: async (_, supportsNoProject) => {
+    assert.equal(supportsNoProject, true); return { noProject: true };
+  } }, client);
+  t.after(() => host.dispose());
+  await host.chooseProject();
+  assert.equal(host.snapshot().draft.workspaceRoot, null);
+  await host.newThread();
+  await host.newThread();
+  assert.equal(client.scratchCalls, 2);
+  assert.equal(client.projectCreates, 0);
+  assert.equal(host.snapshot().projects.filter((project) => project.title === "No project").length, 1);
+  assert.ok(client.commands.every((command) => command.type !== "thread.create" || command.projectId === "scratch-project"));
+});
+test("Servers without Scratch prompt for a folder and create the project before the first send", async (t) => {
+  const client = new FakeTransport();
+  client.shell = { ...client.shell, projects: [], threads: [] };
+  let picks = 0;
+  const { host } = await harness({ pickProject: async (projects, supportsNoProject) => {
+    picks += 1; assert.deepEqual(projects, []); assert.equal(supportsNoProject, false);
+    return { workspaceRoot: "/tmp/chosen-folder" };
+  } }, client);
+  t.after(() => host.dispose());
+  await host.sendMessage("hello from a folder");
+  assert.equal(picks, 1);
+  assert.equal(client.scratchCalls, 0);
+  assert.equal(client.projectCreates, 1);
+  assert.equal(host.snapshot().projects[0]?.workspaceRoot, "/tmp/chosen-folder");
+  const created = client.commands.find((command) => command.type === "thread.create");
+  assert.equal(created?.projectId, "workspace-project");
+  assert.equal(client.commands.findLast((command) => command.type === "message.dispatch")?.threadId, created?.threadId);
+});
+test("Cancelling project selection leaves an empty conversation ready without creating server state", async (t) => {
+  const client = new FakeTransport();
+  client.shell = { ...client.shell, projects: [], threads: [] };
+  const { host } = await harness({ pickProject: async () => null }, client);
+  t.after(() => host.dispose());
+  await assert.rejects(host.sendMessage("retain this draft"), /Choose a project or open a folder/);
+  assert.equal(host.snapshot().phase, "ready");
+  assert.equal(host.snapshot().activeThreadId, undefined);
+  assert.equal(client.commands.length, 0);
+  assert.equal(client.projectCreates, 0);
+  assert.equal(client.scratchCalls, 0);
+});
+test("Cancelling the optional project picker preserves a projectless draft", async (t) => {
+  const client = new FakeTransport();
+  client.shell = { ...client.shell, projects: [], threads: [] };
+  client.config = { ...client.config, scratchWorkspaceRoot: "/tmp/fake-t3-test/scratch" };
+  const { host } = await harness({ pickProject: async () => null }, client); t.after(() => host.dispose());
+  const draft = host.snapshot().draft;
+  await host.chooseProject();
+  assert.deepEqual(host.snapshot().draft, draft);
+  await host.sendMessage("continue without a project");
+  assert.equal(client.scratchCalls, 1);
+  assert.equal(client.projectCreates, 0);
+});
+test("A selected existing project is reused without filtering other projects or touching Scratch", async (t) => {
+  const client = new FakeTransport();
+  client.shell = { ...client.shell, threads: [], projects: [...client.shell.projects, { ...v2Project, id: ProjectId.make("other-project"), title: "Other", workspaceRoot: "/tmp/other" }] };
+  const { host } = await harness({}, client); t.after(() => host.dispose());
+  await host.chooseProject("other-project");
+  await host.sendMessage("use the selected project");
+  assert.equal(client.commands.find((command) => command.type === "thread.create")?.projectId, "other-project");
+  assert.equal(host.snapshot().projects.length, 2);
+  assert.equal(client.projectCreates, 0);
+  assert.equal(client.scratchCalls, 0);
+});
+test("Invalid draft modes and unavailable models do not mutate the draft or dispatch commands", async (t) => {
+  const client = new FakeTransport();
+  client.shell = { ...client.shell, projects: [], threads: [] };
+  client.config = { providers: [{ ...provider, supportedRuntimeModes: ["approval-required", "full-access"] }] };
+  const { host } = await harness({}, client); t.after(() => host.dispose());
+  const draft = host.snapshot().draft;
+  await assert.rejects(host.setModes(undefined, { runtimeMode: "auto", interactionMode: "plan" }), /does not support/);
+  await assert.rejects(host.setModes(undefined, { runtimeMode: "full-access", interactionMode: "invented" }));
+  await assert.rejects(host.setModel(undefined, { instanceId: "missing", model: "missing" }), /unavailable/);
+  assert.deepEqual(host.snapshot().draft, draft);
+  assert.equal(client.commands.length, 0);
+});
+test("An empty model catalog fails before creating Scratch, a project, or a thread", async (t) => {
+  const client = new FakeTransport();
+  client.shell = { ...client.shell, projects: [], threads: [] };
+  client.config = { providers: [], scratchWorkspaceRoot: "/tmp/fake-t3-test/scratch" };
+  const { host } = await harness({ pickProject: async () => { throw new Error("No models must not prompt for a folder."); } }, client);
+  t.after(() => host.dispose());
+  assert.equal(host.snapshot().draft.modelSelection, null);
+  await assert.rejects(host.sendMessage("no models yet"), /No available provider models/);
+  assert.equal(client.commands.length, 0);
+  assert.equal(client.projectCreates, 0);
+  assert.equal(client.scratchCalls, 0);
 });
 test("Automatic reconnect recreates shell and thread subscriptions", async (t) => {
   const { host, client } = await harness(); t.after(() => host.dispose());

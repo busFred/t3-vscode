@@ -9,7 +9,7 @@ import type { PendingThreadRequests } from "@t3tools/client-runtime/state/thread
 
 export const Methods = {
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
-  newThread: "newThread", startPairing: "startPairing", reconnect: "reconnect",
+  newThread: "newThread", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
   setModel: "setModel", setModes: "setModes", interrupt: "interrupt",
   respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
@@ -28,6 +28,15 @@ export interface ModelSelection {
 }
 export type HostPhase = "discovering" | "no-server" | "pairing" | "connecting" | "ready" | "error";
 export interface ProjectSummary { readonly id: string; readonly title: string; readonly workspaceRoot: string }
+export type ProjectSelection = { readonly projectId: string } | { readonly workspaceRoot: string } | { readonly noProject: true };
+export interface ConversationDraft {
+  readonly projectId: string | null;
+  readonly workspaceRoot: string | null;
+  readonly supportsNoProject: boolean;
+  readonly modelSelection: ModelSelection | null;
+  readonly runtimeMode: RuntimeMode;
+  readonly interactionMode: ProviderInteractionMode;
+}
 export interface ThreadSummary {
   readonly id: string; readonly projectId: string; readonly title: string; readonly status: string;
   readonly modelSelection: ModelSelection;
@@ -54,6 +63,7 @@ export interface HostStateSnapshot {
   readonly projects: ReadonlyArray<ProjectSummary>;
   readonly threads: ReadonlyArray<ThreadSummary>;
   readonly providers: ReadonlyArray<ServerProvider>;
+  readonly draft: ConversationDraft;
   readonly activeThreadId?: string;
   readonly transcript: ReadonlyArray<TranscriptItem>;
   readonly pending: PendingThreadRequests;

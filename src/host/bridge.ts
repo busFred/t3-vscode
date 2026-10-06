@@ -33,11 +33,12 @@ export class BridgeHandler {
         case "loadArchive": await this.hostState.loadArchive(); break;
         case "selectThread": await this.hostState.selectThread(id()); break;
         case "newThread": await this.hostState.newThread(params.projectId === undefined ? undefined : stringParam(params, "projectId")); break;
+        case "chooseProject": await this.hostState.chooseProject(params.projectId === undefined ? undefined : stringParam(params, "projectId")); break;
         case "sendMessage": await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id()); break;
         case "reconnect": await this.hostState.reconnect(); break;
         case "startPairing": await this.hostState.pairNow(); break;
-        case "setModel": await this.hostState.setModel(id(), params.modelSelection); break;
-        case "setModes": await this.hostState.setModes(id(), params); break;
+        case "setModel": await this.hostState.setModel(params.threadId === undefined ? undefined : id(), params.modelSelection); break;
+        case "setModes": await this.hostState.setModes(params.threadId === undefined ? undefined : id(), params); break;
         case "interrupt": await this.hostState.interrupt(id()); break;
         case "respondToRequest": {
           if (params.decision !== undefined && typeof params.decision !== "string") throw new Error("Invalid approval decision.");
