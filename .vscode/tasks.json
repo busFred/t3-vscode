@@ -48,14 +48,14 @@
     },
     {
       "label": "T3: start isolated server",
-      "detail": "Start T3 explicitly with state in .t3/vscode-dev; leave this terminal running while testing.",
+      "detail": "Start T3 explicitly with state outside the Git checkout so No project conversations are available; leave this terminal running while testing.",
       "type": "process",
       "command": "env",
       "args": [
         "-u", "T3_SERVICE_LAUNCHER_CONTEXT",
         "-u", "T3_BOOT_SERVICE_UNIT",
         "t3", "serve",
-        "--base-dir", "${workspaceFolder}/.t3/vscode-dev",
+        "--base-dir", "/tmp/t3-vscode-dev-${workspaceFolderBasename}",
         "--host", "127.0.0.1",
         "--port", "47777",
         "--no-browser"
@@ -80,7 +80,7 @@
       "command": "pnpm",
       "args": [
         "exec", "tsx", "scripts/verify-host.ts",
-        "--base-dir", "${workspaceFolder}/.t3/vscode-dev"
+        "--base-dir", "/tmp/t3-vscode-dev-${workspaceFolderBasename}"
       ],
       "problemMatcher": []
     }

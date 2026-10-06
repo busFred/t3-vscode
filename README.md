@@ -17,7 +17,7 @@ code --new-window --profile Default .
 ## Test from VS Code
 
 1. Open this repository in VS Code and run `pnpm install` once.
-2. Run **Terminal → Run Task → T3: start isolated server**. Leave its terminal running. The server uses `.t3/vscode-dev` for state and port `47777`; stop it with Ctrl+C in that terminal when finished.
+2. Run **Terminal → Run Task → T3: start isolated server**. Leave its terminal running. The server uses `/tmp/t3-vscode-dev-t3-vscode` for state and port `47777`; stop it with Ctrl+C in that terminal when finished.
 3. Select **T3: Run Extension (Isolated Server, Default Profile)** in **Run and Debug**, then press **F5**. The pre-launch task copies your **Default** profile into isolated development storage on first use, builds both bundles, and opens a new Extension Development Host window using that copy.
 4. In that new window, open **T3 Code** in the activity bar. Use **Projects and Threads** to browse, create a thread, and send a short message. Use **Open Chat in Editor Tab** and check that both surfaces follow the same selected conversation. Try **Thread Actions** in the sidebar overflow menu to rename, pin, archive and restore a thread.
 
@@ -25,7 +25,7 @@ After editing the extension or UI, stop debugging and press F5 again to rebuild.
 
 The launch configuration passes `--profile=Default` and points both `--user-data-dir` and `--extensions-dir` into `.t3/vscode-profile`. The first launch copies the Default profile's settings, keybindings, snippets and installed extensions; later launches keep changes made in that development copy. The real profile and installation stay outside the development instance. **Always isolate both directories:** a fresh user-data directory sharing the real extension directory can cause VS Code to clean up extensions referenced only by the real profiles. The automated `verify-edh.mjs` check also uses separate temporary user-data and extension directories.
 
-`launch.json` sets `T3CODE_HOME` to this repository's `.t3/vscode-dev`, and workspace settings leave `t3-vscode.t3Home` empty so that environment value takes effect. Start the server task before F5; the extension discovers the existing server.
+`launch.json` sets `T3CODE_HOME` to `/tmp/t3-vscode-dev-${workspaceFolderBasename}`, and workspace settings leave `t3-vscode.t3Home` empty so that environment value takes effect. The server's data must be outside a Git checkout: T3 disables its Scratch folder (the web UI's **No project** conversations) inside a checkout. Start the server task before F5; the extension discovers the existing server. The previous `.t3/vscode-dev` data is preserved but no longer used by this launch configuration.
 
 If the development window says **T3 server unavailable**, run **T3: start isolated server** in the original repository window, keep its terminal open, then choose **Retry connection**. A running background service under `~/.t3` does not satisfy this isolated development configuration. Pairing happens after the development server is available.
 

@@ -15,7 +15,7 @@
         "${workspaceFolder}"
       ],
       "env": {
-        "T3CODE_HOME": "${workspaceFolder}/.t3/vscode-dev",
+        "T3CODE_HOME": "/tmp/t3-vscode-dev-${workspaceFolderBasename}",
         "T3_SERVICE_LAUNCHER_CONTEXT": null,
         "T3_BOOT_SERVICE_UNIT": null
       },

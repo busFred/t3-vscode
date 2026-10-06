@@ -4,7 +4,7 @@
  * connection/state lives in the extension host (see host/hostState.ts).
  */
 
-import { join, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import * as vscode from "vscode";
 import { BridgeHandler, WebviewRegistry } from "./host/bridge.js";
 import { HostState } from "./host/hostState.js";
@@ -20,7 +20,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const config = vscode.workspace.getConfiguration("t3-vscode");
   const home = resolveT3Home(config.get<string>("t3Home"));
   const serverStartupHint = context.extensionMode === vscode.ExtensionMode.Development
-    && resolve(home) === join(context.extensionUri.fsPath, ".t3", "vscode-dev")
+    && resolve(home) === `/tmp/t3-vscode-dev-${basename(context.extensionUri.fsPath)}`
     ? "This F5 session uses an isolated development server. In the original VS Code window, run Terminal → Run Task → T3: start isolated server. Leave its terminal running, then retry the connection."
     : undefined;
 
