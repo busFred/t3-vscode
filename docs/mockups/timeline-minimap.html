@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>T3 VSCode message navigation options</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font-sans, system-ui, sans-serif); color: var(--foreground, #252525); background: var(--background, #fff); font-size: 13px; line-height: 1.5; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--ring, #007acc); outline-offset: 2px; }
+.intro { margin: 0 0 12px; }
+.demo-tools { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 14px; align-items: center; }
+.demo-tools span { color: var(--muted-foreground, #666); font-size: 12px; }
+.theme-button { background: var(--secondary, #f3f3f3); color: inherit; border: 1px solid var(--border, #ddd); border-radius: 4px; padding: 3px 9px; }
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+figure { margin: 0; min-width: 0; }
+figcaption { margin-bottom: 8px; }
+figcaption strong { font-size: 14px; }
+figcaption small { display: block; margin-top: 2px; color: var(--muted-foreground, #666); line-height: 1.5; }
+.mock { --view: var(--vscode-editor-background, #fdfdfd); --text: var(--vscode-foreground, #292929); --subtle: var(--vscode-descriptionForeground, #666); --line: var(--vscode-panel-border, #d9d9d9); --input: var(--vscode-input-background, #fff); --input-text: var(--vscode-input-foreground, #333); --select: var(--vscode-list-activeSelectionBackground, #dceafb); --link: var(--vscode-textLink-foreground, #146eb4); border: 1px solid var(--line); border-radius: 4px; background: var(--view); color: var(--text); font: 12px/1.55 system-ui, sans-serif; overflow: hidden; }
+body[data-demo-theme="dark"] .mock { --vscode-editor-background: #1f1f1f; --vscode-foreground: #ccc; --vscode-descriptionForeground: #aaa; --vscode-panel-border: #454545; --vscode-input-background: #313131; --vscode-input-foreground: #eee; --vscode-list-activeSelectionBackground: #264f78; --vscode-textLink-foreground: #75beff; }
+.mock button { color: inherit; }
+.mock-title { height: 31px; padding: 0 10px; display: flex; align-items: center; border-bottom: 1px solid var(--line); gap: 6px; font-size: 11px; }
+.brand-icon { width: 16px; height: 16px; margin-right: 2px; }
+.mock-title span { flex: 1; }
+.tab-close { color: var(--subtle); }
+.chat-header { min-height: 35px; border-bottom: 1px solid var(--line); display: flex; gap: 4px; align-items: center; padding: 3px 8px; }
+.chat-title { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; font-weight: 600; }
+.chat-title small { font-size: 10px; font-weight: 400; color: var(--subtle); }
+.icon { width: 14px; height: 14px; flex-shrink: 0; }
+.header-button { padding: 3px; border: 0; background: none; display: flex; align-items: center; }
+.viewport { position: relative; height: 360px; }
+.transcript { position: absolute; inset: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; overscroll-behavior: contain; padding: 9px 18px 12px 31px; }
+.right .transcript { padding-right: 35px; padding-left: 14px; }
+.exchange { padding: 6px 0 16px; scroll-margin-top: 8px; }
+.user { margin-left: 18px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--input); color: var(--input-text); }
+.assistant { padding: 13px 2px 4px; }
+.assistant-label { font-weight: 600; margin-bottom: 6px; }
+.assistant-label small { font-size: 10px; font-weight: 400; margin-left: 6px; color: var(--subtle); }
+.assistant p { margin: 0 0 7px; }
+.assistant-actions { display: flex; gap: 12px; color: var(--subtle); margin-top: 8px; }
+.rail { width: 19px; height: 230px; position: absolute; top: 58px; left: 5px; z-index: 3; cursor: pointer; touch-action: none; }
+.right .rail { left: auto; right: 13px; }
+.rail-ticks { position: absolute; inset: 0 3px; pointer-events: none; }
+.tick { position: absolute; display: block; height: 2px; width: 6px; background: var(--subtle); opacity: .48; left: 0; }
+.tick.current { opacity: 1; background: var(--text); }
+.tick.near { width: 9px; }
+.tick.selected { width: 14px; opacity: 1; background: var(--text); }
+.right .tick { right: 0; left: auto; }
+.rail-preview { position: absolute; z-index: 4; left: 27px; width: calc(100% - 47px); padding: 9px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--input); color: var(--input-text); box-shadow: 0 5px 16px #0002; cursor: pointer; text-align: left; }
+.right .rail-preview { left: auto; right: 38px; width: calc(100% - 53px); }
+.rail-preview[hidden] { display: none; }
+.preview-count { display: block; font-size: 10px; color: var(--subtle); margin-bottom: 3px; }
+.preview-prompt { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 600; }
+.preview-response { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 11px; color: var(--subtle); margin-top: 3px; }
+.latest { position: absolute; bottom: 8px; right: 19px; background: var(--input); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; z-index: 2; font-size: 10px; }
+.right .latest { right: 37px; }
+.composer { border-top: 1px solid var(--line); padding: 9px 10px 7px; }
+.input { border: 1px solid var(--line); border-radius: 3px; min-height: 69px; background: var(--input); color: var(--input-text); padding: 8px 9px; position: relative; }
+.input span { opacity: .8; }
+.send { display: flex; align-items: center; justify-content: center; position: absolute; right: 6px; bottom: 6px; width: 23px; height: 23px; border-radius: 3px; background: var(--select); border: 0; }
+.selectors { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
+.selectors button { padding: 0; background: none; border: 0; font-size: 11px; }
+.selectors .model { font-weight: 650; margin-right: auto; }
+.position { display: block; margin-top: 7px; color: var(--subtle); font-size: 10px; }
+.shared { font-size: 12px; color: var(--muted-foreground, #666); margin: 12px 0 0; }
+@media (max-width: 610px) { .options { grid-template-columns: 1fr; gap: 22px; } }
+/* Preview and jump immediately; there are no animation or polling loops. */
+*, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+</style>
+</head>
+<body>
+<p class="intro">Hover over a marker to preview an earlier exchange; click to jump.</p>
+<div class="demo-tools"><span>Interactive: wheel over the rail or use ↑/↓, then Enter.</span><button class="theme-button" id="theme" type="button">Try dark theme</button></div>
+<div class="options">
+  <figure><figcaption><strong>A · Left rail</strong><small>Matches T3’s placement. Keeps the scrollbar separate.</small></figcaption><section class="mock left" data-option="A" aria-label="Option A: left message rail"></section></figure>
+  <figure><figcaption><strong>B · Right rail</strong><small>Next to the scrollbar. Leaves the left text margin clear.</small></figcaption><section class="mock right" data-option="B" aria-label="Option B: right message rail"></section></figure>
+</div>
+<p class="shared">Both use theme colors and a narrow gutter in sidebar and editor chat. One marker per user message; previews include the response. Updates and jumps are instant, with no animation.</p>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5m4-1v5l3 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3 12h18M12 3c-6 6-6 12 0 18 6-6 6-12 0-18" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="usage" viewBox="0 0 24 24"><path d="M4 19V9h4v10m3 0V4h4v15m3 0v-7h3v7" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="up" viewBox="0 0 24 24"><path d="M12 20V4m-6 6 6-6 6 6" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M15 8V4H4v11h4" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="fork" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="18" cy="5" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="20" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 7v4c0 3 6 1 6 7m6-11v4c0 3-6 1-6 7" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+</defs></svg>
+<script>
+const exchanges = [
+  ["The middle selector should be effort, rather than Code or Plan.", "The composer now uses the model’s advertised effort levels."],
+  ["The new font size setting is not registered.", "Font sizes are registered in native VS Code Settings under Extensions → T3 VSCode."],
+  ["Can you launch VS Code and check the build?", "I’ll use separate profile, extension and shared data directories for the test window."],
+  ["Use plain selectors below the message input.", "Model, effort and permission controls stay below the compact input."],
+  ["File links should open in a native VS Code tab.", "Links now open the editor at the cited line or range."],
+  ["History should start closed in editor chat.", "The editor starts with the conversation; History opens on request."],
+  ["Search should find matching text inside conversations.", "Search includes message snippets within the opened workspace."],
+  ["Changed files should show the previous turn’s diff.", "The native diff editor compares adjacent saved checkpoints."],
+  ["What is the current status? What are you running now?", "Account & Usage will start collapsed so sessions get the space. I’m checking notifications and the current-session editor handoff."],
+  ["Keep Account & Usage collapsed by default.", "Sessions stays visible first; account limits expand when requested."],
+  ["Add an icon to open the web UI in my browser.", "The globe opens the current session in your default browser."],
+  ["Show an Input badge and a native notification.", "Requests in unopened project sessions also notify, with an Open session action."],
+  ["The provider icon should stay small.", "Provider marks use a compact 12px size in the session list."],
+  ["Show Working without adding animation.", "Working uses a static icon and elapsed minutes."],
+  ["Enter should queue; Ctrl+Enter should steer.", "Those shortcuts work in sidebar and editor chat; the queue list keeps its Steer action."],
+  ["Make sure Usage does not steal my file references.", "Alt+K keeps targeting the last chat when the Usage page is open."],
+  ["Open Chat in Editor should retain my current session.", "The editor receives the selected session, unsent text and references."],
+  ["Keep Settled and Archive as separate sections.", "Each list has its own collapsible section."],
+  ["I meant the navigation wheel for past messages.", "These two placements keep previews and quick jumps within the current conversation."],
+  ["Keep the interface in my VS Code theme colors.", "The chat, input and navigation use native theme tokens."]
+];
+const svg = id => `<svg class="icon" aria-hidden="true"><use href="#${id}"/></svg>`;
+function createMock(root) {
+  root.innerHTML = `<div class="mock-title"><b>T3 VSCode</b><span></span><span class="tab-close" style="flex:0">×</span></div>
+    <header class="chat-header"><div class="chat-title"><small>t3-vscode / </small>T3 VSCode iteration</div>
+      <button class="header-button" title="Open web UI" aria-label="Open web UI">${svg('globe')}</button><button class="header-button" title="Usage" aria-label="Usage">${svg('usage')}</button><button class="header-button" title="History" aria-label="History">${svg('history')}</button><button class="header-button" title="New thread" aria-label="New thread">${svg('plus')}</button></header>
+    <div class="viewport"><div class="transcript"></div><div class="rail" role="slider" aria-label="Preview messages in option ${root.dataset.option}" aria-orientation="vertical" aria-valuemin="1" aria-valuemax="${exchanges.length}" tabindex="0"><div class="rail-ticks"></div></div>
+      <button class="rail-preview" type="button" aria-label="Jump to previewed message"><span class="preview-count"></span><span class="preview-prompt"></span><span class="preview-response"></span></button><button class="latest" type="button">↓ Latest</button></div>
+    <footer class="composer"><div class="input"><span>Ask anything, or describe a task…</span><button class="send" aria-label="Send message">${svg('up')}</button></div><div class="selectors"><button class="model">GPT-6.1-Sol⌄</button><button>Max⌄</button><button>Auto⌄</button></div><output class="position" aria-live="polite"></output></footer>`;
+  const transcript = root.querySelector('.transcript');
+  exchanges.forEach(([prompt, response], index) => {
+    const exchange = document.createElement('article'); exchange.className = 'exchange'; exchange.dataset.index = index;
+    const user = document.createElement('div'); user.className = 'user'; user.textContent = prompt;
+    const assistant = document.createElement('div'); assistant.className = 'assistant'; assistant.innerHTML = `<div class="assistant-label">T3<small>Assistant</small></div><p></p><div class="assistant-actions">${svg('copy')}${svg('fork')}</div>`;
+    assistant.querySelector('p').textContent = response; exchange.append(user, assistant); transcript.append(exchange);
+  });
+  const rail = root.querySelector('.rail'), ticks = root.querySelector('.rail-ticks'), preview = root.querySelector('.rail-preview'), position = root.querySelector('.position');
+  exchanges.forEach((_, index) => { const tick = document.createElement('i'); tick.className = 'tick'; tick.style.top = `${index / (exchanges.length - 1) * 100}%`; ticks.append(tick); });
+  let selected = 8, current = 7;
+  function show(index) {
+    selected = Math.max(0, Math.min(exchanges.length - 1, index));
+    rail.setAttribute('aria-valuenow', selected + 1); rail.setAttribute('aria-valuetext', exchanges[selected][0]);
+    [...ticks.children].forEach((tick, index) => { tick.className = `tick${index === current ? ' current' : ''}${Math.abs(index - selected) === 1 ? ' near' : ''}${index === selected ? ' selected' : ''}`; });
+    preview.querySelector('.preview-count').textContent = `Message ${selected + 1} of ${exchanges.length}`;
+    preview.querySelector('.preview-prompt').textContent = exchanges[selected][0];
+    preview.querySelector('.preview-response').textContent = exchanges[selected][1];
+    preview.hidden = false;
+    const top = 58 + selected / (exchanges.length - 1) * 230;
+    preview.style.top = `${Math.max(5, Math.min(355 - preview.offsetHeight, top - preview.offsetHeight / 2))}px`;
+  }
+  function jump(index) {
+    current = Math.max(0, Math.min(exchanges.length - 1, index));
+    const element = transcript.children[current]; transcript.scrollTop = element.offsetTop - transcript.offsetTop - 7;
+    show(current); position.textContent = `At message ${current + 1} of ${exchanges.length}`; root.dataset.currentMessage = current + 1;
+  }
+  function fromPointer(event) { const rect = rail.getBoundingClientRect(); return Math.round((event.clientY - rect.top) / rect.height * (exchanges.length - 1)); }
+  rail.addEventListener('pointermove', event => { show(fromPointer(event)); if (event.buttons === 1) jump(selected); });
+  rail.addEventListener('pointerdown', event => { event.preventDefault(); rail.focus(); jump(fromPointer(event)); });
+  rail.addEventListener('wheel', event => { if (!event.deltaY) return; event.preventDefault(); show(selected + Math.sign(event.deltaY)); }, { passive: false });
+  rail.addEventListener('keydown', event => {
+    if (!['ArrowUp','ArrowDown','Home','End','Enter',' ','Escape'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === 'ArrowUp') show(selected - 1); else if (event.key === 'ArrowDown') show(selected + 1);
+    else if (event.key === 'Home') show(0); else if (event.key === 'End') show(exchanges.length - 1);
+    else if (event.key === 'Escape') preview.hidden = true; else jump(selected);
+  });
+  preview.addEventListener('click', () => jump(selected));
+  root.querySelector('.latest').addEventListener('click', () => jump(exchanges.length - 1));
+  transcript.addEventListener('scroll', () => {
+    const top = transcript.getBoundingClientRect().top;
+    const visible = [...transcript.children].findIndex(element => element.getBoundingClientRect().bottom > top + 30);
+    if (visible >= 0) { current = visible; position.textContent = `At message ${current + 1} of ${exchanges.length}`; root.dataset.currentMessage = current + 1; [...ticks.children].forEach((tick,index) => tick.classList.toggle('current', index === current)); }
+  }, { passive: true });
+  jump(7); show(8);
+}
+document.querySelectorAll('.mock').forEach(createMock);
+document.querySelector('#theme').addEventListener('click', event => { const dark = document.body.dataset.demoTheme !== 'dark'; document.body.dataset.demoTheme = dark ? 'dark' : 'light'; event.currentTarget.textContent = dark ? 'Try light theme' : 'Try dark theme'; });
+console.log('Ready: two message navigation placements; pointer, wheel, keyboard and latest actions; no animation or background timers.');
+</script>
+</body>
+</html>
