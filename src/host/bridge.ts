@@ -1,9 +1,8 @@
 /** VS Code adapter for typed UI intents. Never exposes a generic T3 RPC tunnel. */
 import type * as vscode from "vscode";
-import { isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Events, isObject, paramsObject, stringParam, validateRpcMessage, type BridgeEvent, type HostStateSnapshot, type RpcResult } from "../shared/bridge.js";
 import { SIDEBAR_VIEW_ID, type HostState } from "./hostState.js";
+import { resolveChatFileLink } from "./fileLinks.js";
 
 export class WebviewRegistry {
   private readonly webviews = new Map<string, vscode.Webview>();
@@ -92,18 +91,13 @@ export class BridgeHandler {
   private async openLink(href: string, threadId?: string): Promise<void> {
     const vscode = await import("vscode");
     if (/^https?:\/\//i.test(href)) { await vscode.env.openExternal(vscode.Uri.parse(href)); return; }
-    let target = href.startsWith("file:") ? href : decodeURIComponent(href);
-    const location = /(?::(\d+)(?::(\d+))?|#L(\d+))$/.exec(target);
-    if (location) target = target.slice(0, location.index);
-    if (/^[a-z][a-z\d+.-]*:/i.test(target) && !target.startsWith("file:")) throw new Error("Unsupported link type.");
-    const path = target.startsWith("file:") ? fileURLToPath(target) : target;
-    const cwd = this.hostState.workspaceForThread(threadId);
-    if (!isAbsolute(path) && !cwd) throw new Error("This thread has no workspace for relative file links.");
-    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(isAbsolute(path) ? path : resolve(cwd!, path)));
+    const target = resolveChatFileLink(href, this.hostState.workspaceForThread(threadId));
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(target.path));
     const editor = await vscode.window.showTextDocument(document, { preview: true });
-    if (location) {
-      const position = new vscode.Position(Math.max(0, Number(location[1] ?? location[3]) - 1), Math.max(0, Number(location[2] ?? 1) - 1));
-      editor.selection = new vscode.Selection(position, position); editor.revealRange(new vscode.Range(position, position));
+    if (target.line) {
+      const position = new vscode.Position(target.line - 1, (target.column ?? 1) - 1);
+      const end = target.endLine ? new vscode.Position(target.endLine - 1, target.endColumn === undefined ? document.lineAt(Math.min(document.lineCount - 1, target.endLine - 1)).text.length : target.endColumn - 1) : position;
+      editor.selection = new vscode.Selection(position, end); editor.revealRange(new vscode.Range(position, end));
     }
   }
   pushState(): void { this.registry.pushStates((viewId) => this.hostState.snapshot(viewId)); }
