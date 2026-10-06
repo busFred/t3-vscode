@@ -63,10 +63,11 @@ export class BridgeHandler {
   }
   private async openLink(href: string, threadId?: string): Promise<void> {
     if (/^https?:\/\//i.test(href)) { await vscode.env.openExternal(vscode.Uri.parse(href)); return; }
-    if (/^[a-z][a-z\d+.-]*:/i.test(href) && !href.startsWith("file:")) throw new Error("Unsupported link type.");
-    let path = href.startsWith("file:") ? fileURLToPath(href) : decodeURIComponent(href);
-    const location = /(?::(\d+)(?::(\d+))?|#L(\d+))$/.exec(path);
-    if (location) path = path.slice(0, location.index);
+    let target = href.startsWith("file:") ? href : decodeURIComponent(href);
+    const location = /(?::(\d+)(?::(\d+))?|#L(\d+))$/.exec(target);
+    if (location) target = target.slice(0, location.index);
+    if (/^[a-z][a-z\d+.-]*:/i.test(target) && !target.startsWith("file:")) throw new Error("Unsupported link type.");
+    const path = target.startsWith("file:") ? fileURLToPath(target) : target;
     const cwd = this.hostState.workspaceForThread(threadId);
     if (!isAbsolute(path) && !cwd) throw new Error("This thread has no workspace for relative file links.");
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(isAbsolute(path) ? path : resolve(cwd!, path)));

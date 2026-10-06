@@ -47,6 +47,17 @@
         "icon": "$(add)"
       },
       {
+        "command": "t3-vscode.showThreads",
+        "title": "Projects and Threads",
+        "category": "T3",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "t3-vscode.threadActions",
+        "title": "Thread Actions",
+        "category": "T3"
+      },
+      {
         "command": "t3-vscode.openInSideBar",
         "title": "Open Chat in Sidebar",
         "category": "T3",
@@ -68,19 +79,29 @@
     "menus": {
       "view/title": [
         {
-          "command": "t3-vscode.newThread",
+          "command": "t3-vscode.showThreads",
           "when": "view == t3.webview",
           "group": "navigation@0"
         },
         {
-          "command": "t3-vscode.openInTab",
+          "command": "t3-vscode.newThread",
           "when": "view == t3.webview",
           "group": "navigation@1"
         },
         {
-          "command": "t3-vscode.pair",
+          "command": "t3-vscode.openInTab",
           "when": "view == t3.webview",
           "group": "navigation@2"
+        },
+        {
+          "command": "t3-vscode.threadActions",
+          "when": "view == t3.webview",
+          "group": "1_thread"
+        },
+        {
+          "command": "t3-vscode.pair",
+          "when": "view == t3.webview",
+          "group": "2_connection"
         }
       ]
     },

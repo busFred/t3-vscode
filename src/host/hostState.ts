@@ -72,7 +72,11 @@ export class HostState {
   private readonly client: HostTransport;
   constructor(options: HostStateOptions, client: HostTransport) {
     this.options = options; this.client = client;
-    client.onClose = () => { void this.enqueue(() => this.recoverConnection()); };
+    client.onClose = () => {
+      void this.enqueue(() => this.recoverConnection()).catch((cause) => {
+        if (!this.disposed) this.setPhase("error", describeError(cause));
+      });
+    };
     client.onConfig = () => this.scheduleEmit();
   }
   onDidChangeState(listener: (state: HostStateSnapshot) => void): () => void {

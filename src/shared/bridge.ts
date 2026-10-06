@@ -1,7 +1,6 @@
 /** UI intents only. T3 credentials, RPCs, projections and subscriptions stay in the host. */
 import type {
   OrchestrationV2TurnItemJson,
-  ProviderApprovalDecision,
   ProviderInteractionMode,
   RuntimeMode,
   ServerProvider,

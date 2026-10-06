@@ -11,6 +11,7 @@ import { resolveT3Home } from "./host/serverDiscovery.js";
 import { SecretCredentialStore } from "./host/sessionStore.js";
 import { T3Client } from "./host/t3Client.js";
 import { getWorkspaceContext } from "./host/workspaceContext.js";
+import { Events } from "./shared/bridge.js";
 
 let hostState: HostState | null = null;
 
@@ -23,9 +24,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const registry = new WebviewRegistry();
   const bridge = new BridgeHandler(hostState, registry);
-  hostState.onDidChangeState((state) => bridge.pushState(state));
-
   const provider = new T3WebviewProvider(context.extensionUri, registry, bridge);
+  hostState.onDidChangeState((state) => {
+    bridge.pushState(state);
+    provider.updateTitle(state.threads.find((thread) => thread.id === state.activeThreadId)?.title);
+  });
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("t3.webview", provider, {
       webviewOptions: { retainContextWhenHidden: true },
@@ -37,6 +40,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("t3-vscode.pair", () => hostState?.pairNow()),
     vscode.commands.registerCommand("t3-vscode.reconnect", () => hostState?.reconnect()),
     vscode.commands.registerCommand("t3-vscode.newThread", () => hostState?.newThread()),
+    vscode.commands.registerCommand("t3-vscode.showThreads", () => provider.showThreads()),
+    vscode.commands.registerCommand("t3-vscode.threadActions", async () => {
+      const state = hostState?.snapshot();
+      const thread = state?.threads.find((item) => item.id === state.activeThreadId);
+      if (!thread || !hostState) return;
+      const choice = await vscode.window.showQuickPick([
+        { label: "$(edit) Rename thread", action: "rename" },
+        { label: thread.pinned ? "$(pinned) Unpin thread" : "$(pin) Pin thread", action: thread.pinned ? "unpin" : "pin" },
+        { label: thread.archived ? "$(archive) Restore thread" : "$(archive) Archive thread", action: thread.archived ? "unarchive" : "archive" },
+      ], { title: thread.title, placeHolder: "Thread actions" });
+      if (!choice) return;
+      const title = choice.action === "rename" ? await vscode.window.showInputBox({
+        title: "Rename thread", value: thread.title, validateInput: (value) => value.trim() ? null : "Enter a title.",
+      }) : undefined;
+      if (choice.action === "rename" && title === undefined) return;
+      await hostState.threadAction(thread.id, choice.action, title);
+    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("t3-vscode.t3Home")) {
         void vscode.window
@@ -64,6 +84,8 @@ export async function deactivate(): Promise<void> {
  * Both surfaces render the T3 chat app.
  */
 class T3WebviewProvider implements vscode.WebviewViewProvider {
+  private sidebar: vscode.WebviewView | undefined;
+  private title = "Chat";
   private readonly extensionUri: vscode.Uri;
   private readonly registry: WebviewRegistry;
   private readonly bridge: BridgeHandler;
@@ -75,12 +97,26 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.sidebar = webviewView;
+    webviewView.title = this.title;
     const id = `sidebar_${crypto.randomUUID()}`;
     webviewView.webview.options = this.webviewOptions();
     webviewView.webview.html = this.htmlFor(webviewView.webview, "sidebar");
     this.registry.add(id, webviewView.webview);
     this.bridge.attach(webviewView.webview);
-    webviewView.onDidDispose(() => this.registry.remove(id));
+    webviewView.onDidDispose(() => { this.registry.remove(id); if (this.sidebar === webviewView) this.sidebar = undefined; });
+  }
+
+  updateTitle(title?: string): void {
+    const next = title || "Chat";
+    if (next === this.title) return;
+    this.title = next;
+    if (this.sidebar) this.sidebar.title = this.title;
+  }
+
+  async showThreads(): Promise<void> {
+    await vscode.commands.executeCommand("t3.webview.focus");
+    await this.sidebar?.webview.postMessage({ event: Events.showNavigation });
   }
 
   createPanel(): void {
