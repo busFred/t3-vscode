@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { OrchestrationV2Command, ProviderInstanceId, ProviderDriverKind, ThreadId, ProjectId, TurnItemId, EventId, RuntimeRequestId, NodeId, ProviderSessionId, type OrchestrationV2ShellStreamItem, type OrchestrationV2ThreadStreamItem, type OrchestrationV2TurnItem, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem, type OrchestrationV2ProjectedTurnItem, type OrchestrationV2RuntimeRequest, type ServerProvider } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { v2Now, v2Project, v2ThreadShell, v2Projection, v2ShellSnapshot } from "../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
@@ -75,7 +78,7 @@ class FakeTransport implements HostTransport {
   getTurnItem: HostTransport["getTurnItem"] = async () => ({ item: null });
 }
 function structuredCloneShell() { return { ...v2ShellSnapshot, projects: [...v2ShellSnapshot.projects], threads: [...v2ShellSnapshot.threads], archivedThreads: [] }; }
-async function harness(options: Pick<HostStateOptions, "workspaceRoot" | "pickProject"> = {}, client = new FakeTransport()) {
+async function harness(options: Pick<HostStateOptions, "workspaceRoot" | "workspaceRoots" | "pickProject"> = {}, client = new FakeTransport()) {
   const host = new HostState({ home: "/tmp/fake-t3-test", credentials, discover: async () => ({ ok: true, server }), reconnectDelayMs: 0, ...options }, client);
   await host.start(); return { host, client };
 }
@@ -142,10 +145,13 @@ test("A queued send keeps its explicit thread target when another view changes s
   await host.newThread(); await host.sendMessage("for the original conversation", old);
   assert.equal(client.commands.findLast((command) => command.type === "message.dispatch")?.threadId, old);
 });
-test("New threads default to the open workspace without filtering other projects", async (t) => {
+test("New threads default to the open workspace and hide other projects", async (t) => {
   const { host, client } = await harness({ workspaceRoot: () => "/tmp/another-workspace" }); t.after(() => host.dispose());
+  assert.equal(host.snapshot().activeThreadId, undefined);
+  assert.deepEqual(host.snapshot().projects, []);
   await host.newThread();
-  assert.equal(host.snapshot().projects.length, 2);
+  assert.equal(host.snapshot().projects.length, 1);
+  assert.equal(client.shell.projects.length, 2);
   assert.equal(client.commands.find((command) => command.type === "thread.create")?.projectId, "workspace-project");
 });
 test("The first message without a project uses Scratch and preserves draft model and modes", async (t) => {
@@ -179,21 +185,123 @@ test("The first message without a project uses Scratch and preserves draft model
   assert.equal(client.scratchCalls, 1);
   assert.equal(client.projectCreates, 0);
 });
-test("Choosing No project overrides an open workspace and reuses the server's Scratch project", async (t) => {
+test("An open workspace cannot create a conversation in Scratch", async (t) => {
   const client = new FakeTransport();
   client.config = { ...client.config, scratchWorkspaceRoot: "/tmp/fake-t3-test/scratch" };
   const { host } = await harness({ workspaceRoot: () => "/tmp/open-workspace", pickProject: async (_, supportsNoProject) => {
-    assert.equal(supportsNoProject, true); return { noProject: true };
+    assert.equal(supportsNoProject, false); return { noProject: true };
   } }, client);
   t.after(() => host.dispose());
+  const draft = host.snapshot().draft;
+  await assert.rejects(host.chooseProject(), /requires a project/);
+  assert.deepEqual(host.snapshot().draft, draft);
+  assert.equal(client.scratchCalls, 0);
+  assert.equal(client.commands.length, 0);
+});
+test("An empty window can choose No project and reuse the server's Scratch project", async (t) => {
+  const client = new FakeTransport();
+  client.config = { ...client.config, scratchWorkspaceRoot: "/tmp/fake-t3-test/scratch" };
+  const { host } = await harness({ pickProject: async () => ({ noProject: true }) }, client);
+  t.after(() => host.dispose());
   await host.chooseProject();
-  assert.equal(host.snapshot().draft.workspaceRoot, null);
   await host.newThread();
   await host.newThread();
   assert.equal(client.scratchCalls, 2);
   assert.equal(client.projectCreates, 0);
   assert.equal(host.snapshot().projects.filter((project) => project.title === "No project").length, 1);
   assert.ok(client.commands.every((command) => command.type !== "thread.create" || command.projectId === "scratch-project"));
+});
+
+function workspaceFixture() {
+  const client = new FakeTransport();
+  client.shell = { ...client.shell, projects: [
+    { ...v2Project, workspaceRoot: "/tmp/t3-vscode" },
+    { ...v2Project, id: ProjectId.make("other-project"), title: "t3-vscode", workspaceRoot: "/tmp/t3-vscode-other" },
+    { ...v2Project, id: ProjectId.make("nested-project"), workspaceRoot: "/tmp/t3-vscode/nested" },
+    { ...v2Project, id: ProjectId.make("scratch-project"), workspaceRoot: "/tmp/fake-t3-test/scratch", title: "No project" },
+  ], threads: [
+    { ...v2ThreadShell, worktreePath: "/tmp/t3-worktrees/feature" },
+    { ...v2ThreadShell, id: ThreadId.make("other-thread"), projectId: ProjectId.make("other-project") },
+    { ...v2ThreadShell, id: ThreadId.make("nested-thread"), projectId: ProjectId.make("nested-project") },
+    { ...v2ThreadShell, id: ThreadId.make("scratch-thread"), projectId: ProjectId.make("scratch-project") },
+  ] };
+  return client;
+}
+test("Workspace lists match project paths, including their worktrees, without leaking unrelated or archived threads", async (t) => {
+  const client = workspaceFixture();
+  client.archive = { ...client.archive, threads: client.shell.threads.map((thread) => ({ ...thread, id: ThreadId.make(`archived-${thread.id}`), archivedAt: v2Now })) };
+  const { host } = await harness({ workspaceRoots: () => ["/tmp/t3-vscode/"] }, client); t.after(() => host.dispose());
+  assert.deepEqual(host.snapshot().projects.map((project) => project.id), [v2Project.id]);
+  assert.deepEqual(host.snapshot().threads.map((thread) => thread.id), [v2ThreadShell.id]);
+  assert.equal(host.snapshot().activeThreadId, v2ThreadShell.id);
+  assert.equal(host.workspaceForThread(v2ThreadShell.id), "/tmp/t3-worktrees/feature");
+  await host.loadArchive();
+  assert.deepEqual(host.snapshot().threads.map((thread) => thread.id), [v2ThreadShell.id, `archived-${v2ThreadShell.id}`]);
+  assert.equal(client.shell.projects.length, 4);
+});
+test("Unrelated thread and project actions are rejected before any server mutation", async (t) => {
+  const { host, client } = await harness({ workspaceRoots: () => ["/tmp/t3-vscode"] }, workspaceFixture()); t.after(() => host.dispose());
+  await assert.rejects(host.selectThread("other-thread"), /current workspace/);
+  await assert.rejects(host.sendMessage("wrong project", "other-thread"), /current workspace/);
+  await assert.rejects(host.threadAction("other-thread", "archive"), /current workspace/);
+  await assert.rejects(host.setModel("other-thread", { instanceId: "kimi", model: "kimi-for-coding" }), /current workspace/);
+  await assert.rejects(host.newThread("other-project"), /current workspace/);
+  await assert.rejects(host.chooseProject("other-project"), /current workspace/);
+  assert.throws(() => host.workspaceForThread("other-thread"), /current workspace/);
+  assert.equal(client.commands.length, 0);
+  assert.equal(client.projectCreates, 0);
+  assert.equal(host.snapshot().activeThreadId, v2ThreadShell.id);
+});
+test("Workspace project pickers receive only opened folders and cannot select an outside folder", async (t) => {
+  const { host, client } = await harness({ workspaceRoots: () => ["/tmp/t3-vscode"], pickProject: async (projects, supportsNoProject, roots) => {
+    assert.deepEqual(projects.map((project) => project.id), [v2Project.id]);
+    assert.equal(supportsNoProject, false);
+    assert.deepEqual(roots, ["/tmp/t3-vscode"]);
+    return { workspaceRoot: "/tmp/outside" };
+  } }, workspaceFixture()); t.after(() => host.dispose());
+  await assert.rejects(host.chooseProject(), /current VS Code workspace/);
+  assert.equal(host.snapshot().draft.workspaceRoot, "/tmp/t3-vscode");
+  assert.equal(client.commands.length, 0);
+});
+test("Workspace changes immediately hide the old transcript and reconcile selection and subscriptions", async (t) => {
+  let roots = ["/tmp/t3-vscode"];
+  const { host, client } = await harness({ workspaceRoots: () => roots }, workspaceFixture()); t.after(() => host.dispose());
+  const handler = client.threadHandlers.get(v2ThreadShell.id)!;
+  const text = message("old-workspace", "private to the old workspace");
+  handler({ kind: "snapshot", snapshotSequence: 1, projection: { ...v2Projection, turnItems: [text], visibleTurnItems: [projected(text, 0)] } });
+  assert.equal(host.snapshot().transcript.length, 1);
+  roots = ["/tmp/t3-vscode-other"];
+  assert.equal(host.snapshot().activeThreadId, undefined);
+  assert.deepEqual(host.snapshot().transcript, []);
+  await host.workspaceChanged();
+  assert.equal(host.snapshot().activeThreadId, "other-thread");
+  assert.equal(host.snapshot().draft.projectId, "other-project");
+  assert.equal(client.threadStops, 1);
+  roots = [];
+  await host.workspaceChanged();
+  assert.equal(host.snapshot().projects.length, 4);
+  assert.equal(host.snapshot().activeThreadId, "other-thread");
+});
+test("Multi-root workspaces expose only projects belonging to their opened folders", async (t) => {
+  const { host } = await harness({ workspaceRoots: () => ["/tmp/t3-vscode", "/tmp/t3-vscode-other"] }, workspaceFixture()); t.after(() => host.dispose());
+  assert.deepEqual(host.snapshot().threads.map((thread) => thread.id), [v2ThreadShell.id, "other-thread"]);
+  assert.deepEqual(host.snapshot().projects.map((project) => project.id), [v2Project.id, "other-project"]);
+  await host.chooseProject("other-project");
+  const id = await host.newThread();
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.projectId, "other-project");
+});
+test("Workspace matching resolves symlinks to avoid duplicate projects for the same folder", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "t3-vscode-scope-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const real = join(directory, "project"); const linked = join(directory, "linked");
+  await mkdir(real); await symlink(real, linked);
+  const client = new FakeTransport();
+  client.shell = { ...client.shell, projects: [{ ...v2Project, workspaceRoot: real }] };
+  const { host } = await harness({ workspaceRoots: () => [linked] }, client); t.after(() => host.dispose());
+  assert.equal(host.snapshot().projects[0]?.id, v2Project.id);
+  await host.newThread();
+  assert.equal(client.projectCreates, 0);
+  assert.equal(client.commands.find((command) => command.type === "thread.create")?.projectId, v2Project.id);
 });
 test("Servers without Scratch prompt for a folder and create the project before the first send", async (t) => {
   const client = new FakeTransport();

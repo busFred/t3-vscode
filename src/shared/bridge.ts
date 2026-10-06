@@ -58,6 +58,7 @@ export interface HostStateSnapshot {
   readonly revision: number;
   readonly phase: HostPhase;
   readonly home: string;
+  readonly workspaceRoots: ReadonlyArray<string>;
   readonly notice?: string;
   readonly environment?: { readonly environmentId: string; readonly label: string; readonly serverVersion?: string };
   readonly projects: ReadonlyArray<ProjectSummary>;

@@ -27,7 +27,7 @@ export function ThreadList({ state, onSelect }: { readonly state: HostStateSnaps
         </button>)}
         {threads.length === 0 ? <div className="no-project-threads">{showArchived ? "No archived threads" : "No threads yet"}</div> : null}
       </section>)}
-      {groups.length === 0 ? <p className="empty-list">No matching threads.</p> : null}
+      {groups.length === 0 ? <p className="empty-list">{search ? "No matching threads." : state.workspaceRoots.length ? "No conversations in this workspace yet." : "No conversations yet."}</p> : null}
     </nav>
     <footer className="sidebar-footer"><span className="connection-dot" />{state.environment?.label ?? "T3 Code"}<span className="sidebar-count">{state.threads.length}</span></footer>
   </aside>;

@@ -26,7 +26,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const client = new T3Client();
   hostState = new HostState({ home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
-    workspaceRoot: () => getWorkspaceContext().root, pickProject: pickConversationProject }, client);
+    workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject }, client);
 
   const registry = new WebviewRegistry();
   const bridge = new BridgeHandler(hostState, registry);
@@ -47,6 +47,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("t3-vscode.reconnect", () => hostState?.reconnect()),
     vscode.commands.registerCommand("t3-vscode.newThread", () => hostState?.newThread()),
     vscode.commands.registerCommand("t3-vscode.showThreads", () => provider.showThreads()),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      void hostState?.workspaceChanged().catch((cause) => vscode.window.showErrorMessage(String(cause)));
+    }),
     vscode.commands.registerCommand("t3-vscode.threadActions", async () => {
       const state = hostState?.snapshot();
       const thread = state?.threads.find((item) => item.id === state.activeThreadId);
@@ -84,7 +87,15 @@ export async function deactivate(): Promise<void> {
   hostState = null;
 }
 
-async function pickConversationProject(projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean): Promise<ProjectSelection | null> {
+async function pickConversationProject(projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean, workspaceRoots: ReadonlyArray<string>): Promise<ProjectSelection | null> {
+  if (workspaceRoots.length) {
+    const choices = workspaceRoots.map((root) => {
+      const project = projects.find((entry) => resolve(entry.workspaceRoot) === resolve(root));
+      return { label: project?.title ?? basename(root), description: root, selection: project ? { projectId: project.id } : { workspaceRoot: root } };
+    });
+    if (choices.length === 1) return choices[0]!.selection;
+    return (await vscode.window.showQuickPick(choices, { title: "Conversation workspace folder", matchOnDescription: true }))?.selection ?? null;
+  }
   if (projects.length || supportsNoProject) {
     const choices: Array<vscode.QuickPickItem & { selection: ProjectSelection | null }> = [
       ...(supportsNoProject ? [{ label: "$(comment-discussion) No project", description: "Start without a project", selection: { noProject: true } as const }] : []),

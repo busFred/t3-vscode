@@ -8,7 +8,7 @@ Working name: **t3-vscode** (placeholder). Migrate T3 Code functionality and UI 
 - Two surfaces, same app: sidebar chat view **and** pop-out editor tab (movable across VS Code windows). Hard requirement.
 - Use T3 Code’s UI, components and visual conventions as the baseline. Adapt navigation and layout to VS Code’s sidebar and editor tab; assess further visual changes after the migration.
 - Linux first. Prerequisite: `t3 service install` done and running.
-- Show all threads/projects (no per-workspace filtering).
+- Scope projects and threads to the opened VS Code folders, matching canonical project workspace roots. Include those projects' worktree and archived threads; an empty window can browse all projects. This supersedes the original unfiltered requirement.
 - Agents run on the T3 server (this machine, via service) — the extension is a thin client.
 
 ## 2. Repository layout
@@ -25,7 +25,7 @@ t3-vscode/
 │   │   ├── t3Client.ts           # connection lifecycle over vendored client-runtime
 │   │   ├── hostState.ts          # projections, subscriptions, history and user actions
 │   │   ├── bridge.ts             # postMessage RPC between webviews and host
-│   │   └── workspaceContext.ts   # opened folder (cwd default, file resolution only)
+│   │   └── workspaceContext.ts   # opened folders (navigation scope, cwd default, file resolution)
 │   ├── shared/bridge.ts          # typed host snapshots and allowed UI intents
 │   └── webview/                  # React app (chat UI; native toolbar in extension.ts)
 │       ├── App.tsx
@@ -75,7 +75,7 @@ Tech: TypeScript ESM, Vite for the webview bundle, `effect` (comes with vendored
 ## 7. Migration priorities
 
 Migrate the core chat workflow first. The unfilled KEEP column does not define scope:
-- Thread navigation (all projects, list, search, pin and archive/restore)
+- Thread navigation (workspace projects, list, search, pin and archive/restore)
 - Composer (server model catalog, modes and Stop first; rich editor and attachments later)
 - Checkpoints/diff view (server-side git refs; optional native `vscode.diff` per file)
 - Approvals & questions rendering

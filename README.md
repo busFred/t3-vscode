@@ -31,7 +31,7 @@ If the development window says **T3 server unavailable**, run **T3: start isolat
 
 The repository's gitignored `.t3` directory holds the isolated VS Code profile and any previous development-server data. The current debug server uses `/tmp` instead. Normal extension use discovers the shared T3 home (`~/.t3` by default); it does not create `.t3` in each project.
 
-Open the **T3 Code** activity bar view. **T3: Open Chat in Editor Tab** opens the same app in an editor. All projects are visible regardless of the current VS Code workspace. New threads default to the open workspace, or to the selected project when there is no workspace.
+Open the **T3 Code** activity bar view. **T3: Open Chat in Editor Tab** opens the same app in an editor. With a folder open, only projects whose workspace root matches that folder and their threads appear, including archived conversations and that project's worktrees. Multi-root workspaces include each opened folder. An empty VS Code window can browse all server projects and use **No project** when the server supports it. New threads use an opened folder, or the selected project when there is no workspace.
 
 The sidebar uses VS Code's native title toolbar: **Projects and Threads**, **New Thread**, and **Open Chat in Editor Tab**. Its overflow menu contains **Thread Actions** (rename, pin, archive/restore) and pairing. There is no duplicate header inside the sidebar. The editor tab retains the T3 app header.
 

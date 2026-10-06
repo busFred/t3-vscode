@@ -1,5 +1,6 @@
 /** Single host-owned T3 projection shared by the sidebar and every editor tab. */
 import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { basename, isAbsolute, resolve } from "node:path";
 import {
   OrchestrationV2TurnItemJson, ModelSelection as ModelSelectionSchema,
@@ -30,7 +31,8 @@ export interface HostStateOptions {
   readonly credentials: CredentialStore;
   readonly serverStartupHint?: string | undefined;
   readonly workspaceRoot?: () => string | null;
-  readonly pickProject?: (projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean) => Promise<ProjectSelection | null>;
+  readonly workspaceRoots?: () => ReadonlyArray<string>;
+  readonly pickProject?: (projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean, workspaceRoots: ReadonlyArray<string>) => Promise<ProjectSelection | null>;
   readonly discover?: typeof discoverServer;
   readonly pair?: typeof pairWithServer;
   readonly reconnectDelayMs?: number;
@@ -76,6 +78,7 @@ export class HostState {
   private readonly listeners = new Set<(state: HostStateSnapshot) => void>();
   private readonly encodedItems = new WeakMap<OrchestrationV2TurnItem, Omit<TranscriptItem, "key" | "sourceThreadId">>();
   private readonly projectQuestionHistory = createQuestionHistoryProjector();
+  private readonly pathIdentities = new Map<string, string>();
 
   private readonly options: HostStateOptions;
   private readonly client: HostTransport;
@@ -146,7 +149,7 @@ export class HostState {
       this.shellSubscription = await this.client.subscribeShell((item) => this.handleShell(item));
       if (this.archive) await this.subscribeArchive();
       const selected = this.findThread(this.activeThreadId);
-      const latest = [...this.shell.threads].sort((a, b) => DateTime.toEpochMillis(b.updatedAt) - DateTime.toEpochMillis(a.updatedAt))[0];
+      const latest = [...this.visibleThreads()].filter((thread) => !thread.archivedAt).sort((a, b) => DateTime.toEpochMillis(b.updatedAt) - DateTime.toEpochMillis(a.updatedAt))[0];
       this.activeThreadId = selected?.id ?? latest?.id;
       if (this.activeThreadId) await this.subscribeActiveThread();
       this.setPhase("ready");
@@ -171,6 +174,9 @@ export class HostState {
     } else if (this.shell) {
       this.shell = ShellState.applyShellStreamEvent(this.shell, item);
     }
+    if (this.activeThreadId && !this.findThread(this.activeThreadId)) {
+      void this.workspaceChanged().catch((cause) => { if (!this.disposed) this.setPhase("error", describeError(cause)); });
+    }
     this.scheduleEmit();
   }
   loadArchive(): Promise<void> { return this.enqueue(() => this.subscribeArchive()); }
@@ -194,11 +200,45 @@ export class HostState {
     const activeIds = new Set(active.map((thread) => thread.id));
     return [...active, ...(this.archive?.threads ?? this.shell?.archivedThreads ?? []).filter((thread) => !activeIds.has(thread.id))];
   }
-  private findThread(id: string | undefined) { return this.allThreads().find((thread) => thread.id === id); }
+  private workspaceRoots(): ReadonlyArray<string> {
+    const root = this.options.workspaceRoot?.();
+    return this.options.workspaceRoots?.() ?? (root ? [root] : []);
+  }
+  private pathIdentity(path: string): string {
+    const absolute = resolve(path);
+    let identity = this.pathIdentities.get(absolute);
+    if (!identity) {
+      try { identity = realpathSync.native(absolute); } catch { identity = absolute; }
+      this.pathIdentities.set(absolute, identity);
+    }
+    return identity;
+  }
+  private pathInWorkspace(path: string): boolean {
+    const roots = this.workspaceRoots();
+    return !roots.length || roots.some((root) => this.pathIdentity(root) === this.pathIdentity(path));
+  }
+  private visibleProjects() { return this.shell?.projects.filter((project) => this.pathInWorkspace(project.workspaceRoot)) ?? []; }
+  private visibleThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
+    const projects = new Set(this.visibleProjects().map((project) => project.id));
+    return this.allThreads().filter((thread) => !thread.deletedAt && projects.has(thread.projectId));
+  }
+  private findThread(id: string | undefined) { return this.visibleThreads().find((thread) => thread.id === id); }
+  workspaceChanged(): Promise<void> {
+    return this.enqueue(async () => {
+      this.pathIdentities.clear();
+      this.draftProjectId = undefined; this.draftWorkspaceRoot = undefined;
+      if (this.activeThreadId && !this.findThread(this.activeThreadId)) {
+        this.activeThreadId = [...this.visibleThreads()].filter((thread) => !thread.archivedAt)
+          .sort((a, b) => DateTime.toEpochMillis(b.updatedAt) - DateTime.toEpochMillis(a.updatedAt))[0]?.id;
+        await this.subscribeActiveThread();
+      }
+      this.emit();
+    });
+  }
   private requireThread(id: string): OrchestrationV2ThreadShell {
     if (!this.client.connected) throw new Error("T3 is disconnected.");
     const thread = this.findThread(id);
-    if (!thread) throw new Error("This thread is no longer available. Refresh the thread list.");
+    if (!thread) throw new Error("This thread is not available in the current workspace. Refresh the thread list.");
     return thread;
   }
   selectThread(id: string): Promise<void> {
@@ -264,13 +304,16 @@ export class HostState {
     return supported.includes("approval-required") ? "approval-required" : supported[0]!;
   }
   private conversationDraft(): ConversationDraft {
-    const root = this.draftWorkspaceRoot === undefined ? this.options.workspaceRoot?.() ?? null : this.draftWorkspaceRoot;
+    const roots = this.workspaceRoots();
+    const chosenRoot = this.draftWorkspaceRoot === undefined ? roots[0] ?? null : this.draftWorkspaceRoot;
+    const root = roots.length && (!chosenRoot || !this.pathInWorkspace(chosenRoot)) ? roots[0]! : chosenRoot;
     const active = this.findThread(this.activeThreadId);
-    const project = this.shell?.projects.find((item) => item.id === this.draftProjectId)
-      ?? (root ? this.shell?.projects.find((item) => resolve(item.workspaceRoot) === resolve(root))
-        : this.draftWorkspaceRoot === null ? undefined : this.shell?.projects.find((item) => item.id === active?.projectId));
+    const projects = this.visibleProjects();
+    const project = projects.find((item) => item.id === this.draftProjectId)
+      ?? (root ? projects.find((item) => this.pathIdentity(item.workspaceRoot) === this.pathIdentity(root))
+        : this.draftWorkspaceRoot === null ? undefined : projects.find((item) => item.id === active?.projectId));
     const modelSelection = this.availableModel(this.draftModelSelection ?? project?.defaultModelSelection ?? active?.modelSelection);
-    const supportsNoProject = availableScratchWorkspaceRoot(this.client.connected ? "connected" : null, this.client.config) !== null;
+    const supportsNoProject = !roots.length && availableScratchWorkspaceRoot(this.client.connected ? "connected" : null, this.client.config) !== null;
     return { projectId: project?.id ?? null, workspaceRoot: project?.workspaceRoot ?? root, supportsNoProject, modelSelection,
       runtimeMode: this.compatibleRuntimeMode(modelSelection, this.draftRuntimeMode), interactionMode: this.draftInteractionMode };
   }
@@ -286,17 +329,18 @@ export class HostState {
       if (!this.conversationDraft().supportsNoProject) throw new Error("This server requires a project. Choose a project folder.");
       this.draftProjectId = undefined; this.draftWorkspaceRoot = null;
     } else if ("projectId" in selection) {
-      const project = this.shell?.projects.find((item) => item.id === selection.projectId);
-      if (!project) throw new Error("Project not found.");
+      const project = this.visibleProjects().find((item) => item.id === selection.projectId);
+      if (!project) throw new Error("Project not found in the current workspace.");
       this.draftProjectId = project.id; this.draftWorkspaceRoot = project.workspaceRoot;
     } else {
       if (!isAbsolute(selection.workspaceRoot)) throw new Error("Choose an absolute project folder.");
+      if (!this.pathInWorkspace(selection.workspaceRoot)) throw new Error("Choose a folder from the current VS Code workspace.");
       this.draftProjectId = undefined; this.draftWorkspaceRoot = resolve(selection.workspaceRoot);
     }
   }
   private async pickDraftProject(): Promise<boolean> {
-    const projects = this.shell?.projects.map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })) ?? [];
-    const selected = await this.options.pickProject?.(projects, this.conversationDraft().supportsNoProject);
+    const projects = this.visibleProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot }));
+    const selected = await this.options.pickProject?.(projects, this.conversationDraft().supportsNoProject, this.workspaceRoots());
     if (!selected) return false;
     this.applyProjectSelection(selected);
     return true;
@@ -306,7 +350,7 @@ export class HostState {
     this.chooseModel();
     let draft = this.conversationDraft();
     let projectId = requestedProjectId ?? draft.projectId ?? undefined;
-    if (projectId && !this.shell?.projects.some((project) => project.id === projectId)) throw new Error("Project not found.");
+    if (projectId && !this.visibleProjects().some((project) => project.id === projectId)) throw new Error("Project not found in the current workspace.");
     if (!projectId && !draft.workspaceRoot) {
       if (draft.supportsNoProject) projectId = await this.client.ensureScratchProject();
       else {
@@ -318,7 +362,7 @@ export class HostState {
     if (!projectId) {
       const root = draft.workspaceRoot;
       if (root) {
-        projectId = this.shell?.projects.find((project) => resolve(project.workspaceRoot) === resolve(root))?.id;
+        projectId = this.visibleProjects().find((project) => this.pathIdentity(project.workspaceRoot) === this.pathIdentity(root))?.id;
         if (!projectId) projectId = await this.client.createProject(root, basename(root));
       }
     }
@@ -459,7 +503,8 @@ export class HostState {
   }
   workspaceForThread(id?: string): string | null {
     const thread = this.findThread(id);
-    return thread?.worktreePath ?? this.shell?.projects.find((project) => project.id === thread?.projectId)?.workspaceRoot ?? this.options.workspaceRoot?.() ?? null;
+    if (id && !thread) throw new Error("This thread is not available in the current workspace.");
+    return thread?.worktreePath ?? this.visibleProjects().find((project) => project.id === thread?.projectId)?.workspaceRoot ?? this.workspaceRoots()[0] ?? null;
   }
   private presentItem(item: OrchestrationV2TurnItem): Omit<TranscriptItem, "key" | "sourceThreadId"> {
     const cached = this.encodedItems.get(item);
@@ -470,15 +515,17 @@ export class HostState {
     this.encodedItems.set(item, result); return result;
   }
   snapshot(): HostStateSnapshot {
-    const state = this.activeThreadId ? this.threads.get(this.activeThreadId) : undefined;
+    const activeThreadId = this.findThread(this.activeThreadId)?.id;
+    const state = activeThreadId ? this.threads.get(activeThreadId) : undefined;
     const projection = state?.projection;
     const descriptor = this.server?.descriptor;
     return {
       revision: this.revision, phase: this.phase, home: this.options.home,
+      workspaceRoots: this.workspaceRoots(),
       ...(this.notice ? { notice: this.notice } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
-      projects: this.shell?.projects.map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })) ?? [],
-      threads: this.allThreads().filter((thread) => !thread.deletedAt).map((thread) => ({
+      projects: this.visibleProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })),
+      threads: this.visibleThreads().map((thread) => ({
         id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
         modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
         updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
@@ -486,7 +533,7 @@ export class HostState {
       })),
       providers: this.client.config?.providers ?? [],
       draft: this.conversationDraft(),
-      ...(this.activeThreadId ? { activeThreadId: this.activeThreadId } : {}),
+      ...(activeThreadId ? { activeThreadId } : {}),
       transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => ({
         key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, ...this.presentItem(row.item),
       })) : [],
