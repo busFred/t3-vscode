@@ -30,11 +30,17 @@ Single pinned copy of the T3 wire protocol (`contracts`) plus the shared/client
 runtime, vendored so the extension builds against a frozen schema instead of a
 moving upstream. See `docs/t3-vscode-architecture.md` for the decision record.
 
+## Rendering adapter provenance
+
+The pinned wire/runtime copy remains at the revision above. The extension adapters additionally inspected the locally installed T3 Code 0.0.46 Web UI for `html_render` attachment metadata, responsive heights and theme notifications, and the pinned upstream UI for markdown, KaTeX, media and subagent navigation behavior. These adapters live in `src/shared/` and `src/webview/`; they do not replace the vendored protocol packages or embed the entire original Web UI.
+
 ## License
 
 MIT, Copyright (c) 2026 T3 Tools Inc. The full license text is in
 [`LICENSE.t3code`](./LICENSE.t3code) and **must ship with any distribution** of
 this extension (third-party notices).
+
+[LICENSE.remark-math](LICENSE.remark-math) retains the license from the [rehype-katex 7.0.1 release](https://github.com/remarkjs/remark-math/blob/rehype-katex%407.0.1/license); the same license is present in the [remark-math 6.0.0 release](https://github.com/remarkjs/remark-math/blob/6.0.0/license), and both npm packages omit a standalone license file. The notice generator includes it in the bundled dependency notices.
 
 ## Runtime dependencies (for the root package.json)
 

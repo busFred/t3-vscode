@@ -12,6 +12,9 @@ import type { DraftTransfer } from "../shared/viewDraft";
 import { SidebarView } from "./components/SidebarView";
 import { ServerSetup } from "./components/ServerSetup";
 import { UsagePanel } from "./components/UsagePanel";
+import { MathContextMenu } from "./components/MathContextMenu";
+import { VisualDialog } from "./components/ChatMedia";
+import { settleDraftAttachments } from "./composerAttachments";
 
 export function App() {
   const [state, setState] = useState<HostStateSnapshot | null>(null);
@@ -46,7 +49,7 @@ export function App() {
   }, [run]);
   useEffect(() => bridge.on(Events.openInTab, (data) => {
     const draftKey = typeof data === "string" ? data : state?.activeThreadId ?? "new";
-    void run(Methods.openInTab, { draftKey, draft: readDraft(draftKey) });
+    void settleDraftAttachments(draftKey).then(() => run(Methods.openInTab, { draftKey, draft: readDraft(draftKey) }));
   }), [state?.activeThreadId, run]);
   useEffect(() => {
     const off = bridge.on(Events.stateChanged, (data) => receive(data as HostStateSnapshot));
@@ -79,7 +82,7 @@ export function App() {
   />;
   return <Actions value={run}><div className="app">
     {error ? <div className="error-banner" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError(null)}><XIcon size={14} /></button></div> : null}
-    {content}
+    {content}<MathContextMenu /><VisualDialog />
     {usage && state && document.body.dataset.surface !== "usage" ? <UsagePanel state={state} {...usage} onClose={() => setUsage(null)} /> : null}
   </div></Actions>;
 }

@@ -350,6 +350,23 @@ try {
   client.config = { providers: client.config.providers.map((provider) => ({ ...provider, workspaceSnapshots: [{ cwd: "/tmp/t3-vscode", checkedAt: "2026-10-06T12:00:00Z", slashCommands: [{ name: "compact", description: "Summarize the conversation" }], skills: [{ name: "Review", description: "Review code changes", path: "/tmp/review", enabled: true }] }],
     ...(provider.instanceId === "codex-personal" ? { usageLimits: { checkedAt: "2026-10-06T12:00:00Z", windows: [{ id: "weekly", kind: "weekly", label: "Weekly", usedPercent: 9, resetsAt: "2026-10-13T12:00:00Z" }] } } : {}) })) };
   client.onConfig?.(client.config as Parameters<NonNullable<typeof client.onConfig>>[0]);
+  const accountSidebar = await browser.newPage({ viewport: { width: 360, height: 820 } });
+  accountSidebar.on("pageerror", (error) => errors.push(error.message));
+  await accountSidebar.goto(`http://127.0.0.1:${address.port}/?view=${SIDEBAR_VIEW_ID}`);
+  await accountSidebar.locator(".dedicated-sessions").waitFor();
+  assert.equal(await accountSidebar.locator(".account-usage").evaluate(element => (element as HTMLDetailsElement).open), false);
+  await accountSidebar.locator(".account-usage > summary").click();
+  await accountSidebar.getByRole("combobox", { name: "Usage account" }).selectOption({ label: "Codex Personal" });
+  await accountSidebar.locator('.account-usage time[datetime="2026-10-06T12:00:00Z"]').waitFor();
+  client.config = { ...client.config, providers: client.config.providers.map(provider => provider.instanceId === "codex-personal" ? { ...provider, usageLimits: { ...provider.usageLimits!, checkedAt: "2026-10-06T12:01:00Z" } } : provider) };
+  const refreshesBefore = client.providerRefreshes.length;
+  await accountSidebar.locator(".account-usage").getByRole("button", { name: "Refresh usage", exact: true }).click();
+  await accountSidebar.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some((entry) => entry.method === "refreshUsage"));
+  assert.equal(client.providerRefreshes.length, refreshesBefore + 1);
+  await accountSidebar.locator('.account-usage time[datetime="2026-10-06T12:01:00Z"]').waitFor();
+  assert.equal(await accountSidebar.locator(".account-usage").getByRole("button", { name: "Refresh usage", exact: true }).isEnabled(), true);
+  await accountSidebar.screenshot({ path: `${evidence}/sessions-usage-refresh.png` });
+  await accountSidebar.close();
   client.pathEntries = { entries: [{ path: "src/example.ts", kind: "file" }, { path: "src/utils", kind: "directory" }], truncated: false };
   const input = second.getByRole("textbox", { name: "Message", exact: true });
   await input.fill("/");
@@ -382,7 +399,7 @@ try {
   await second.locator('.history-shelf').filter({ hasText: "Settled" }).locator('[data-thread-id="first"]').waitFor();
   await second.getByText("Archive", { exact: true }).click();
   await second.locator('.history-shelf').filter({ hasText: "Archive" }).locator('[data-thread-id="third"]').waitFor();
-  assert.equal(await second.locator('.project-groups [data-thread-id="first"], .project-groups [data-thread-id="third"]').count(), 0);
+  assert.equal(await second.locator('.session-list [data-thread-id="first"], .session-list [data-thread-id="third"]').count(), 0);
   await second.screenshot({ path: `${evidence}/history-separate-shelves.png` });
   await second.getByRole("button", { name: "Close history" }).click();
   assert.equal(await input.inputValue(), "Draft survives navigation");

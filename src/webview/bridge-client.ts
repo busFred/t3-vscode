@@ -32,6 +32,13 @@ class Bridge {
   }
 
   private handleMessage = (event: MessageEvent): void => {
+    // VS Code aliases window.parent to window in its injected API, although its
+    // outer frame still forwards replies from the same webview origin.
+    if (event.source && event.source !== window) {
+      if (event.origin === "null" || event.origin !== window.location.origin) return;
+      // Child graphics are never bridge senders, including same-origin fixtures.
+      if ([...document.querySelectorAll("iframe")].some((frame) => frame.contentWindow === event.source)) return;
+    }
     const msg = event.data as RpcResult & { event?: BridgeEvent; data?: unknown };
     if (msg && typeof msg === "object" && typeof msg.id === "string" && this.pending.has(msg.id)) {
       const entry = this.pending.get(msg.id)!;

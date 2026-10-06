@@ -9,6 +9,12 @@ export const provider: ServerProvider = { instanceId: ProviderInstanceId.make("k
 export const server = { origin: "http://audit.invalid", descriptor: { environmentId: "audit", label: "Audit" } } as DiscoveredServer;
 export const credentials = { get: async () => ({ origin: server.origin, environmentId: server.descriptor.environmentId, accessToken: "fake", expiresAt: Date.now() + 100_000, scopes: [] }), save: async () => {}, clear: async () => {} };
 export class FakeTransport implements HostTransport {
+  uploads: Array<Parameters<HostTransport["uploadAttachment"]>[0]> = [];
+  deletedAttachments: string[] = [];
+  async uploadAttachment(input: Parameters<HostTransport["uploadAttachment"]>[0]) { this.uploads.push(input); return { ...input, type: input.type ?? "image", id: `pending-${this.uploads.length}` } as Awaited<ReturnType<HostTransport["uploadAttachment"]>>; }
+  async deleteAttachment(id: string) { this.deletedAttachments.push(id); }
+  assetRequests: Array<Parameters<HostTransport["createAssetUrl"]>[0]> = [];
+  async createAssetUrl(resource: Parameters<HostTransport["createAssetUrl"]>[0]) { this.assetRequests.push(resource); return { url: "http://127.0.0.1:1/assets/fixture", expiresAt: Date.now() + 60_000 }; }
   connected = false;
   config: NonNullable<HostTransport["config"]> = { providers: [provider] };
   onClose: HostTransport["onClose"] = null;
@@ -54,7 +60,7 @@ export class FakeTransport implements HostTransport {
     };
     this.threadHandlers.set(id, receive);
     const thread = this.shell.threads.find((thread) => thread.id === id);
-    receive(this.snapshots.get(id) ?? { kind: "snapshot", snapshotSequence: 0, projection: { ...v2Projection, thread: { ...v2Projection.thread, id: ThreadId.make(id),
+    receive(this.snapshots.get(id) ?? { kind: "snapshot", snapshotSequence: 0, projection: { ...v2Projection, thread: { ...v2Projection.thread, ...(thread ?? {}), lastVisitedAt: thread?.lastVisitedAt ?? null, pinnedAt: thread?.pinnedAt ?? null, id: ThreadId.make(id),
       modelSelection: thread?.modelSelection ?? v2Projection.thread.modelSelection, runtimeMode: thread?.runtimeMode ?? v2Projection.thread.runtimeMode,
       interactionMode: thread?.interactionMode ?? v2Projection.thread.interactionMode } } });
     return async () => { this.threadStops += 1; if (this.threadHandlers.get(id) === receive) this.threadHandlers.delete(id); };
@@ -143,11 +149,11 @@ export class FakeTransport implements HostTransport {
   getTurnItem: HostTransport["getTurnItem"] = async () => ({ item: null });
 }
 function structuredCloneShell() { return { ...v2ShellSnapshot, projects: [...v2ShellSnapshot.projects], threads: [...v2ShellSnapshot.threads], archivedThreads: [] }; }
-export async function harness(options: Pick<HostStateOptions, "workspaceRoot" | "workspaceRoots" | "pickProject" | "appearance" | "favoriteModels" | "saveFavoriteModels"> = {}, client = new FakeTransport()) {
+export async function harness(options: Pick<HostStateOptions, "workspaceRoot" | "workspaceRoots" | "pickProject" | "appearance" | "messageNavigation" | "favoriteModels" | "saveFavoriteModels"> = {}, client = new FakeTransport()) {
   const host = new HostState({ home: "/tmp/fake-t3-test", credentials, discover: async () => ({ ok: true, server }), reconnectDelayMs: 0, ...options }, client);
   await host.start(); return { host, client };
 }
-export async function viewsHarness(options: Pick<HostStateOptions, "appearance" | "favoriteModels" | "saveFavoriteModels"> = {}) {
+export async function viewsHarness(options: Pick<HostStateOptions, "appearance" | "messageNavigation" | "favoriteModels" | "saveFavoriteModels"> = {}) {
   const client = new FakeTransport();
   client.shell = { ...client.shell, projects: [
     { ...v2Project, workspaceRoot: "/tmp/t3-vscode", title: "t3-vscode" },

@@ -60,3 +60,16 @@ test("Native font settings remain available offline and are read again when the 
   preferences = { fontSizeInterface: 17, fontSizePrompt: 14, fontSizeCode: 15 }; restarted.refreshAppearance();
   assert.deepEqual(latest.appearance, preferences);
 });
+
+test("Native message rail placement changes preserve every view's session and draft", async (t) => {
+  let placement: 'left' | 'right' | 'off' = 'left';
+  const { host, client } = await viewsHarness({ messageNavigation: () => placement }); t.after(() => host.dispose());
+  await host.selectThread('first'); host.registerView('tab'); await host.selectThread('second', 'tab');
+  const connections = client.connections; const starts = client.threadStarts;
+  for (const value of ['right', 'off', 'left'] as const) {
+    placement = value; host.refreshAppearance();
+    assert.equal(host.snapshot().messageNavigation, value); assert.equal(host.snapshot('tab').messageNavigation, value);
+    assert.equal(host.snapshot().activeThreadId, 'first'); assert.equal(host.snapshot('tab').activeThreadId, 'second');
+  }
+  assert.equal(client.connections, connections); assert.equal(client.threadStarts, starts); assert.equal(client.commands.length, 0);
+});

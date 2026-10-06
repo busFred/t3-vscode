@@ -1,7 +1,7 @@
-import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { LegendList, type LegendListRef } from "@legendapp/list/react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { LegendList, type LegendListRef, type OnViewableItemsChangedInfo } from "@legendapp/list/react";
 import type { AssistantCitation } from "@t3tools/contracts";
-import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, WrenchIcon, BotIcon, ArrowRightLeftIcon, MinusIcon, XIcon } from "lucide-react";
+import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, WrenchIcon, ArrowRightLeftIcon, MinusIcon, XIcon } from "lucide-react";
 import type { HostStateSnapshot, TranscriptItem, WireTurnItem } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { getQuestionAnswerText } from "@t3tools/client-runtime/work-log/user-input";
@@ -12,6 +12,13 @@ import { T3Wordmark } from "./t3/T3Wordmark";
 import { T3VSCodeIcon } from "./T3VSCodeIcon";
 import { findAssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 import { TurnChanges } from "./TurnChanges";
+import { MessageNavigator } from "./MessageNavigator";
+import { messageExchanges } from "../../shared/messageNavigation";
+import { transcriptRows, workSummary, type DisplayRow } from "../../shared/transcriptRows";
+import { htmlVisual } from "../../shared/chatVisuals";
+import { HtmlVisual } from "./HtmlVisual";
+import { ChatMedia } from "./ChatMedia";
+import { SubagentCard, SubagentState } from "./SubagentCard";
 
 function CopyButton({ text }: { text: string }) {
   const run = useActions(); const [copied, setCopied] = useState(false);
@@ -50,18 +57,41 @@ function FileChange({ item, threadId }: { item: Extract<WireTurnItem, { type: "f
     {item.diffStr ? <Diff text={item.diffStr} /> : item.oldStr !== undefined || item.newStr !== undefined ? <Diff text={[...(item.oldStr?.split("\n").map((line) => `-${line}`) ?? []), ...(item.newStr?.split("\n").map((line) => `+${line}`) ?? [])].join("\n")} /> : <p className="subtle">File change recorded.</p>}
   </div>;
 }
+function DynamicTool({ row, threadId }: { row: TranscriptItem; threadId: string }) {
+  const run = useActions(); const [busy, setBusy] = useState(false); const [failed, setFailed] = useState(false);
+  const load = useCallback(() => {
+    setBusy(true); setFailed(false);
+    void run("loadItemDetail", { threadId, sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }).then((ok) => setFailed(!ok)).finally(() => setBusy(false));
+  }, [run, threadId, row.sourceThreadId, row.sourceItemId, row.item.id]);
+  const knownVisual = row.item.type === "dynamic_tool" && row.item.status === "completed" && /(?:^|[._])html_render$/.test(row.item.toolName ?? "");
+  useEffect(() => { if (knownVisual && row.needsDetail) load(); }, [knownVisual, row.needsDetail, load]);
+  if (row.item.type !== "dynamic_tool") return null;
+  const visual = htmlVisual(row.item);
+  if (visual) return <HtmlVisual visual={visual} threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} />;
+  if (knownVisual && row.needsDetail) return <div className="visual-loading" role="status">{busy ? "Loading visualization…" : "Visualization is unavailable."}{!busy ? <button className="text-button" onClick={load}>{failed ? "Retry" : "Load visualization"}</button> : null}</div>;
+  if (row.item.viewedImagePath) return <ChatMedia src={row.item.viewedImagePath} alt="Viewed image" threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} />;
+  return <Disclosure label={row.toolLabel ?? row.item.title ?? row.item.toolName ?? "Tool"} icon={<WrenchIcon size={14} />} row={row} threadId={threadId}><pre className="command-input">{typeof row.item.input === "string" ? row.item.input : JSON.stringify(row.item.input, null, 2)}</pre>{row.output ? <pre className="tool-output">{row.output}</pre> : <span className="subtle">{row.needsDetail ? "Expand again to retry loading output." : "No output."}</span>}</Disclosure>;
+}
+function WorkGroup({ rows, threadId, environmentId }: { rows: ReadonlyArray<TranscriptItem>; threadId: string; environmentId: string }) {
+  const [open, setOpen] = useState(false); const label = workSummary(rows);
+  const failures = rows.filter((row) => row.item.status === "failed").length;
+  return <section className="work-group"><button className="work-group-toggle" aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)}><TerminalIcon size={14} /><span>{label}</span>{failures ? <span className="work-group-failures">{failures} failed</span> : null}<ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /></button>
+    {open ? <div className="work-group-items">{rows.map((row) => <TurnItem key={row.key} row={row} threadId={threadId} environmentId={environmentId} />)}</div> : null}
+  </section>;
+}
 const TurnItem = memo(function TurnItem({ row, threadId, environmentId }: { row: TranscriptItem; threadId: string; environmentId: string }) {
   const { item } = row; const run = useActions();
-  const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} />;
+  const assetSource = { sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id };
+  const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} assetSource={assetSource} />;
   const openThread = (id: string) => { void run("selectThread", { threadId: id }); };
   switch (item.type) {
-    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{markdown(item.text)}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}</div><CopyButton text={item.text} /></article>;
-    case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}><div className="message-author"><T3Wordmark className="size-5" /><span>Assistant</span>{item.streaming ? <span className="streaming-label">Writing…</span> : null}</div><ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} />{!item.streaming ? <div className="response-actions"><CopyButton text={item.text} /><ForkButton row={row} threadId={threadId} /></div> : null}</article>;
+    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{markdown(item.text)}</div><CopyButton text={item.text} /></article>;
+    case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}><div className="message-author"><T3Wordmark className="size-5" /><span>Assistant</span>{item.streaming ? <span className="streaming-label">Writing…</span> : null}</div><ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} assetSource={assetSource} streaming={item.streaming} />{!item.streaming ? <div className="response-actions"><CopyButton text={item.text} /><ForkButton row={row} threadId={threadId} /></div> : null}</article>;
     case "reasoning": return <Disclosure label={item.streaming ? "Thinking…" : "Thought process"} icon={<BrainIcon size={14} />} row={row} threadId={threadId}>{markdown(item.text)}</Disclosure>;
     case "proposed_plan": return <section className="plan-card"><header><span className="plan-badge">Plan</span><strong>Proposed plan</strong><CopyButton text={item.markdown} /></header>{markdown(item.markdown)}</section>;
     case "todo_list": return <section className="todo-card">{item.explanation ? <p>{item.explanation}</p> : null}{item.steps.map((step, index) => <div key={index} className={`todo-step ${step.status}`}><span>{step.status === "completed" ? "✓" : step.status === "running" ? "◉" : "○"}</span><span>{step.text}</span></div>)}</section>;
     case "command_execution": return <Disclosure label={item.title ?? item.input.split("\n")[0] ?? "Command"} icon={<TerminalIcon size={14} />} row={row} threadId={threadId}><pre className="command-input">{item.input}</pre>{row.output ? <pre className="tool-output">{row.output}</pre> : <span className="subtle">{row.needsDetail ? "Expand again to retry loading output." : "No output."}</span>}{item.exitCode !== undefined ? <span className="subtle">Exit code {item.exitCode}</span> : null}</Disclosure>;
-    case "dynamic_tool": return <Disclosure label={row.toolLabel ?? item.title ?? item.toolName ?? "Tool"} icon={<WrenchIcon size={14} />} row={row} threadId={threadId}><pre className="command-input">{typeof item.input === "string" ? item.input : JSON.stringify(item.input, null, 2)}</pre>{row.output ? <pre className="tool-output">{row.output}</pre> : <span className="subtle">{row.needsDetail ? "Expand again to retry loading output." : "No output."}</span>}</Disclosure>;
+    case "dynamic_tool": return <DynamicTool row={row} threadId={threadId} />;
     case "file_change": return <Disclosure label={item.title ?? `Edited ${item.fileName}`} icon={<FileIcon size={14} />} row={row} threadId={threadId}><FileChange item={item} threadId={threadId} /></Disclosure>;
     case "file_search": return <Disclosure label={item.title ?? `Searched files${item.pattern ? `: ${item.pattern}` : ""}`} icon={<SearchIcon size={14} />} row={row} threadId={threadId}>{item.results?.map((result, index) => <div className="search-result" key={index}><button className="text-button" onClick={() => { void run("openLink", { href: `${result.fileName}${result.line ? `:${result.line}` : ""}`, threadId }); }}>{result.fileName}{result.line ? `:${result.line}` : ""}</button>{result.preview ? <pre>{result.preview}</pre> : null}</div>)}</Disclosure>;
     case "web_search": return <Disclosure label={item.title ?? `Searched the web${item.patterns?.length ? `: ${item.patterns.join(", ")}` : ""}`} icon={<GlobeIcon size={14} />} row={row} threadId={threadId}>{item.results?.map((result, index) => <div className="search-result" key={index}><button className="text-button" onClick={() => { if (result.url) void run("openLink", { href: result.url }); }}>{result.title ?? result.url ?? "Search result"}</button>{result.snippet ? <p>{result.snippet}</p> : null}</div>)}</Disclosure>;
@@ -76,18 +106,44 @@ const TurnItem = memo(function TurnItem({ row, threadId, environmentId }: { row:
     case "handoff": return <TimelineSystemDivider label="Context handoff" detail={item.summary ?? item.toProviderInstanceId} icon={ArrowRightLeftIcon} />;
     case "fork": return <TimelineSystemDivider label="Conversation fork" icon={GitForkIcon} actionLabel="Open related thread" onAction={() => openThread(item.source.type === "run" ? item.source.threadId : item.targetThreadId)} />;
     case "thread_created": return <TimelineSystemDivider label={item.title ?? "Created thread"} actionLabel="Open thread" onAction={() => openThread(item.targetThreadId)} />;
-    case "subagent": return <Disclosure label={item.title ?? `Agent · ${item.providerInstanceId}`} icon={<BotIcon size={14} />} row={row} threadId={threadId}>{markdown(item.result ?? item.progress ?? item.prompt)}{item.childThreadId ? <button className="text-button" onClick={() => openThread(item.childThreadId!)}>Open agent conversation</button> : null}</Disclosure>;
+    case "subagent": return <SubagentCard row={{ ...row, item }} />;
     case "notification": return <section className="notification">{markdown(item.detail ? `${item.summary}\n\n${item.detail}` : item.summary)}</section>;
   }
 });
 
-export function TranscriptView({ state, onViewport, citationTarget }: { readonly state: HostStateSnapshot; readonly onViewport?: (element: HTMLDivElement | null) => void; readonly citationTarget?: AssistantCitation | null }) {
+export function TranscriptView({ state, onViewport, citationTarget, onNavigate }: { readonly state: HostStateSnapshot; readonly onViewport?: (element: HTMLDivElement | null) => void; readonly citationTarget?: AssistantCitation | null; readonly onNavigate?: () => void }) {
   const run = useActions();
   const id = state.activeThreadId;
   const list = useRef<LegendListRef>(null);
+  const rows = useMemo(() => transcriptRows(state.transcript), [state.transcript]);
+  const exchanges = useMemo(() => messageExchanges(state.transcript), [state.transcript]);
+  const [viewedKey, setViewedKey] = useState<string | null>(null);
+  const [atEnd, setAtEnd] = useState(true); const [followEnd, setFollowEnd] = useState(true);
+  const [navigationNotice, setNavigationNotice] = useState<string | null>(null);
+  const visible = useCallback((info: OnViewableItemsChangedInfo<DisplayRow>) => {
+    const first = info.viewableItems.reduce<DisplayRow | null>((first, entry) => !first || entry.item.firstIndex < first.firstIndex ? entry.item : first, null);
+    if (first) setViewedKey(first.key);
+  }, []);
+  useEffect(() => { setViewedKey(null); setAtEnd(true); setFollowEnd(true); setNavigationNotice(null); }, [id]);
+  const jump = useCallback((key: string) => {
+    const index = rows.findIndex((row) => row.key === key); if (index < 0) return;
+    onNavigate?.(); setFollowEnd(false); setNavigationNotice(null); setViewedKey(key);
+    void list.current?.scrollToIndex({ index, animated: false, viewPosition: 0.08 }).catch(() => setNavigationNotice("Could not jump to this message. Try again."));
+  }, [rows, onNavigate]);
+  const latest = () => {
+    onNavigate?.(); setFollowEnd(true); setNavigationNotice(null);
+    const current = list.current;
+    void current?.scrollToEnd({ animated: false }).then(() => {
+      if (current !== list.current) return;
+      // Rich rows can finish measuring after the virtual list chose its target.
+      // Finish at the actual DOM bottom instead of an earlier estimated offset.
+      const node: unknown = current.getScrollableNode();
+      if (node instanceof HTMLElement) node.scrollTop = node.scrollHeight;
+    }).catch(() => setNavigationNotice("Could not jump to the latest message. Try again."));
+  };
   const attempts = useRef<{ target: AssistantCitation | null; pages: number }>({ target: null, pages: 0 });
   const [citationNotice, setCitationNotice] = useState<string | null>(null);
-  const sourceIndex = citationTarget ? state.transcript.findIndex((row) => row.sourceThreadId === citationTarget.threadId && row.item.type === "assistant_message" && row.item.messageId === citationTarget.messageId) : -1;
+  const sourceIndex = citationTarget ? rows.findIndex((group) => group.rows.some((row) => row.sourceThreadId === citationTarget.threadId && row.item.type === "assistant_message" && row.item.messageId === citationTarget.messageId)) : -1;
   useEffect(() => {
     if (!citationTarget || citationTarget.threadId !== id) return;
     if (attempts.current.target !== citationTarget) { attempts.current = { target: citationTarget, pages: 0 }; setCitationNotice(null); }
@@ -116,18 +172,23 @@ export function TranscriptView({ state, onViewport, citationTarget }: { readonly
     frame = requestAnimationFrame(show);
     return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-assistant-citation"); };
   }, [citationTarget, id, sourceIndex, state.threadLoading, state.history.hasMore, state.history.loading, state.transcript.length, run]);
-  const renderItem = useCallback(({ item }: { item: TranscriptItem }) => <div className={`timeline-row${item.item.type === "checkpoint" ? " checkpoint-row" : ""}`}><TurnItem row={item} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /></div>, [id, state.environment?.environmentId]);
+  const renderItem = useCallback(({ item }: { item: DisplayRow }) => <div data-message-key={item.key} className={`timeline-row${item.rows[0]!.item.type === "checkpoint" ? " checkpoint-row" : ""}`}>
+    {item.rows.length > 1 ? <WorkGroup rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : <TurnItem row={item.rows[0]!} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} />}
+  </div>, [id, state.environment?.environmentId]);
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source response…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length) return <div className="chat-empty"><p>Loading conversation…</p></div>;
-  return <div ref={onViewport} className="transcript-container" data-assistant-citation-viewport="" aria-label="Conversation">
+  return <SubagentState value={state}><div ref={onViewport} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation">
     {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
-    <LegendList ref={list} key={id} data={state.transcript} keyExtractor={(row) => row.key} renderItem={renderItem} estimatedItemSize={100}
-      {...(sourceIndex >= 0 ? { alwaysRender: { keys: [state.transcript[sourceIndex]!.key] } } : {})}
-      initialScrollAtEnd={!citationTarget || citationTarget.threadId !== id} maintainScrollAtEnd={!citationTarget || citationTarget.threadId !== id} maintainScrollAtEndThreshold={0.15} maintainVisibleContentPosition
-      className="transcript-list" style={{ height: "100%" }}
+    {navigationNotice ? <div className="citation-source-notice" role="status">{navigationNotice}</div> : null}
+    <MessageNavigator key={`nav:${id}`} exchanges={exchanges} currentRow={rows.find((row) => row.key === viewedKey)?.firstIndex ?? state.transcript.length - 1} placement={state.messageNavigation ?? "left"} atEnd={atEnd} history={state.history} onJump={jump} onLatest={latest} onEarlier={() => { void run("loadHistory", { threadId: id }); }} />
+    <LegendList ref={list} key={id} data={rows} keyExtractor={(row) => row.key} renderItem={renderItem} estimatedItemSize={100}
+      {...(sourceIndex >= 0 ? { alwaysRender: { keys: [rows[sourceIndex]!.key] } } : {})}
+      initialScrollAtEnd={!citationTarget || citationTarget.threadId !== id} maintainScrollAtEnd={followEnd && (!citationTarget || citationTarget.threadId !== id) ? { animated: false } : false} maintainScrollAtEndThreshold={0.15} maintainVisibleContentPosition
+      className="transcript-list" style={{ height: "100%" }} onViewableItemsChanged={visible} viewabilityConfig={{ itemVisiblePercentThreshold: 0 }}
+      onScroll={(event) => { const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent; const node: unknown = list.current?.getScrollableNode(); const distance = node instanceof HTMLElement ? node.scrollHeight - node.scrollTop - node.clientHeight : contentSize.height - contentOffset.y - layoutMeasurement.height; const end = distance < 40; setAtEnd(end); if (end) setFollowEnd(true); }}
       ListHeaderComponent={<div className="timeline-header">{state.history.hasMore || state.history.error ? <button className="btn" disabled={state.history.loading} onClick={() => { void run("loadHistory", { threadId: id }); }}>{state.history.loading ? "Loading…" : state.history.error ? "Retry loading earlier messages" : "Load earlier messages"}</button> : null}{state.history.error ? <p className="turn-error">{state.history.error}</p> : null}</div>}
       ListFooterComponent={<div className="timeline-footer" />}
     />
-  </div>;
+  </div></SubagentState>;
 }

@@ -13,6 +13,7 @@ import { SecretCredentialStore } from "./host/sessionStore.js";
 import { T3Client } from "./host/t3Client.js";
 import { getWorkspaceContext } from "./host/workspaceContext.js";
 import { Events, type ProjectSelection, type ProjectSummary, type FavoriteModel } from "./shared/bridge.js";
+import { resolveMessageNavigation } from "./shared/messageNavigation.js";
 import { FONT_SIZE_KEYS, resolveAppearance, type AppearanceSettings } from "./shared/appearance.js";
 import { editorReference } from "./host/editorReference.js";
 import type { FileReference } from "./shared/composerContext.js";
@@ -34,7 +35,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const client = new T3Client();
   hostState = new HostState({ home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
     workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject,
-    appearance: readAppearance,
+    appearance: readAppearance, messageNavigation: () => resolveMessageNavigation(vscode.workspace.getConfiguration("t3-vscode").get("messageNavigation")),
     favoriteModels: () => context.globalState.get<ReadonlyArray<FavoriteModel>>("favoriteModels", []),
     saveFavoriteModels: (favorites) => context.globalState.update("favoriteModels", favorites) }, client);
 
@@ -106,7 +107,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await bridge.performThreadAction(thread.id, choice.action);
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (FONT_SIZE_KEYS.some((key) => event.affectsConfiguration(`t3-vscode.${key}`))) hostState?.refreshAppearance();
+      if (event.affectsConfiguration("t3-vscode.messageNavigation") || FONT_SIZE_KEYS.some((key) => event.affectsConfiguration(`t3-vscode.${key}`))) hostState?.refreshAppearance();
       if (event.affectsConfiguration("t3-vscode.usage")) meters.update();
       if (event.affectsConfiguration("t3-vscode.t3Home")) {
         void vscode.window
@@ -190,7 +191,7 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
 
   updateTitles(): void {
     if (this.sidebar) this.sidebar.title = "T3 VSCode";
-    for (const [id, panel] of this.panels) if (id !== this.usageViewId) panel.title = "T3 VSCode";
+    for (const [id, panel] of this.panels) if (id !== this.usageViewId) { const state = this.host.snapshot(id); panel.title = state.threads.find((thread) => thread.id === state.activeThreadId)?.title.trim() || "New conversation"; }
   }
 
   async showThreads(): Promise<void> {
@@ -214,6 +215,8 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
   }
   async insertReference(reference: FileReference): Promise<void> {
     const id = this.registry.focusedViewId;
+    const threadId = this.host.snapshot(id).activeThreadId;
+    if (threadId) await this.host.composerState(threadId, undefined, true, id);
     this.registry.postWhenReady(id, Events.insertReference, { draftKey: this.host.snapshot(id).activeThreadId ?? "new", reference });
     const panel = this.panels.get(id);
     if (panel) panel.reveal(panel.viewColumn);
@@ -222,7 +225,7 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
 
   async createPanel(sourceViewId = SIDEBAR_VIEW_ID, transfer?: DraftTransfer, surface: "panel" | "usage" = "panel"): Promise<string> {
     const id = `panel_${crypto.randomUUID()}`;
-    this.host.registerView(id, sourceViewId);
+    this.host.registerView(id, sourceViewId, surface !== "usage");
     const panel = vscode.window.createWebviewPanel("t3Panel", "T3 VSCode", vscode.ViewColumn.One, {
       ...this.webviewOptions(),
       retainContextWhenHidden: true,
@@ -234,6 +237,7 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
     this.bridge.attach(panel.webview, id);
     if (transfer) this.registry.postWhenReady(id, Events.initializeDraft, transfer);
     panel.webview.html = this.htmlFor(panel.webview, surface);
+    this.updateTitles();
     panel.onDidChangeViewState(({ webviewPanel }) => { if (webviewPanel.active) this.registry.focus(id); });
     panel.onDidDispose(() => {
       this.registry.remove(id); this.panels.delete(id);
@@ -250,16 +254,19 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
   }
 
   private htmlFor(webview: vscode.Webview, surface: "sidebar" | "panel" | "usage"): string {
+    const mathCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "math", "katex.css"));
+    const visualsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "mermaid.js"));
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "webview.js"));
     const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
     const csp = [
       `default-src 'none'`,
       `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `img-src ${webview.cspSource} data: blob:`,
+      `img-src ${webview.cspSource} data: blob: http: https:`,
       `font-src ${webview.cspSource}`,
-      `media-src ${webview.cspSource} data: blob:`,
+      `media-src ${webview.cspSource} data: blob: http: https:`,
       `connect-src ${webview.cspSource}`,
       `worker-src ${webview.cspSource} blob:`,
+      `frame-src http://127.0.0.1:* http://localhost:* http://[::1]:*`,
       `script-src 'nonce-${nonce}' ${webview.cspSource}`,
     ].join("; ");
     return /* html */ `<!DOCTYPE html>
@@ -269,8 +276,9 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>T3 VSCode</title>
+  <link rel="stylesheet" href="${mathCssUri}" />
 </head>
-<body data-surface="${surface}">
+<body data-surface="${surface}" data-mermaid-url="${visualsUri}">
   <div id="root"></div>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>

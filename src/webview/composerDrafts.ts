@@ -1,8 +1,9 @@
 /** Renderer-local drafts are independent in each webview, including contexts for inactive conversations. */
 import { useSyncExternalStore } from "react";
 import type { ComposerContext } from "../shared/composerContext";
+import type { ViewDraft } from "../shared/viewDraft";
 
-export interface ComposerDraft { readonly text: string; readonly contexts: ReadonlyArray<ComposerContext> }
+export interface ComposerDraft extends ViewDraft { readonly text: string; readonly contexts: ReadonlyArray<ComposerContext> }
 const EMPTY: ComposerDraft = { text: "", contexts: [] };
 const drafts = new Map<string, ComposerDraft>();
 const listeners = new Map<string, Set<() => void>>();

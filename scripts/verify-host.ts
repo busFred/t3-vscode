@@ -7,6 +7,7 @@ import { HostState } from "../src/host/hostState.js";
 import { T3Client } from "../src/host/t3Client.js";
 import type { PairedSession } from "../src/host/pairing.js";
 import type { HostStateSnapshot } from "../src/shared/bridge.js";
+import { configureLiveTestModel } from "./liveTestModel.js";
 
 const flag = process.argv.indexOf("--base-dir");
 if (flag < 0 || !process.argv[flag + 1]) throw new Error("Usage: pnpm exec tsx scripts/verify-host.ts --base-dir <isolated-home>");
@@ -28,6 +29,7 @@ try {
   const initial = host.snapshot();
   if (initial.phase !== "ready") throw new Error(initial.notice ?? `Host phase: ${initial.phase}`);
   console.log("Connected to isolated server; available providers:", initial.providers.filter((provider) => provider.enabled && provider.installed).map((provider) => provider.instanceId).join(", "));
+  await configureLiveTestModel(host);
   const id = await host.newThread();
   assert.equal(host.snapshot().activeThreadId, id);
   await waitFor((state) => state.activeThreadId === id && !state.threadLoading);

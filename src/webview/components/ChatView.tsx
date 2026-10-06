@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { HistoryIcon, PlusIcon, ChevronDownIcon, ChartNoAxesColumnIcon, GlobeIcon } from "lucide-react";
+import { HistoryIcon, PlusIcon, ChevronDownIcon, ChartNoAxesColumnIcon, GlobeIcon, BotIcon, ArrowLeftIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { Composer } from "./Composer";
@@ -40,12 +40,13 @@ export function ChatView({ state, onAppearance }: { readonly state: HostStateSna
     return () => window.removeEventListener("keydown", close);
   }, [navigationOpen]);
   const thread = state.threads.find((item) => item.id === state.activeThreadId);
+  const parent = thread?.relationshipToParent === "subagent" ? state.threads.find((entry) => entry.id === thread.parentThreadId) : undefined;
   const project = state.projects.find((item) => item.id === thread?.projectId);
   return <div className={`chat-view${navigationOpen ? " navigation-open sessions-page" : ""}`}>
     {navigationOpen ? <ThreadList state={state} dedicated closable onSelect={() => setNavigationOpen(false)} onClose={() => setNavigationOpen(false)} onAppearance={onAppearance} /> : null}
     {navigationOpen ? <button className="sessions-return btn" onClick={() => setNavigationOpen(false)}>Return to chat</button> : null}
-    {!navigationOpen ? <>
-    <main className="chat-main" data-thread-id={state.activeThreadId ?? ""} onPointerDown={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }} onFocusCapture={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }}>
+    <>
+    <main className="chat-main" hidden={navigationOpen} data-thread-id={state.activeThreadId ?? ""} onPointerDown={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }} onFocusCapture={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }}>
       {isSidebar ? <div className="sidebar-chat-heading" title={thread?.title || "New conversation"}>{thread?.title || "New conversation"}</div> : null}
       {!isSidebar ? <header className="chat-header">
         <div className="chat-heading"><span className="project-label">{project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1) ?? "No project"}</span><span className="breadcrumb-divider">/</span><strong>{thread?.title || "New conversation"}</strong></div>
@@ -56,7 +57,8 @@ export function ChatView({ state, onAppearance }: { readonly state: HostStateSna
         {thread ? <button className="icon-button" aria-label="Thread actions" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); setThreadMenu(threadMenu ? null : { x: box.right - 190, y: box.bottom + 5 }); }}><ChevronDownIcon size={14} /></button> : null}
       </header> : null}
       {threadMenu && thread ? <ThreadActionsMenu thread={thread} position={threadMenu} onClose={closeThreadMenu} /> : null}
-      <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} />
+      {thread?.relationshipToParent === "subagent" ? <div className="subagent-parent-bar">{parent ? <button className="subagent-parent-link" onClick={() => { void run("selectThread", { threadId: parent.id }); }}><ArrowLeftIcon size={12} /><BotIcon size={12} /><span>Subagent of · {parent.title || "Untitled"}</span></button> : <span>Subagent conversation · parent unavailable in this workspace</span>}</div> : null}
+      <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} onNavigate={() => setCitationTarget(null)} />
       <AssistantSelectionToolbar viewport={viewport} onCite={(citation, anchor) => setCommentTarget({ citation, anchor, draftKey: state.activeThreadId ?? "new" })} />
       <Composer key={state.activeThreadId ?? "draft"} state={state} onUsage={showUsage} onEditCitation={(citation, index) => setCommentTarget({ citation, index, draftKey: state.activeThreadId ?? "new" })} />
       {commentTarget ? <CitationCommentEditor key={`${commentTarget.citation.messageId}:${commentTarget.citation.start}:${commentTarget.index ?? "new"}`} citation={commentTarget.citation} anchor={commentTarget.anchor} onClose={() => setCommentTarget(null)} onSave={(comment) => {
@@ -66,6 +68,6 @@ export function ChatView({ state, onAppearance }: { readonly state: HostStateSna
         setCommentTarget(null); window.dispatchEvent(new CustomEvent("t3-focus-composer"));
       }} /> : null}
     </main>
-    </> : null}
+    </>
   </div>;
 }

@@ -9,8 +9,10 @@ import type {
 } from "@t3tools/contracts";
 import type { PendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
 import type { AppearanceSettings } from "./appearance.js";
+import type { MessageNavigationPlacement } from "./messageNavigation.js";
 
 export const Methods = {
+  chatAsset: "chatAsset", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
   newThread: "newThread", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
   setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt",
@@ -55,6 +57,10 @@ export interface ThreadSummary {
   readonly searchTerms?: ReadonlyArray<string>;
   readonly pendingRuntimeRequest?: { readonly id: string; readonly kind: string; readonly createdAt: string } | null;
   readonly branch?: string | null;
+  readonly parentThreadId?: string | null;
+  readonly relationshipToParent?: "fork" | "subagent" | null;
+  readonly providerNativeSubagent?: boolean;
+  readonly activityRunStatus?: string | null;
 }
 export type ThreadSearchMatch = OrchestrationThreadSearchMatch;
 export interface ComposerSuggestion {
@@ -93,6 +99,7 @@ export interface HostStateSnapshot {
   readonly home: string;
   readonly workspaceRoots: ReadonlyArray<string>;
   readonly appearance: AppearanceSettings;
+  readonly messageNavigation?: MessageNavigationPlacement;
   readonly notice?: string;
   readonly environment?: { readonly environmentId: string; readonly label: string; readonly serverVersion?: string };
   readonly projects: ReadonlyArray<ProjectSummary>;

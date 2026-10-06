@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { basename, isAbsolute, resolve } from "node:path";
 import {
-  OrchestrationV2TurnItemJson, ModelSelection as ModelSelectionSchema,
+  OrchestrationV2TurnItemJson, ModelSelection as ModelSelectionSchema, type ChatAttachment, getProviderAttachmentLimitError,
   ProviderApprovalDecision, ProviderInteractionMode, RuntimeMode,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadProjection, type OrchestrationV2ThreadStreamItem,
@@ -32,8 +32,13 @@ import { discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
 import type { CredentialStore } from "./sessionStore.js";
 import type { T3Client, Subscription } from "./t3Client.js";
 import { DEFAULT_APPEARANCE, resolveAppearance, type AppearanceSettings } from "../shared/appearance.js";
+import { ThreadId } from "@t3tools/contracts";
+import { htmlVisual, type ChatAssetReference, type ChatAssetSource } from "../shared/chatVisuals.js";
+import { resolveMessageNavigation, type MessageNavigationPlacement } from "../shared/messageNavigation.js";
+import { classifyMarkdownImageSource } from "@t3tools/client-runtime/markdown-images";
+import { attachmentUploadInput, type DraftAttachment } from "../shared/composerAttachments.js";
 
-export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getTurnDiff" | "getDiffFileContents"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
+export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
   readonly home: string;
   readonly credentials: CredentialStore;
@@ -41,6 +46,7 @@ export interface HostStateOptions {
   readonly workspaceRoot?: () => string | null;
   readonly workspaceRoots?: () => ReadonlyArray<string>;
   readonly appearance?: () => AppearanceSettings;
+  readonly messageNavigation?: () => MessageNavigationPlacement;
   readonly favoriteModels?: () => ReadonlyArray<FavoriteModel>;
   readonly saveFavoriteModels?: (favorites: ReadonlyArray<FavoriteModel>) => PromiseLike<void>;
   readonly pickProject?: (projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean, workspaceRoots: ReadonlyArray<string>) => Promise<ProjectSelection | null>;
@@ -65,9 +71,11 @@ interface ViewState {
   draftRuntimeMode: RuntimeMode;
   draftInteractionMode: ProviderInteractionMode;
   sending: boolean;
+  chatActive: boolean;
+  chatThreadId: string | undefined;
 }
 const blankView = (): ViewState => ({ activeThreadId: undefined, draftProjectId: undefined, draftWorkspaceRoot: undefined,
-  draftModelSelection: undefined, draftRuntimeMode: "auto", draftInteractionMode: "default", sending: false });
+  draftModelSelection: undefined, draftRuntimeMode: "auto", draftInteractionMode: "default", sending: false, chatActive: false, chatThreadId: undefined });
 const describeError = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
 function authFailure(cause: unknown): boolean {
   return typeof cause === "object" && cause !== null && (
@@ -88,6 +96,8 @@ export class HostState {
   private shellSubscription: Subscription | null = null;
   private chain: Promise<unknown> = Promise.resolve();
   private disposed = false;
+  private readonly emptyThreads = new Set<string>();
+  private readonly uploads = new Map<string, { attachment: ChatAttachment; environmentId: string; owners: Set<string>; sent: boolean }>();
   private revision = 0;
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly listeners = new Map<(state: HostStateSnapshot) => void, string>();
@@ -112,23 +122,72 @@ export class HostState {
     this.listeners.set(listener, viewId); listener(this.snapshot(viewId));
     return () => { this.listeners.delete(listener); };
   }
-  registerView(viewId: string, sourceViewId?: string): void {
+  registerView(viewId: string, sourceViewId?: string, chat = true): void {
     if (this.disposed) throw new Error("T3 extension is closed.");
     if (this.views.has(viewId)) throw new Error("This conversation view is already open.");
     // A handoff copies the selection once; subsequent changes belong to each view.
-    this.views.set(viewId, sourceViewId ? { ...this.requireView(sourceViewId), sending: false } : blankView()); this.emit();
+    const source = sourceViewId ? this.requireView(sourceViewId) : blankView();
+    if (chat && sourceViewId) for (const upload of this.uploads.values()) if (upload.owners.has(sourceViewId)) upload.owners.add(viewId);
+    this.views.set(viewId, { ...source, sending: false, chatActive: chat, chatThreadId: chat ? source.activeThreadId : undefined }); this.emit();
   }
   removeView(viewId: string): Promise<void> {
     if (viewId === SIDEBAR_VIEW_ID) return Promise.resolve();
+    const closedThreadId = this.views.get(viewId)?.chatThreadId;
     this.views.delete(viewId);
     for (const [listener, id] of this.listeners) if (id === viewId) this.listeners.delete(listener);
     if (this.disposed) return Promise.resolve();
-    return this.enqueue(async () => { await this.syncThreadSubscriptions(); this.emit(); });
+    return this.enqueue(async () => {
+      // Sends ahead of this closure must finish claiming uploads before abandonment deletes them.
+      for (const [id, upload] of this.uploads) if (upload.owners.has(viewId)) await this.releaseAttachment(id, viewId).catch(() => undefined);
+      if (closedThreadId) await this.cleanupEmptyThread(closedThreadId);
+      await this.syncThreadSubscriptions(); this.emit();
+    });
+  }
+  composerState(id: string, active: boolean | undefined, touched: boolean, viewId = SIDEBAR_VIEW_ID): Promise<void> {
+    // Record typing before asynchronous cleanup can run; even subsequently cleared text counts.
+    const view = this.requireView(viewId);
+    if (touched && view.activeThreadId === id) this.emptyThreads.delete(id);
+    if (active === true && view.activeThreadId === id) { view.chatActive = true; view.chatThreadId = id; }
+    else if (active === false && view.chatThreadId === id) { view.chatActive = false; view.chatThreadId = undefined; }
+    return active === false ? this.enqueue(() => this.cleanupEmptyThread(id)) : Promise.resolve();
+  }
+  private async cleanupEmptyThread(id: string): Promise<void> {
+    if (!this.emptyThreads.has(id) || !this.client.connected || [...this.views.values()].some((view) => view.chatThreadId === id)) return;
+    const thread = this.findThread(id);
+    if (!thread || thread.activeRunId || thread.archivedAt || thread.deletedAt || thread.title !== "New thread" || thread.pinnedAt || thread.settledOverride) return;
+    // Check durable server data, rather than assuming an unloaded transcript is empty.
+    const projection = await this.client.getThreadProjection(id).catch(() => null);
+    if (!projection || projection.messages.length || projection.runs.length || projection.visibleTurnItems.some((row) => row.item.type === "user_message" || row.item.type === "assistant_message")
+      || projection.thread.title !== "New thread" || projection.thread.pinnedAt || projection.thread.settledOverride
+      || !this.emptyThreads.has(id) || [...this.views.values()].some((view) => view.chatThreadId === id)) return;
+    await this.client.dispatch({ type: "thread.delete", commandId: randomUUID(), threadId: id });
+    this.emptyThreads.delete(id); this.shell = await this.client.snapshotShell();
+    await this.reconcileViews();
   }
   private requireView(viewId: string): ViewState {
     const view = this.views.get(viewId);
     if (!view) throw new Error("This conversation tab has been closed.");
     return view;
+  }
+  async uploadAttachment(name: string, mimeType: string, bytes: Uint8Array, viewId = SIDEBAR_VIEW_ID, threadId?: string): Promise<DraftAttachment> {
+    const view = this.requireView(viewId);
+    if (!this.client.connected || !this.server) throw new Error("T3 is disconnected. Retry after reconnecting.");
+    if (threadId && view.activeThreadId !== threadId) throw new Error("The conversation changed before the file could be attached.");
+    if (view.activeThreadId) this.emptyThreads.delete(view.activeThreadId);
+    const input = attachmentUploadInput(name, mimeType, bytes.byteLength);
+    const environmentId = this.server.descriptor.environmentId;
+    const attachment = await this.client.uploadAttachment(input, bytes);
+    if (!this.views.has(viewId) || this.server?.descriptor.environmentId !== environmentId) {
+      await this.client.deleteAttachment(attachment.id).catch(() => undefined); throw new Error("The chat closed before its file could be attached.");
+    }
+    this.uploads.set(attachment.id, { attachment, environmentId, owners: new Set([viewId]), sent: false });
+    return { key: attachment.id, name: attachment.name, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes, attachment, environmentId,
+      ...(attachment.type === "image" ? { previewUrl: `data:${attachment.mimeType};base64,${Buffer.from(bytes).toString("base64")}` } : {}) };
+  }
+  async releaseAttachment(id: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
+    const upload = this.uploads.get(id); if (!upload?.owners.delete(viewId) || upload.owners.size) return;
+    this.uploads.delete(id);
+    if (!upload.sent && this.client.connected && upload.environmentId === this.server?.descriptor.environmentId) await this.client.deleteAttachment(id);
   }
   private enqueue<T>(action: () => Promise<T>): Promise<T> {
     const next = this.chain.then(() => {
@@ -272,6 +331,7 @@ export class HostState {
       } else if (selectSidebar && viewId === SIDEBAR_VIEW_ID && !view.activeThreadId) {
         view.activeThreadId = this.latestThreadId();
       }
+      view.chatThreadId = view.chatActive ? view.activeThreadId : undefined;
     }
     await this.syncThreadSubscriptions(); this.emit();
   }
@@ -295,8 +355,11 @@ export class HostState {
       this.requireThread(id);
       const view = this.requireView(viewId);
       if (view.activeThreadId === id && this.threads.get(id)?.subscription) return;
+      const previous = view.chatThreadId;
       view.activeThreadId = id;
+      if (view.chatActive) view.chatThreadId = id;
       await this.syncThreadSubscriptions(); this.emit();
+      if (previous && previous !== id) await this.cleanupEmptyThread(previous);
     });
   }
   private async syncThreadSubscriptions(): Promise<void> {
@@ -434,24 +497,38 @@ export class HostState {
       createdBy: "user", creationSource: "web", title: "New thread", modelSelection: model,
       runtimeMode: this.compatibleRuntimeMode(model, draft.runtimeMode), interactionMode: draft.interactionMode, branch: null, worktreePath: null });
     this.shell = await this.client.snapshotShell();
-    if (this.views.get(viewId) === view) view.activeThreadId = id;
+    this.emptyThreads.add(id);
+    const previous = view.chatThreadId;
+    if (this.views.get(viewId) === view) { view.activeThreadId = id; if (view.chatActive) view.chatThreadId = id; }
     await this.syncThreadSubscriptions(); this.emit();
+    if (previous) await this.cleanupEmptyThread(previous);
+    if (!this.views.has(viewId)) await this.cleanupEmptyThread(id);
     return id;
   }
-  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID, mode = "auto"): Promise<void> {
+  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID, mode = "auto", attachmentIds: ReadonlyArray<string> = []): Promise<void> {
     return this.enqueue(async () => {
       this.requireView(viewId);
       if (!["auto", "queue", "steer"].includes(mode)) throw new Error("Unknown message delivery mode.");
-      if (!text.trim()) throw new Error("Enter a message.");
+      if (new Set(attachmentIds).size !== attachmentIds.length) throw new Error("Duplicate attachments are not allowed.");
+      const attachments = attachmentIds.map((id) => {
+        const upload = this.uploads.get(id);
+        if (!upload?.owners.has(viewId) || upload.environmentId !== this.server?.descriptor.environmentId) throw new Error("This attachment is not available in the current chat. Remove it and attach it again.");
+        return upload.attachment;
+      });
+      const limitError = getProviderAttachmentLimitError(attachments); if (limitError) throw new Error(limitError);
+      if (!text.trim() && !attachments.length) throw new Error("Enter a message or attach a file.");
       const id = targetThreadId ?? await this.createThread(undefined, viewId);
+      this.emptyThreads.delete(id);
       const view = this.requireView(viewId);
       const thread = this.requireThread(id);
       if (thread.archivedAt) throw new Error("Restore this thread before sending a message.");
+      if (thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") throw new Error("This subagent conversation is controlled by its provider. Return to the parent conversation to send instructions.");
       view.sending = true; this.emit();
       try {
         await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id,
-          createdBy: "user", creationSource: "web", messageId: randomUUID(), text, attachments: [],
-          titleSeed: deriveThreadTitleSeed({ text, attachments: [] }), ...(mode !== "queue" ? { deliveryIntent: mode } : {}), dispatchMode: { type: mode === "queue" ? "queue_after_active" : "start_immediately" } });
+          createdBy: "user", creationSource: "web", messageId: randomUUID(), text, attachments,
+          titleSeed: deriveThreadTitleSeed({ text, attachments }), ...(mode !== "queue" ? { deliveryIntent: mode } : {}), dispatchMode: { type: mode === "queue" ? "queue_after_active" : "start_immediately" } });
+        for (const id of attachmentIds) { const upload = this.uploads.get(id); if (upload) upload.sent = true; }
       } finally { view.sending = false; this.emit(); }
     });
   }
@@ -546,6 +623,7 @@ export class HostState {
   threadAction(id: string, action: string, title?: string): Promise<void> {
     return this.enqueue(async () => {
       this.requireThread(id);
+      if (action !== "delete") this.emptyThreads.delete(id);
       if (action === "rename") {
         if (!title?.trim()) throw new Error("Enter a thread title.");
         await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, title });
@@ -700,6 +778,33 @@ export class HostState {
     this.requireView(viewId); this.requireThread(diff.threadId);
     return result;
   }
+  async chatAsset(id: string, source: ChatAssetSource, reference: ChatAssetReference, viewId = SIDEBAR_VIEW_ID) {
+    this.requireView(viewId); this.requireThread(id);
+    const row = this.threads.get(id)?.projection?.visibleTurnItems.find((row) => row.sourceThreadId === source.sourceThreadId && row.sourceItemId === source.itemId);
+    if (!row) throw new Error("The visual's message is no longer available. Load its history and try again.");
+    const item = row.item;
+    let resource: Parameters<HostTransport["createAssetUrl"]>[0];
+    if (reference.kind === "html") {
+      const visual = htmlVisual(Schema.encodeSync(OrchestrationV2TurnItemJson)(item));
+      if (!visual) throw new Error("This item has no rendered HTML page.");
+      resource = { _tag: "attachment", attachmentId: visual.attachmentId, fileName: "visualization.html", mimeType: "text/html", disposition: "inline" };
+    } else if (reference.kind === "attachment") {
+      const attachment = item.type === "user_message" ? item.attachments.find((entry) => entry.id === reference.attachmentId) : null;
+      if (!attachment) throw new Error("This attachment does not belong to the selected message.");
+      resource = { _tag: "attachment", attachmentId: attachment.id, fileName: attachment.name, mimeType: attachment.mimeType, disposition: "inline" };
+    } else {
+      const text = "text" in item && typeof item.text === "string" ? item.text : item.type === "subagent" ? item.result ?? item.progress ?? item.prompt : "";
+      if (!text.includes(reference.path) && !text.includes(encodeURI(reference.path)) && !(item.type === "dynamic_tool" && item.viewedImagePath === reference.path)) throw new Error("This media reference does not belong to the selected message.");
+      const thread = this.findThread(source.sourceThreadId) ?? this.requireThread(id);
+      const cwd = this.workspaceForThread(thread.id) ?? undefined;
+      const media = classifyMarkdownImageSource(reference.path, cwd);
+      if (media._tag !== "WorkspaceFile") throw new Error("Unsupported local media reference.");
+      resource = { _tag: "media-file", threadId: ThreadId.make(source.sourceThreadId), path: media.path };
+    }
+    const result = await this.client.createAssetUrl(resource);
+    this.requireView(viewId); this.requireThread(id);
+    return result;
+  }
   private presentItem(item: OrchestrationV2TurnItem): Omit<TranscriptItem, "key" | "sourceThreadId"> {
     const cached = this.encodedItems.get(item);
     if (cached) return cached;
@@ -718,7 +823,7 @@ export class HostState {
     const visibleThreadIds = new Set(threads.map((thread) => thread.id));
     return {
       revision: this.revision, phase: this.phase, home: this.options.home,
-      workspaceRoots: this.workspaceRoots(),
+      workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()),
       appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
       ...(this.notice ? { notice: this.notice } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
@@ -734,6 +839,10 @@ export class HostState {
             ? (thread.latestRunStartedAt || thread.latestRunRequestedAt ? DateTime.formatIso((thread.latestRunStartedAt ?? thread.latestRunRequestedAt)!) : null) : null,
         settled: thread.settledOverride === "settled", searchTerms: threadPullRequestSearchTerms(thread),
         branch: thread.branch,
+        parentThreadId: thread.lineage.parentThreadId && visibleThreadIds.has(thread.lineage.parentThreadId) ? thread.lineage.parentThreadId : null,
+        relationshipToParent: thread.lineage.relationshipToParent,
+        providerNativeSubagent: thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider",
+        activityRunStatus: thread.activityRunStatus ?? null,
         pendingRuntimeRequest: (() => {
           const request = thread.pendingRuntimeRequest ?? this.threads.get(thread.id)?.projection?.runtimeRequests.find((request) => request.status === "pending");
           return request ? { id: request.id, kind: request.kind, createdAt: DateTime.formatIso(request.createdAt) } : null;

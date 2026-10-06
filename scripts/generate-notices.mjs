@@ -24,8 +24,17 @@ for (const entry of packages) {
       if (start < 0) throw new Error("lru_map's README license is missing.");
       texts.push(readme.slice(start));
     }
+    if (!texts.length && ((entry.name === "fastdom" && manifest.version === "1.0.12") || (entry.name === "strictdom" && manifest.version === "1.0.1")) && manifest.license === "MIT") {
+      const readme = await readFile(join(directory, "README.md"), "utf8");
+      const start = readme.indexOf("## License");
+      if (start < 0 || !readme.slice(start).includes("Permission is hereby granted")) throw new Error(`${entry.name}'s README license is missing.`);
+      texts.push(readme.slice(start));
+    }
     if (!texts.length && entry.name === "@pierre/theming" && manifest.version === "0.0.2" && manifest.license.toLowerCase() === "apache-2.0") {
       texts.push(await readFile(join(root, "vendor/LICENSE.pierre-theming"), "utf8"));
+    }
+    if (!texts.length && ((entry.name === "rehype-katex" && manifest.version === "7.0.1") || (entry.name === "remark-math" && manifest.version === "6.0.0")) && manifest.license === "MIT") {
+      texts.push(await readFile(join(root, "vendor/LICENSE.remark-math"), "utf8"));
     }
     if (!texts.length) throw new Error(`No license text found for ${entry.name}; retain its notice before packaging.`);
     sections.push(`${entry.name}@${manifest.version}\nLicense: ${entry.license}\n\n${texts.join("\n\n").trim()}`);

@@ -2,7 +2,7 @@
   "name": "t3-vscode",
   "displayName": "T3 VSCode",
   "description": "Workspace-scoped T3 Code sessions, chat, references and account usage in VS Code.",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "publisher": "t3-vscode",
   "repository": {
     "type": "git",
@@ -214,6 +214,22 @@
           "default": [],
           "scope": "window",
           "markdownDescription": "Accounts to keep in the status bar alongside the active conversation. Use [Configure Status Meters](command:t3-vscode.configureUsage) to choose accounts. Each account has its own meter; missing quota windows show \u2014."
+        },
+        "t3-vscode.messageNavigation": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Show the message rail on the left.",
+            "Show the message rail on the right.",
+            "Hide the message rail."
+          ],
+          "default": "left",
+          "scope": "window",
+          "description": "Placement of the message navigation rail in sidebar and editor chats. Hover or scroll over it to preview prompts, then click to jump. Changes apply immediately."
         }
       }
     },
@@ -251,7 +267,7 @@
   "scripts": {
     "build": "pnpm run build:extension && pnpm run build:webview",
     "build:extension": "tsdown",
-    "build:webview": "vite build",
+    "build:webview": "vite build && vite build -c vite.visuals.config.ts && node scripts/build-math.mjs",
     "build:spike": "tsdown -c tsdown.spike.config.ts",
     "spike": "pnpm run build:spike && node dist-spike/spike.mjs",
     "dev:extension": "tsdown --watch",
@@ -268,12 +284,19 @@
     "@t3tools/contracts": "workspace:*",
     "@t3tools/shared": "workspace:*",
     "clsx": "2.1.1",
+    "dompurify": "3.4.16",
     "effect": "4.0.0-rc.115",
+    "katex": "0.16.25",
     "lucide-react": "0.564.0",
+    "mermaid": "11.17.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "10.1.0",
+    "rehype-katex": "7.0.1",
+    "rehype-raw": "7.0.0",
+    "rehype-sanitize": "6.0.0",
     "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0",
     "tailwind-merge": "3.4.0"
   },
   "devDependencies": {

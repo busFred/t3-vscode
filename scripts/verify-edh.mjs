@@ -18,6 +18,8 @@ if (home === live || home.startsWith(`${live}/`)) throw new Error("Never run ver
 const setupOnly = process.argv.includes('--setup-only');
 const requestsOnly = process.argv.includes('--requests-only');
 const referencesOnly = process.argv.includes('--references-only');
+const visualsOnly = process.argv.includes('--visuals-only');
+const testModel = process.env.T3_VSCODE_TEST_MODEL || 'gpt-6-luna';
 if (!setupOnly) {
   const runtime = JSON.parse(await readFile(join(home, "userdata/server-runtime.json"), "utf8"));
   assert.ok(runtime.pid && runtime.origin, "Start an isolated T3 server first.");
@@ -40,6 +42,7 @@ let settingsText = await readFile(settingsFile, "utf8").catch(() => "{}");
 for (const [key, value] of Object.entries({ "update.mode": "none", "extensions.autoCheckUpdates": false, "extensions.autoUpdate": false, "window.zoomLevel": 0, "window.dialogStyle": "custom", "security.workspace.trust.enabled": false })) {
   settingsText = jsonc.applyEdits(settingsText, jsonc.modify(settingsText, [key], value, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
 }
+if (visualsOnly) settingsText = jsonc.applyEdits(settingsText, jsonc.modify(settingsText, ['files.simpleDialog.enable'], true, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
 await writeFile(settingsFile, settingsText);
 await mkdir(join(home, "workspace/.vscode"), { recursive: true });
 await writeFile(join(home, "workspace/.vscode/settings.json"), JSON.stringify({
@@ -77,8 +80,13 @@ class WebviewSession {
       this.pending.delete(message.id); clearTimeout(pending.timer);
       if (message.error) pending.reject(new Error(message.error.message)); else pending.resolve(message.result);
     };
+    socket.onclose = () => {
+      for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error("CDP target closed")); }
+      this.pending.clear();
+    };
   }
   async send(method, params = {}) {
+    if (this.socket.readyState !== WebSocket.OPEN) throw new Error("CDP target closed");
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`CDP ${method} timed out`)); }, 160_000);
@@ -122,7 +130,9 @@ async function findWebview(surface) {
       const session = new WebviewSession(socket); await session.send("Runtime.enable");
       for (const contextId of session.contexts) {
         if (await session.evaluate(`document.body?.dataset.surface === ${JSON.stringify(surface)}`, contextId).catch(() => false)) {
-          session.contextId = contextId; session.targetId = target.id; sessions.push(session); return session;
+          session.contextId = contextId; session.targetId = target.id; session.surface = surface; sessions.push(session);
+          await session.evaluate(`window.__bridgeSeen=[];window.addEventListener('message',event=>window.__bridgeSeen.push({event:event.data?.event,id:event.data?.id,parent:event.source===window.parent,self:event.source===window,origin:event.origin}));`);
+          return session;
         }
       }
       session.close();
@@ -133,6 +143,28 @@ async function findWebview(surface) {
   throw new Error(`No ${surface} webview. Inspect ${profile}/logs.`);
 }
 let browser; let workbench;
+async function chooseLiveTestModel(view, favorite = false) {
+  await view.evaluate('document.querySelector(\'[aria-label="Choose model"]\').click()');
+  await view.wait('document.querySelector(".model-picker")');
+  await view.evaluate(`(() => {
+    const input = document.querySelector('input[aria-label="Search models"]');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(testModel)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  const selector = `.model-choice[title=${JSON.stringify(testModel)}]:not(:disabled)`;
+  await view.wait(`document.querySelector(${JSON.stringify(selector)})`);
+  if (favorite) {
+    await view.evaluate(`(() => { const button=document.querySelector(${JSON.stringify(selector)}).closest('.model-row').querySelector('.model-favorite');if(button.getAttribute('aria-pressed') !== 'true')button.click(); })()`);
+    await view.wait(`document.querySelector(${JSON.stringify(selector)}).closest('.model-row').querySelector('.model-favorite').getAttribute('aria-pressed') === 'true'`);
+  }
+  await view.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  await view.wait('!document.querySelector(".model-picker")');
+  const level = await view.evaluate(`(() => { const select=document.querySelector('select[aria-label="Effort level"]'); return select && [...select.options].find(option=>option.value==='low')?.value; })()`);
+  if (level) {
+    await view.evaluate(`(() => { const select=document.querySelector('select[aria-label="Effort level"]');select.value=${JSON.stringify(level)};select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+    await view.wait(`document.querySelector('select[aria-label="Effort level"]').value === ${JSON.stringify(level)} && !document.querySelector('select[aria-label="Effort level"]').disabled`);
+  }
+}
 try {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
@@ -197,9 +229,9 @@ try {
     await workbench.locator('.quick-input-widget input').filter({ visible: true }).fill('>Notifications: Clear All Notifications');
     await workbench.locator('.quick-input-list .monaco-list-row').filter({ hasText: 'Notifications: Clear All Notifications' }).waitFor();
     await workbench.keyboard.press('Enter');
-    const helperCode = `import { HostState } from './src/host/hostState.ts'; import { T3Client } from './src/host/t3Client.ts';
+    const helperCode = `import { HostState } from './src/host/hostState.ts'; import { T3Client } from './src/host/t3Client.ts'; import { configureLiveTestModel } from './scripts/liveTestModel.ts';
       let session = null; const host = new HostState({ home: ${JSON.stringify(home)}, workspaceRoot: () => ${JSON.stringify(join(home, 'workspace'))}, credentials: { get: async () => session, save: async value => { session = value; }, clear: async () => { session = null; } } }, new T3Client());
-      try { await host.start(); if (host.snapshot().phase !== 'ready') throw new Error(host.snapshot().notice); for (const thread of host.snapshot().threads.filter(thread => thread.pendingRuntimeRequest)) { await host.selectThread(thread.id); await host.interrupt(thread.id); } const id = await host.newThread(); await host.threadAction(id, 'rename', 'Notification verification'); await host.setModes(id, { interactionMode: 'plan' });
+      try { await host.start(); if (host.snapshot().phase !== 'ready') throw new Error(host.snapshot().notice); for (const thread of host.snapshot().threads.filter(thread => thread.pendingRuntimeRequest)) { await host.selectThread(thread.id); await host.interrupt(thread.id); } await configureLiveTestModel(host); const id = await host.newThread(); await host.threadAction(id, 'rename', 'Notification verification'); await host.setModes(id, { interactionMode: 'plan' });
       await host.sendMessage('This is a UI verification. Use your request_user_input tool to ask exactly one required question: choose A or B, with two options A and B. Wait for my answer. Do not ask in plain text, edit files or perform any other work. After I answer, reply exactly NOTIFICATION-ANSWERED.', id); console.log(id); } finally { await host.dispose(); }`;
     const helper = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', helperCode], { cwd: fileURLToPath(new URL('..', import.meta.url)), stdio: ['ignore', 'pipe', 'pipe'] });
     let helperOutput = '', helperError = ''; helper.stdout.on('data', data => { helperOutput += data; }); helper.stderr.on('data', data => { helperError += data; });
@@ -221,10 +253,37 @@ try {
     await inputPanel.wait(`[...document.querySelectorAll('.assistant-message')].some(node => node.textContent.includes('NOTIFICATION-ANSWERED') && !node.querySelector('.streaming-label'))`, 90_000);
     await workbench.screenshot({ path: join(evidence, 'edh-input-answered.png') });
     console.log('PASS: unopened workspace session shows Input badge and native notification; Open session targets its conversation; answering clears the badge and resumes the provider');
+  } else if (visualsOnly) {
+    const { verifyRichChat } = await import('./verify-rich-chat.mjs');
+    await verifyRichChat({ home, evidence, workbench, sidebar, findWebview, chooseLiveTestModel, async findVisualFrame() {
+      const runtime = JSON.parse(await readFile(join(home, 'userdata/server-runtime.json'), 'utf8'));
+      const deadline = Date.now() + 20_000;
+      while (Date.now() < deadline) {
+        const targets = await (await fetch(`${origin}/json/list`)).json();
+        for (const target of targets.filter(target => target.type === 'iframe' && target.url.startsWith(runtime.origin))) {
+          const socket = new WebSocket(target.webSocketDebuggerUrl); await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
+          const session = new WebviewSession(socket); await session.send('Runtime.enable');
+          for (const contextId of session.contexts) if (await session.evaluate('!!document.querySelector(".mock")', contextId).catch(() => false)) {
+            session.contextId = contextId; session.targetId = target.id; sessions.push(session); return session;
+          }
+          session.close();
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      throw new Error('No native HTML visualization frame');
+    } });
   } else {
   await sidebar.wait('document.querySelector(".dedicated-sessions")');
   assert.equal(await sidebar.evaluate('document.querySelector(".account-usage").open'), false);
   assert.equal(await sidebar.evaluate('!!document.querySelector(".navigation-backdrop")'), false);
+  assert.equal(await sidebar.evaluate('document.querySelectorAll(".project-heading").length'), 0);
+  await sidebar.evaluate('document.querySelector(".account-usage > summary").click()');
+  await sidebar.wait('document.querySelector(".account-usage time[datetime]")');
+  await sidebar.evaluate('document.querySelector(".account-usage [aria-label=\\"Refresh usage\\"]").click()');
+  await sidebar.wait('!document.querySelector(".account-usage [aria-label=\\"Refresh usage\\"]").disabled');
+  await workbench.screenshot({ path: join(evidence, "edh-sidebar-usage-refresh.png") });
+  await sidebar.evaluate('document.querySelector(".account-usage > summary").click()');
+  console.log('PASS: sidebar account usage starts collapsed and exposes refresh plus its reported update time');
   await workbench.screenshot({ path: join(evidence, "edh-sessions-default.png") });
   await sidebar.evaluate(`[...document.querySelectorAll('.sidebar-modes button')].find(button => button.textContent === 'Chat').click()`);
   await sidebar.wait('document.querySelector(".composer-box")');
@@ -234,7 +293,7 @@ try {
   assert.ok(await workbench.locator('.part.sidebar .codicon-history').count(), "History must use a clock icon");
   const nativeAction = (label) => workbench.locator(`[aria-label="${label}"]`).filter({ visible: true }).first();
   await nativeAction("History").click();
-  await sidebar.wait('document.querySelector(".dedicated-sessions .project-groups")');
+  await sidebar.wait('document.querySelector(".dedicated-sessions .session-list")');
   await sidebar.evaluate(`[...document.querySelectorAll('.sidebar-modes button')].find(button => button.textContent === 'Chat').click()`);
   await sidebar.wait('document.querySelector(".chat-main")');
   const beforeNewThread = await sidebar.evaluate('document.querySelector(".chat-main")?.dataset.threadId');
@@ -244,6 +303,7 @@ try {
   assert.ok(await newPanel.evaluate('document.querySelector(".chat-main").dataset.threadId'));
   await workbench.keyboard.press('Control+w');
   await sidebar.wait(`document.querySelector('.chat-empty') && document.querySelector('.chat-main')?.dataset.threadId && document.querySelector('.chat-main').dataset.threadId !== ${JSON.stringify(beforeNewThread)}`);
+  await chooseLiveTestModel(sidebar);
   await sidebar.evaluate(`(() => {
     const input = document.querySelector('textarea[aria-label="Message"]');
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Reply with exactly this markdown and no other text:\\nVSCODE-EDH-M1-OK\\n\\n[Open selected file](example.ts#L2-L3)');
@@ -317,27 +377,8 @@ try {
   console.log("PASS: all three font settings are registered in native VS Code Settings; editing them updates both chat views and persists in the disposable Default profile");
   await workbench.keyboard.press('Escape');
   await workbench.locator('.settings-editor').waitFor({ state: 'hidden' });
-  await panel.evaluate(`document.querySelector('[aria-label="Choose model"]').click()`);
-  await panel.wait('document.querySelector(".model-picker")');
-  await panel.evaluate(`(() => {
-    const input = document.querySelector('input[aria-label="Search models"]');
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'astra'); input.dispatchEvent(new Event('input', { bubbles: true }));
-  })()`);
-  await panel.wait('document.querySelectorAll(".model-choice").length > 0');
-  await panel.evaluate('document.querySelector(".model-favorite").click()');
-  await panel.wait('document.querySelector(".model-favorite[aria-pressed=true]")');
-  await panel.wait('document.querySelector(".model-choice:not(:disabled)")');
-  await panel.evaluate(`document.querySelector('.model-choice').click()`);
-  await panel.wait('!document.querySelector(".model-picker")');
+  await chooseLiveTestModel(panel, true);
   assert.equal(await panel.evaluate('!!document.querySelector("select[aria-label=\\"Interaction mode\\"]")'), false);
-  const level = await panel.evaluate(`(() => {
-    const select = document.querySelector('select[aria-label="Effort level"]');
-    if (!select) return null;
-    return [...select.options].find(option => option.value === 'max')?.value ?? [...select.options].find(option => option.value === 'high')?.value;
-  })()`);
-  assert.ok(level, "The real Codex catalog should advertise effort options");
-  await panel.evaluate(`(() => { const select = document.querySelector('select[aria-label="Effort level"]'); select.value = ${JSON.stringify(level)}; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-  await panel.wait(`document.querySelector('select[aria-label="Effort level"]').value === ${JSON.stringify(level)} && !document.querySelector('select[aria-label="Effort level"]').disabled`);
   console.log("PASS: real model search, favorite persistence and capability-driven effort; no Code/Plan toggle");
   // Markdown links open the native editor with the linked range, instead of a web file panel.
   await sidebar.evaluate(`(() => {
@@ -392,7 +433,7 @@ try {
   assert.equal(await panel.evaluate('document.querySelector(".chat-main").dataset.threadId'), panelBeforeFork);
   await workbench.screenshot({ path: join(evidence, "edh-fork.png") });
   await nativeAction("History").click();
-  await sidebar.wait('document.querySelector(".dedicated-sessions .project-groups")');
+  await sidebar.wait('document.querySelector(".dedicated-sessions .session-list")');
   await sidebar.evaluate(`document.querySelector('.thread[data-thread-id="${forkId}"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 210 }))`);
   await sidebar.wait('document.querySelector(".thread-actions-popup")');
   await sidebar.evaluate(`document.querySelector('.thread-actions-popup button').click()`);
@@ -423,7 +464,12 @@ try {
       await sidebar.evaluate(`(() => { const input = document.querySelector('textarea[aria-label="Message"]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${JSON.stringify(text)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     };
     const sendMessage = async (text) => { await setMessage(text); await sidebar.wait('!document.querySelector(".send-button").disabled'); await sidebar.evaluate('document.querySelector(".send-button").click()'); };
-    const complete = (marker) => sidebar.wait(`[...document.querySelectorAll('.assistant-message')].some(node => node.textContent.includes(${JSON.stringify(marker)}) && !node.querySelector('.streaming-label')) && !document.querySelector('.stop-button')`, 150_000);
+    const complete = async (marker) => {
+      // The citation checks deliberately leave an older response selected.
+      // Resume Latest before checking new responses in the virtualized DOM.
+      await sidebar.evaluate('document.querySelector(".message-nav-latest")?.click()');
+      await sidebar.wait(`[...document.querySelectorAll('.assistant-message')].some(node => node.textContent.includes(${JSON.stringify(marker)}) && !node.querySelector('.streaming-label')) && !document.querySelector('.stop-button')`, 150_000);
+    };
     await nativeAction("Usage").click(); const usage = await findWebview("usage"); await usage.wait('document.querySelector(".usage-panel")');
     await workbench.screenshot({ path: join(evidence, "edh-usage.png") });
     await workbench.keyboard.press('Control+w');
@@ -491,6 +537,7 @@ try {
 } catch (error) {
   await workbench?.screenshot({ path: join(evidence, "edh-failure.png") }).catch(() => {});
   console.error(`Inspect ${profile}/code.log and ${evidence}/edh-failure.png`);
+  for(const session of sessions.filter(session => session.surface)) console.error(await session.evaluate('JSON.stringify({surface:document.body.dataset.surface,text:document.body.textContent.slice(0,1200),bridge:window.__bridgeSeen?.slice(-20)})').catch(()=>''));
   throw error;
 } finally {
   for (const session of sessions) session.close();

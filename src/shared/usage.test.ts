@@ -16,9 +16,9 @@ test("Meters keep subscriptions separate, deduplicate shared accounts and preser
   const personal = accounts.find((account) => account.label === "Personal")!;
   const work = accounts.find((account) => account.label === "Work")!;
   assert.deepEqual(personal.instanceIds, ["codex-personal", "codex-copy"]);
-  assert.equal(meterText(personal).replaceAll("\u2007", " "), "  — |  91 |  64 %");
-  assert.equal(meterText(work).replaceAll("\u2007", " "), "  — |  55 |   — %");
-  assert.equal(meterText(accounts.find((account) => account.label === "Unavailable")!).replaceAll("\u2007", " "), "  — |   — |   — %");
+  assert.equal(meterText(personal).replaceAll("\u2007", " "), "M   — | W  91 | S  64%");
+  assert.equal(meterText(work).replaceAll("\u2007", " "), "M   — | W  55 | S   —%");
+  assert.equal(meterText(accounts.find((account) => account.label === "Unavailable")!).replaceAll("\u2007", " "), "M   — | W   — | S   —%");
   assert.deepEqual(selectedUsageAccounts(accounts, { followActive: true, pinnedAccounts: [personal.key, work.key] }, "codex-copy").map((account) => account.key), [personal.key, work.key]);
   assert.deepEqual(selectedUsageAccounts(accounts, { followActive: false, pinnedAccounts: [work.key] }, "codex-personal"), [work]);
 });

@@ -6,6 +6,9 @@ import { resolveChatFileLink } from "./fileLinks.js";
 import type { TurnDiff, TurnDiffFile } from "./turnDiff.js";
 import type { ReviewDiffFileContentsResult } from "@t3tools/contracts";
 import { parseDraftTransfer, type DraftTransfer } from "../shared/viewDraft.js";
+import { readFile, stat } from "node:fs/promises";
+import { basename } from "node:path";
+import { PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
 
 export class WebviewRegistry {
   private readonly webviews = new Map<string, vscode.Webview>();
@@ -90,6 +93,39 @@ export class BridgeHandler {
           if (typeof params.query !== "string" || typeof params.atPromptStart !== "boolean") throw new Error("Invalid composer query.");
           return { id: message.id, result: await this.hostState.composerSuggestions(stringParam(params, "kind"), params.query, params.atPromptStart, viewId) };
         }
+        case "composerState": {
+          if ((params.active !== undefined && typeof params.active !== "boolean") || (params.touched !== undefined && typeof params.touched !== "boolean")) throw new Error("Invalid composer state.");
+          await this.hostState.composerState(id(), params.active as boolean | undefined, params.touched === true, viewId); break;
+        }
+        case "uploadAttachment": {
+          const base64 = stringParam(params, "base64");
+          if (base64.length > Math.ceil(PROVIDER_SEND_TURN_MAX_FILE_BYTES / 3) * 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error("Invalid attachment data or file too large.");
+          const bytes = Buffer.from(base64, "base64");
+          return { id: message.id, result: await this.hostState.uploadAttachment(stringParam(params, "name"), stringParam(params, "mimeType"), bytes, viewId, params.threadId === undefined ? undefined : id()) };
+        }
+        case "pickAttachments": {
+          const vscode = await import("vscode");
+          const files = await vscode.window.showOpenDialog({ title: "Attach files to T3 VSCode", openLabel: "Attach", canSelectFiles: true, canSelectFolders: false, canSelectMany: true });
+          const attachments = []; const errors: string[] = [];
+          const threadId = this.hostState.snapshot(viewId).activeThreadId;
+          for (const file of files ?? []) {
+            try {
+              if (file.scheme !== "file") throw new Error("Choose a file on this machine.");
+              const info = await stat(file.fsPath);
+              if (!info.isFile() || info.size > PROVIDER_SEND_TURN_MAX_FILE_BYTES) throw new Error("Choose a file of at most 50 MB.");
+              attachments.push(await this.hostState.uploadAttachment(basename(file.fsPath), "", await readFile(file.fsPath), viewId, threadId));
+            } catch (cause) { errors.push(`${basename(file.fsPath)}: ${cause instanceof Error ? cause.message : String(cause)}`); }
+          }
+          return { id: message.id, result: { attachments, errors } };
+        }
+        case "releaseAttachment": await this.hostState.releaseAttachment(stringParam(params, "attachmentId"), viewId); break;
+        case "chatAsset": {
+          const reference = paramsObject(params.reference);
+          const kind = stringParam(reference, "kind");
+          const assetReference = kind === "html" ? { kind } as const : kind === "attachment" ? { kind, attachmentId: stringParam(reference, "attachmentId") } as const : kind === "media" ? { kind, path: stringParam(reference, "path") } as const : null;
+          if (!assetReference) throw new Error("Unsupported chat asset.");
+          return { id: message.id, result: await this.hostState.chatAsset(id(), { sourceThreadId: stringParam(params, "sourceThreadId"), itemId: stringParam(params, "itemId") }, assetReference, viewId) };
+        }
         case "refreshUsage": await this.hostState.refreshUsage(); break;
         case "openTurnDiff": {
           if (params.path !== undefined && typeof params.path !== "string") throw new Error("Invalid diff path.");
@@ -101,7 +137,10 @@ export class BridgeHandler {
         case "selectThread": await this.hostState.selectThread(id(), viewId); break;
         case "newThread": await this.hostState.newThread(params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
         case "chooseProject": await this.hostState.chooseProject(params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
-        case "sendMessage": await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id(), viewId, params.mode === undefined ? "auto" : stringParam(params, "mode")); break;
+        case "sendMessage": {
+          if (params.attachmentIds !== undefined && (!Array.isArray(params.attachmentIds) || params.attachmentIds.length > 100 || !params.attachmentIds.every((id) => typeof id === "string"))) throw new Error("Invalid message attachments.");
+          await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id(), viewId, params.mode === undefined ? "auto" : stringParam(params, "mode"), params.attachmentIds as string[] | undefined); break;
+        }
         case "queueAction": {
           if (params.beforeRunId !== undefined && params.beforeRunId !== null && typeof params.beforeRunId !== "string") throw new Error("Invalid queue destination.");
           await this.hostState.queueAction(id(), stringParam(params, "action"), typeof params.runId === "string" ? params.runId : undefined, typeof params.text === "string" ? params.text : undefined,

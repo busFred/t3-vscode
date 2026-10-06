@@ -6,7 +6,7 @@ import {
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadStreamItem, type OrchestrationV2ArchivedShellStreamItem, type ServerConfig,
-  type ReviewDiffFileContentsInput, ProviderInstanceId,
+  type ReviewDiffFileContentsInput, ProviderInstanceId, type AssetResource, type AttachmentCreateUploadUrlInput, ChatAttachment,
 } from "@t3tools/contracts";
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import * as Rpc from "@t3tools/client-runtime/rpc/session";
@@ -172,6 +172,31 @@ export class T3Client {
   }
   getDiffFileContents(input: ReviewDiffFileContentsInput) {
     return readCheckpointFiles(input);
+  }
+  async createAssetUrl(resource: AssetResource) {
+    const server = this.server;
+    if (!server) throw new Error("Not connected to T3.");
+    const result = await this.run(this.requireSession().client[WS_METHODS.assetsCreateUrl]({ resource }));
+    const url = new URL(result.relativeUrl, server.origin);
+    if (url.origin !== new URL(server.origin).origin || url.username || url.password) throw new Error("T3 returned an invalid asset URL.");
+    return { url: url.href, expiresAt: result.expiresAt };
+  }
+  async uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array): Promise<ChatAttachment> {
+    const server = this.server; if (!server) throw new Error("Not connected to T3.");
+    const capabilities = this.config?.environment.capabilities;
+    if (!capabilities?.attachmentUploads) throw new Error("This T3 server does not support attachment uploads. Update T3 Code, then retry.");
+    if (input.type === "file" && (!capabilities.fileAttachments || input.sizeBytes > capabilities.fileAttachments.maxUploadBytes)) throw new Error("This file exceeds the server's supported file upload limit.");
+    const result = await this.run(this.requireSession().client[WS_METHODS.attachmentsCreateUploadUrl](input));
+    const url = new URL(result.relativeUrl, server.origin);
+    if (url.origin !== new URL(server.origin).origin || url.username || url.password) throw new Error("T3 returned an invalid upload URL.");
+    try {
+      const response = await fetch(url, { method: "POST", headers: { "Content-Type": input.mimeType }, body: Buffer.from(bytes), redirect: "error", signal: AbortSignal.timeout(5 * 60_000) });
+      if (!response.ok) throw new Error(`Attachment upload failed (${response.status}).`);
+      return Schema.decodeUnknownSync(ChatAttachment)({ ...input, type: input.type ?? "image", id: result.attachmentId });
+    } catch (cause) { await this.deleteAttachment(result.attachmentId).catch(() => undefined); throw cause; }
+  }
+  async deleteAttachment(attachmentId: string): Promise<void> {
+    await this.run(this.requireSession().client[WS_METHODS.attachmentsDelete]({ attachmentId }));
   }
   // Retained for the standalone M0 transport diagnostic.
   sendMessage(id: string, text: string): Promise<void> {

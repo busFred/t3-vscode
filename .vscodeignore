@@ -4,6 +4,8 @@
 !README.md
 !dist/extension.mjs
 !dist/webview.js
+!dist/mermaid.js
+!dist/math/**
 !dist/THIRD_PARTY_NOTICES.txt
 !resources/t3-icon.svg
 !resources/t3-extension.png
