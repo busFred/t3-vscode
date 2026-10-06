@@ -2,7 +2,7 @@
   "name": "t3-vscode",
   "displayName": "T3 Code",
   "description": "Thin VS Code client for a T3 Code server — chat with provider agents (Kimi via ACP registry, Codex, Claude, …) from the sidebar or an editor tab.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "t3-vscode",
   "repository": {
     "type": "git",

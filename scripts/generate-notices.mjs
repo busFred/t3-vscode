@@ -14,9 +14,20 @@ for (const entry of packages) {
   for (const directory of entry.paths) {
     const files = (await readdir(directory, { withFileTypes: true }))
       .filter((file) => file.isFile() && /^(?:licen[cs]e|copying|notice)(?:[._-]|$)/i.test(file.name)).map((file) => file.name).sort();
-    if (!files.length) throw new Error(`No license text found for ${entry.name}; retain its notice before packaging.`);
     const manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
     const texts = await Promise.all(files.map((file) => readFile(join(directory, file), "utf8")));
+    // These pinned npm releases omit a standalone license file. Keep their
+    // declared license and copyright text without changing installed packages.
+    if (!texts.length && entry.name === "lru_map" && manifest.version === "0.4.1" && manifest.license === "MIT") {
+      const readme = await readFile(join(directory, "README.md"), "utf8");
+      const start = readme.indexOf("# MIT license");
+      if (start < 0) throw new Error("lru_map's README license is missing.");
+      texts.push(readme.slice(start));
+    }
+    if (!texts.length && entry.name === "@pierre/theming" && manifest.version === "0.0.2" && manifest.license.toLowerCase() === "apache-2.0") {
+      texts.push(await readFile(join(root, "vendor/LICENSE.pierre-theming"), "utf8"));
+    }
+    if (!texts.length) throw new Error(`No license text found for ${entry.name}; retain its notice before packaging.`);
     sections.push(`${entry.name}@${manifest.version}\nLicense: ${entry.license}\n\n${texts.join("\n\n").trim()}`);
   }
 }
