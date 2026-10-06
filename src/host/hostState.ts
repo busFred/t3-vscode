@@ -27,6 +27,7 @@ export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" 
 export interface HostStateOptions {
   readonly home: string;
   readonly credentials: CredentialStore;
+  readonly serverStartupHint?: string | undefined;
   readonly workspaceRoot?: () => string | null;
   readonly discover?: typeof discoverServer;
   readonly pair?: typeof pairWithServer;
@@ -106,7 +107,7 @@ export class HostState {
     await this.stopSubscriptions();
     await this.client.disconnect();
     this.setPhase("discovering");
-    const discovered = await (this.options.discover ?? discoverServer)(this.options.home);
+    const discovered = await (this.options.discover ?? discoverServer)(this.options.home, this.options.serverStartupHint);
     if (!discovered.ok) { this.server = null; this.setPhase("no-server", discovered.reason); return; }
     if (this.server?.descriptor.environmentId !== discovered.server.descriptor.environmentId) {
       this.shell = null; this.archive = null; this.threads.clear(); this.activeThreadId = undefined;

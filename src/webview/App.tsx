@@ -28,9 +28,11 @@ export function App() {
   if (!state) content = <StatusView title="Opening T3 Code…" detail="Connecting to the extension host." />;
   else if (state.phase === "ready") content = <ChatView state={state} />;
   else content = <StatusView
-    title={state.phase === "no-server" ? "Connect to T3 Code" : state.phase === "error" ? "Connection interrupted" : state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}
-    detail={state.notice ?? (state.phase === "no-server" ? "Install and start the T3 service with t3 service install." : state.environment?.label ?? state.home)}
-    actions={state.phase === "error" || state.phase === "no-server" ? [
+    title={state.phase === "no-server" ? "T3 server unavailable" : state.phase === "error" ? "Connection interrupted" : state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}
+    detail={state.notice ?? (state.phase === "no-server" ? `Start the T3 server for ${state.home}, then retry the connection.` : state.environment?.label ?? state.home)}
+    actions={state.phase === "no-server" ? [
+      { label: "Retry connection", onClick: () => { void run(Methods.reconnect); } },
+    ] : state.phase === "error" ? [
       { label: "Reconnect", onClick: () => { void run(Methods.reconnect); } },
       { label: "Pair again", onClick: () => { void run(Methods.startPairing); } },
     ] : []}

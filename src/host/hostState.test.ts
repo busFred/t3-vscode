@@ -76,6 +76,43 @@ function message(id: string, text: string, ordinal = 0): OrchestrationV2TurnItem
   return { id: TurnItemId.make(id), threadId: v2ThreadShell.id, type: "assistant_message", messageId: "message" as Extract<OrchestrationV2TurnItem, { type: "assistant_message" }>["messageId"], text, streaming: false, title: null, status: "completed", ordinal, runId: null, nodeId: null, providerThreadId: null, providerTurnId: null, nativeItemRef: null, parentItemId: null, startedAt: v2Now, completedAt: v2Now, updatedAt: v2Now };
 }
 
+test("Missing server retries preserve credentials and recover after the server is started externally", async (t) => {
+  const client = new FakeTransport();
+  let running = false;
+  let credentialReads = 0;
+  let credentialWrites = 0;
+  let pairingAttempts = 0;
+  const host = new HostState({
+    home: "/tmp/fake-t3-test",
+    credentials: {
+      get: async () => { credentialReads += 1; return credentials.get(); },
+      save: async () => { credentialWrites += 1; },
+      clear: async () => { credentialWrites += 1; },
+    },
+    discover: async () => running ? { ok: true, server } : { ok: false, reason: "Start the isolated server first." },
+    pair: async () => { pairingAttempts += 1; throw new Error("Pairing requires a running server."); },
+  }, client);
+  t.after(() => host.dispose());
+  await host.start();
+  await host.reconnect();
+  await host.pairNow();
+  assert.equal(host.snapshot().phase, "no-server");
+  assert.equal(host.snapshot().notice, "Start the isolated server first.");
+  assert.equal(credentialReads, 0);
+  assert.equal(pairingAttempts, 0);
+  assert.equal(client.connections, 0);
+
+  running = true;
+  await host.reconnect();
+  assert.equal(host.snapshot().phase, "ready");
+  assert.equal(host.snapshot().notice, undefined);
+  assert.equal(client.connections, 1);
+  assert.equal(credentialReads, 1);
+  assert.equal(credentialWrites, 0);
+  assert.equal(pairingAttempts, 0);
+  assert.ok(host.snapshot().threads.length > 0);
+});
+
 test("New Thread focuses the created thread and uses the server's ACP model catalog", async (t) => {
   const { host, client } = await harness(); t.after(() => host.dispose());
   const id = await host.newThread();

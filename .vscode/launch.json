@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "T3: Run Extension (Default Profile)",
+      "name": "T3: Run Extension (Isolated Server, Default Profile)",
       "type": "extensionHost",
       "request": "launch",
       "runtimeExecutable": "${execPath}",

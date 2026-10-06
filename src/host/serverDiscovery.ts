@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
 import * as RemoteEnvironment from "@t3tools/client-runtime/environment";
 import * as Effect from "effect/Effect";
@@ -78,18 +78,21 @@ export type DiscoveryResult =
  * Discover a live T3 server under `home`. Returns the reason when no usable
  * server exists (the setup view renders it).
  */
-export const discoverServer = async (home: string): Promise<DiscoveryResult> => {
+export const discoverServer = async (home: string, startupHint?: string): Promise<DiscoveryResult> => {
+  const hint = startupHint ?? (resolve(home) === join(homedir(), ".t3")
+    ? "Start the T3 service with `t3 service start` (or install it with `t3 service install`), then retry the connection."
+    : "Start T3 with `t3 serve --base-dir` pointing to this directory, then retry the connection.");
   const found = readRuntimeState(home);
   if (!found) {
     return {
       ok: false,
-      reason: `No running T3 server found under ${home}. Run \`t3 service install\` (or start a server) and try again.`,
+      reason: `No running T3 server found under ${home}. ${hint}`,
     };
   }
   if (!pidAlive(found.state.pid)) {
     return {
       ok: false,
-      reason: `The server recorded in ${found.path} (pid ${found.state.pid}) is not running. Start it with \`t3 service start\` or \`t3 service install\`.`,
+      reason: `The server recorded in ${found.path} (pid ${found.state.pid}) is not running. ${hint}`,
     };
   }
   const origin = found.state.origin;
