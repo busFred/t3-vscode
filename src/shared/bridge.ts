@@ -9,7 +9,7 @@ import type {
 import type { PendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
 
 export const Methods = {
-  getState: "getState", selectThread: "selectThread", sendMessage: "sendMessage",
+  getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
   newThread: "newThread", startPairing: "startPairing", reconnect: "reconnect",
   setModel: "setModel", setModes: "setModes", interrupt: "interrupt",
   respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
@@ -19,7 +19,7 @@ export const Methods = {
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
 export interface RpcResult { readonly id: string; readonly result?: unknown; readonly error?: string }
-export const Events = { stateChanged: "stateChanged" } as const;
+export const Events = { stateChanged: "stateChanged", showNavigation: "showNavigation" } as const;
 export type BridgeEvent = (typeof Events)[keyof typeof Events];
 
 export interface ModelSelection {

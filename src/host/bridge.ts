@@ -30,6 +30,7 @@ export class BridgeHandler {
       const id = () => stringParam(params, "threadId");
       switch (message.method) {
         case "getState": break;
+        case "loadArchive": await this.hostState.loadArchive(); break;
         case "selectThread": await this.hostState.selectThread(id()); break;
         case "newThread": await this.hostState.newThread(params.projectId === undefined ? undefined : stringParam(params, "projectId")); break;
         case "sendMessage": await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id()); break;

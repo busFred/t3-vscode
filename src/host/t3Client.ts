@@ -5,7 +5,7 @@ import {
   ORCHESTRATION_V2_WS_METHODS as V2, WS_METHODS,
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
-  type OrchestrationV2ThreadStreamItem, type ServerConfig,
+  type OrchestrationV2ThreadStreamItem, type OrchestrationV2ArchivedShellStreamItem, type ServerConfig,
 } from "@t3tools/contracts";
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import * as Rpc from "@t3tools/client-runtime/rpc/session";
@@ -65,6 +65,7 @@ export class T3Client {
       this.session = session;
       this.server = server;
       this.accessToken = accessToken;
+      this.configState = applyServerConfigProjection(Option.none(), { version: 1, type: "snapshot", config });
       await this.subscribe(session.subscribeServerConfig({}), (event) => {
         this.configState = applyServerConfigProjection(this.configState, event);
         if (this.config) this.onConfig?.(this.config);
@@ -104,6 +105,12 @@ export class T3Client {
   }
   subscribeShell(handler: (item: OrchestrationV2ShellStreamItem) => void): Promise<Subscription> {
     return this.subscribe(this.requireSession().client[V2.subscribeShell]({ requestCompletionMarker: true }), handler);
+  }
+  snapshotArchive() {
+    return this.run(this.requireSession().client[V2.getArchivedShellSnapshot]({}));
+  }
+  subscribeArchive(handler: (item: OrchestrationV2ArchivedShellStreamItem) => void): Promise<Subscription> {
+    return this.subscribe(this.requireSession().client[V2.subscribeArchivedShell]({}), handler);
   }
   subscribeThread(id: string, handler: (item: OrchestrationV2ThreadStreamItem) => void): Promise<Subscription> {
     return this.subscribe(this.requireSession().client[V2.subscribeThread]({

@@ -6,7 +6,7 @@ import {
   ProviderApprovalDecision, ProviderInteractionMode, RuntimeMode,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadProjection, type OrchestrationV2ThreadStreamItem,
-  type OrchestrationV2TurnItem, type OrchestrationV2ThreadShell, type ServerConfig,
+  type OrchestrationV2TurnItem, type OrchestrationV2ThreadShell, type ServerConfig, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem,
 } from "@t3tools/contracts";
 import * as ShellState from "@t3tools/client-runtime/state/shell";
 import { applyOrchestrationV2ProjectionEvent } from "@t3tools/client-runtime/state/orchestration-v2-projection";
@@ -23,7 +23,7 @@ import { discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
 import type { CredentialStore } from "./sessionStore.js";
 import type { T3Client, Subscription } from "./t3Client.js";
 
-export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "dispatch" | "ensureScratchProject" | "createProject" | "getHistory" | "getTurnItem"> & { readonly config: Pick<ServerConfig, "providers"> | null };
+export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "dispatch" | "ensureScratchProject" | "createProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive"> & { readonly config: Pick<ServerConfig, "providers"> | null };
 export interface HostStateOptions {
   readonly home: string;
   readonly credentials: CredentialStore;
@@ -53,6 +53,8 @@ export class HostState {
   private server: DiscoveredServer | null = null;
   private shell: OrchestrationV2ShellSnapshot | null = null;
   private activeThreadId: string | undefined;
+  private archive: OrchestrationV2ArchivedShellSnapshot | null = null;
+  private archiveSubscription: Subscription | null = null;
   private readonly threads = new Map<string, ThreadState>();
   private shellSubscription: Subscription | null = null;
   private threadSubscription: Subscription | null = null;
@@ -91,9 +93,10 @@ export class HostState {
 
   private async stopSubscriptions(): Promise<void> {
     this.threadGeneration += 1;
-    const shell = this.shellSubscription; const thread = this.threadSubscription;
+    const shell = this.shellSubscription; const thread = this.threadSubscription; const archive = this.archiveSubscription;
+    this.archiveSubscription = null;
     this.shellSubscription = null; this.threadSubscription = null;
-    await shell?.(); await thread?.();
+    await shell?.(); await thread?.(); await archive?.();
   }
   private async connect(forcePair: boolean): Promise<void> {
     await this.stopSubscriptions();
@@ -102,7 +105,7 @@ export class HostState {
     const discovered = await (this.options.discover ?? discoverServer)(this.options.home);
     if (!discovered.ok) { this.server = null; this.setPhase("no-server", discovered.reason); return; }
     if (this.server?.descriptor.environmentId !== discovered.server.descriptor.environmentId) {
-      this.shell = null; this.threads.clear(); this.activeThreadId = undefined;
+      this.shell = null; this.archive = null; this.threads.clear(); this.activeThreadId = undefined;
     }
     this.server = discovered.server;
     try {
@@ -126,6 +129,7 @@ export class HostState {
       if (this.disposed) { await this.client.disconnect(); return; }
       this.shell = await this.client.snapshotShell();
       this.shellSubscription = await this.client.subscribeShell((item) => this.handleShell(item));
+      if (this.archive) await this.subscribeArchive();
       const selected = this.findThread(this.activeThreadId);
       const latest = [...this.shell.threads].sort((a, b) => DateTime.toEpochMillis(b.updatedAt) - DateTime.toEpochMillis(a.updatedAt))[0];
       this.activeThreadId = selected?.id ?? latest?.id;
@@ -154,8 +158,26 @@ export class HostState {
     }
     this.scheduleEmit();
   }
+  loadArchive(): Promise<void> { return this.enqueue(() => this.subscribeArchive()); }
+  private async subscribeArchive(): Promise<void> {
+    if (this.archiveSubscription) return;
+    this.archive = await this.client.snapshotArchive();
+    this.archiveSubscription = await this.client.subscribeArchive((item) => this.handleArchive(item));
+    this.emit();
+  }
+  private handleArchive(item: OrchestrationV2ArchivedShellStreamItem): void {
+    if (item.kind === "snapshot") this.archive = item.snapshot;
+    else if (this.archive && item.sequence > this.archive.snapshotSequence) {
+      const id = item.kind === "thread.updated" ? item.thread.id : item.threadId;
+      this.archive = { ...this.archive, snapshotSequence: item.sequence,
+        threads: [...this.archive.threads.filter((thread) => thread.id !== id), ...(item.kind === "thread.updated" ? [item.thread] : [])] };
+    }
+    this.scheduleEmit();
+  }
   private allThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
-    return [...(this.shell?.threads ?? []), ...(this.shell?.archivedThreads ?? [])];
+    const active = this.shell?.threads ?? [];
+    const activeIds = new Set(active.map((thread) => thread.id));
+    return [...active, ...(this.archive?.threads ?? this.shell?.archivedThreads ?? []).filter((thread) => !activeIds.has(thread.id))];
   }
   private findThread(id: string | undefined) { return this.allThreads().find((thread) => thread.id === id); }
   private requireThread(id: string): OrchestrationV2ThreadShell {
@@ -313,7 +335,12 @@ export class HostState {
       } else if (["archive", "unarchive", "pin", "unpin"].includes(action)) {
         await this.client.dispatch({ type: `thread.${action}`, commandId: randomUUID(), threadId: id });
       } else throw new Error("Unknown thread action.");
-      this.shell = await this.client.snapshotShell(); this.emit();
+      this.shell = await this.client.snapshotShell();
+      if (action === "archive" || action === "unarchive") {
+        this.archive = await this.client.snapshotArchive();
+        await this.subscribeArchive();
+      }
+      this.emit();
     });
   }
   async loadHistory(id: string): Promise<void> {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { OrchestrationV2Command, ProviderInstanceId, ThreadId, ProjectId, TurnItemId, EventId, type OrchestrationV2ShellStreamItem, type OrchestrationV2ThreadStreamItem, type OrchestrationV2TurnItem, type ServerProvider } from "@t3tools/contracts";
+import { OrchestrationV2Command, ProviderInstanceId, ThreadId, ProjectId, TurnItemId, EventId, RuntimeRequestId, NodeId, ProviderSessionId, type OrchestrationV2ShellStreamItem, type OrchestrationV2ThreadStreamItem, type OrchestrationV2TurnItem, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem, type OrchestrationV2ProjectedTurnItem, type OrchestrationV2RuntimeRequest, type ServerProvider } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { v2Now, v2Project, v2ThreadShell, v2Projection, v2ShellSnapshot } from "../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 import { HostState, type HostTransport } from "./hostState.js";
@@ -17,12 +17,20 @@ class FakeTransport implements HostTransport {
   onConfig: HostTransport["onConfig"] = null;
   connections = 0; shellStarts = 0; threadStops = 0;
   shell = structuredCloneShell();
+  archive: OrchestrationV2ArchivedShellSnapshot = { ...v2ShellSnapshot, threads: [] };
+  archiveHandler: ((item: OrchestrationV2ArchivedShellStreamItem) => void) | null = null;
+  archiveStarts = 0;
   shellHandler: ((item: OrchestrationV2ShellStreamItem) => void) | null = null;
   threadHandlers = new Map<string, (item: OrchestrationV2ThreadStreamItem) => void>();
   commands: OrchestrationV2Command[] = [];
   async connect() { this.connected = true; this.connections += 1; }
   async disconnect() { this.connected = false; }
   async snapshotShell() { return this.shell; }
+  async snapshotArchive() { return this.archive; }
+  subscribeArchive: HostTransport["subscribeArchive"] = async (handler) => {
+    this.archiveStarts += 1; this.archiveHandler = handler;
+    return async () => { this.archiveHandler = null; };
+  };
   async subscribeShell(handler: (item: OrchestrationV2ShellStreamItem) => void) { this.shellStarts += 1; this.shellHandler = handler; return async () => { this.shellHandler = null; }; }
   async subscribeThread(id: string, handler: (item: OrchestrationV2ThreadStreamItem) => void) {
     this.threadHandlers.set(id, handler);
@@ -32,6 +40,16 @@ class FakeTransport implements HostTransport {
   async dispatch(raw: unknown) {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(raw); this.commands.push(command);
     if (command.type === "thread.create") this.shell = { ...this.shell, threads: [...this.shell.threads, { ...v2ThreadShell, id: command.threadId, projectId: command.projectId, modelSelection: command.modelSelection }] };
+    if (command.type === "thread.archive") {
+      const thread = this.shell.threads.find((thread) => thread.id === command.threadId)!;
+      this.shell = { ...this.shell, threads: this.shell.threads.filter((thread) => thread.id !== command.threadId) };
+      this.archive = { ...this.archive, threads: [...this.archive.threads, { ...thread, archivedAt: v2Now }] };
+    }
+    if (command.type === "thread.unarchive") {
+      const thread = this.archive.threads.find((thread) => thread.id === command.threadId)!;
+      this.archive = { ...this.archive, threads: this.archive.threads.filter((thread) => thread.id !== command.threadId) };
+      this.shell = { ...this.shell, threads: [...this.shell.threads, { ...thread, archivedAt: null }] };
+    }
   }
   async createProject(workspaceRoot: string, title: string) {
     const id = ProjectId.make("workspace-project");
@@ -110,4 +128,69 @@ test("Model selection rejects unavailable providers before sending a command", a
   const { host, client } = await harness(); t.after(() => host.dispose());
   await assert.rejects(host.setModel(v2ThreadShell.id, { instanceId: "missing", model: "invented" }), /unavailable/);
   assert.equal(client.commands.length, 0);
+});
+
+test("Archiving keeps a thread discoverable and restorable outside the active shell", async (t) => {
+  const { host, client } = await harness(); t.after(() => host.dispose());
+  const id = host.snapshot().activeThreadId!;
+  await host.threadAction(id, "archive");
+  assert.equal(client.shell.threads.length, 0);
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.archived, true);
+  await assert.rejects(host.sendMessage("should not send", id), /Restore this thread/);
+  await host.reconnect();
+  assert.equal(client.archiveStarts, 2);
+  assert.equal(host.snapshot().activeThreadId, id);
+  await host.threadAction(id, "unarchive");
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.archived, false);
+  await host.sendMessage("restored", id);
+  assert.equal(client.commands.findLast((command) => command.type === "message.dispatch")?.threadId, id);
+});
+
+test("Archive updates from other clients appear on demand and reject stale deltas", async (t) => {
+  const { host, client } = await harness(); t.after(() => host.dispose());
+  const archived = { ...v2ThreadShell, id: ThreadId.make("archived"), archivedAt: v2Now };
+  client.archive = { ...client.archive, threads: [archived] };
+  assert.equal(host.snapshot().threads.length, 1);
+  await host.loadArchive();
+  assert.equal(host.snapshot().threads.length, 2);
+  client.archiveHandler?.({ kind: "thread.updated", sequence: 5, thread: { ...archived, title: "Renamed in T3" } });
+  client.archiveHandler?.({ kind: "thread.updated", sequence: 4, thread: { ...archived, title: "Stale" } });
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === archived.id)?.title, "Renamed in T3");
+  client.archiveHandler?.({ kind: "thread.removed", sequence: 6, threadId: archived.id });
+  assert.equal(host.snapshot().threads.length, 1);
+});
+
+const projected = (item: OrchestrationV2TurnItem, position: number): OrchestrationV2ProjectedTurnItem => ({
+  item, position, sourceItemId: item.id, sourceThreadId: item.threadId, visibility: "local",
+});
+test("An older history response preserves newer live text while the page is in flight", async (t) => {
+  const { host, client } = await harness(); t.after(() => host.dispose());
+  const handler = client.threadHandlers.get(v2ThreadShell.id)!;
+  const recent = message("recent", "streaming text", 1);
+  handler({ kind: "snapshot", snapshotSequence: 1, projection: { ...v2Projection, turnItems: [recent], visibleTurnItems: [projected(recent, 0)] }, historyCursor: "older-page", hasMoreHistory: true });
+  let finish!: (page: Awaited<ReturnType<HostTransport["getHistory"]>>) => void;
+  client.getHistory = async () => new Promise((resolve) => { finish = resolve; });
+  const loading = host.loadHistory(v2ThreadShell.id);
+  assert.equal(host.snapshot().history.loading, true);
+  handler({ kind: "event", sequence: 2, event: { id: EventId.make("newer"), type: "turn-item.updated", threadId: v2ThreadShell.id, occurredAt: v2Now, payload: message("recent", "final live text", 1) } });
+  finish({ snapshotSequence: 1, items: [projected(message("old", "earlier message"), 0), projected(recent, 1)], nextCursor: null, hasMoreHistory: false });
+  await loading;
+  assert.deepEqual(host.snapshot().transcript.map(({ item }) => item.type === "assistant_message" ? item.text : null), ["earlier message", "final live text"]);
+  assert.equal(host.snapshot().history.hasMore, false);
+  assert.equal(host.snapshot().history.loading, false);
+});
+
+test("Approvals validate pending and resumable state before dispatching a response", async (t) => {
+  const { host, client } = await harness(); t.after(() => host.dispose());
+  const handler = client.threadHandlers.get(v2ThreadShell.id)!;
+  const request: OrchestrationV2RuntimeRequest = { id: RuntimeRequestId.make("approval"), nodeId: NodeId.make("node"), providerTurnId: null, nativeRequestRef: null, kind: "command", status: "pending", responseCapability: { type: "live", providerSessionId: ProviderSessionId.make("session") }, createdAt: v2Now, resolvedAt: null };
+  handler({ kind: "snapshot", snapshotSequence: 1, projection: { ...v2Projection, runtimeRequests: [request] } });
+  assert.equal(host.snapshot().pending.approvals[0]?.responseCapability, "live");
+  await host.respondToRequest({ threadId: v2ThreadShell.id, requestId: request.id, decision: "accept" });
+  assert.equal(client.commands.findLast((command) => command.type === "runtime-request.respond")?.decision, "accept");
+  handler({ kind: "snapshot", snapshotSequence: 2, projection: { ...v2Projection, runtimeRequests: [{ ...request, responseCapability: { type: "not_resumable", reason: "Provider ended" } }] } });
+  await assert.rejects(host.respondToRequest({ threadId: v2ThreadShell.id, requestId: request.id, decision: "accept" }), /provider process has ended/i);
+  handler({ kind: "snapshot", snapshotSequence: 3, projection: { ...v2Projection, runtimeRequests: [{ ...request, status: "resolved" }] } });
+  assert.equal(host.snapshot().pending.approvals.length, 0);
+  await assert.rejects(host.respondToRequest({ threadId: v2ThreadShell.id, requestId: request.id, decision: "accept" }), /no longer pending/);
 });
