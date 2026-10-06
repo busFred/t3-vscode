@@ -38,8 +38,10 @@ this extension (third-party notices).
 
 ## Runtime dependencies (for the root package.json)
 
-Declare these once in the root `package.json`; the vendored package.jsons keep
-`workspace:*` refs to each other and rely on the root for externals:
+The vendored manifests declare their runtime dependencies and keep
+`workspace:*` references to each other. The workspace override pins one Effect
+version; the root also declares Effect because the host adapter imports it.
+The lockfile resolves the remaining dependencies:
 
 - `effect` **4.0.0-rc.115** — exactly one copy; duplicates break schema decoding
 - `@noble/curves` 1.9.1

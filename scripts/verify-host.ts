@@ -41,8 +41,15 @@ try {
   assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.pinned, true);
   await host.threadAction(id, "unpin");
   console.log("PASS: rename, pin, unpin");
-  const reconnected = waitFor((state) => state.phase === "ready" && !state.threadLoading && state.transcript.some(({ item }) => item.type === "assistant_message" && item.text.includes("VSCODE-M1-OK")));
-  await host.reconnect(); await reconnected;
+  await host.threadAction(id, "archive");
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.archived, true);
+  await assert.rejects(host.sendMessage("must not send to archive", id), /Restore this thread/);
+  await host.reconnect();
+  await waitFor((state) => state.phase === "ready" && !state.threadLoading && state.transcript.some(({ item }) => item.type === "assistant_message" && item.text.includes("VSCODE-M1-OK")));
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.archived, true);
+  await host.threadAction(id, "unarchive");
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.archived, false);
+  console.log("PASS: archive remains selectable across reconnect and can be restored");
   await writeFile(join(home, "verified-snapshot.json"), JSON.stringify(host.snapshot(), null, 2));
   console.log("PASS: reconnect restored thread history; observed item types:", [...new Set(final.transcript.map(({ item }) => item.type))].join(", "));
 } finally { await host.dispose(); }

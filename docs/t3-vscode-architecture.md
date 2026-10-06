@@ -23,9 +23,11 @@ t3-vscode/
 │   │   ├── pairing.ts            # shell out to `t3 pair`, complete token exchange
 │   │   ├── sessionStore.ts       # credential in VS Code SecretStorage, shared across windows
 │   │   ├── t3Client.ts           # connection lifecycle over vendored client-runtime
+│   │   ├── hostState.ts          # projections, subscriptions, history and user actions
 │   │   ├── bridge.ts             # postMessage RPC between webviews and host
 │   │   └── workspaceContext.ts   # opened folder (cwd default, file resolution only)
-│   └── webview/                  # React app (the entire UI)
+│   ├── shared/bridge.ts          # typed host snapshots and allowed UI intents
+│   └── webview/                  # React app (chat UI; native toolbar in extension.ts)
 │       ├── App.tsx
 │       ├── bridge-client.ts      # host bridge client
 │       ├── components/           # ported T3 components (see §6)
@@ -41,14 +43,14 @@ Tech: TypeScript ESM, Vite for the webview bundle, `effect` (comes with vendored
 
 ## 3. Server discovery & lifecycle
 
-1. On activation, resolve T3 home: `T3CODE_HOME` env → `~/.t3` (same precedence as `t3 pair`).
+1. On activation, resolve T3 home: `t3-vscode.t3Home` setting → `T3CODE_HOME` env → `~/.t3`.
 2. Read `<home>/userdata/server-runtime.json` (or `<home>/dev/server-runtime.json` for implicit dev homes); if present, verify pid alive and probe `/.well-known/t3/environment` to confirm it's a T3 server and capture the environment descriptor.
 3. If no live server: surface a setup view — "run `t3 service install`" — do **not** auto-spawn (prerequisite model, per decision).
 4. Handle port drift: always resolve origin from runtime state, never a hardcoded port.
 
 ## 4. Auth
 
-- Pairing exchange: `t3 pair --label "vscode"` (shell out to installed `t3` CLI), parse the printed token, then perform the same exchange the web client does at `/pair` to obtain a durable session.
+- Pairing exchange: `t3 pair --label "VS Code" --base-dir <home>` (shell out to installed `t3` CLI), parse the printed token, then use T3's headless exchange to obtain a durable session. Always pass the discovered home; never fall back to a command targeting the default home.
   - Resolved in §8: use the vendored headless bearer exchange, followed by a WebSocket ticket. The local browser’s cookie flow is reference behavior rather than an extension dependency.
 - Store the session credential in VS Code `SecretStorage` (global, shared across windows).
 - If a call returns auth failure → re-pair once, then show setup view.
@@ -61,6 +63,7 @@ Tech: TypeScript ESM, Vite for the webview bundle, `effect` (comes with vendored
   - `WebviewPanel` ("Open Chat in Editor Tab" command)
 - Webviews are **thin**: all T3 connection and state lives in the extension host (`t3Client` + vendored client-runtime stores). Webviews render host state and send intents over a typed postMessage bridge (mirrors Kimi's `bridge.ts` pattern, which is a proven template for this exact split).
 - Multiple webviews open simultaneously must stay in sync through the single host-side store.
+- The sidebar uses VS Code's native title and toolbar for thread navigation, creation and pop-out. Thread actions and pairing live in its overflow menu. It has no second chat header. Editor tabs retain the app header because their native tab does not provide those actions.
 
 ## 6. Rendering: T3 UI in a VS Code webview
 
@@ -72,8 +75,8 @@ Tech: TypeScript ESM, Vite for the webview bundle, `effect` (comes with vendored
 ## 7. Migration priorities
 
 Migrate the core chat workflow first. The unfilled KEEP column does not define scope:
-- Thread sidebar (list, search, pin/snooze/archive as approved)
-- Composer (T3 tiptap port or Kimi textarea — decide in matrix)
+- Thread navigation (all projects, list, search, pin and archive/restore)
+- Composer (server model catalog, modes and Stop first; rich editor and attachments later)
 - Checkpoints/diff view (server-side git refs; optional native `vscode.diff` per file)
 - Approvals & questions rendering
 - Usage/quota widgets
@@ -88,17 +91,15 @@ Migrate the core chat workflow first. The unfilled KEEP column does not define s
    4. `GET /ws?wsTicket=…&orchestrationProtocol=2` (the protocol param is mandatory — server 426s without it). Auth is on the HTTP upgrade only.
    Same-machine shortcut for dev: `t3 auth session issue --token-only` mints a durable admin bearer directly; not used by the extension (standard scopes only). Credential lives in VS Code SecretStorage; on auth failure → clear, re-pair once, else setup view.
 2. **License check** — ✅ RESOLVED. MIT (Copyright (c) 2026 T3 Tools Inc.): use/copy/modify/merge/publish/distribute/sublicense/sell permitted; condition is retaining the copyright+permission notice → shipped as `vendor/LICENSE.t3code` (must go into any distributed extension's third-party notices). Packages are not npm-published (`private`, source-only exports) so source vendoring is the only route.
-3. **Item-fidelity pass** — pending (M1). Skim T3 web components for the 21 item types; size the port (which are trivial vs which pull heavy deps like tiptap/diff workers).
-4. **Subscription load** — ✅ RESOLVED at the contract level (M0 implementation follows it). `subscribeThread` replays: no `afterSequence` → a snapshot frame (bounded window + `historyCursor`/`hasMoreHistory` when `acceptBoundedSnapshot: true`; the extension sets it), then live events; `afterSequence` → bounded persisted-event replay with `synchronized` marker when `requestCompletionMarker: true`. Older pages: `GET /api/orchestration/threads/:threadId/history?cursor=…`. M0 caps buffered turn items per thread (1000) and renders text only.
+3. **Item-fidelity pass** — core renderers implemented. Portable work-log, approval, system-divider and wordmark components are copied from T3. The typed timeline covers the turn-item union, with markdown, reasoning, tool output, diffs, plans and request history. Rich attachments, interactive checkpoint restore and specialized tool previews remain later work; core rendering is not complete web-app parity.
+4. **Subscription load** — bounded snapshots and progressive history implemented. Only the selected thread is subscribed; switching/reconnecting replaces that subscription. Older pages use the authenticated history endpoint and the vendored merge helper to preserve newer live items. Active shell updates and the on-demand archived shell have separate subscriptions. Bridge pushes are coalesced; targeted bridge deltas remain an optimization for later profiling.
 
 ## 9. Milestones
 
 - **M0 — spike:** ✅ DONE (verified end-to-end). Discovery (`server-runtime.json` + pid + `/.well-known/t3/environment`) → `t3 pair` → headless `/oauth/token` exchange → WS ticket → Effect-RPC session (vendored client-runtime) → `subscribeShell` (all projects/threads, no filtering) → `projects.ensureScratch` → `thread.create` → `message.dispatch` → `subscribeThread` (bounded snapshot replay + live `turn-item.updated`) → assistant reply rendered as plain text.
   - Proof: `scripts/spike.ts` (`pnpm run spike -- --base-dir /tmp/t3-vscode-m0`) passes against an isolated server (`t3 serve --base-dir /tmp/t3-vscode-m0 --port 47777`, never the live `~/.t3`): final `assistant_message` "SPIKE-OK" from a real provider turn.
-  - Extension Dev Host verified: sidebar + editor tab host the same webview; auto-pairing on activation; thread history renders on select; view/title actions use codicon buttons (`$(link-external)`, `$(plug)`); narrow sidebar collapses the thread list into a ☰ overlay via CSS container query.
-  - Known M0 limits (by design): plain-text rendering only (component port is M1); no composer extras; whole-state bridge pushes (targeted deltas later); packaging (vsce dep bundling) not done.
-  - Vendoring notes: `vendor/` holds contracts+client-runtime+shared (tests stripped, `devDependencies` stripped, `catalog:` inlined); two subpath exports added (`./rpc/session`, `./rpc/http`) — see `vendor/README.md`. Host bundles are ESM (`dist/extension.mjs`, tsdown) with runtime `node_modules` resolution; webview is a single IIFE (`dist/webview.js`, vite + css-injected-by-js).
-- **M1:** sidebar chat with T3 components for the core item types (messages, reasoning, tool calls, approvals, diffs).
-- **M2:** editor-tab surface + multi-webview sync.
+  - Vendoring notes: `vendor/` holds contracts, client-runtime and shared, with narrow adapter exports documented in `vendor/README.md`. The MIT notice must ship in distributions. The host is a compiled ESM bundle (`dist/extension.mjs`, tsdown); only VS Code and Node built-ins remain external. The webview is a single IIFE (`dist/webview.js`, Vite + CSS injection).
+- **M1 — core chat:** implemented. T3 palettes and portable components, a virtualized rich timeline, server-advertised models (including ACP), Code/Plan and permission modes, Stop, approvals/questions, progressive history, and rename/pin/archive/restore. Verification uses behavior tests, deterministic browser fixtures and a real isolated server. Full attachment and specialized-tool fidelity is deferred.
+- **M2 — surfaces:** implemented. Sidebar and editor tabs share the host selection and live projection. Native sidebar controls avoid a duplicate toolbar; editor tabs have project navigation and a chat header. The isolated Extension Development Host check covers both surfaces in one window.
 - **M3:** continue T3 feature migration (checkpoints UI, usage widgets, composer extras…), prioritizing after review of the core chat experience.
-- Verification: manual against a dev server first; later the `test-t3-app` skill flow (isolated home, never the live `~/.t3`).
+- Verification: `scripts/verify-host.ts` requires an explicit isolated server home; `scripts/verify-ui.mjs` exercises the built UI with fixtures; `scripts/verify-edh.mjs` launches a separate VS Code profile against that home. Neither integration check uses the live `~/.t3` service. VSIX packaging/distribution and cross-window behavior remain unverified.
