@@ -86,7 +86,10 @@ Then re-apply the package.json edits by hand (they are **not** scripted):
    version from the upstream `pnpm-workspace.yaml` `catalog:` section
    (keep `workspace:*` refs as-is).
 
-3. Add a `./rpc/session` export entry pointing at `./src/rpc/session.ts`
+3. Add the extension adapter subpath exports: `./rpc/session`, `./rpc/http`,
+   `./connection/model`, `./state/thread-history-merge`, and
+   `./state/server-config-projection`. Each points at the existing source file.
+   The `./rpc/session` entry points at `./src/rpc/session.ts`
    (upstream's `./rpc` barrel exports only `protocol.ts` and the `RpcSession`
    type; the extension needs `RpcSessionFactory` for connection lifecycle).
 
