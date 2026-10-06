@@ -11,6 +11,7 @@
         "--profile=Default",
         "--user-data-dir=${workspaceFolder}/.t3/vscode-profile",
         "--extensions-dir=${workspaceFolder}/.t3/vscode-profile/extensions",
+        "--shared-data-dir=${workspaceFolder}/.t3/vscode-profile/shared-data",
         "--extensionDevelopmentPath=${workspaceFolder}",
         "${workspaceFolder}"
       ],
