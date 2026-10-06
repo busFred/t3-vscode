@@ -15,6 +15,13 @@ function CopyButton({ text }: { text: string }) {
   const run = useActions(); const [copied, setCopied] = useState(false);
   return <button className="icon-button copy-button" title="Copy message" aria-label="Copy message" onClick={() => { void run("copyText", { text }).then(setCopied); }}>{copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}</button>;
 }
+function ForkButton({ row, threadId }: { row: TranscriptItem; threadId: string }) {
+  const run = useActions(); const [busy, setBusy] = useState(false);
+  if (!row.canFork) return null;
+  return <button className="icon-button fork-button" title="Fork from this response" aria-label="Fork from this response" disabled={busy} onClick={() => {
+    setBusy(true); void run("forkFromResponse", { threadId, sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }).finally(() => setBusy(false));
+  }}><GitForkIcon size={13} /><span>Fork</span></button>;
+}
 function Disclosure({ label, icon, children, row, threadId }: { label: string; icon: ReactNode; children: ReactNode; row: TranscriptItem; threadId: string }) {
   const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false);
   const run = useActions();
@@ -47,7 +54,7 @@ const TurnItem = memo(function TurnItem({ row, threadId, environmentId }: { row:
   const openThread = (id: string) => { void run("selectThread", { threadId: id }); };
   switch (item.type) {
     case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{markdown(item.text)}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}</div><CopyButton text={item.text} /></article>;
-    case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}><div className="message-author"><T3Wordmark className="size-5" /><span>Assistant</span>{item.streaming ? <span className="streaming-label">Writing…</span> : null}</div><ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} />{!item.streaming ? <CopyButton text={item.text} /> : null}</article>;
+    case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}><div className="message-author"><T3Wordmark className="size-5" /><span>Assistant</span>{item.streaming ? <span className="streaming-label">Writing…</span> : null}</div><ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} />{!item.streaming ? <div className="response-actions"><CopyButton text={item.text} /><ForkButton row={row} threadId={threadId} /></div> : null}</article>;
     case "reasoning": return <Disclosure label={item.streaming ? "Thinking…" : "Thought process"} icon={<BrainIcon size={14} />} row={row} threadId={threadId}>{markdown(item.text)}</Disclosure>;
     case "proposed_plan": return <section className="plan-card"><header><span className="plan-badge">Plan</span><strong>Proposed plan</strong><CopyButton text={item.markdown} /></header>{markdown(item.markdown)}</section>;
     case "todo_list": return <section className="todo-card">{item.explanation ? <p>{item.explanation}</p> : null}{item.steps.map((step, index) => <div key={index} className={`todo-step ${step.status}`}><span>{step.status === "completed" ? "✓" : step.status === "running" ? "◉" : "○"}</span><span>{step.text}</span></div>)}</section>;

@@ -10,7 +10,7 @@ import { viewsHarness, publishText } from "../src/host/testing/fakeTransport.js"
 import { Events, type RpcMessage } from "../src/shared/bridge.js";
 import { DEFAULT_APPEARANCE, type AppearanceSettings } from "../src/shared/appearance.js";
 import type { FavoriteModel } from "../src/shared/bridge.js";
-import { ProviderInstanceId, ProviderDriverKind } from "@t3tools/contracts";
+import { ProviderInstanceId, ProviderDriverKind, RunId } from "@t3tools/contracts";
 import { collectAssistantCitations, serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
 
 const evidence = process.env.T3_VSCODE_UI_EVIDENCE ?? "/tmp/t3-vscode-views-ui";
@@ -29,7 +29,10 @@ client.config = { providers: [
   { ...firstProvider, instanceId: ProviderInstanceId.make("claude"), driver: ProviderDriverKind.make("claudeAgent"), displayName: "Claude", models: [{ slug: "claude-sonnet", name: "Claude Sonnet", isCustom: false, capabilities: { optionDescriptors: [{ id: "effort", type: "select", label: "Effort", promptInjectedValues: ["ultrathink"], options: [{ id: "high", label: "High", isDefault: true }, { id: "ultrathink", label: "Ultrathink" }] }] } }] },
 ] };
 let settingsOpened = 0;
-const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry, async () => { settingsOpened += 1; });
+let deleteConfirmed = false;
+const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry, async () => { settingsOpened += 1; }, {
+  rename: async () => "Renamed through history", confirmDelete: async () => deleteConfirmed,
+});
 const views = new Map<string, FakeWebview>(); const sinks = new Map<string, Set<ServerResponse>>();
 for (const id of [SIDEBAR_VIEW_ID, "tab-one", "tab-two", "tab-three"]) {
   if (id !== SIDEBAR_VIEW_ID) host.registerView(id);
@@ -164,6 +167,26 @@ try {
   assert.equal(await sidebar.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
   preferences = DEFAULT_APPEARANCE; host.refreshAppearance();
   await Promise.all([...pages, sidebar].map((page) => expectFonts(page, preferences)));
+  assert.equal(await sidebar.locator(".composer-box select, .composer-box .model-trigger").count(), 0, "Plain selectors must live below the input");
+  assert.equal(await sidebar.locator(".composer-box").evaluate((node) => getComputedStyle(node).borderRadius), "4px");
+  assert.equal(await sidebar.locator(".model-trigger svg").count(), 1, "Model only needs its dropdown arrow");
+  await sidebar.setViewportSize({ width: 170, height: 820 });
+  await sidebar.getByLabel("Effort and permissions", { exact: true }).click();
+  await sidebar.getByRole("combobox", { name: "Effort level" }).selectOption("high");
+  await sidebar.getByRole("combobox", { name: "Permission mode" }).selectOption("auto");
+  await sidebar.waitForFunction(() => (document.querySelector('select[aria-label="Effort level"]') as HTMLSelectElement).value === "high");
+  assert.equal(await third.getByRole("combobox", { name: "Effort level" }).inputValue(), "max");
+  await sidebar.locator(".assistant-message p").first().click();
+  assert.equal(await sidebar.locator("details[open]").count(), 0);
+  assert.equal(await sidebar.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await sidebar.screenshot({ path: `${evidence}/composer-170-light.png` });
+  await sidebar.evaluate(() => { document.body.className = "vscode-dark"; });
+  await sidebar.waitForFunction(() => document.documentElement.classList.contains("dark"));
+  await sidebar.screenshot({ path: `${evidence}/composer-170-dark.png` });
+  await sidebar.setViewportSize({ width: 360, height: 820 });
+  await sidebar.waitForFunction(() => !document.querySelector(".composer-options-overflow"));
+  assert.equal(await sidebar.getByRole("combobox", { name: "Effort level" }).inputValue(), "high");
+  console.log("PASS: footer selectors remain outside the compact input, narrow overflow retains model/effort/permission settings and closes outside; light and dark layouts fit.");
   await sidebar.close();
   // The quote spans bold and plain DOM nodes; native mouse selection captures rendered positions.
   await selectAssistantText(second, "reply in second conversation");
@@ -252,6 +275,38 @@ try {
   await first.close(); registry.remove("tab-one"); await host.removeView("tab-one");
   assert.equal(host.snapshot("tab-two").activeThreadId, "second");
   assert.equal(host.snapshot("tab-three").activeThreadId, "third");
+  const contextTarget = second.getByRole("button", { name: "third conversation", exact: true });
+  await contextTarget.click({ button: "right" });
+  await second.getByRole("menuitem", { name: "Pin thread", exact: true }).click();
+  await second.waitForFunction(() => document.querySelector('[data-thread-id="third"] svg.lucide-pin'));
+  assert.equal(host.snapshot("tab-two").activeThreadId, "second");
+  await contextTarget.focus(); await contextTarget.press("Shift+F10");
+  await second.getByRole("menuitem", { name: "Rename thread", exact: true }).waitFor();
+  await second.keyboard.press("Escape"); assert.equal(await contextTarget.evaluate((node) => document.activeElement === node), true);
+  await contextTarget.click({ button: "right" });
+  await second.getByRole("menuitem", { name: "Rename thread", exact: true }).click();
+  await second.getByRole("button", { name: "Renamed through history", exact: true }).waitFor();
+  assert.equal(await third.locator(".chat-heading strong").textContent(), "Renamed through history");
+  publishText(client, "third", "Response with a persisted run for forking", 3, { runId: RunId.make("fork-run") });
+  await third.getByRole("button", { name: "Fork from this response", exact: true }).click();
+  await third.locator(".chat-heading strong").filter({ hasText: "Fork of Renamed through history" }).waitFor();
+  assert.equal(host.snapshot("tab-two").activeThreadId, "second");
+  assert.equal(await second.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft after sending references");
+  assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "");
+  await third.getByText("Response with a persisted run for forking", { exact: true }).waitFor();
+  const childId = host.snapshot("tab-three").activeThreadId!;
+  const completedBeforeDelete = await third.evaluate(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.filter((entry) => entry.method === "threadAction").length);
+  await third.getByRole("button", { name: "Thread actions", exact: true }).click();
+  await third.getByRole("menuitem", { name: "Delete thread", exact: true }).click();
+  await third.waitForFunction((count) => (window as unknown as { __completed: Array<{ method: string }> }).__completed.filter((entry) => entry.method === "threadAction").length > count, completedBeforeDelete);
+  assert.equal(host.snapshot("tab-three").activeThreadId, childId, "Cancelled delete keeps the conversation");
+  deleteConfirmed = true;
+  await third.getByRole("button", { name: "Thread actions", exact: true }).click();
+  await third.getByRole("menuitem", { name: "Delete thread", exact: true }).click();
+  await third.locator(".chat-heading strong").filter({ hasText: "New conversation" }).waitFor();
+  assert.equal(host.snapshot("tab-two").activeThreadId, "second");
+  assert.equal(client.threadHandlers.has(childId), false);
+  console.log("PASS: right-click and keyboard history menus target their row, native rename/cancelled delete preserve selections; response fork inherits history only in its own tab; confirmed delete releases the child's projection.");
   assert.deepEqual(errors, []);
   console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
   console.log(`Screenshots: ${evidence}`);

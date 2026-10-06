@@ -112,7 +112,7 @@ try {
   await page.getByRole("button", { name: "Submit answers" }).click();
   assert.deepEqual(await page.evaluate(() => window.__requests.findLast((request) => request.method === "respondToRequest").params.answers.checks), ["browser", "real server"]);
   await page.setViewportSize({ width: 360, height: 820 });
-  await page.getByRole("button", { name: "Projects and threads", exact: true }).click();
+  await page.getByRole("button", { name: "History", exact: true }).click();
   await page.getByRole("button", { name: "Server integration checks" }).click();
   await page.locator(".chat-heading strong").filter({ hasText: "Server integration checks" }).waitFor();
   assert.equal(await page.locator(".projects-sidebar").isVisible(), false);

@@ -64,6 +64,29 @@ export class FakeTransport implements HostTransport {
       this.archive = { ...this.archive, threads: this.archive.threads.filter((thread) => thread.id !== command.threadId) };
       this.shell = { ...this.shell, threads: [...this.shell.threads, { ...thread, archivedAt: null }] };
     }
+    if (command.type === "thread.delete") {
+      this.shell = { ...this.shell, threads: this.shell.threads.filter((thread) => thread.id !== command.threadId) };
+      this.archive = { ...this.archive, threads: this.archive.threads.filter((thread) => thread.id !== command.threadId) };
+      this.snapshots.delete(command.threadId);
+    }
+    if (command.type === "thread.metadata.update" || command.type === "thread.pin" || command.type === "thread.unpin") {
+      const update = (thread: typeof v2ThreadShell) => thread.id !== command.threadId ? thread : {
+        ...thread, ...(command.type === "thread.metadata.update" ? { title: command.title ?? thread.title } : { pinnedAt: command.type === "thread.pin" ? v2Now : null }),
+      };
+      this.shell = { ...this.shell, threads: this.shell.threads.map(update) };
+      this.archive = { ...this.archive, threads: this.archive.threads.map(update) };
+    }
+    if (command.type === "thread.fork") {
+      const source = [...this.shell.threads, ...this.archive.threads].find((thread) => thread.id === command.sourceThreadId)!;
+      const child = { ...source, id: command.targetThreadId, title: `Fork of ${source.title}`, archivedAt: null,
+        forkedFrom: command.sourcePoint.type === "run" ? { type: "run" as const, threadId: source.id, runId: command.sourcePoint.runId } : null,
+        lineage: { rootThreadId: source.lineage.rootThreadId, parentThreadId: source.id, relationshipToParent: "fork" as const } };
+      this.shell = { ...this.shell, threads: [...this.shell.threads, child] };
+      const projection = this.snapshots.get(source.id)?.projection;
+      if (projection) this.snapshots.set(child.id, { kind: "snapshot", snapshotSequence: 0, projection: { ...projection,
+        thread: { ...projection.thread, id: child.id, title: child.title, lineage: child.lineage, forkedFrom: child.forkedFrom },
+        turnItems: [], visibleTurnItems: projection.visibleTurnItems.map((row) => ({ ...row, visibility: "inherited" as const })) } });
+    }
   }
   async createProject(workspaceRoot: string, title: string) {
     this.projectCreates += 1;
@@ -100,12 +123,14 @@ export async function viewsHarness(options: Pick<HostStateOptions, "appearance" 
   ] };
   return harness({ workspaceRoots: () => ["/tmp/t3-vscode"], ...options }, client);
 }
-export function publishText(client: FakeTransport, id: string, text: string, sequence = 1) {
+export function publishText(client: FakeTransport, id: string, text: string, sequence = 1,
+  overrides: Partial<Extract<OrchestrationV2TurnItem, { type: "assistant_message" }>> = {},
+  projectionFields: Partial<Extract<OrchestrationV2ThreadStreamItem, { kind: "snapshot" }>["projection"]> = {}) {
   const item: OrchestrationV2TurnItem = { id: TurnItemId.make(`text-${id}`), threadId: ThreadId.make(id), type: "assistant_message",
     messageId: "message" as Extract<OrchestrationV2TurnItem, { type: "assistant_message" }>["messageId"], text, streaming: false,
     title: null, status: "completed", ordinal: 0, runId: null, nodeId: null, providerThreadId: null, providerTurnId: null,
-    nativeItemRef: null, parentItemId: null, startedAt: v2Now, completedAt: v2Now, updatedAt: v2Now };
+    nativeItemRef: null, parentItemId: null, startedAt: v2Now, completedAt: v2Now, updatedAt: v2Now, ...overrides };
   client.threadHandlers.get(id)!({ kind: "snapshot", snapshotSequence: sequence,
     projection: { ...v2Projection, thread: { ...v2Projection.thread, id: ThreadId.make(id) }, turnItems: [item],
-      visibleTurnItems: [{ item, position: 0, sourceItemId: item.id, sourceThreadId: item.threadId, visibility: "local" }] } });
+      visibleTurnItems: [{ item, position: 0, sourceItemId: item.id, sourceThreadId: item.threadId, visibility: "local" }], ...projectionFields } });
 }

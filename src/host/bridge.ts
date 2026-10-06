@@ -33,7 +33,24 @@ export class BridgeHandler {
   private readonly hostState: HostState;
   private readonly registry: WebviewRegistry;
   private readonly showSettings: () => PromiseLike<unknown>;
-  constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:t3-vscode.t3-vscode")) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; }
+  private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean> };
+  constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:t3-vscode.t3-vscode"),
+    prompts = {
+      rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
+      confirmDelete: async (title: string): Promise<boolean> => (await (await import("vscode")).window.showWarningMessage(`Delete "${title}"?`, { modal: true }, "Delete thread")) === "Delete thread",
+    }) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; this.prompts = prompts; }
+  async performThreadAction(id: string, action: string, title?: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
+    const thread = this.hostState.snapshot(viewId).threads.find((thread) => thread.id === id);
+    if (!thread) throw new Error("This thread is not available in the current workspace.");
+    if (action === "rename" && title === undefined) {
+      title = await this.prompts.rename(thread.title);
+      if (title === undefined) return;
+    }
+    if (action === "delete" && !await this.prompts.confirmDelete(thread.title)) return;
+    // A native prompt may stay open after its originating chat tab has closed.
+    this.hostState.snapshot(viewId);
+    await this.hostState.threadAction(id, action, title);
+  }
   attach(webview: vscode.Webview, viewId: string): void {
     webview.onDidReceiveMessage((raw: unknown) => {
       void this.handle(raw, viewId).then(async (result) => {
@@ -77,7 +94,10 @@ export class BridgeHandler {
         case "dismissRequest": await this.hostState.dismissRequest(id(), stringParam(params, "requestId")); break;
         case "loadHistory": await this.hostState.loadHistory(id()); break;
         case "loadItemDetail": await this.hostState.loadItemDetail(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId")); break;
-        case "threadAction": await this.hostState.threadAction(id(), stringParam(params, "action"), typeof params.title === "string" ? params.title : undefined); break;
+        case "threadAction":
+          if (params.title !== undefined && typeof params.title !== "string") throw new Error("Invalid thread title.");
+          await this.performThreadAction(id(), stringParam(params, "action"), typeof params.title === "string" ? params.title : undefined, viewId); break;
+        case "forkFromResponse": await this.hostState.forkFromResponse(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId"), viewId); break;
         case "openInTab": await (await import("vscode")).commands.executeCommand("t3-vscode.openInTab"); break;
         case "copyText": {
           if (typeof params.text !== "string") throw new Error("Invalid text.");

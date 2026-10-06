@@ -33,7 +33,7 @@
         {
           "type": "webview",
           "id": "t3.webview",
-          "name": "Chat"
+          "name": "T3 Code"
         }
       ]
     },
@@ -52,9 +52,9 @@
       },
       {
         "command": "t3-vscode.showThreads",
-        "title": "Projects and Threads",
+        "title": "History",
         "category": "T3",
-        "icon": "$(list-tree)"
+        "icon": "$(history)"
       },
       {
         "command": "t3-vscode.threadActions",

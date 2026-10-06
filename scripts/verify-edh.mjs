@@ -31,7 +31,7 @@ const require = createRequire(import.meta.url);
 const jsonc = createRequire(require.resolve("@vscode/vsce"))("jsonc-parser");
 const settingsFile = join(profile, "User/settings.json");
 let settingsText = await readFile(settingsFile, "utf8").catch(() => "{}");
-for (const [key, value] of Object.entries({ "update.mode": "none", "extensions.autoCheckUpdates": false, "extensions.autoUpdate": false, "window.zoomLevel": 0, "security.workspace.trust.enabled": false })) {
+for (const [key, value] of Object.entries({ "update.mode": "none", "extensions.autoCheckUpdates": false, "extensions.autoUpdate": false, "window.zoomLevel": 0, "window.dialogStyle": "custom", "security.workspace.trust.enabled": false })) {
   settingsText = jsonc.applyEdits(settingsText, jsonc.modify(settingsText, [key], value, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
 }
 await writeFile(settingsFile, settingsText);
@@ -138,17 +138,20 @@ try {
   const sidebar = await findWebview("sidebar");
   await sidebar.wait('document.querySelector(".composer-box")');
   assert.equal(await sidebar.evaluate('!!document.querySelector(".chat-header")'), false, "Sidebar must use the native title toolbar only");
+  const sidebarHeading = workbench.locator('.part.sidebar .composite.title h2').filter({ visible: true }).first();
+  assert.equal((await sidebarHeading.textContent()).trim().toLowerCase(), "t3 code");
+  assert.ok(await workbench.locator('.part.sidebar .codicon-history').count(), "History must use a clock icon");
   const nativeAction = (label) => workbench.locator(`[aria-label="${label}"]`).filter({ visible: true }).first();
-  await nativeAction("Projects and Threads").click();
+  await nativeAction("History").click();
   await sidebar.wait('document.querySelector(".navigation-open .project-groups")');
-  await nativeAction("Projects and Threads").click();
+  await nativeAction("History").click();
   await sidebar.wait('!document.querySelector(".navigation-open")');
   const beforeNewThread = await sidebar.evaluate('document.querySelector(".chat-main")?.dataset.threadId');
   await nativeAction("New Thread").click();
   await sidebar.wait(`document.querySelector('.chat-empty') && document.querySelector('.chat-main')?.dataset.threadId && document.querySelector('.chat-main').dataset.threadId !== ${JSON.stringify(beforeNewThread)}`);
   await sidebar.evaluate(`(() => {
     const input = document.querySelector('textarea[aria-label="Message"]');
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Reply with exactly: VSCODE-EDH-M1-OK');
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Reply with exactly this markdown and no other text:\\nVSCODE-EDH-M1-OK\\n\\n[Open selected file](example.ts#L2-L3)');
     input.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
   await sidebar.wait('!document.querySelector(".send-button").disabled');
@@ -171,6 +174,7 @@ try {
     thread.click();
   })()`);
   await panel.wait(reply);
+  assert.equal((await sidebarHeading.textContent()).trim().toLowerCase(), "t3 code", "Changing conversations must not expand the sidebar title");
   assert.equal(await panel.evaluate('!!document.querySelector(".chat-header")'), true);
   await panel.evaluate(`document.querySelector('.chat-header [aria-label="New thread"]').click()`);
   await panel.wait('document.querySelector(".chat-empty")');
@@ -217,11 +221,20 @@ try {
   await panel.evaluate(`(() => { const select = document.querySelector('select[aria-label="Effort level"]'); select.value = ${JSON.stringify(level)}; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
   await panel.wait(`document.querySelector('select[aria-label="Effort level"]').value === ${JSON.stringify(level)} && !document.querySelector('select[aria-label="Effort level"]').disabled`);
   console.log("PASS: real model search, favorite persistence and capability-driven effort; no Code/Plan toggle");
+  // Markdown links open the native editor with the linked range, instead of a web file panel.
+  await sidebar.evaluate(`(() => {
+    const link = document.querySelector('.assistant-message a[href="example.ts#L2-L3"]');
+    if (!link) throw new Error('The test response did not contain its requested file link.'); link.click();
+  })()`);
+  await workbench.locator('.monaco-editor').filter({ visible: true }).first().waitFor();
+  await workbench.keyboard.press('Alt+k');
+  await panel.wait('document.querySelector(".context-label")?.textContent === "@example.ts:2-3"');
+  assert.equal(await sidebar.evaluate('document.querySelectorAll(".context-chip").length'), 0);
+  assert.ok((await panel.evaluate('document.querySelector(".context-label").title')).includes('export const final = 3;'));
+  await panel.evaluate('document.querySelector(".context-chip [aria-label=\\"Remove reference 1\\"]").click()');
+  console.log("PASS: chat file link opens a native VS Code editor with its exact line range; Alt+K reads the native selection");
   // Native editor selection and actual Alt+K command, including unsaved document text.
-  await workbench.keyboard.press('Control+p');
-  await workbench.locator('.quick-input-widget input').fill('example.ts');
-  await workbench.locator('.quick-input-list').getByText('example.ts', { exact: true }).first().waitFor();
-  await workbench.keyboard.press('Enter');
+  await workbench.locator('.tab').filter({ hasText: 'example.ts' }).filter({ visible: true }).first().click();
   await workbench.locator('.monaco-editor').filter({ visible: true }).first().waitFor();
   await workbench.keyboard.press('Control+Home'); await workbench.keyboard.press('ArrowDown'); await workbench.keyboard.press('End');
   await workbench.keyboard.insertText(' // unsaved test'); await workbench.keyboard.press('Home'); await workbench.keyboard.press('Shift+End');
@@ -252,6 +265,36 @@ try {
   assert.equal(await panel.evaluate('document.querySelector(".context-label")?.textContent'), '@example.ts:2');
   await workbench.screenshot({ path: join(evidence, "edh-citation.png") });
   console.log("PASS: selection of a real assistant response opens an optional comment and adds a citation to its own composer; the editor tab retains its independent file reference");
+  await panel.evaluate(`document.querySelector('.chat-header [aria-label="History"]').click()`);
+  const panelBeforeFork = await panel.evaluate('document.querySelector(".chat-main").dataset.threadId');
+  await sidebar.wait('document.querySelector(".fork-button:not(:disabled)")');
+  await sidebar.evaluate('document.querySelector(".fork-button").click()');
+  await sidebar.wait(`document.querySelector('.chat-main')?.dataset.threadId !== ${JSON.stringify(selectedId)} && ${reply}`);
+  const forkId = await sidebar.evaluate('document.querySelector(".chat-main").dataset.threadId');
+  assert.ok(forkId && forkId !== selectedId);
+  assert.equal(await panel.evaluate('document.querySelector(".chat-main").dataset.threadId'), panelBeforeFork);
+  await workbench.screenshot({ path: join(evidence, "edh-fork.png") });
+  await nativeAction("History").click();
+  await sidebar.wait('document.querySelector(".navigation-open .project-groups")');
+  await sidebar.evaluate(`document.querySelector('.thread[data-thread-id="${forkId}"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 210 }))`);
+  await sidebar.wait('document.querySelector(".thread-actions-popup")');
+  await sidebar.evaluate(`document.querySelector('.thread-actions-popup button').click()`);
+  await workbench.locator('.quick-input-widget input').filter({ visible: true }).fill('Native context-menu fork');
+  await workbench.keyboard.press('Enter');
+  await sidebar.wait(`document.querySelector('.thread[data-thread-id="${forkId}"] .thread-title')?.textContent === "Native context-menu fork"`);
+  await sidebar.evaluate(`document.querySelector('.thread[data-thread-id="${forkId}"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 210 }))`);
+  await sidebar.wait('document.querySelector(".thread-actions-popup .danger")');
+  await sidebar.evaluate('document.querySelector(".thread-actions-popup .danger").click()');
+  const deleteDialog = workbench.getByRole('dialog').filter({ hasText: 'Native context-menu fork' });
+  await deleteDialog.waitFor(); await deleteDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal(await sidebar.evaluate('document.querySelector(".chat-main").dataset.threadId'), forkId);
+  await sidebar.evaluate(`document.querySelector('.thread[data-thread-id="${forkId}"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 210 }))`);
+  await sidebar.wait('document.querySelector(".thread-actions-popup .danger")');
+  await sidebar.evaluate('document.querySelector(".thread-actions-popup .danger").click()');
+  await deleteDialog.waitFor(); await deleteDialog.getByRole('button', { name: 'Delete thread', exact: true }).click();
+  await sidebar.wait(`!document.querySelector('.thread[data-thread-id="${forkId}"]')`);
+  assert.equal(await panel.evaluate('document.querySelector(".chat-main").dataset.threadId'), panelBeforeFork);
+  console.log("PASS: real response fork retains native history and changes only its sidebar; context-menu rename uses VS Code's input prompt; cancel/confirm delete leaves the other tab intact");
   await workbench.screenshot({ path: join(evidence, "edh-both.png") });
   console.log(`Evidence: ${evidence}; isolated VS Code profile: ${profile}`);
 } catch (error) {

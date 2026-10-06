@@ -14,7 +14,7 @@ export const Methods = {
   setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt",
   respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
-  threadAction: "threadAction", openLink: "openLink", copyText: "copyText", openInTab: "openInTab",
+  threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab",
 } as const;
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
@@ -50,10 +50,12 @@ export type WireTurnItem = typeof OrchestrationV2TurnItemJson.Encoded;
 export interface TranscriptItem {
   readonly key: string;
   readonly sourceThreadId: string;
+  readonly sourceItemId?: string;
   readonly item: WireTurnItem;
   readonly toolLabel: string | null;
   readonly output: string | null;
   readonly needsDetail: boolean;
+  readonly canFork?: boolean;
 }
 export interface HostStateSnapshot {
   /** Monotonic within a host instance; prevents slow RPC responses replacing a newer push. */

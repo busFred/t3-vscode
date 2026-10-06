@@ -14,6 +14,7 @@ import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operation
 import { applyOrchestrationV2ProjectionEvent } from "@t3tools/client-runtime/state/orchestration-v2-projection";
 import { derivePendingThreadRequests, createQuestionHistoryProjector } from "@t3tools/client-runtime/state/thread-requests";
 import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/turn-item-presentation";
+import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
 import { mergeOlderHistoryIntoProjection, EMPTY_THREAD_HISTORY_META, applyHistoryPageMeta, type ThreadHistoryMeta } from "@t3tools/client-runtime/state/thread-history-merge";
 import { resolveWorkEntryToolPresentation } from "@t3tools/client-runtime/work-log/presentation";
 import { turnItemNeedsDetailFetch, turnItemOutputText } from "@t3tools/client-runtime/work-log/item-detail";
@@ -541,15 +542,37 @@ export class HostState {
       if (action === "rename") {
         if (!title?.trim()) throw new Error("Enter a thread title.");
         await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, title });
-      } else if (["archive", "unarchive", "pin", "unpin"].includes(action)) {
+      } else if (["archive", "unarchive", "pin", "unpin", "delete"].includes(action)) {
         await this.client.dispatch({ type: `thread.${action}`, commandId: randomUUID(), threadId: id });
       } else throw new Error("Unknown thread action.");
       this.shell = await this.client.snapshotShell();
-      if (action === "archive" || action === "unarchive") {
+      if (action === "archive" || action === "unarchive" || action === "delete") {
         this.archive = await this.client.snapshotArchive();
         await this.subscribeArchive();
       }
-      this.emit();
+      await this.reconcileViews();
+    });
+  }
+  private canForkRow(projection: OrchestrationV2ThreadProjection, row: OrchestrationV2ThreadProjection["visibleTurnItems"][number]): boolean {
+    if (row.item.type !== "assistant_message" || row.item.runId === null || row.item.status !== "completed") return false;
+    const providerThread = projection.providerThreads.find((thread) => thread.id === row.item.providerThreadId);
+    const session = projection.providerSessions.find((session) => session.id === providerThread?.providerSessionId);
+    return canForkProjectedAssistantItem({ projectedItem: row, capabilities: session?.capabilities });
+  }
+  forkFromResponse(id: string, sourceThreadId: string, itemId: string, viewId = SIDEBAR_VIEW_ID): Promise<string> {
+    return this.enqueue(async () => {
+      this.requireView(viewId); this.requireThread(id);
+      const projection = this.threads.get(id)?.projection;
+      const row = projection?.visibleTurnItems.find((item) => item.sourceThreadId === sourceThreadId && item.sourceItemId === itemId);
+      if (!projection || !row || !this.canForkRow(projection, row) || row.item.runId === null) throw new Error("This response cannot be forked.");
+      this.requireThread(row.sourceThreadId);
+      const targetId = randomUUID();
+      await this.client.dispatch({ type: "thread.fork", commandId: randomUUID(), createdBy: "user", creationSource: "web",
+        sourceThreadId: row.sourceThreadId, targetThreadId: targetId, sourcePoint: { type: "run", runId: row.item.runId } });
+      this.shell = await this.client.snapshotShell();
+      this.requireThread(targetId);
+      this.requireView(viewId).activeThreadId = targetId;
+      await this.syncThreadSubscriptions(); this.emit(); return targetId;
     });
   }
   async loadHistory(id: string): Promise<void> {
@@ -600,6 +623,8 @@ export class HostState {
     const state = activeThreadId ? this.threads.get(activeThreadId) : undefined;
     const projection = state?.projection;
     const descriptor = this.server?.descriptor;
+    const threads = this.visibleThreads();
+    const visibleThreadIds = new Set(threads.map((thread) => thread.id));
     return {
       revision: this.revision, phase: this.phase, home: this.options.home,
       workspaceRoots: this.workspaceRoots(),
@@ -607,7 +632,7 @@ export class HostState {
       ...(this.notice ? { notice: this.notice } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
       projects: this.visibleProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })),
-      threads: this.visibleThreads().map((thread) => ({
+      threads: threads.map((thread) => ({
         id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
         modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
         updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
@@ -618,7 +643,8 @@ export class HostState {
       draft: this.conversationDraft(view),
       ...(activeThreadId ? { activeThreadId } : {}),
       transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => ({
-        key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, ...this.presentItem(row.item),
+        key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId,
+        ...this.presentItem(row.item), canFork: visibleThreadIds.has(row.sourceThreadId) && this.canForkRow(projection, row),
       })) : [],
       pending: projection ? derivePendingThreadRequests(projection) : { approvals: [], userInputs: [] },
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },

@@ -1,12 +1,16 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ArchiveIcon, FolderIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, RefreshCwIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { T3Wordmark } from "./t3/T3Wordmark";
+import { ThreadActionsMenu } from "./ThreadActionsMenu";
 
 export function ThreadList({ state, onSelect }: { readonly state: HostStateSnapshot; readonly onSelect: () => void }) {
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [menu, setMenu] = useState<{ threadId: string; x: number; y: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const menuThread = state.threads.find((thread) => thread.id === menu?.threadId);
   const run = useActions();
   const groups = useMemo(() => state.projects.map((project) => ({ project,
     threads: state.threads.filter((thread) => thread.projectId === project.id && thread.archived === showArchived && `${thread.title} ${project.title}`.toLowerCase().includes(search.toLowerCase()))
@@ -20,7 +24,9 @@ export function ThreadList({ state, onSelect }: { readonly state: HostStateSnaps
     <nav className="project-groups">
       {groups.map(({ project, threads }) => <section className="project-group" key={project.id}>
         <div className="project-heading"><FolderIcon size={14} /><span title={project.workspaceRoot}>{project.title}</span><button className="icon-button" aria-label={`New thread in ${project.title}`} onClick={() => { void run("newThread", { projectId: project.id }).then((ok) => { if (ok) onSelect(); }); }}><PlusIcon size={13} /></button></div>
-        {threads.map((thread) => <button key={thread.id} data-thread-id={thread.id} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={() => { void run("selectThread", { threadId: thread.id }).then((ok) => { if (ok) onSelect(); }); }} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>
+        {threads.map((thread) => <button key={thread.id} data-thread-id={thread.id} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={() => { void run("selectThread", { threadId: thread.id }).then((ok) => { if (ok) onSelect(); }); }} onContextMenu={(event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
+          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }
+        }} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>
           {thread.pinned ? <PinIcon size={12} /> : <MessageSquareIcon size={12} />}
           <span className="thread-title">{thread.title || "Untitled"}</span>
           {thread.status === "running" || thread.status === "starting" || thread.status === "waiting" ? <span className={`thread-dot ${thread.status}`} title={thread.status} /> : null}
@@ -30,5 +36,6 @@ export function ThreadList({ state, onSelect }: { readonly state: HostStateSnaps
       {groups.length === 0 ? <p className="empty-list">{search ? "No matching threads." : state.workspaceRoots.length ? "No conversations in this workspace yet." : "No conversations yet."}</p> : null}
     </nav>
     <footer className="sidebar-footer"><span className="connection-dot" />{state.environment?.label ?? "T3 Code"}<span className="sidebar-count">{state.threads.length}</span></footer>
+    {menu && menuThread ? <ThreadActionsMenu thread={menuThread} position={menu} onClose={closeMenu} /> : null}
   </aside>;
 }

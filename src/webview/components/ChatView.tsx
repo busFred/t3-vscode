@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { PanelLeftIcon, PlusIcon, ChevronDownIcon, PinIcon, ArchiveIcon, PencilIcon, XIcon, SettingsIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { HistoryIcon, PlusIcon, ChevronDownIcon, SettingsIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { Composer } from "./Composer";
@@ -13,15 +13,16 @@ import { addDraftContext, updateDraft } from "../composerDrafts";
 import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
 import { CitationCommentEditor } from "./CitationCommentEditor";
 import type { AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
+import { ThreadActionsMenu } from "./ThreadActionsMenu";
 
 export function ChatView({ state, onAppearance }: { readonly state: HostStateSnapshot; readonly onAppearance: () => void }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
-  const [renaming, setRenaming] = useState(false);
-  const [title, setTitle] = useState("");
+  const [threadMenu, setThreadMenu] = useState<{ x: number; y: number } | null>(null);
+  const closeThreadMenu = useCallback(() => setThreadMenu(null), []);
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const [commentTarget, setCommentTarget] = useState<{ citation: AssistantCitation; draftKey: string; index?: number; anchor?: AssistantCitationSourceAnchor } | null>(null);
   const [citationTarget, setCitationTarget] = useState<AssistantCitation | null>(null);
-  useEffect(() => { setCommentTarget(null); }, [state.activeThreadId]);
+  useEffect(() => { setCommentTarget(null); setThreadMenu(null); }, [state.activeThreadId]);
   const run = useActions();
   useEffect(() => {
     const open = (event: Event) => {
@@ -47,22 +48,14 @@ export function ChatView({ state, onAppearance }: { readonly state: HostStateSna
     <ThreadList state={state} onSelect={() => setNavigationOpen(false)} />
     <main className="chat-main" data-thread-id={state.activeThreadId ?? ""} onPointerDown={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }} onFocusCapture={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }}>
       {!isSidebar ? <header className="chat-header">
-        <button className="icon-button nav-toggle" title="Projects and threads" aria-label="Projects and threads" onClick={() => setNavigationOpen(!navigationOpen)}><PanelLeftIcon size={16} /></button>
+        <button className="icon-button nav-toggle" title="History" aria-label="History" onClick={() => setNavigationOpen(!navigationOpen)}><HistoryIcon size={16} /></button>
         <T3Wordmark className="header-wordmark" aria-label="T3 Code" />
         <div className="chat-heading"><span className="project-label">{project?.title ?? state.environment?.label}</span><strong>{thread?.title || "New conversation"}</strong></div>
         <button className="icon-button" aria-label="T3 Code settings" title="T3 Code settings" onClick={onAppearance}><SettingsIcon size={15} /></button>
         <button className="icon-button" aria-label="New thread" title="New thread" onClick={() => { void run("newThread"); }}><PlusIcon size={16} /></button>
-        {thread ? <details className="thread-menu"><summary className="icon-button" aria-label="Thread actions"><ChevronDownIcon size={14} /></summary>
-          <div className="menu-popup">
-            <button onClick={() => { setTitle(thread.title); setRenaming(true); }}><PencilIcon size={14} /> Rename thread</button>
-            <button onClick={() => { void run("threadAction", { threadId: thread.id, action: thread.pinned ? "unpin" : "pin" }); }}><PinIcon size={14} /> {thread.pinned ? "Unpin" : "Pin"} thread</button>
-            <button onClick={() => { void run("threadAction", { threadId: thread.id, action: thread.archived ? "unarchive" : "archive" }); }}><ArchiveIcon size={14} /> {thread.archived ? "Restore" : "Archive"} thread</button>
-          </div>
-        </details> : null}
+        {thread ? <button className="icon-button" aria-label="Thread actions" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); setThreadMenu(threadMenu ? null : { x: box.right - 190, y: box.bottom + 5 }); }}><ChevronDownIcon size={14} /></button> : null}
       </header> : null}
-      {renaming && thread ? <form className="rename-form" onSubmit={(event) => { event.preventDefault(); void run("threadAction", { threadId: thread.id, action: "rename", title }).then((ok) => { if (ok) setRenaming(false); }); }}>
-        <input autoFocus aria-label="Thread title" value={title} onChange={(event) => setTitle(event.target.value)} /><button className="btn primary" type="submit">Save</button><button type="button" className="icon-button" aria-label="Cancel rename" onClick={() => setRenaming(false)}><XIcon size={14} /></button>
-      </form> : null}
+      {threadMenu && thread ? <ThreadActionsMenu thread={thread} position={threadMenu} onClose={closeThreadMenu} /> : null}
       <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} />
       <AssistantSelectionToolbar viewport={viewport} onCite={(citation, anchor) => setCommentTarget({ citation, anchor, draftKey: state.activeThreadId ?? "new" })} />
       <Composer key={state.activeThreadId ?? "draft"} state={state} onEditCitation={(citation, index) => setCommentTarget({ citation, index, draftKey: state.activeThreadId ?? "new" })} />

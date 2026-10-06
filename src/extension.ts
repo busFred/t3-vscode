@@ -72,13 +72,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         { label: "$(edit) Rename thread", action: "rename" },
         { label: thread.pinned ? "$(pinned) Unpin thread" : "$(pin) Pin thread", action: thread.pinned ? "unpin" : "pin" },
         { label: thread.archived ? "$(archive) Restore thread" : "$(archive) Archive thread", action: thread.archived ? "unarchive" : "archive" },
+        { label: "$(trash) Delete thread", action: "delete" },
       ], { title: thread.title, placeHolder: "Thread actions" });
       if (!choice) return;
-      const title = choice.action === "rename" ? await vscode.window.showInputBox({
-        title: "Rename thread", value: thread.title, validateInput: (value) => value.trim() ? null : "Enter a title.",
-      }) : undefined;
-      if (choice.action === "rename" && title === undefined) return;
-      await hostState.threadAction(thread.id, choice.action, title);
+      await bridge.performThreadAction(thread.id, choice.action);
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (FONT_SIZE_KEYS.some((key) => event.affectsConfiguration(`t3-vscode.${key}`))) hostState?.refreshAppearance();
@@ -167,7 +164,7 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
       const state = this.host.snapshot(id);
       return state.threads.find((thread) => thread.id === state.activeThreadId)?.title;
     };
-    if (this.sidebar) this.sidebar.title = titleForView(SIDEBAR_VIEW_ID) || "Chat";
+    if (this.sidebar) this.sidebar.title = "T3 Code";
     for (const [id, panel] of this.panels) panel.title = titleForView(id) || "T3 Code";
   }
 
