@@ -442,3 +442,19 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 
 .inline-attachment { display: inline-flex; align-items: center; gap: 4px; font-size: .85em; line-height: 1.5; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--message-surface); color: var(--foreground); vertical-align: baseline; cursor: pointer; }
 .chat-image .image-preview-button { display: block; border: 0; background: transparent; padding: 0; max-width: 100%; cursor: zoom-in; }
+
+/* Session find inherits the active VS Code theme. */
+.session-find input, .find-options select { color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, #8886); padding: 5px 7px; border-radius: 3px; min-width: 0; }
+.session-find { flex: none; padding: 6px 12px; border-bottom: 1px solid var(--vscode-panel-border, #8885); color: var(--vscode-foreground); background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); font-size: .85em; }
+.session-find-toolbar, .find-options { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.session-find-toolbar input { flex: 1; min-width: 120px; }
+.find-count { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .9em; }
+.find-options { margin-top: 6px; font-size: .9em; }
+.find-options small { margin-left: auto; color: var(--vscode-descriptionForeground); }
+.find-results { max-height: 145px; overflow: auto; margin-top: 6px; }
+.find-result { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; padding: 5px 7px; cursor: pointer; }
+.find-result small { display: block; color: var(--vscode-descriptionForeground); }
+.find-result span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.find-result:hover, .session-find .selected { background: var(--vscode-list-inactiveSelectionBackground, #8883); }
+.session-match-row { outline: 1px solid var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder)); outline-offset: 2px; }
+::highlight(t3-session-match) { background-color: var(--vscode-editor-findMatchBackground, #ea9e3288); color: var(--vscode-editor-foreground); }

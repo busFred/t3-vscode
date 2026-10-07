@@ -10,7 +10,7 @@ import { viewsHarness, publishText } from "../src/host/testing/fakeTransport.js"
 import { Events, type RpcMessage } from "../src/shared/bridge.js";
 import { DEFAULT_APPEARANCE, type AppearanceSettings } from "../src/shared/appearance.js";
 import type { FavoriteModel } from "../src/shared/bridge.js";
-import { ProviderInstanceId, ProviderDriverKind, RunId, ThreadId, ProjectId, RuntimeRequestId } from "@t3tools/contracts";
+import { ProviderInstanceId, ProviderDriverKind, RunId, ThreadId, ProjectId, RuntimeRequestId, TurnItemId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import { v2Now } from "../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 import { collectAssistantCitations, serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
@@ -35,11 +35,12 @@ client.config = { providers: [
   { ...firstProvider, instanceId: ProviderInstanceId.make("claude"), driver: ProviderDriverKind.make("claudeAgent"), displayName: "Claude", models: [{ slug: "claude-sonnet", name: "Claude Sonnet", isCustom: false, capabilities: { optionDescriptors: [{ id: "effort", type: "select", label: "Effort", promptInjectedValues: ["ultrathink"], options: [{ id: "high", label: "High", isDefault: true }, { id: "ultrathink", label: "Ultrathink" }] }] } }] },
 ] };
 let settingsOpened = 0;
+let renamesRequested = 0;
 let deleteConfirmed = false;
 const openedSessions: Array<string | undefined> = [];
 const openedDiffs: Array<{ turn: number; path: string; old: string; current: string }> = [];
 const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry, async () => { settingsOpened += 1; }, {
-  rename: async () => "Renamed through history", confirmDelete: async () => deleteConfirmed,
+  rename: async () => { renamesRequested += 1; return "Renamed through history"; }, confirmDelete: async () => deleteConfirmed,
 }, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); }, { openInTab: (id) => { openedSessions.push(host.snapshot(id).activeThreadId); }, showUsage: (_id, key) => { registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key); } });
 const views = new Map<string, FakeWebview>(); const sinks = new Map<string, Set<ServerResponse>>();
 for (const id of [SIDEBAR_VIEW_ID, "tab-one", "tab-two", "tab-three", "tab-narrow"]) {
@@ -111,6 +112,53 @@ async function selectAssistantText(page: Page, text: string) {
   await page.mouse.move(points.end.x, points.end.y, { steps: 8 }); await page.mouse.up();
   await page.getByRole("button", { name: "Cite selection in composer" }).waitFor();
 }
+async function checkSessionFind(second: Page, third: Page, selectInView: (page: Page, id: string) => Promise<void>) {
+  // Search pages older history separately and reveals one result without replacing the draft.
+  await selectInView(second, "first");
+  await selectInView(third, "second");
+  await second.getByRole("textbox", { name: "Message", exact: true }).fill("Keep my search draft");
+  publishText(client, "first", "Rate rate rates $\\eta=0.01$", 60);
+  const searchProjection = await client.getThreadProjection("first"), seed = searchProjection.visibleTurnItems[0]!;
+  if (seed.item.type !== "assistant_message") throw new Error("Expected message fixture");
+  const oldId = TurnItemId.make("search-old-command");
+  const oldRow = { ...seed, sourceItemId: oldId, position: 0, item: { ...seed.item, id: oldId, type: "command_execution" as const, title: "Training output", input: "train model", output: "rate 0.01", ordinal: 0, exitCode: 0 } };
+  client.getHistory = async () => ({ snapshotSequence: 61, items: [oldRow], hasMoreHistory: false, nextCursor: null });
+  client.threadHandlers.get("first")!({ kind: "snapshot", snapshotSequence: 61, projection: searchProjection, hasMoreHistory: true, historyCursor: "older-search" });
+  await second.getByRole("button", { name: "Find in session", exact: true }).click();
+  await second.getByRole("textbox", { name: "Find in this session", exact: true }).fill("rate");
+  await second.getByText("Entire session searched", { exact: true }).waitFor();
+  assert.equal(await second.locator(".session-find").count(), 1, "Search and composer must retain distinct React identities across host updates");
+  assert.equal(await second.locator(".find-count").textContent(), "1 / 4");
+  assert.equal(await third.locator(".session-find").count(), 0);
+  await second.getByRole("button", { name: "Next match", exact: true }).click();
+  await second.locator(".session-match-row .tool-output").filter({ hasText: "rate 0.01" }).waitFor();
+  await second.waitForFunction(() => CSS.highlights.has("t3-session-match"));
+  await second.getByRole("button", { name: "Whole word", exact: true }).click();
+  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1 / 3");
+  await second.getByRole("button", { name: "Match case", exact: true }).click();
+  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1 / 2");
+  await second.getByRole("combobox", { name: "Search content", exact: true }).selectOption("messages");
+  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1 / 1");
+  await second.getByRole("textbox", { name: "Find in this session", exact: true }).fill("\\eta");
+  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1 / 1");
+  await second.getByRole("button", { name: "Next match", exact: true }).click();
+  await second.locator(".session-match-row .assistant-message").waitFor();
+  await second.getByRole("button", { name: "Close session search", exact: true }).click();
+  assert.equal(await second.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Keep my search draft");
+  await second.waitForFunction(() => !CSS.highlights.has("t3-session-match"));
+  await second.getByRole("textbox", { name: "Message", exact: true }).press("Control+f");
+  await second.getByRole("textbox", { name: "Find in this session", exact: true }).waitFor();
+  await second.getByRole("textbox", { name: "Find in this session", exact: true }).press("Escape");
+  assert.equal(await second.locator(".session-find").count(), 0);
+  const renamesBefore = renamesRequested;
+  await second.locator(".chat-heading strong").dblclick();
+  await second.locator(".chat-heading strong").filter({ hasText: "Renamed through history" }).waitFor();
+  assert.equal(renamesRequested, renamesBefore + 1);
+  assert.equal(host.snapshot("tab-three").activeThreadId, "second");
+  assert.equal(await second.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Keep my search draft");
+  await second.screenshot({ path: `${evidence}/session-search-preserved-draft.png` });
+  console.log("PASS: full-session search, case/word/content filters, older command reveal and highlight, math source lookup, keyboard find and double-click renaming preserve per-tab state and drafts.");
+}
 try {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert.ok(address && typeof address !== "string");
@@ -143,6 +191,7 @@ try {
     await host.selectThread(threadId, new URL(page.url()).searchParams.get("view")!);
     await page.waitForFunction(id => document.querySelector('.chat-main')?.getAttribute('data-thread-id') === id, threadId);
   };
+  if (!process.argv.includes("--search-only")) {
   for (const [index, name] of ["first", "second", "third"].entries()) {
     await selectInView(pages[index]!, name);
     await pages[index]!.locator(".chat-heading strong").filter({ hasText: `${name} conversation` }).waitFor();
@@ -484,6 +533,8 @@ try {
   await submitFollowUp(second, "Idle Enter sends immediately", "Enter", "auto");
   await submitFollowUp(second, "Idle Ctrl+Enter sends immediately", "Control+Enter", "auto");
   console.log("PASS: Enter queues and Ctrl/Cmd+Enter steers in wide/narrow editor chat, unsupported steering queues, idle shortcuts send normally; queued-message editing, reordering and promotion/cancellation preserve independent drafts.");
+  }
+  await checkSessionFind(pages[1]!, pages[2]!, selectInView);
   assert.deepEqual(errors, []);
   console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
   console.log(`Screenshots: ${evidence}`);

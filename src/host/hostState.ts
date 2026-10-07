@@ -38,6 +38,9 @@ import { resolveMessageNavigation, type MessageNavigationPlacement } from "../sh
 import { classifyMarkdownImageSource } from "@t3tools/client-runtime/markdown-images";
 import { attachmentMessageContext, attachmentUploadInput, type AttachmentReference, type DraftAttachment } from "../shared/composerAttachments.js";
 
+import { SessionSearchJob } from "./sessionSearch.js";
+import type { SessionSearchOptions } from "../shared/sessionSearch.js";
+
 export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
   readonly home: string;
@@ -85,6 +88,7 @@ function authFailure(cause: unknown): boolean {
 }
 
 export class HostState {
+  private readonly sessionSearches = new Map<string, SessionSearchJob>();
   private phase: HostPhase = "discovering";
   private notice: string | undefined;
   private server: DiscoveredServer | null = null;
@@ -131,6 +135,7 @@ export class HostState {
     this.views.set(viewId, { ...source, sending: false, chatActive: chat, chatThreadId: chat ? source.activeThreadId : undefined }); this.emit();
   }
   removeView(viewId: string): Promise<void> {
+    this.cancelSessionSearch(viewId);
     if (viewId === SIDEBAR_VIEW_ID) return Promise.resolve();
     const closedThreadId = this.views.get(viewId)?.chatThreadId;
     this.views.delete(viewId);
@@ -203,6 +208,7 @@ export class HostState {
   refreshAppearance(): void { this.emit(); }
 
   private async stopSubscriptions(): Promise<void> {
+    for (const viewId of this.sessionSearches.keys()) this.cancelSessionSearch(viewId);
     const shell = this.shellSubscription; const archive = this.archiveSubscription;
     const threads = [...this.threads.values()]; this.threads.clear();
     this.archiveSubscription = null;
@@ -356,6 +362,7 @@ export class HostState {
       const view = this.requireView(viewId);
       if (view.activeThreadId === id && this.threads.get(id)?.subscription) return;
       const previous = view.chatThreadId;
+      this.cancelSessionSearch(viewId);
       view.activeThreadId = id;
       if (view.chatActive) view.chatThreadId = id;
       await this.syncThreadSubscriptions(); this.emit();
@@ -399,6 +406,9 @@ export class HostState {
         state.history = { ...state.history, latestLocalTurnOrdinal: Math.max(state.history.latestLocalTurnOrdinal ?? 0, item.event.payload.ordinal) };
       }
     } else if (item.kind === "synchronized") { state.loading = false; }
+    if (state.projection) for (const job of this.sessionSearches.values()) {
+      if (job.threadId === state.projection.thread.id) job.refresh(state.projection.visibleTurnItems);
+    }
     this.scheduleEmit();
   }
   newThread(projectId?: string, viewId = SIDEBAR_VIEW_ID): Promise<string> { return this.enqueue(() => this.createThread(projectId, viewId)); }
@@ -705,6 +715,37 @@ export class HostState {
     const visible = new Set(this.visibleThreads().map((thread) => thread.id));
     return result.matches.filter((match) => visible.has(match.threadId));
   }
+  cancelSessionSearch(viewId = SIDEBAR_VIEW_ID): void {
+    this.sessionSearches.get(viewId)?.cancel();
+    this.sessionSearches.delete(viewId);
+  }
+  searchSession(id: string, options: SessionSearchOptions, viewId = SIDEBAR_VIEW_ID): void {
+    this.requireThread(id);
+    if (this.requireView(viewId).activeThreadId !== id) throw new Error("Open this conversation before searching it.");
+    if (!options.query || options.query.length > 500) throw new Error("Enter between 1 and 500 characters to search.");
+    const state = this.threads.get(id);
+    if (!state?.projection || state.loading) throw new Error("Wait for this conversation to finish loading.");
+    this.cancelSessionSearch(viewId);
+    const job = new SessionSearchJob(id, options, () => { if (this.sessionSearches.get(viewId) === job && this.views.has(viewId)) this.scheduleEmit(); });
+    this.sessionSearches.set(viewId, job); this.emit();
+    void job.scan(state.projection.visibleTurnItems, state.history.historyCursor, {
+      present: (row) => ({ key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId, ...this.presentItem(row.item) }),
+      history: (cursor) => this.client.getHistory(id, cursor),
+      detail: async (row) => { const result = await this.client.getTurnItem(row.sourceThreadId, row.sourceItemId); if (!result.item) throw new Error("Some activity details could not be loaded; the match count is incomplete."); return { ...row, item: result.item }; },
+    }, state.history.hasMoreHistory);
+  }
+  revealSessionMatch(matchId: string, viewId = SIDEBAR_VIEW_ID): void {
+    const job = this.sessionSearches.get(viewId);
+    if (!job || job.threadId !== this.requireView(viewId).activeThreadId) throw new Error("Search this conversation again.");
+    const match = job.state.matches.find((entry) => entry.id === matchId), state = this.threads.get(job.threadId);
+    const row = match ? job.rows.get(match.rowKey) : undefined;
+    if (!row || !state?.projection) throw new Error("The search result is no longer available.");
+    this.requireThread(job.threadId);
+    const existing = state.projection.visibleTurnItems.find((item) => item.sourceThreadId === row.sourceThreadId && item.sourceItemId === row.sourceItemId);
+    if (existing) state.projection = { ...state.projection, visibleTurnItems: state.projection.visibleTurnItems.map((entry) => entry === existing && DateTime.toEpochMillis(entry.item.updatedAt) <= DateTime.toEpochMillis(row.item.updatedAt) ? row : entry) };
+    else state.projection = mergeOlderHistoryIntoProjection(state.projection, [row]);
+    this.emit();
+  }
   async composerSuggestions(kind: string, query: string, atPromptStart: boolean, viewId = SIDEBAR_VIEW_ID): Promise<ReadonlyArray<ComposerSuggestion>> {
     const view = this.requireView(viewId);
     if (query.length > 256) throw new Error("Suggestion query is too long.");
@@ -824,6 +865,7 @@ export class HostState {
     const visibleThreadIds = new Set(threads.map((thread) => thread.id));
     return {
       revision: this.revision, phase: this.phase, home: this.options.home,
+      ...(this.sessionSearches.get(viewId) ? { sessionSearch: this.sessionSearches.get(viewId)!.state } : {}),
       workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()),
       appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
       ...(this.notice ? { notice: this.notice } : {}),

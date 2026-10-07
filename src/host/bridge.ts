@@ -84,6 +84,12 @@ export class BridgeHandler {
       const params = message.params === undefined ? {} : paramsObject(message.params);
       const id = () => stringParam(params, "threadId");
       switch (message.method) {
+        case "searchSession": {
+          if (typeof params.query !== "string" || typeof params.caseSensitive !== "boolean" || typeof params.wholeWord !== "boolean" || !["all", "messages"].includes(String(params.scope))) throw new Error("Invalid session search options.");
+          this.hostState.searchSession(id(), { query: params.query, caseSensitive: params.caseSensitive, wholeWord: params.wholeWord, scope: params.scope as "all" | "messages" }, viewId); break;
+        }
+        case "cancelSessionSearch": this.hostState.cancelSessionSearch(viewId); break;
+        case "revealSessionMatch": this.hostState.revealSessionMatch(stringParam(params, "matchId"), viewId); break;
         case "getState": break;
         case "searchThreads": {
           if (typeof params.query !== "string") throw new Error("Invalid search query.");

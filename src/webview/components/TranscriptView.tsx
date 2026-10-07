@@ -19,6 +19,9 @@ import { htmlVisual } from "../../shared/chatVisuals";
 import { HtmlVisual } from "./HtmlVisual";
 import { ChatMedia } from "./ChatMedia";
 import { SubagentCard, SubagentState } from "./SubagentCard";
+import { useContext } from "react";
+import { SearchTargetContext, type SearchTarget } from "./SessionFind";
+import { highlightSearchResult } from "../searchHighlight";
 
 function CopyButton({ text }: { text: string }) {
   const run = useActions(); const [copied, setCopied] = useState(false);
@@ -33,6 +36,8 @@ function ForkButton({ row, threadId }: { row: TranscriptItem; threadId: string }
 }
 function Disclosure({ label, icon, children, row, threadId }: { label: string; icon: ReactNode; children: ReactNode; row: TranscriptItem; threadId: string }) {
   const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false);
+  const target = useContext(SearchTargetContext);
+  useEffect(() => { if (target?.rowKey === row.key) setOpen(true); }, [target, row.key]);
   const run = useActions();
   const toggle = () => {
     setOpen(!open);
@@ -74,12 +79,18 @@ function DynamicTool({ row, threadId }: { row: TranscriptItem; threadId: string 
 }
 function WorkGroup({ rows, threadId, environmentId }: { rows: ReadonlyArray<TranscriptItem>; threadId: string; environmentId: string }) {
   const [open, setOpen] = useState(false); const label = workSummary(rows);
+  const target = useContext(SearchTargetContext);
+  useEffect(() => { if (target && rows.some((row) => row.key === target.rowKey)) setOpen(true); }, [target, rows]);
   const failures = rows.filter((row) => row.item.status === "failed").length;
   return <section className="work-group"><button className="work-group-toggle" aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)}><TerminalIcon size={14} /><span>{label}</span>{failures ? <span className="work-group-failures">{failures} failed</span> : null}<ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /></button>
     {open ? <div className="work-group-items">{rows.map((row) => <TurnItem key={row.key} row={row} threadId={threadId} environmentId={environmentId} />)}</div> : null}
   </section>;
 }
-const TurnItem = memo(function TurnItem({ row, threadId, environmentId }: { row: TranscriptItem; threadId: string; environmentId: string }) {
+const TurnItem = memo(function TurnItem(props: { row: TranscriptItem; threadId: string; environmentId: string }) {
+  const target = useContext(SearchTargetContext);
+  return <div data-search-row={props.row.key} className={target?.rowKey === props.row.key ? "session-match-row" : undefined}><TurnContent {...props} /></div>;
+});
+const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: { row: TranscriptItem; threadId: string; environmentId: string }) {
   const { item } = row; const run = useActions();
   const assetSource = { sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id };
   const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} assetSource={assetSource} {...(item.type === "user_message" ? { context: item.context, attachments: item.attachments } : {})} />;
@@ -111,7 +122,7 @@ const TurnItem = memo(function TurnItem({ row, threadId, environmentId }: { row:
   }
 });
 
-export function TranscriptView({ state, onViewport, citationTarget, onNavigate }: { readonly state: HostStateSnapshot; readonly onViewport?: (element: HTMLDivElement | null) => void; readonly citationTarget?: AssistantCitation | null; readonly onNavigate?: () => void }) {
+export function TranscriptView({ state, onViewport, citationTarget, searchTarget, onNavigate }: { readonly state: HostStateSnapshot; readonly onViewport?: (element: HTMLDivElement | null) => void; readonly citationTarget?: AssistantCitation | null; readonly searchTarget?: SearchTarget | null; readonly onNavigate?: () => void }) {
   const run = useActions();
   const id = state.activeThreadId;
   const list = useRef<LegendListRef>(null);
@@ -144,6 +155,23 @@ export function TranscriptView({ state, onViewport, citationTarget, onNavigate }
   const attempts = useRef<{ target: AssistantCitation | null; pages: number }>({ target: null, pages: 0 });
   const [citationNotice, setCitationNotice] = useState<string | null>(null);
   const sourceIndex = citationTarget ? rows.findIndex((group) => group.rows.some((row) => row.sourceThreadId === citationTarget.threadId && row.item.type === "assistant_message" && row.item.messageId === citationTarget.messageId)) : -1;
+  const matchIndex = searchTarget && searchTarget.threadId === id ? rows.findIndex((group) => group.rows.some((row) => row.key === searchTarget.rowKey)) : -1;
+  useEffect(() => {
+    CSS.highlights?.delete("t3-session-match");
+    if (!searchTarget || searchTarget.threadId !== id || matchIndex < 0) return;
+    setFollowEnd(false); setNavigationNotice(null); setViewedKey(rows[matchIndex]!.key);
+    let stopped = false, frame = 0, attempts = 0;
+    void list.current?.scrollToIndex({ index: matchIndex, animated: false, viewPosition: 0.3 }).catch(() => { if (!stopped) setNavigationNotice("Could not open the search result. Select it again to retry."); });
+    const show = () => {
+      if (stopped) return;
+      const element = document.querySelector<HTMLElement>(`[data-search-row="${CSS.escape(searchTarget.rowKey)}"]`);
+      if (element && highlightSearchResult(element, searchTarget)) return;
+      if (++attempts < 25) frame = requestAnimationFrame(show);
+      else if (element) { element.scrollIntoView({ block: "center" }); setNavigationNotice("Match found in recorded text or source; see the search result for the exact text."); }
+    };
+    frame = requestAnimationFrame(show);
+    return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-session-match"); };
+  }, [searchTarget, id, matchIndex]);
   useEffect(() => {
     if (!citationTarget || citationTarget.threadId !== id) return;
     if (attempts.current.target !== citationTarget) { attempts.current = { target: citationTarget, pages: 0 }; setCitationNotice(null); }
@@ -180,17 +208,17 @@ export function TranscriptView({ state, onViewport, citationTarget, onNavigate }
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source response…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length) return <div className="chat-empty"><p>Loading conversation…</p></div>;
-  return <SubagentState value={state}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation">
+  return <SearchTargetContext.Provider value={searchTarget ?? null}><SubagentState value={state}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation">
     {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
     {navigationNotice ? <div className="citation-source-notice" role="status">{navigationNotice}</div> : null}
     <MessageNavigator key={`nav:${id}`} exchanges={exchanges} currentRow={rows.find((row) => row.key === viewedKey)?.firstIndex ?? state.transcript.length - 1} placement={state.messageNavigation ?? "left"} atEnd={atEnd} history={state.history} onJump={jump} onLatest={latest} onEarlier={() => { void run("loadHistory", { threadId: id }); }} />
     <LegendList ref={list} key={id} data={rows} keyExtractor={(row) => row.key} renderItem={renderItem} estimatedItemSize={100}
-      {...(sourceIndex >= 0 ? { alwaysRender: { keys: [rows[sourceIndex]!.key] } } : {})}
-      initialScrollAtEnd={followEnd && (!citationTarget || citationTarget.threadId !== id)} {...(!followEnd && viewedKey ? { initialScrollIndex: Math.max(0, rows.findIndex((row) => row.key === viewedKey)) } : {})} maintainScrollAtEnd={followEnd && (!citationTarget || citationTarget.threadId !== id) ? { animated: false } : false} maintainScrollAtEndThreshold={0.15} maintainVisibleContentPosition
+      {...(sourceIndex >= 0 || matchIndex >= 0 ? { alwaysRender: { keys: [...new Set([sourceIndex, matchIndex].filter((index) => index >= 0).map((index) => rows[index]!.key))] } } : {})}
+      initialScrollAtEnd={!searchTarget && followEnd && (!citationTarget || citationTarget.threadId !== id)} {...(!followEnd && viewedKey ? { initialScrollIndex: Math.max(0, rows.findIndex((row) => row.key === viewedKey)) } : {})} maintainScrollAtEnd={!searchTarget && followEnd && (!citationTarget || citationTarget.threadId !== id) ? { animated: false } : false} maintainScrollAtEndThreshold={0.15} maintainVisibleContentPosition
       className="transcript-list" style={{ height: "100%" }} onViewableItemsChanged={visible} viewabilityConfig={{ itemVisiblePercentThreshold: 0 }}
       onScroll={(event) => { const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent; const node: unknown = list.current?.getScrollableNode(); const distance = node instanceof HTMLElement ? node.scrollHeight - node.scrollTop - node.clientHeight : contentSize.height - contentOffset.y - layoutMeasurement.height; const end = distance < 40; setAtEnd(end); if (end) setFollowEnd(true); }}
       ListHeaderComponent={header}
       ListFooterComponent={<div className="timeline-footer" />}
     />
-  </div></SubagentState>;
+  </div></SubagentState></SearchTargetContext.Provider>;
 }

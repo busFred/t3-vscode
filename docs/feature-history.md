@@ -1,6 +1,6 @@
 # T3 VSCode feature history
 
-This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease.
+This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is a local preview containing double-click renaming and session search.
 
 ## Overview
 
@@ -9,9 +9,10 @@ This document tracks features by release, including how later versions changed t
 | [Sessions sidebar](#sessions-sidebar) | Session manager with chat in editor tabs. | v0.0.7 | v0.0.9 |
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
 | [Independent chat views](#independent-chat-views) | Editor tabs keep independent conversations and drafts. | v0.0.2 | v0.0.9 |
-| [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | Unreleased |
+| [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.0.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.0.6 |
+| [Find in session](#find-in-session) | Search all recorded text in the current conversation, including older history. | v0.1.13 | v0.1.13 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Shows static Working/Input badges and notifies when input is needed. | v0.0.1 | v0.0.9 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.0.8 |
@@ -24,7 +25,7 @@ This document tracks features by release, including how later versions changed t
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Attaches clipboard images and files selected from the local machine. | v0.0.8 | v0.0.9 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies through a virtualized timeline and loads older history. | v0.0.1 | v0.1.10 |
 | [Markdown and media](#markdown-and-media) | Renders formatted text, code, tables, images, video and audio. | v0.0.1 | v0.0.8 |
-| [Collapsed activity](#collapsed-activity) | Keeps reasoning and command sequences inside closed summaries. | v0.0.1 | v0.0.9 |
+| [Collapsed activity](#collapsed-activity) | Keeps reasoning and command sequences inside closed summaries. | v0.0.1 | v0.1.13 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
 | [Two-column reading](#two-column-reading) | Removed in v0.1.10 after performance feedback. | v0.0.9 | v0.1.10 |
@@ -46,7 +47,7 @@ This document tracks features by release, including how later versions changed t
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage and Connection. | v0.0.9 | v0.1.10 |
 | [Native themes and fonts](#native-themes-and-fonts) | Follows VS Code theme colors and exposes native font-size settings. | v0.0.1 | v0.0.9 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.12 |
-| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces prerelease VSIX installers. | v0.0.1 | v0.1.12 |
+| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces prerelease VSIX installers. | v0.0.1 | v0.1.13 |
 | [Release versioning](#release-versioning) | Uses one three-number version everywhere with Alpha as a stage description. | v0.1.10 | v0.1.11 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 
@@ -123,7 +124,7 @@ This document tracks features by release, including how later versions changed t
 
 - Add settle/unsettle actions and compact native conversation controls.
 
-#### Unreleased
+#### v0.1.13
 
 - Double-click the conversation title in the chat header to open the native Rename dialog; saved changes also update the session list and editor tab.
 
@@ -147,6 +148,17 @@ This document tracks features by release, including how later versions changed t
 
 - Use T3's native conversation index so message text matches include snippets.
 - Give search a visible bordered input and retain workspace scope.
+
+### Find in session
+
+#### v0.1.13
+
+- Open conversation search with the header icon or Ctrl/Cmd+F and navigate occurrences with Enter, F3 or the arrow buttons.
+- Search literal text with Match case, Whole word and Messages only or All text filters.
+- Scan older history and lazy command details with progress, cancellation and explicit incomplete-result errors.
+- Reveal and highlight selected matches without replacing the composer draft or another tab’s selection.
+- Search recorded Markdown, LaTeX and attachment filenames, with a source snippet when rendered text differs.
+- Update matches as the conversation streams and cap the navigable result list at 20,000 occurrences.
 
 ### Conversation status and notifications
 
@@ -348,6 +360,10 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.9
 
 - Prevent long command output from shrinking its command-input block below one readable line.
+
+#### v0.1.13
+
+- Expand matched activity groups and command details when navigating session-search results.
 
 ### Interactive HTML graphics
 
@@ -700,6 +716,10 @@ This document tracks features by release, including how later versions changed t
 - Move source setup, F5 debugging, automated verification and packaging instructions into [Development and testing](development.md).
 - Verify native Ctrl+K routing, saved prompt selections and unsaved source snapshots in disposable VS Code storage without provider turns.
 
+#### v0.1.13
+
+- Add deterministic host and browser checks for full-session search without provider calls.
+
 ### Release versioning
 
 #### v0.1.10
@@ -774,6 +794,15 @@ This document tracks features by release, including how later versions changed t
 - Inspect the prerelease VSIX's identity, exact bundles, shortcuts, settings, screenshots, math fonts and licenses, then install it successfully into disposable VS Code storage.
 - Publish v0.1.12 as [`hungtienhuang.t3-vscode`](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) on October 7, 2026, with the owner's permission and public repository links.
 - Confirm the public prerelease metadata; Marketplace installation remains pending validation as of 04:22 UTC, while the local VSIX installation passed.
+
+### v0.1.13
+
+- Limit this local release to double-click conversation renaming and full-session search, with worktree development kept separately and unversioned.
+- Pass 127 unit tests, TypeScript checks and both extension/webview builds against the separated release source.
+- Pass both deterministic browser suites, including keyboard search, older activity matches, math source, double-click renaming and preservation of independent drafts.
+- Recheck existing graphics, attachments, subagents, queue/steer, references, themes and transcript navigation using the feature overview as the regression checklist.
+- Verify all 44 linked feature rows and their introduction/latest-change version entries without provider calls.
+- Obtain fresh-context regression signoff against `8b66b1b` with no blocking findings or worktree implementation in the release.
 
 ## Maintenance
 

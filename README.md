@@ -1,6 +1,6 @@
 # T3 VSCode
 
-**Alpha preview — 0.1.12.** Use the prerelease channel on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode), or install a local VSIX.
+**Local alpha preview — 0.1.13.** The published prerelease remains 0.1.12 on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode). Install this preview from a local VSIX.
 
 A VS Code client for a separately running [T3 Code](https://github.com/pingdotgg/t3code) server. T3 VSCode adds a workspace session manager and chat in editor tabs. Colors follow your VS Code theme; the extension host owns connection, authentication and shared conversation state.
 
@@ -36,7 +36,7 @@ Open the **T3 VSCode** activity bar view. **T3 VSCode: Open Chat in Editor Tab**
 
 The sidebar title keeps **Open Web UI** and its overflow actions. Use the single **New Thread** button above search to create an editor chat; right-click a session to rename, pin, settle, archive, restore or delete it. The editor has its conversation breadcrumb, browser shortcut and thread actions.
 
-Each editor tab retains its conversation and draft. Session selection and input notifications reveal an already open conversation instead of duplicating its tab. Creating another conversation leaves existing editor drafts intact. Tab titles follow conversation names and live renames; closing a tab keeps conversations running in other views.
+Each editor tab retains its conversation and draft. Session selection and input notifications reveal an already open conversation instead of duplicating its tab. Creating another conversation leaves existing editor drafts intact. Double-click the chat header title to rename a conversation. Tab titles follow conversation names and live renames; closing a tab keeps conversations running in other views.
 
 Sessions begin directly below search, with one New Thread button in the Sessions heading and no project-name row. Subagents appear beneath their parent session in a tree whose branches start collapsed. Expand a parent to inspect its children. Active, Settled and Archive retain separate trees; a parent shown only as context is labeled **Parent session**. Search expands the ancestors of matching children. Hover or focus a subagent transcript row for its provider, model, current status and elapsed time; click it to open the child, then use **Subagent of** to return. Provider-native child conversations are read-only; T3-owned delegated conversations accept follow-ups.
 
@@ -66,6 +66,10 @@ While an agent is responding, **Enter** or the send button queues a follow-up af
 
 Expand a turn's changed-file summary to browse folders and additions/deletions. Clicking a file opens VS Code's read-only diff editor for that turn's saved before/after snapshots. Earlier turn diffs remain unchanged by later edits or commits. This uses checkpoint files in the local T3 workspace; binary files cannot be expanded as text.
 
+## Find in the current session
+
+Click **Find in session** or press **Ctrl/Cmd+F** inside a chat to search its complete recorded text. Match case, Whole word and Messages only / All text filters help narrow results; Enter, F3 and the arrow buttons step through occurrences. Search scans older history, reveals matching collapsed activity and keeps the draft intact. LaTeX source and attachment filenames are searchable; image pixels and the contents of embedded HTML pages are not. Very broad searches retain up to 20,000 navigable matches and show the total count.
+
 ## Install a local VSIX
 
 For building from source, see [Development and testing](docs/development.md#build-a-vsix).
@@ -73,14 +77,14 @@ For building from source, see [Development and testing](docs/development.md#buil
 In the VS Code window/profile where you want to use it, open **Extensions → ⋯ → Install from VSIX…**, choose that file, then reload the window if prompted. For an isolated preview installation, the CLI example uses separate user, extension and shared storage:
 
 ```sh
-code --user-data-dir /tmp/t3-vscode-preview/user-data --extensions-dir /tmp/t3-vscode-preview/extensions --shared-data-dir /tmp/t3-vscode-preview/shared-data --install-extension ./target-installer/t3-vscode-0.1.12.vsix
+code --user-data-dir /tmp/t3-vscode-preview/user-data --extensions-dir /tmp/t3-vscode-preview/extensions --shared-data-dir /tmp/t3-vscode-preview/shared-data --install-extension ./target-installer/t3-vscode-0.1.13.vsix
 ```
 
 The installed extension normally discovers your already-running T3 service under `~/.t3`. Leave **T3 VSCode: T3 Home** empty to use that default; an explicit setting or `T3CODE_HOME` overrides it. Packaging does not install the extension or start a server.
 
 ## Current scope
 
-The core chat migration supports projects/threads, server-advertised models (including ACP instances), effort and permissions, file references, native editor links, assistant citations with comments, native font settings, message streaming, rich turn items, approvals, questions, Stop, progressive history, context-menu thread management, response forks and local VSIX packaging. Account limits, per-account status meters, session status notifications, native theme colors and missing-server setup are included. Clipboard/file attachments, authenticated inline media, interactive HTML, Mermaid, KaTeX with copy actions, nested subagents and message navigation are included. Terminal/preview panels, checkpoint restore and cross-window movement remain later work; specialized tool previews still need a fidelity pass. ACP model selection is covered by fixtures; the isolated live-server checks used Codex.
+The core chat migration supports projects/threads, server-advertised models (including ACP instances), effort and permissions, file references, native editor links, assistant citations with comments, native font settings, message streaming, rich turn items, approvals, questions, Stop, progressive history, context-menu thread management, response forks and local VSIX packaging. Account limits, per-account status meters, session status notifications, native theme colors and missing-server setup are included. Clipboard/file attachments, authenticated inline media, interactive HTML, Mermaid, KaTeX with copy actions, nested subagents and message navigation are included. Full-session search and double-click renaming are included in v0.1.13. Terminal/preview panels, checkpoint restore and cross-window movement remain later work; specialized tool previews still need a fidelity pass. ACP model selection is covered by fixtures; the isolated live-server checks used Codex.
 
 T3 VSCode uses the [MIT license](LICENSE); T3-derived code retains [the upstream notice](vendor/LICENSE.t3code), and bundled dependencies retain their own notices.
 

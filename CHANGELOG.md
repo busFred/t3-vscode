@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.13 — Local alpha preview
+
+- Rename conversations by double-clicking the chat title.
+- Search complete session history with occurrence navigation, case/word filters and matching activity expansion.
+- Keep session search independent across tabs and preserve composer drafts.
+
 ## 0.1.12 — Alpha prerelease
 
 - Insert editor selections at the last-used chat's prompt cursor with Ctrl+K (Cmd+K on macOS), retaining Alt+K.

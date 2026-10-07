@@ -82,7 +82,7 @@ pnpm install --frozen-lockfile
 pnpm run package
 ```
 
-This rebuilds both bundles, marks the package as a prerelease, and produces `target-installer/t3-vscode-0.1.12.vsix`. All packaged VSIX installers go into `target-installer/`, which is excluded from Git. The archive includes compiled code, icons, the lazy Mermaid renderer, KaTeX CSS/fonts and license notices; development profiles, server data, source maps and `node_modules` are excluded.
+This rebuilds both bundles, marks the package as a prerelease, and produces `target-installer/t3-vscode-0.1.13.vsix`. All packaged VSIX installers go into `target-installer/`, which is excluded from Git. The archive includes compiled code, icons, the lazy Mermaid renderer, KaTeX CSS/fonts and license notices; development profiles, server data, source maps and `node_modules` are excluded.
 
 ## Where things live
 
@@ -131,3 +131,7 @@ The [feature history](feature-history.md) records introduction and change versio
 
 See [the architecture](t3-vscode-architecture.md) for the host/webview boundary and milestones. The [feature comparison](kilo-kimi-t3-feature-matrix.md) remains reference material.
 
+
+## Session-search verification
+
+Use the [feature-history overview](feature-history.md#overview) as the regression checklist before packaging. `scripts/verify-views.ts` covers full-history search, case/word/content filters, older command reveal, math source, independent tabs and draft preservation against deterministic fixtures. Unit tests cover source occurrences, incremental updates, cancellation and incomplete history; these checks do not call a provider.
