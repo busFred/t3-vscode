@@ -9,7 +9,7 @@ This document tracks features by release, including how later versions changed t
 | [Sessions sidebar](#sessions-sidebar) | Session manager with chat in editor tabs. | v0.0.7 | v0.0.9 |
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
 | [Independent chat views](#independent-chat-views) | Editor tabs keep independent conversations and drafts. | v0.0.2 | v0.0.9 |
-| [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.0.6 |
+| [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | Unreleased |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.0.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.0.6 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Shows static Working/Input badges and notifies when input is needed. | v0.0.1 | v0.0.9 |
@@ -122,6 +122,10 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.6
 
 - Add settle/unsettle actions and compact native conversation controls.
+
+#### Unreleased
+
+- Double-click the conversation title in the chat header to open the native Rename dialog; saved changes also update the session list and editor tab.
 
 ### Settled and Archive
 

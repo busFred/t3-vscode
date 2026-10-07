@@ -39,7 +39,11 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
   return <div className="chat-view">
     <main className="chat-main" data-reading-layout="one" data-thread-id={state.activeThreadId ?? ""} onPointerDown={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }} onFocusCapture={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }}>
       <header className="chat-header">
-        <div className="chat-heading"><span className="project-label">{project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1) ?? "No project"}</span><span className="breadcrumb-divider">/</span><strong>{thread?.title || "New conversation"}</strong></div>
+        <div className="chat-heading"><span className="project-label">{project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1) ?? "No project"}</span><span className="breadcrumb-divider">/</span><strong title={thread ? "Double-click to rename conversation" : undefined} onDoubleClick={thread ? (event) => {
+          event.preventDefault();
+          window.getSelection()?.removeAllRanges();
+          void run("threadAction", { threadId: thread.id, action: "rename" });
+        } : undefined}>{thread?.title || "New conversation"}</strong></div>
         <button className="icon-button" aria-label="Open Web UI" title="Open current conversation in your default browser" onClick={() => { void run("openWebUi"); }}><GlobeIcon size={15} /></button>
         {thread ? <button className="icon-button" aria-label="Thread actions" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); setThreadMenu(threadMenu ? null : { x: box.right - 190, y: box.bottom + 5 }); }}><ChevronDownIcon size={14} /></button> : null}
       </header>
