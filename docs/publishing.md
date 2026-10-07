@@ -1,6 +1,6 @@
 # Publishing T3 VSCode
 
-The current candidate is **0.1.12 (Alpha)** and packaged for the **prerelease channel**. Publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
+The current release is **0.1.12 (Alpha)**, uploaded to the [Marketplace prerelease channel](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode). Future publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
 
 ## Version policy
 
@@ -46,3 +46,13 @@ pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.1.12.vsix --pr
 ```
 
 Using the reviewed package avoids rebuilding different code while publishing. Do not pass `patch` or another version argument: those commands can modify the version and create Git commits/tags. After publication, check the Marketplace page, verify prerelease installation in an isolated VS Code profile, and record the published URL and version.
+
+## First public release
+
+- Published `hungtienhuang.t3-vscode` version **0.1.12** to the prerelease channel on **October 7, 2026**, from source commit `3e9d971`.
+- Made `busFred/t3-vscode` public with the owner's explicit permission and verified anonymous access to all README screenshots and development documentation.
+- Passed 121 unit tests, browser checks, isolated native editor-reference checks and a fresh-context regression review before packaging.
+- Installed the reviewed local VSIX successfully into disposable VS Code storage without changing the normal profile.
+- VSIX SHA-256: `82c59225f4f27f29ed561c4e39e441df76f6177b00ca74c60b41637b2be495ff`.
+
+At 04:22 UTC on October 7, the Marketplace reported version 0.1.12 with the prerelease property but had not marked it validated, and an isolated Marketplace installation still reported the extension unavailable. The local VSIX installation passed; Marketplace installation remains pending its validation and discovery update.

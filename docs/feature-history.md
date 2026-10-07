@@ -1,6 +1,6 @@
 # T3 VSCode feature history
 
-This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the current alpha candidate.
+This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease.
 
 ## Overview
 
@@ -768,6 +768,8 @@ This document tracks features by release, including how later versions changed t
 - Verify all 43 feature anchors and the moved documentation's local links without provider turns.
 - Obtain final fresh-context regression signoff against `310a34f`, including distinct partial selections on the same source lines, with no blocking findings.
 - Inspect the prerelease VSIX's identity, exact bundles, shortcuts, settings, screenshots, math fonts and licenses, then install it successfully into disposable VS Code storage.
+- Publish v0.1.12 as [`hungtienhuang.t3-vscode`](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) on October 7, 2026, with the owner's permission and public repository links.
+- Confirm the public prerelease metadata; Marketplace installation remains pending validation as of 04:22 UTC, while the local VSIX installation passed.
 
 ## Maintenance
 
