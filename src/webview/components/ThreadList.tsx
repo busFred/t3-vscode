@@ -7,8 +7,6 @@ import { useBridgeQuery } from "../useBridgeQuery";
 import { ThreadActionsMenu } from "./ThreadActionsMenu";
 import { ProviderIcon } from "./ProviderIcon";
 import { providerBrand } from "../../shared/usage";
-import { readDraft } from "../composerDrafts";
-import { settleDraftAttachments } from "../composerAttachments";
 import { sessionTree, type SessionTreeNode } from "../../shared/sessionTree";
 
 const working = (thread: ThreadSummary) => ["preparing", "running", "starting", "waiting"].includes(thread.status);
@@ -18,7 +16,7 @@ function elapsedLabel(start: string | null | undefined, now: number): string {
   return seconds < 60 ? "<1m" : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h ${Math.floor(seconds / 60) % 60}m`;
 }
 
-export function ThreadList({ state, onSelect, onClose, onAppearance, dedicated = false, openInEditor = false, closable = false }: { readonly state: HostStateSnapshot; readonly onSelect: () => void; readonly onClose: () => void; readonly onAppearance: () => void; readonly dedicated?: boolean; readonly openInEditor?: boolean; readonly closable?: boolean }) {
+export function ThreadList({ state, onAppearance }: { readonly state: HostStateSnapshot; readonly onAppearance: () => void }) {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -46,7 +44,7 @@ export function ThreadList({ state, onSelect, onClose, onAppearance, dedicated =
   const row = (thread: ThreadSummary, context = false) => {
     const match = hits.data?.find((hit) => hit.threadId === thread.id);
     const provider = state.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId);
-    return <button key={thread.id} data-thread-id={thread.id} data-shelf-context={context || undefined} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={() => { void run("selectThread", { threadId: thread.id }).then(async (ok) => { if (!ok) return; if (openInEditor) { await settleDraftAttachments(thread.id); await run("openInTab", { draftKey: thread.id, draft: readDraft(thread.id) }); } else onSelect(); }); }} onContextMenu={(event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
+    return <button key={thread.id} data-thread-id={thread.id} data-shelf-context={context || undefined} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={() => { void run("selectThread", { threadId: thread.id }).then((ok) => { if (ok) void run("openInTab"); }); }} onContextMenu={(event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
       if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }
     }} aria-label={thread.title || "Untitled"} aria-description={thread.pendingRuntimeRequest ? "Input needed" : working(thread) ? "Working" : undefined} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>
       {thread.pinned ? <PinIcon size={12} /> : thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : <MessageSquareIcon size={12} />}
@@ -62,8 +60,8 @@ export function ThreadList({ state, onSelect, onClose, onAppearance, dedicated =
       {node.children.length && open ? <div className="session-tree-children" aria-label={`Subagents of ${node.thread.title || "Untitled"}`}>{node.children.map((child) => treeRow(child, members, section, depth + 1))}</div> : null}
     </div>;
   };
-  return <aside className={`projects-sidebar${dedicated ? " dedicated-sessions" : ""}`} aria-label={dedicated ? "Sessions" : "History"}>
-    <div className="history-heading"><strong>{dedicated ? "SESSIONS" : "History"}</strong>{!dedicated || closable ? <button className="icon-button" aria-label="Close history" onClick={onClose}><XIcon size={15} /></button> : <button className="icon-button" aria-label="New thread" title="New thread" onClick={() => { void run("newThread").then(async (ok) => { if (!ok) return; if (openInEditor) await run("openInTab"); else onSelect(); }); }}><PlusIcon size={15} /></button>}</div>
+  return <aside className="projects-sidebar dedicated-sessions" aria-label="Sessions">
+    <div className="history-heading"><strong>SESSIONS</strong><button className="icon-button" aria-label="New thread" title="New thread" onClick={() => { void run("newThread").then((ok) => { if (ok) void run("openInTab"); }); }}><PlusIcon size={15} /></button></div>
     <label className="thread-search"><SearchIcon size={14} /><input placeholder="Search conversations…" aria-label="Search threads" value={search} onChange={(event) => setSearch(event.target.value)} />{search ? <button className="icon-button" aria-label="Clear search" onClick={() => setSearch("")}><XIcon size={13} /></button> : null}</label>
     {hits.pending ? <p className="search-status" role="status">Searching messages…</p> : hits.error ? <p className="search-status turn-error" role="status">{hits.error}</p> : null}
     <nav className="session-list" aria-label="Active conversations">

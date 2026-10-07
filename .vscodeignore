@@ -2,6 +2,10 @@
 **/*
 !package.json
 !README.md
+!CHANGELOG.md
+!LICENSE
+!SUPPORT.md
+!docs/screenshots/*.png
 !dist/extension.mjs
 !dist/webview.js
 !dist/mermaid.js

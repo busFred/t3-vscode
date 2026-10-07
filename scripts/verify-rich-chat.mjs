@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright-core';
 
-export async function verifyRichChat({ home, evidence, workbench, sidebar, findWebview, findVisualFrame, chooseLiveTestModel }) {
+export async function verifyRichChat({ home, evidence, workbench, sidebar, findWebview, findVisualFrame, chooseLiveTestModel, runCommand }) {
   const fixture = JSON.parse(await readFile(join(home, 'rich-chat-fixture.json'), 'utf8'));
   assert.equal(fixture.home, home);
   // ClipboardItem writes through Chromium's OS clipboard; VS Code receives a real Ctrl+V.
@@ -71,6 +71,13 @@ export async function verifyRichChat({ home, evidence, workbench, sidebar, findW
   await jumpRail('End');
   await panel.wait('document.querySelector(".work-group") && document.querySelector(".attachment-thumbnail img")');
   assert.equal(await panel.evaluate('document.querySelector(".work-group-toggle").getAttribute("aria-expanded")'), 'false');
+  await panel.evaluate(`document.querySelector('.work-group-toggle').click()`);
+  await panel.wait(`[...document.querySelectorAll('.work-entry button')].some(button=>button.textContent.includes('command height verification'))`);
+  await panel.evaluate(`[...document.querySelectorAll('.work-entry button')].find(button=>button.textContent.includes('command height verification')).click()`);
+  await panel.wait('document.querySelector(".command-input") && document.querySelector(".tool-output")');
+  assert.equal(await panel.evaluate(`(() => {const input=document.querySelector('.command-input'),style=getComputedStyle(input);return input.clientHeight+1>=parseFloat(style.lineHeight)+parseFloat(style.paddingTop)+parseFloat(style.paddingBottom);})()`), true);
+  assert.equal(await panel.evaluate('document.querySelector(".tool-output").scrollHeight > document.querySelector(".tool-output").clientHeight'), true);
+  await panel.evaluate(`document.querySelector('.work-group-toggle').click()`);
   await panel.wait('document.querySelector(".attachment-thumbnail img").naturalWidth > 0');
   await panel.wait('document.querySelector("iframe[title=\\"Actual T3 navigation mockup\\"]")');
   const visual = await findVisualFrame();
@@ -82,18 +89,32 @@ export async function verifyRichChat({ home, evidence, workbench, sidebar, findW
   await workbench.screenshot({ path: join(evidence, 'edh-actual-html-mockup.png') });
   console.log('PASS: rail jumps, native placement settings, preserved draft, automatically collapsed commands/thought, authenticated thumbnails and the actual published interactive HTML mockup');
 
+  await runCommand('View: Hide Secondary Side Bar');
+  await panel.wait('document.querySelector(".chat-main")?.dataset.readingLayout === "one" && document.querySelector(".transcript-list")');
+  assert.equal(await panel.evaluate('document.querySelectorAll(".reader-flow, .reader-toggle, .composer-layout-control").length'), 0);
+  await panel.evaluate(`document.querySelector('.katex').click()`);
+  await panel.wait(`document.querySelector('[aria-label="Equation preview"]')`);
+  await panel.evaluate(`document.querySelector('[aria-label="Close preview"]').click()`);
+  await workbench.screenshot({ path: join(evidence, 'edh-single-column-rich.png') });
+  console.log('PASS: full-height command input beside long output and native single-column rich graphics with equation preview');
+
     await chooseLiveTestModel(panel);
     await panel.evaluate('document.querySelector(".message-nav-latest")?.click()');
     await panel.wait('!document.querySelector(".message-nav-latest")');
     await clipboardPage.bringToFront();
     const png = (await readFile(join(home, 'clipboard-fixture.png'))).toString('base64');
     await clipboardPage.evaluate(async encoded => { const blob = new Blob([Uint8Array.from(atob(encoded), c => c.charCodeAt(0))], { type: 'image/png' }); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); }, png);
-    await workbench.bringToFront(); await setMessage('Reply exactly ATTACHMENT-OK. These images verify the UI. Do not run commands or edit files.');
+    await workbench.bringToFront(); await setMessage('Reply exactly ATTACHMENT-OK. Compare here then explain. These images verify the UI. Do not run commands or edit files.');
+    await panel.evaluate(`(() => {const input=document.querySelector('textarea'),cursor=input.value.indexOf(' then explain');input.setSelectionRange(cursor,cursor);})()`);
     await panel.evaluate(`window.__pasteSeen=[];document.querySelector('textarea').addEventListener('paste',event=>window.__pasteSeen.push({types:[...event.clipboardData.types],files:[...event.clipboardData.files].map(file=>({type:file.type,size:file.size}))}));document.querySelector('textarea').focus()`); await workbench.keyboard.press('Control+v');
     await panel.wait('window.__pasteSeen.some(event => event.files.some(file => file.type === "image/png" && file.size > 0))');
     console.log('Native paste:', await panel.evaluate('window.__pasteSeen'));
     await panel.wait('document.querySelector(".composer-attachment img") && !document.querySelector(".send-button").disabled');
     await panel.wait('document.querySelector(".composer-attachment img").naturalWidth > 0');
+    assert.match(await panel.evaluate('document.querySelector("textarea").value'), /Compare here!\[[^\]]+\]\(t3-context:\/\/v1\/image\/[^)]+\) then explain/);
+    await panel.evaluate(`(() => {const input=document.querySelector('textarea'),cursor=input.value.indexOf('t3-context://')+10;input.setSelectionRange(cursor,cursor);input.dispatchEvent(new MouseEvent('click',{bubbles:true}));})()`);
+    await panel.wait('document.querySelector(".visual-expanded img")');
+    await panel.evaluate(`document.querySelector('[aria-label="Close preview"]').click()`);
     await panel.evaluate(`document.querySelector('[aria-label="Attach files"]').click()`);
     const input = workbench.locator('.quick-input-widget input').filter({ visible: true }).first();
     await input.waitFor(); await input.fill(join(home, 'clipboard-fixture.png'));
@@ -105,29 +126,44 @@ export async function verifyRichChat({ home, evidence, workbench, sidebar, findW
     await panel.wait('!document.querySelector(".composer-attachment")');
     await panel.evaluate('document.querySelector(".message-nav-latest")?.click()');
     await panel.wait('document.querySelectorAll(".attachment-thumbnail img").length >= 2');
+    await panel.wait('document.querySelectorAll(".user-message .inline-attachment").length >= 2');
     await panel.wait(`[...document.querySelectorAll('.assistant-message')].some(row=>row.textContent.includes('ATTACHMENT-OK')&&!row.querySelector('.streaming-label'))`, 120_000);
     await workbench.screenshot({ path: join(evidence, 'edh-attachments-sent.png') });
     console.log('PASS: actual OS clipboard image paste, native file-picker API for a file outside the workspace, draft thumbnails, signed upload, provider delivery and sent-message thumbnails');
 
-  await panel.evaluate(`document.querySelector('.chat-header [aria-label="New thread"]').click()`);
-  await panel.wait('document.querySelector(".chat-heading strong")?.textContent === "New thread"');
-  const emptyId = await panel.evaluate('document.querySelector(".chat-main").dataset.threadId');
-  await workbench.bringToFront(); await workbench.keyboard.press('Control+w');
-  await sidebar.wait(`!document.querySelector('.thread[data-thread-id="${emptyId}"]')`);
-  await workbench.locator('[aria-label="Open Chat in Editor Tab"]').filter({ visible: true }).first().click();
-  const typed = await findWebview('panel');
-  await typed.wait('document.querySelector(".chat-header")');
-  await typed.evaluate(`document.querySelector('.chat-header [aria-label="New thread"]').click()`);
-  await typed.wait('document.querySelector(".chat-heading strong")?.textContent === "New thread"');
-  const typedId = await typed.evaluate('document.querySelector(".chat-main").dataset.threadId');
-  await typed.evaluate(`(() => {const input=document.querySelector('textarea');const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;for(const text of ['Preserve this typed draft','']){set.call(input,text);input.dispatchEvent(new Event('input',{bubbles:true}));}})()`);
-  await workbench.keyboard.press('Control+w');
-  await sidebar.wait(`document.querySelector('.thread[data-thread-id="${typedId}"]')`);
-  console.log('PASS: closing an untouched new tab deletes its thread; typing then clearing preserves it');
+  await verifyEmptyChat({ workbench, sidebar, findWebview });
   } finally {
     await clipboardPage.bringToFront().catch(() => {});
     await Promise.race([clipboardPage.evaluate(async () => { if (window.previousClipboard?.length) await navigator.clipboard.write(window.previousClipboard.map(types => new ClipboardItem(types))); }), new Promise((_, reject) => setTimeout(() => reject(new Error('Clipboard restore timed out')), 5000))]).catch(() => {});
     await clipboardBrowser.close(); await new Promise(resolve => clipboardServer.close(resolve));
   }
 
+}
+
+export async function verifyEmptyChat({ workbench, sidebar, findWebview }) {
+  await sidebar.wait('document.querySelector(".dedicated-sessions")');
+  // The copied profile may bind Ctrl+W differently, and native icon classes vary
+  // by VS Code version; use the Close action's label and verify tab disposal.
+  const closeNewThread = async () => {
+    await workbench.bringToFront();
+    const tab = workbench.locator('.tab').filter({ hasText: 'New thread' });
+    assert.equal(await tab.count(), 1);
+    await tab.hover();
+    await tab.locator('.tab-actions [aria-label^="Close"]').click();
+    await tab.waitFor({ state: 'detached' });
+  };
+  await sidebar.evaluate(`document.querySelector('.history-heading [aria-label="New thread"]').click()`);
+  const empty = await findWebview('panel');
+  await empty.wait('document.querySelector(".chat-heading strong")?.textContent === "New thread"');
+  const emptyId = await empty.evaluate('document.querySelector(".chat-main").dataset.threadId');
+  await closeNewThread();
+  await sidebar.wait(`!document.querySelector('.thread[data-thread-id="${emptyId}"]')`);
+  await sidebar.evaluate(`document.querySelector('.history-heading [aria-label="New thread"]').click()`);
+  const typed = await findWebview('panel');
+  await typed.wait('document.querySelector(".chat-heading strong")?.textContent === "New thread"');
+  const typedId = await typed.evaluate('document.querySelector(".chat-main").dataset.threadId');
+  await typed.evaluate(`(() => {const input=document.querySelector('textarea');const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;for(const text of ['Preserve this typed draft','']){set.call(input,text);input.dispatchEvent(new Event('input',{bubbles:true}));}})()`);
+  await closeNewThread();
+  await sidebar.wait(`document.querySelector('.thread[data-thread-id="${typedId}"]')`);
+  console.log('PASS: closing an untouched new tab deletes its thread; typing then clearing preserves it');
 }

@@ -36,11 +36,13 @@ export class FakeTransport implements HostTransport {
   pathSearches: Array<{ cwd: string; query: string }> = [];
   providerRefreshes: Array<{ instanceId: string | undefined; cwd: string | undefined }> = [];
   diffRequests: Array<{ id: string; from: number; to: number }> = [];
+  savedDiffRequests: Parameters<HostTransport["getSavedTurnDiff"]>[0][] = [];
   diffFileRequests: Parameters<HostTransport["getDiffFileContents"]>[0][] = [];
   async searchThreads(query: string) { this.searches.push(query); return this.searchMatches; }
   async searchPaths(cwd: string, query: string) { this.pathSearches.push({ cwd, query }); return this.pathEntries; }
   async refreshProviders(instanceId?: string, cwd?: string) { this.providerRefreshes.push({ instanceId, cwd }); return { providers: this.config.providers }; }
   async getTurnDiff(id: string, from: number, to: number) { this.diffRequests.push({ id, from, to }); return { threadId: ThreadId.make(id), fromTurnCount: from, toTurnCount: to, diff: "" }; }
+  getSavedTurnDiff: HostTransport["getSavedTurnDiff"] = async (input) => { this.savedDiffRequests.push(input); return ""; };
   getDiffFileContents: HostTransport["getDiffFileContents"] = async (input) => { this.diffFileRequests.push(input); return { oldContents: "before\n", newContents: "after\n" }; };
   async connect() { this.connected = true; this.connections += 1; }
   async disconnect() { this.connected = false; }

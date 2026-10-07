@@ -1,8 +1,8 @@
 {
   "name": "t3-vscode",
   "displayName": "T3 VSCode",
-  "description": "Workspace-scoped T3 Code sessions, chat, references and account usage in VS Code.",
-  "version": "0.0.8",
+  "description": "Alpha client for local T3 Code servers: workspace sessions, editor chat, rich messages and account usage.",
+  "version": "0.1.11",
   "publisher": "t3-vscode",
   "repository": {
     "type": "git",
@@ -52,13 +52,13 @@
       },
       {
         "command": "t3-vscode.showUsage",
-        "title": "Usage",
+        "title": "Account & Usage",
         "category": "T3 VSCode",
         "icon": "$(graph)"
       },
       {
         "command": "t3-vscode.showThreads",
-        "title": "History",
+        "title": "Sessions",
         "category": "T3 VSCode",
         "icon": "$(history)"
       },
@@ -66,12 +66,6 @@
         "command": "t3-vscode.threadActions",
         "title": "Thread Actions",
         "category": "T3 VSCode"
-      },
-      {
-        "command": "t3-vscode.openInSideBar",
-        "title": "Open Chat in Sidebar",
-        "category": "T3 VSCode",
-        "icon": "$(layout-sidebar-left)"
       },
       {
         "command": "t3-vscode.pair",
@@ -127,26 +121,6 @@
       ],
       "view/title": [
         {
-          "command": "t3-vscode.showUsage",
-          "when": "view == t3.webview",
-          "group": "navigation@0"
-        },
-        {
-          "command": "t3-vscode.showThreads",
-          "when": "view == t3.webview",
-          "group": "navigation@1"
-        },
-        {
-          "command": "t3-vscode.newThread",
-          "when": "view == t3.webview",
-          "group": "navigation@2"
-        },
-        {
-          "command": "t3-vscode.openInTab",
-          "when": "view == t3.webview",
-          "group": "navigation@3"
-        },
-        {
           "command": "t3-vscode.threadActions",
           "when": "view == t3.webview",
           "group": "1_thread"
@@ -168,71 +142,99 @@
         }
       ]
     },
-    "configuration": {
-      "title": "T3 VSCode",
-      "properties": {
-        "t3-vscode.t3Home": {
-          "type": "string",
-          "default": "",
-          "description": "T3 home directory (the server's data dir, default ~/.t3 or $T3CODE_HOME). Empty = auto. Change only to point at an isolated/dev server."
-        },
-        "t3-vscode.fontSizeInterface": {
-          "type": "integer",
-          "default": 16,
-          "minimum": 12,
-          "maximum": 20,
-          "scope": "window",
-          "markdownDescription": "Base font size in pixels for T3 chat text, navigation and labels. Matches T3 Code's interface scaling. Changes apply immediately to the sidebar and all T3 editor tabs."
-        },
-        "t3-vscode.fontSizePrompt": {
-          "type": "integer",
-          "default": 14,
-          "minimum": 12,
-          "maximum": 20,
-          "scope": "window",
-          "description": "Font size in pixels for the message input, independent of interface and code sizes. Changes apply immediately."
-        },
-        "t3-vscode.fontSizeCode": {
-          "type": "integer",
-          "default": 13,
-          "minimum": 10,
-          "maximum": 18,
-          "scope": "window",
-          "description": "Font size in pixels for code blocks, diffs and tool output, independent of interface and prompt sizes. Changes apply immediately."
-        },
-        "t3-vscode.usage.followActiveConversation": {
-          "type": "boolean",
-          "default": true,
-          "scope": "window",
-          "description": "Show the remaining subscription limits of the provider used by the focused conversation. Month, week and session appear in that order."
-        },
-        "t3-vscode.usage.pinnedAccounts": {
-          "type": "array",
-          "items": {
-            "type": "string"
+    "configuration": [
+      {
+        "title": "Appearance",
+        "order": 1,
+        "properties": {
+          "t3-vscode.fontSizeInterface": {
+            "type": "integer",
+            "default": 16,
+            "minimum": 12,
+            "maximum": 20,
+            "scope": "window",
+            "markdownDescription": "Base font size in pixels for T3 chat text, navigation and labels. Matches T3 Code's interface scaling. Changes apply immediately to the sidebar and all T3 editor tabs.",
+            "order": 1
           },
-          "default": [],
-          "scope": "window",
-          "markdownDescription": "Accounts to keep in the status bar alongside the active conversation. Use [Configure Status Meters](command:t3-vscode.configureUsage) to choose accounts. Each account has its own meter; missing quota windows show \u2014."
-        },
-        "t3-vscode.messageNavigation": {
-          "type": "string",
-          "enum": [
-            "left",
-            "right",
-            "off"
-          ],
-          "enumDescriptions": [
-            "Show the message rail on the left.",
-            "Show the message rail on the right.",
-            "Hide the message rail."
-          ],
-          "default": "left",
-          "scope": "window",
-          "description": "Placement of the message navigation rail in sidebar and editor chats. Hover or scroll over it to preview prompts, then click to jump. Changes apply immediately."
+          "t3-vscode.fontSizePrompt": {
+            "type": "integer",
+            "default": 14,
+            "minimum": 12,
+            "maximum": 20,
+            "scope": "window",
+            "description": "Font size in pixels for the message input, independent of interface and code sizes. Changes apply immediately.",
+            "order": 2
+          },
+          "t3-vscode.fontSizeCode": {
+            "type": "integer",
+            "default": 13,
+            "minimum": 10,
+            "maximum": 18,
+            "scope": "window",
+            "description": "Font size in pixels for code blocks, diffs and tool output, independent of interface and prompt sizes. Changes apply immediately.",
+            "order": 3
+          }
+        }
+      },
+      {
+        "title": "Reading",
+        "order": 2,
+        "properties": {
+          "t3-vscode.messageNavigation": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right",
+              "off"
+            ],
+            "enumDescriptions": [
+              "Show the message rail on the left.",
+              "Show the message rail on the right.",
+              "Hide the message rail."
+            ],
+            "default": "left",
+            "scope": "window",
+            "description": "Placement of the message navigation rail in editor chats. Hover or scroll over it to preview prompts, then click to jump. Changes apply immediately.",
+            "order": 1
+          }
+        }
+      },
+      {
+        "title": "Usage",
+        "order": 3,
+        "properties": {
+          "t3-vscode.usage.followActiveConversation": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "description": "Show the remaining subscription limits of the provider used by the focused conversation. Month, week and session appear in that order.",
+            "order": 1
+          },
+          "t3-vscode.usage.pinnedAccounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "scope": "window",
+            "markdownDescription": "Accounts to keep in the status bar alongside the active conversation. Use [Configure Status Meters](command:t3-vscode.configureUsage) to choose accounts. Each account has its own meter; only reported quota windows are shown.",
+            "order": 2
+          }
+        }
+      },
+      {
+        "title": "Connection",
+        "order": 4,
+        "properties": {
+          "t3-vscode.t3Home": {
+            "type": "string",
+            "default": "",
+            "description": "T3 home directory (the server's data dir, default ~/.t3 or $T3CODE_HOME). Empty = auto. Change only to point at an isolated/dev server.",
+            "order": 1
+          }
         }
       }
-    },
+    ],
     "icons": {
       "t3-vscode-codex": {
         "description": "T3 VSCode codex provider icon",
@@ -316,5 +318,20 @@
     "vite": "^6.3.3",
     "vite-plugin-css-injected-by-js": "^3.5.2"
   },
-  "icon": "resources/t3-extension.png"
+  "icon": "resources/t3-extension.png",
+  "preview": true,
+  "license": "MIT",
+  "homepage": "https://github.com/busFred/t3-vscode#readme",
+  "bugs": {
+    "url": "https://github.com/busFred/t3-vscode/issues"
+  },
+  "keywords": [
+    "t3-code",
+    "chat",
+    "ai",
+    "codex",
+    "claude",
+    "sessions",
+    "latex"
+  ]
 }

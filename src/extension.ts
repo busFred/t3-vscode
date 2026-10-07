@@ -21,6 +21,7 @@ import { registerNativeDiff } from "./host/nativeDiff.js";
 import { UsageStatusBar } from "./host/usageStatusBar.js";
 import { InputNotificationTracker } from "./host/inputNotifications.js";
 import type { DraftTransfer } from "./shared/viewDraft.js";
+import { usageAccounts } from "./shared/usage.js";
 
 let hostState: HostState | null = null;
 
@@ -56,7 +57,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     for (const thread of notifications.update(state)) {
       void vscode.window.showInformationMessage(`T3 VSCode: "${thread.title || "Untitled session"}" needs ${thread.pendingRuntimeRequest?.kind === "user_input" ? "your input" : "your approval"}.`, "Open session").then(async (choice) => {
         if (choice !== "Open session" || !hostState?.snapshot().threads.some((item) => item.id === thread.id)) return;
-        try { await hostState.selectThread(thread.id); await provider.createPanel(SIDEBAR_VIEW_ID); }
+        try { await provider.openSession(thread.id); }
         catch (cause) { await vscode.window.showErrorMessage(String(cause)); }
       });
     }
@@ -68,10 +69,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.commands.registerCommand("t3-vscode.openInTab", () => provider.requestEditorHandoff()),
-    vscode.commands.registerCommand("t3-vscode.openInSideBar", async () => {
-      await vscode.commands.executeCommand("t3.webview.focus");
-      registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showChat, undefined);
-    }),
     vscode.commands.registerCommand("t3-vscode.pair", () => hostState?.pairNow()),
     vscode.commands.registerCommand("t3-vscode.reconnect", () => hostState?.reconnect()),
     vscode.commands.registerCommand("t3-vscode.newThread", async () => { await hostState?.newThread(); await provider.createPanel(SIDEBAR_VIEW_ID); }),
@@ -161,7 +158,7 @@ async function pickConversationProject(projects: ReadonlyArray<ProjectSummary>, 
 /**
  * Sidebar WebviewViewProvider + editor-tab WebviewPanel host. Same HTML, same
  * bundle, same BridgeHandler — only the container differs (architecture doc §5).
- * Both surfaces render the T3 chat app.
+ * The sidebar manages sessions; editor panels render conversations.
  */
 class T3WebviewProvider implements vscode.WebviewViewProvider {
   private sidebar: vscode.WebviewView | undefined;
@@ -182,7 +179,7 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
     this.sidebar = webviewView;
     const id = SIDEBAR_VIEW_ID;
     webviewView.webview.options = this.webviewOptions();
-    this.registry.add(id, webviewView.webview);
+    this.registry.add(id, webviewView.webview, false);
     this.bridge.attach(webviewView.webview, id);
     webviewView.webview.html = this.htmlFor(webviewView.webview, "sidebar");
     webviewView.onDidDispose(() => { if (this.sidebar === webviewView) { this.registry.remove(id); this.sidebar = undefined; } });
@@ -191,52 +188,58 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
 
   updateTitles(): void {
     if (this.sidebar) this.sidebar.title = "T3 VSCode";
-    for (const [id, panel] of this.panels) if (id !== this.usageViewId) { const state = this.host.snapshot(id); panel.title = state.threads.find((thread) => thread.id === state.activeThreadId)?.title.trim() || "New conversation"; }
+    for (const [id, panel] of this.panels) { const state = this.host.snapshot(id); panel.title = state.threads.find((thread) => thread.id === state.activeThreadId)?.title.trim() || "New conversation"; }
   }
 
   async showThreads(): Promise<void> {
     await vscode.commands.executeCommand("t3.webview.focus");
     this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showNavigation, undefined);
   }
-  private usageViewId: string | undefined;
   async showUsage(accountKey?: string, sourceViewId = this.registry.focusedViewId): Promise<void> {
-    let panel = this.usageViewId ? this.panels.get(this.usageViewId) : undefined;
-    if (!panel) {
-      const id = await this.createPanel(sourceViewId, undefined, "usage");
-      this.usageViewId = id; panel = this.panels.get(id);
-      if (panel) panel.title = "T3 VSCode · Usage";
-    }
-    panel?.reveal(panel.viewColumn);
-    this.registry.postWhenReady(this.usageViewId!, Events.showUsage, accountKey);
+    const state = this.host.snapshot(sourceViewId);
+    const instanceId = state.threads.find((thread) => thread.id === state.activeThreadId)?.modelSelection.instanceId ?? state.draft.modelSelection?.instanceId;
+    const key = accountKey ?? usageAccounts(state).find((account) => account.instanceIds.includes(instanceId ?? ""))?.key;
+    await vscode.commands.executeCommand("t3.webview.focus");
+    this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key);
   }
   async requestEditorHandoff(): Promise<void> {
-    await vscode.commands.executeCommand("t3.webview.focus");
-    this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.openInTab, this.host.snapshot(SIDEBAR_VIEW_ID).activeThreadId ?? "new");
+    await this.createPanel(this.registry.focusedViewId);
+  }
+  async openSession(threadId: string): Promise<string> {
+    for (const [id, panel] of this.panels) if (this.host.snapshot(id).activeThreadId === threadId) {
+      panel.reveal(panel.viewColumn); this.registry.focus(id); return id;
+    }
+    await this.host.selectThread(threadId, SIDEBAR_VIEW_ID);
+    return this.createPanel(SIDEBAR_VIEW_ID);
   }
   async insertReference(reference: FileReference): Promise<void> {
-    const id = this.registry.focusedViewId;
+    const focusedId = this.registry.focusedViewId;
+    const id = this.panels.has(focusedId) ? focusedId : await this.createPanel(SIDEBAR_VIEW_ID);
     const threadId = this.host.snapshot(id).activeThreadId;
     if (threadId) await this.host.composerState(threadId, undefined, true, id);
     this.registry.postWhenReady(id, Events.insertReference, { draftKey: this.host.snapshot(id).activeThreadId ?? "new", reference });
     const panel = this.panels.get(id);
     if (panel) panel.reveal(panel.viewColumn);
-    else await vscode.commands.executeCommand("t3.webview.focus");
   }
 
-  async createPanel(sourceViewId = SIDEBAR_VIEW_ID, transfer?: DraftTransfer, surface: "panel" | "usage" = "panel"): Promise<string> {
+  async createPanel(sourceViewId = SIDEBAR_VIEW_ID, transfer?: DraftTransfer): Promise<string> {
+    const threadId = this.host.snapshot(sourceViewId).activeThreadId;
+    if (threadId) for (const [id, panel] of this.panels) if (this.host.snapshot(id).activeThreadId === threadId) {
+      panel.reveal(panel.viewColumn); this.registry.focus(id); return id;
+    }
     const id = `panel_${crypto.randomUUID()}`;
-    this.host.registerView(id, sourceViewId, surface !== "usage");
-    const panel = vscode.window.createWebviewPanel("t3Panel", "T3 VSCode", vscode.ViewColumn.One, {
+    this.host.registerView(id, sourceViewId);
+    const panel = vscode.window.createWebviewPanel("t3Panel", "T3 VSCode", vscode.ViewColumn.Active, {
       ...this.webviewOptions(),
       retainContextWhenHidden: true,
     });
     panel.iconPath = { light: vscode.Uri.joinPath(this.extensionUri, "resources", "t3-tab-light.svg"), dark: vscode.Uri.joinPath(this.extensionUri, "resources", "t3-tab-dark.svg") };
     this.panels.set(id, panel);
-    this.registry.add(id, panel.webview, surface !== "usage");
+    this.registry.add(id, panel.webview);
     this.registry.focus(id);
     this.bridge.attach(panel.webview, id);
     if (transfer) this.registry.postWhenReady(id, Events.initializeDraft, transfer);
-    panel.webview.html = this.htmlFor(panel.webview, surface);
+    panel.webview.html = this.htmlFor(panel.webview, "panel");
     this.updateTitles();
     panel.onDidChangeViewState(({ webviewPanel }) => { if (webviewPanel.active) this.registry.focus(id); });
     panel.onDidDispose(() => {
@@ -253,7 +256,7 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
     };
   }
 
-  private htmlFor(webview: vscode.Webview, surface: "sidebar" | "panel" | "usage"): string {
+  private htmlFor(webview: vscode.Webview, surface: "sidebar" | "panel"): string {
     const mathCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "math", "katex.css"));
     const visualsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "mermaid.js"));
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "webview.js"));

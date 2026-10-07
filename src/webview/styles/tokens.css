@@ -159,6 +159,7 @@ select, input { color: inherit; background: var(--card); }
 .work-entry { color: var(--foreground); }.work-entry.failed { border-left: 2px solid var(--destructive); padding-left: 6px; }
 .work-status { font-size: 0.625rem; }.work-entry .command-input { color: var(--foreground); }
 .tool-output { max-height: 360px; }
+.tool-output, .command-input { line-height: 1.55; }
 .file-change { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .file-change-heading { display: flex; align-items: center; gap: 7px; padding: 8px; font-size: 0.6875rem; }.file-change-heading button { color: var(--foreground); }
 .file-counts { display: flex; gap: 6px; margin-left: auto; }
@@ -281,35 +282,10 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .composer-suggestions .suggestion-label { flex-shrink: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
 .composer-suggestions .suggestion-description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 0.6875rem; }
 .composer-suggestions > p { padding: 4px 8px; margin: 0; font-size: 0.75rem; }
-.usage-overlay { position: fixed; inset: 0; z-index: 80; background: #0005; display: grid; place-items: center; padding: 12px; }
-.usage-panel { width: min(690px, 100%); max-height: calc(100vh - 24px); overflow: auto; border: 1px solid var(--input); border-radius: 8px; background: var(--background); box-shadow: 0 10px 35px #0005; }
-.usage-panel > header { display: flex; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--border); }
-.usage-panel h2 { flex: 1; margin: 0; font-size: 0.875rem; font-weight: 500; }
-.usage-panel h2 span { color: var(--muted-foreground); }
-.usage-body { padding: 12px 18px 20px; }
-.usage-body p { font-size: 0.75rem; }
-.usage-provider h3 { font-size: 0.875rem; font-weight: 500; margin: 10px 0; text-transform: capitalize; }
-.usage-window { display: flex; gap: 18px; align-items: center; border: 1px solid var(--input); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
-.usage-remaining { min-width: 130px; }
-.usage-remaining > span { font-size: 0.875rem; }
-.usage-remaining strong { display: block; font-size: 1.75rem; font-weight: 650; }
-.usage-remaining small { font-size: 0.875rem; font-weight: 400; }
-.usage-accounts { flex: 1; min-width: 0; }
-.usage-bar { height: 22px; border-radius: 12px; background: var(--message-surface); overflow: hidden; }
-.usage-bar > span { display: block; text-align: center; height: 100%; background: #9c9c9c; color: #111; border-radius: 12px; }
-.usage-claude .usage-bar > span { background: #efcabc; }
-.usage-account-label { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; font-size: 0.75rem; margin: 6px 0; }
-.usage-account-label small { color: var(--muted-foreground); }
-@media (max-width: 440px) { .usage-window { flex-direction: column; align-items: stretch; padding: 12px; gap: 7px; } .usage-remaining strong { font-size: 1.5rem; } .usage-body { padding: 8px 10px 12px; } }
 
 /* Dedicated session management fills the whole sidebar; history never overlays chat. */
 .sidebar-view { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--sidebar); color: var(--sidebar-foreground); }
-.sidebar-modes { display: flex; flex-shrink: 0; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--border); }
-.sidebar-modes button { border: 0; border-bottom: 2px solid transparent; padding: 6px 8px; color: var(--foreground); background: transparent; font-size: .75rem; }
-.sidebar-modes button[aria-pressed=true] { border-bottom-color: var(--ring); }
-.sidebar-view .dedicated-sessions, .sessions-page .dedicated-sessions { display: flex; position: static; inset: auto; flex: 1; width: 100%; min-width: 0; border: 0; box-shadow: none; }
-.sessions-page { flex-direction: column; background: var(--sidebar); }
-.sessions-return { margin: 6px 12px; align-self: flex-start; }
+.sidebar-view .dedicated-sessions { display: flex; position: static; inset: auto; flex: 1; width: 100%; min-width: 0; border: 0; box-shadow: none; }
 .dedicated-sessions .history-heading { font-size: .6875rem; font-weight: 600; }
 .thread { color: var(--foreground); border-radius: 3px; padding: 7px 8px; }
 .thread.active { background: var(--vscode-list-activeSelectionBackground, var(--sidebar-row-active)); color: var(--vscode-list-activeSelectionForeground, var(--foreground)); }
@@ -331,7 +307,6 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .account-usage > summary { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: .625rem; cursor: pointer; list-style: none; }
 .account-usage > summary > svg { transform: rotate(-90deg); }
 .account-usage[open] > summary > svg { transform: none; }
-.account-usage summary > span { margin-left: auto; color: var(--muted-foreground); }
 .account-usage-body { padding: 3px 12px 12px; }
 .account-usage-update { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 3px; color: var(--muted-foreground); font-size: .6875rem; }
 .account-usage-update .icon-button { width: 23px; height: 23px; }
@@ -343,15 +318,6 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .account-limit-bar i { display: block; height: 100%; background: var(--vscode-progressBar-background, var(--primary)); }
 .account-limit small { color: var(--muted-foreground); font-size: .5625rem; }
 .account-usage-actions { display: flex; justify-content: space-between; gap: 6px; font-size: .6875rem; }
-.usage-page { flex: 1; min-height: 0; overflow: auto; }
-.usage-page .usage-panel { width: 100%; max-height: none; border: 0; border-radius: 0; box-shadow: none; }
-.usage-panel > header { gap: 8px; }
-.usage-panel > header .text-button { font-size: .6875rem; }
-.usage-bar { height: 6px; background: var(--input); }
-.usage-bar > span { background: var(--vscode-progressBar-background, var(--primary)); }
-.usage-window { border-radius: 4px; }
-.usage-remaining { min-width: 100px; }
-.usage-remaining strong { font-size: 1.5rem; }
 .composer-box { background: var(--vscode-input-background, var(--card)); color: var(--vscode-input-foreground, var(--foreground)); border-radius: 3px; }
 .composer-box textarea::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted-foreground)); }
 .thread-search { background: var(--vscode-input-background, var(--card)); color: var(--vscode-input-foreground, var(--foreground)); border-radius: 3px; }
@@ -369,7 +335,6 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .setup-actions button { gap: 5px; }
 .setup-diagnostics { color: var(--muted-foreground); font-size: .6875rem; overflow-wrap: anywhere; }
 @media (max-width: 400px) { .server-setup { padding: 16px; } }
-.sidebar-chat-heading { min-height: 30px; flex-shrink: 0; padding: 4px 10px; border-bottom: 1px solid var(--border); font-size: .875rem; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .composer-box textarea { color: var(--vscode-input-foreground, var(--foreground)); }
 .thread-search input::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted-foreground)); }
@@ -419,6 +384,10 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .work-entry .text-secondary-label { color: var(--foreground); }
 .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
 .markdown .katex { color: var(--foreground); }
+.markdown .katex { cursor: zoom-in; }
+.markdown .katex:focus-visible { outline: 1px solid var(--ring); outline-offset: 4px; }
+.equation-preview { max-width: calc(100vw - 100px); overflow: auto; padding: 28px 16px; font-size: 1.25rem; }
+.equation-preview > .katex { display: inline-block; white-space: nowrap; }
 .math-context-menu { position: fixed; z-index: 120; width: min(230px, calc(100vw - 10px)); padding: 4px; border: 1px solid var(--vscode-menu-border, var(--border)); background: var(--vscode-menu-background, var(--card)); color: var(--vscode-menu-foreground, var(--foreground)); box-shadow: 0 3px 10px #0003; border-radius: 3px; }
 .math-context-menu button { display: block; width: 100%; padding: 5px 8px; border: 0; background: transparent; color: inherit; text-align: left; }
 .math-context-menu button:hover, .math-context-menu button:focus { background: var(--vscode-menu-selectionBackground, var(--sidebar-row-active)); color: var(--vscode-menu-selectionForeground, var(--foreground)); }
@@ -467,3 +436,9 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .subagent-parent-link { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 5px 9px; border-radius: 14px; color: var(--foreground); background: transparent; border: 1px solid var(--border); cursor: pointer; }
 .subagent-parent-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subagent-readonly { margin: 8px 0; font-size: .85rem; }
+
+.account-usage .usage-notice, .account-plan { font-size: .6875rem; line-height: 1.5; overflow-wrap: anywhere; }
+.provider-usage-link { display: block; font-size: .6875rem; margin-bottom: 8px; }
+
+.inline-attachment { display: inline-flex; align-items: center; gap: 4px; font-size: .85em; line-height: 1.5; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--message-surface); color: var(--foreground); vertical-align: baseline; cursor: pointer; }
+.chat-image .image-preview-button { display: block; border: 0; background: transparent; padding: 0; max-width: 100%; cursor: zoom-in; }

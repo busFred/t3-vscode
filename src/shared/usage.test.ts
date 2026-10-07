@@ -16,9 +16,11 @@ test("Meters keep subscriptions separate, deduplicate shared accounts and preser
   const personal = accounts.find((account) => account.label === "Personal")!;
   const work = accounts.find((account) => account.label === "Work")!;
   assert.deepEqual(personal.instanceIds, ["codex-personal", "codex-copy"]);
-  assert.equal(meterText(personal).replaceAll("\u2007", " "), "M   — | W  91 | S  64%");
-  assert.equal(meterText(work).replaceAll("\u2007", " "), "M   — | W  55 | S   —%");
-  assert.equal(meterText(accounts.find((account) => account.label === "Unavailable")!).replaceAll("\u2007", " "), "M   — | W   — | S   —%");
+  assert.equal(meterText(personal), "W 91% · S 64%");
+  assert.equal(meterText(work), "Week 55%");
+  assert.equal(meterText({ ...personal, limits: { ...personal.limits, windows: [{ id: "monthly", kind: "monthly", label: "Month", usedPercent: 0 }, ...personal.limits.windows] } }), "M 100% · W 91% · S 64%");
+  assert.equal(meterText({ ...personal, limits: { ...personal.limits, windows: [{ id: "session", kind: "session", label: "Session", usedPercent: 100 }] } }), "Session 0%");
+  assert.equal(meterText(accounts.find((account) => account.label === "Unavailable")!), "Usage unavailable");
   assert.deepEqual(selectedUsageAccounts(accounts, { followActive: true, pinnedAccounts: [personal.key, work.key] }, "codex-copy").map((account) => account.key), [personal.key, work.key]);
   assert.deepEqual(selectedUsageAccounts(accounts, { followActive: false, pinnedAccounts: [work.key] }, "codex-personal"), [work]);
 });

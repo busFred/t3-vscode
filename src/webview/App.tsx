@@ -11,15 +11,15 @@ import { addDraftContext, readDraft, updateDraft } from "./composerDrafts";
 import type { DraftTransfer } from "../shared/viewDraft";
 import { SidebarView } from "./components/SidebarView";
 import { ServerSetup } from "./components/ServerSetup";
-import { UsagePanel } from "./components/UsagePanel";
 import { MathContextMenu } from "./components/MathContextMenu";
+import { EquationPreview } from "./components/EquationPreview";
 import { VisualDialog } from "./components/ChatMedia";
 import { settleDraftAttachments } from "./composerAttachments";
 
 export function App() {
   const [state, setState] = useState<HostStateSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [usage, setUsage] = useState<{ accountKey?: string } | null>(null);
+  const [usageRequest, setUsageRequest] = useState<{ accountKey?: string } | null>(null);
   const appearance = state?.appearance ?? DEFAULT_APPEARANCE;
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -37,16 +37,7 @@ export function App() {
       return true;
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return false; }
   }, [receive]);
-  useEffect(() => {
-    const open = (data?: unknown) => setUsage(typeof data === "string" ? { accountKey: data } : {});
-    const event = (event: Event) => {
-      const accountKey = (event as CustomEvent).detail;
-      void run(Methods.showUsage, typeof accountKey === "string" ? { accountKey } : undefined);
-    };
-    const off = bridge.on(Events.showUsage, open);
-    window.addEventListener("t3-show-usage", event);
-    return () => { off(); window.removeEventListener("t3-show-usage", event); };
-  }, [run]);
+  useEffect(() => bridge.on(Events.showUsage, (data) => setUsageRequest(typeof data === "string" ? { accountKey: data } : {})), []);
   useEffect(() => bridge.on(Events.openInTab, (data) => {
     const draftKey = typeof data === "string" ? data : state?.activeThreadId ?? "new";
     void settleDraftAttachments(draftKey).then(() => run(Methods.openInTab, { draftKey, draft: readDraft(draftKey) }));
@@ -70,7 +61,7 @@ export function App() {
   }, [run, receive]);
   let content;
   if (!state) content = <StatusView title="Opening T3 VSCode…" detail="Connecting to the extension host." />;
-  else if (state.phase === "ready") content = document.body.dataset.surface === "usage" ? <UsagePanel state={state} {...(usage ?? {})} embedded onClose={() => {}} /> : document.body.dataset.surface === "sidebar" ? <SidebarView state={state} onAppearance={() => { void run(Methods.openSettings); }} /> : <ChatView state={state} onAppearance={() => { void run(Methods.openSettings); }} />;
+  else if (state.phase === "ready") content = document.body.dataset.surface === "sidebar" ? <SidebarView state={state} usageRequest={usageRequest} onAppearance={() => { void run(Methods.openSettings); }} /> : <ChatView state={state} />;
   else if (state.phase === "no-server") content = <ServerSetup state={state} />;
   else content = <StatusView
     title={state.phase === "error" ? "Connection interrupted" : state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}
@@ -82,7 +73,6 @@ export function App() {
   />;
   return <Actions value={run}><div className="app">
     {error ? <div className="error-banner" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError(null)}><XIcon size={14} /></button></div> : null}
-    {content}<MathContextMenu /><VisualDialog />
-    {usage && state && document.body.dataset.surface !== "usage" ? <UsagePanel state={state} {...usage} onClose={() => setUsage(null)} /> : null}
+    {content}<MathContextMenu /><VisualDialog /><EquationPreview />
   </div></Actions>;
 }

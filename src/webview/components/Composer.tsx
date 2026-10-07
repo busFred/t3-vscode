@@ -5,7 +5,7 @@ import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge"
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
 import { clearDraft, updateDraft, useComposerDraft } from "../composerDrafts";
-import { fileReferenceLabel, formatComposerMessage } from "../../shared/composerContext";
+import { contextIsReferenced, fileReferenceLabel, formatComposerMessage, removeContextReference } from "../../shared/composerContext";
 import type { AssistantCitation } from "@t3tools/contracts";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
 import { effortDescriptor } from "../../shared/modelOptions";
@@ -17,15 +17,17 @@ import { ComposerSuggestions } from "./ComposerSuggestions";
 import { ConversationActivity } from "./ConversationActivity";
 import { resolveComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 import { addDraftAttachments, pasteAttachments, removeDraftAttachment, trackAttachmentWork } from "../composerAttachments";
-import type { DraftAttachment } from "../../shared/composerAttachments";
+import type { DraftAttachment, TextSelection } from "../../shared/composerAttachments";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { openVisual } from "./ChatMedia";
+import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 
 const runtimeLabels: Record<string, string> = { "approval-required": "Ask permission", "auto-accept-edits": "Auto-accept edits", auto: "Auto", "full-access": "Full access" };
 const steerShortcut = navigator.userAgent.includes("Mac") ? "Cmd+Enter" : "Ctrl+Enter";
-export function Composer({ state, onEditCitation, onUsage }: { readonly state: HostStateSnapshot; readonly onEditCitation: (citation: AssistantCitation, index: number) => void; readonly onUsage: () => void }) {
+export function Composer({ state, onEditCitation, onUsage, onSelectionChange }: { readonly state: HostStateSnapshot; readonly onEditCitation: (citation: AssistantCitation, index: number) => void; readonly onUsage: () => void; readonly onSelectionChange: (selection: TextSelection) => void }) {
   const draftKey = state.activeThreadId ?? "new";
   const { text, contexts, attachments = [] } = useComposerDraft(draftKey);
+  const visibleContexts = contexts.map((context, index) => ({ context, index })).filter(({ context }) => contextIsReferenced(text, context));
   const touched = useRef(false);
   const markTouched = () => {
     if (touched.current || !state.activeThreadId) return;
@@ -87,9 +89,18 @@ export function Composer({ state, onEditCitation, onUsage }: { readonly state: H
     else requestAnimationFrame(() => { textarea.current?.focus(); textarea.current?.setSelectionRange(next.cursor, next.cursor); });
   };
   useEffect(() => {
-    const focus = () => textarea.current?.focus(); window.addEventListener("t3-focus-composer", focus);
+    const focus = (event: Event) => {
+      const detail = (event as CustomEvent<{ draftKey?: string; cursor?: number }>).detail;
+      if (detail?.draftKey && detail.draftKey !== draftKey) return;
+      const input = textarea.current;
+      requestAnimationFrame(() => {
+        if (!input || input !== textarea.current) return;
+        input.focus();
+        if (detail?.cursor !== undefined) { input.setSelectionRange(detail.cursor, detail.cursor); setCursor(detail.cursor); onSelectionChange({ start: detail.cursor, end: detail.cursor }); }
+      });
+    }; window.addEventListener("t3-focus-composer", focus);
     return () => window.removeEventListener("t3-focus-composer", focus);
-  }, []);
+  }, [draftKey, onSelectionChange]);
   useEffect(() => {
     if (!textarea.current) return;
     textarea.current.style.height = "auto";
@@ -128,21 +139,36 @@ export function Composer({ state, onEditCitation, onUsage }: { readonly state: H
     if ((!value && !attachments.length) || disabled || !selection || picking || attachments.some((file) => file.pending || !file.attachment)) return;
     setBusy(true);
     const mode = resolveComposerDispatchMode({ running, activeTurnDefault: "queue", alternateModifier: steer && state.queue?.canSteer === true });
-    const sent = await run("sendMessage", { text: value, mode, attachmentIds: attachments.map((file) => file.attachment!.id), ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
+    const sent = await run("sendMessage", { text: value, mode, attachmentIds: attachments.map((file) => file.attachment!.id), attachmentReferences: attachments.flatMap((file) => file.contextId ? [{ contextId: file.contextId, attachmentId: file.attachment!.id }] : []), ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
     if (sent) clearDraft(draftKey);
     setBusy(false); textarea.current?.focus();
   };
   const addFiles = (files: ReadonlyArray<File>) => {
     if (disabled || !files.length) return;
     markTouched(); setAttachmentError(null);
-    void pasteAttachments(draftKey, files, state.activeThreadId).catch((cause) => setAttachmentError(cause instanceof Error ? cause.message : String(cause)));
+    const selection = { start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length };
+    void pasteAttachments(draftKey, files, state.activeThreadId, selection, (cursor) => {
+      setCursor(cursor); requestAnimationFrame(() => textarea.current?.setSelectionRange(cursor, cursor));
+    }).catch((cause) => setAttachmentError(cause instanceof Error ? cause.message : String(cause)));
   };
   const pickFiles = () => {
+    const selection = { start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length };
     setPicking(true); setAttachmentError(null);
     void trackAttachmentWork(draftKey, bridge.request<{ attachments: DraftAttachment[]; errors: string[] }>("pickAttachments", undefined, 10 * 60_000).then((result) => {
-      if (result.attachments.length) { markTouched(); addDraftAttachments(draftKey, result.attachments); }
+      if (result.attachments.length) { markTouched(); const cursor = addDraftAttachments(draftKey, result.attachments, selection); if (cursor !== undefined) { setCursor(cursor); requestAnimationFrame(() => textarea.current?.setSelectionRange(cursor, cursor)); } }
       setAttachmentError(result.errors.join("\n") || null);
     })).catch((cause) => setAttachmentError(cause instanceof Error ? cause.message : String(cause))).finally(() => { setPicking(false); textarea.current?.focus(); });
+  };
+  const activateInlineReference = (position: number): boolean => {
+    const reference = collectComposerContextReferences(text).find((ref) => ref.start <= position && position < ref.end);
+    if (reference?.kind === "assistant-quote") {
+      const index = contexts.findIndex((context) => context.type === "assistant" && context.contextId === reference.contextId);
+      const context = contexts[index];
+      if (context?.type === "assistant") { onEditCitation(context.citation, index); return true; }
+    }
+    const file = reference?.kind === "image" ? attachments.find((file) => file.contextId === reference.contextId) : undefined;
+    if (file?.previewUrl) { openVisual({ title: file.name, src: file.previewUrl }); return true; }
+    return false;
   };
   const traits = <div className="composer-traits">
     {effort ? <label className="effort-control" title={effort.description ?? effort.label}><select aria-label="Effort level" value={effortValue} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => {
@@ -171,20 +197,28 @@ export function Composer({ state, onEditCitation, onUsage }: { readonly state: H
         <button className="icon-button remove-attachment" aria-label={`Remove ${file.name}`} disabled={busy} onClick={() => { void removeDraftAttachment(draftKey, file.key).catch((cause) => setAttachmentError(String(cause))); }}><XIcon size={12} /></button>
       </div>)}</div> : null}
       {attachmentError ? <div className="composer-attachment-error" role="alert">{attachmentError}</div> : null}
-      {contexts.length ? <div className="composer-contexts" aria-label="Message references">{contexts.map((context, index) => <div className="context-chip" key={index}>
+      {visibleContexts.length ? <div className="composer-contexts" aria-label="Message references">{visibleContexts.map(({ context, index }) => <div className="context-chip" key={index}>
         <button className="context-label" title={context.type === "file" ? context.text || context.path : `${context.citation.text}${context.citation.comment ? `\nComment: ${context.citation.comment}` : ""}`} onClick={() => {
           if (context.type === "assistant") onEditCitation(context.citation, index);
           else void run("openLink", { href: `${context.uri}:${context.range.start.line}:${context.range.start.column}` });
         }}>{context.type === "file" ? `@${fileReferenceLabel(context)}` : context.citation.comment ? "Assistant quote · Comment" : "Assistant quote"}</button>
-        <button className="icon-button" aria-label={`Remove reference ${index + 1}`} onClick={() => updateDraft(draftKey, (draft) => ({ ...draft, contexts: draft.contexts.filter((_, position) => position !== index) }))}><XIcon size={12} /></button>
+        <button className="icon-button" aria-label={`Remove reference ${index + 1}`} onClick={() => updateDraft(draftKey, (draft) => ({ ...draft, text: removeContextReference(draft.text, context), contexts: draft.contexts.filter((_, position) => position !== index) }))}><XIcon size={12} /></button>
       </div>)}</div> : null}
-      <textarea ref={textarea} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} disabled={disabled} rows={2}
+      <textarea ref={textarea} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description="Click an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor." disabled={disabled || picking} rows={2}
+        onBlur={(event) => onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })}
+        onClick={(event) => {
+          if (event.currentTarget.selectionStart !== event.currentTarget.selectionEnd) return;
+          activateInlineReference(event.currentTarget.selectionStart);
+        }}
         onPaste={(event) => {
           const files = event.clipboardData.files.length ? [...event.clipboardData.files] : [...event.clipboardData.items].map((item) => item.kind === "file" ? item.getAsFile() : null).filter((file): file is File => file !== null);
           if (files.length) { event.preventDefault(); addFiles(files); }
         }}
         aria-controls={suggestionsOpen ? "composer-suggestions" : undefined} aria-expanded={suggestionsOpen} aria-autocomplete="list" aria-activedescendant={suggestionsOpen && items.length ? `composer-suggestion-${highlighted}` : undefined}
-        onSelect={(event) => setCursor(event.currentTarget.selectionStart)} onChange={(event) => { setText(event.target.value); setCursor(event.target.selectionStart); setDismissedTrigger(null); }} onKeyDown={(event) => {
+        onSelect={(event) => { setCursor(event.currentTarget.selectionStart); onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }); }} onChange={(event) => { setText(event.target.value); setCursor(event.target.selectionStart); onSelectionChange({ start: event.target.selectionStart, end: event.target.selectionEnd }); setDismissedTrigger(null); }} onKeyDown={(event) => {
+        if (event.key === "Enter" && event.altKey) {
+          if (activateInlineReference(event.currentTarget.selectionStart)) { event.preventDefault(); return; }
+        }
         if (suggestionsOpen && !event.nativeEvent.isComposing) {
           if (event.key === "Escape") { event.preventDefault(); setDismissedTrigger(triggerKey); return; }
           if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setSuggestionIndex(items.length ? (highlighted + (event.key === "ArrowDown" ? 1 : items.length - 1)) % items.length : 0); return; }
@@ -197,7 +231,7 @@ export function Composer({ state, onEditCitation, onUsage }: { readonly state: H
       }}><FolderIcon size={12} /><span>{projectLabel}</span><ChevronDownIcon size={11} /></button> : null}</div>
       {!selection ? <div className="composer-hint">No models available. Configure a provider in T3 Code.</div> : null}
       <div className="composer-send-controls"><button className="icon-button" aria-label="Attach files" title="Attach files from this machine" disabled={disabled || picking} onClick={pickFiles}><PaperclipIcon size={17} /></button>{thread?.activeRunId ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
-        <button className="send-button" aria-label="Send message" title={running ? `Queue after this turn${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Send message"} disabled={disabled || picking || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !contexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
+        <button className="send-button" aria-label="Send message" title={running ? `Queue after this turn${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Send message"} disabled={disabled || picking || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
       </div></div>
     </div>
     <div ref={controls} className="composer-controls">

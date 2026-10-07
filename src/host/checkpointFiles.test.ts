@@ -5,7 +5,8 @@ import { promisify } from "node:util";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { readCheckpointFiles } from "./checkpointFiles.js";
+import { readCheckpointFiles, readCheckpointDiff } from "./checkpointFiles.js";
+import { turnDiffFiles } from "./turnDiff.js";
 
 test("Saved diff files read exact checkpoint blobs even when HEAD and the working file differ", async (t) => {
   const cwd = await mkdtemp(join(tmpdir(), "t3-checkpoint-files-")); t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -18,8 +19,12 @@ test("Saved diff files read exact checkpoint blobs even when HEAD and the workin
   await writeFile(join(cwd, path), "third on disk\n"); await git("add", path); await git("commit", "-qm", "Later");
   const input = { cwd, sourceKind: "branch-range" as const, changeType: "change" as const, baseRef: "refs/t3/test/1", headRef: "refs/t3/test/2", oldPath: path, newPath: path };
   assert.deepEqual(await readCheckpointFiles(input), { oldContents: "first\n", newContents: "second\n" });
+  const patch = await readCheckpointDiff(input);
+  assert.match(patch, /-first\n\+second/); assert.doesNotMatch(patch, /third on disk/);
+  assert.deepEqual(turnDiffFiles(patch), [{ oldPath: path, newPath: path, changeType: "change" }]);
   assert.deepEqual(await readCheckpointFiles({ ...input, changeType: "new", baseRef: null }), { oldContents: "", newContents: "second\n" });
   assert.deepEqual(await readCheckpointFiles({ ...input, changeType: "deleted", headRef: null }), { oldContents: "first\n", newContents: "" });
   await assert.rejects(readCheckpointFiles({ ...input, headRef: "HEAD" }), /Invalid saved checkpoint/);
   await assert.rejects(readCheckpointFiles({ ...input, newPath: "../outside" }), /Invalid saved checkpoint/);
+  await assert.rejects(readCheckpointDiff({ ...input, baseRef: "HEAD" }), /Invalid saved checkpoint/);
 });

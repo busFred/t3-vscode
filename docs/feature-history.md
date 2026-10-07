@@ -1,50 +1,53 @@
 # T3 VSCode feature history
 
-This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.8 records the current iteration.
+This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9 and v0.1.10 were local previews, and v0.1.11 is the current alpha candidate.
 
 ## Overview
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Dedicated session manager with optional sidebar chat. | v0.0.7 | v0.0.8 |
-| [Workspace scope](#workspace-scope) | Shows conversations belonging to opened folders and their worktrees. | v0.0.2 | v0.0.8 |
-| [Independent chat views](#independent-chat-views) | Sidebar and editor tabs keep independent conversations and drafts. | v0.0.2 | v0.0.8 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with chat in editor tabs. | v0.0.7 | v0.0.9 |
+| [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
+| [Independent chat views](#independent-chat-views) | Editor tabs keep independent conversations and drafts. | v0.0.2 | v0.0.9 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.0.6 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.0.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.0.6 |
-| [Conversation status and notifications](#conversation-status-and-notifications) | Shows static Working/Input badges and notifies when input is needed. | v0.0.1 | v0.0.7 |
+| [Conversation status and notifications](#conversation-status-and-notifications) | Shows static Working/Input badges and notifies when input is needed. | v0.0.1 | v0.0.9 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.0.8 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes newly created empty chats when their last chat surface closes. | v0.0.8 | v0.0.8 |
-| [Compact composer](#compact-composer) | Compact message box with plain model, effort and permission selectors below it. | v0.0.1 | v0.0.8 |
+| [Compact composer](#compact-composer) | Compact prompt controls below the single-column transcript. | v0.0.1 | v0.1.10 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.0.6 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits, removes, reorders and promotes queued messages; shows current tasks. | v0.0.6 | v0.0.7 |
-| [Attachment presentation](#attachment-presentation) | Shows image previews in drafts and sent messages. | v0.0.1 | v0.0.8 |
-| [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Attaches clipboard images and files selected from the local machine. | v0.0.8 | v0.0.8 |
-| [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies through a virtualized timeline and loads older history. | v0.0.1 | v0.0.8 |
+| [Attachment presentation](#attachment-presentation) | Draft and sent previews with image references in message text. | v0.0.1 | v0.0.9 |
+| [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Attaches clipboard images and files selected from the local machine. | v0.0.8 | v0.0.9 |
+| [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies through a virtualized timeline and loads older history. | v0.0.1 | v0.1.10 |
 | [Markdown and media](#markdown-and-media) | Renders formatted text, code, tables, images, video and audio. | v0.0.1 | v0.0.8 |
-| [Collapsed activity](#collapsed-activity) | Keeps reasoning and command sequences inside closed summaries. | v0.0.1 | v0.0.8 |
+| [Collapsed activity](#collapsed-activity) | Keeps reasoning and command sequences inside closed summaries. | v0.0.1 | v0.0.9 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
-| [Math rendering and copying](#math-rendering-and-copying) | Renders KaTeX equations and copies LaTeX or MathML. | v0.0.8 | v0.0.8 |
+| [Two-column reading](#two-column-reading) | Removed in v0.1.10 after performance feedback. | v0.0.9 | v0.1.10 |
+| [Math rendering and copying](#math-rendering-and-copying) | Renders KaTeX with scrolling, floating previews and copy actions. | v0.0.8 | v0.0.9 |
 | [Models and provider instances](#models-and-provider-instances) | Uses server-advertised providers and models, including ACP instances. | v0.0.1 | v0.0.7 |
 | [Model search and favorites](#model-search-and-favorites) | Searches model/provider names and saves favorite models. | v0.0.4 | v0.0.7 |
 | [Effort and permission controls](#effort-and-permission-controls) | Uses each model's advertised options and supported runtime modes. | v0.0.1 | v0.0.7 |
-| [Account usage](#account-usage) | Displays quota windows, remaining percentages, reset times and a refresh action. | v0.0.6 | v0.0.8 |
-| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection. | v0.0.7 | v0.0.8 |
+| [Account usage](#account-usage) | Collapsed sidebar limits, reset times, notices and refresh. | v0.0.6 | v0.0.9 |
+| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection. | v0.0.7 | v0.0.9 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.0.5 |
-| [Editor references](#editor-references) | Adds editor selections to the focused chat with Alt+K. | v0.0.4 | v0.0.8 |
-| [Assistant citations](#assistant-citations) | Quotes assistant text with optional comments and links to its source. | v0.0.4 | v0.0.8 |
+| [Editor references](#editor-references) | Adds editor selections to the focused chat with Alt+K. | v0.0.4 | v0.0.9 |
+| [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.11 |
 | [Response forks](#response-forks) | Forks supported completed responses into a separate conversation. | v0.0.5 | v0.0.6 |
-| [Saved turn diffs](#saved-turn-diffs) | Opens the preceding turn's saved changes in native diff editors. | v0.0.6 | v0.0.6 |
+| [Saved turn diffs](#saved-turn-diffs) | Opens the preceding turn's saved changes in native diff editors. | v0.0.6 | v0.0.9 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
-| [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.0.7 |
+| [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers a running local T3 server and stores credentials in SecretStorage. | v0.0.1 | v0.0.8 |
 | [Missing-server setup](#missing-server-setup) | Offers installation, service/manual startup links and Retry connection. | v0.0.1 | v0.0.7 |
-| [Native themes and fonts](#native-themes-and-fonts) | Follows VS Code theme colors and exposes native font-size settings. | v0.0.1 | v0.0.8 |
-| [T3 VSCode branding](#t3-vscode-branding) | Distinguishes the extension's name and icons from T3 Code. | v0.0.7 | v0.0.7 |
-| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces local VSIX installers. | v0.0.1 | v0.0.8 |
+| [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage and Connection. | v0.0.9 | v0.1.10 |
+| [Native themes and fonts](#native-themes-and-fonts) | Follows VS Code theme colors and exposes native font-size settings. | v0.0.1 | v0.0.9 |
+| [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.11 |
+| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces prerelease VSIX installers. | v0.0.1 | v0.1.11 |
+| [Release versioning](#release-versioning) | Uses one three-number version everywhere with Alpha as a stage description. | v0.1.10 | v0.1.11 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 
 ## Sessions and navigation
@@ -60,6 +63,11 @@ This document tracks features by release, including how later versions changed t
 
 - Preserve the active editor chat and draft while its History page is open.
 - Show sessions directly below search and remove the redundant project heading and project-level New Thread button.
+
+#### v0.0.9
+
+- Make the sidebar a session manager and remove its Chat/Sessions switch and embedded chat.
+- Remove redundant History, New, Open in Editor and Usage title actions while keeping the browser shortcut and one New control above search.
 
 ### Workspace scope
 
@@ -94,6 +102,11 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.8
 
 - Include uploaded attachments in draft handoff and wait for pending uploads before copying them.
+
+#### v0.0.9
+
+- Reuse the existing editor tab when selecting an already open conversation.
+- Keep the last focused editor as the reference and account-meter target when the session manager gains focus.
 
 ### Conversation management
 
@@ -141,6 +154,10 @@ This document tracks features by release, including how later versions changed t
 
 - Add static Working and Input/Approval badges for unopened workspace sessions.
 - Deduplicate native notifications by pending request and open the affected conversation from the notification.
+
+#### v0.0.9
+
+- Reveal an existing session tab from the input notification instead of creating a duplicate.
 
 ### Message navigation rail
 
@@ -197,6 +214,14 @@ This document tracks features by release, including how later versions changed t
 
 - Add a paperclip button and compact removable attachment previews.
 
+#### v0.0.9
+
+- Dock the composer below the latest right column and allow it to expand across both columns without replacing its input or losing the draft.
+
+#### v0.1.10
+
+- Return the composer below the single-column transcript and remove the column expansion control.
+
 ### Slash commands and file suggestions
 
 #### v0.0.6
@@ -241,6 +266,11 @@ This document tracks features by release, including how later versions changed t
 - Replace image-name placeholders with authenticated thumbnails in sent messages.
 - Show removable draft thumbnails with upload status and expanded image previews.
 
+#### v0.0.9
+
+- Open floating image previews from the thumbnail itself or its inline message reference.
+- Display message-owned image references in place while retaining the attached-image thumbnail strip.
+
 ### Clipboard paste and file picker
 
 #### v0.0.8
@@ -248,6 +278,13 @@ This document tracks features by release, including how later versions changed t
 - Attach pasted clipboard images, dropped files and files chosen through VS Code's local file picker.
 - Upload bytes through T3's signed upload API and retain per-chat ownership through handoff and closure.
 - Prevent attachment cleanup from racing an outgoing message dispatch.
+
+#### v0.0.9
+
+- Insert stable image/file references at the cursor for paste, drop and file-picker attachments.
+- Send structured attachment context so the provider receives the image position within the paragraph.
+- Remove an attachment’s references when removing its draft thumbnail.
+- Keep existing references intact when a new attachment is inserted from a caret or selection inside a reference.
 
 ## Message rendering
 
@@ -269,6 +306,14 @@ This document tracks features by release, including how later versions changed t
 
 - Keep message-rail jumps and grouped activity compatible with virtualization and source citations.
 - Resume following replies when the user manually scrolls back to the bottom.
+
+#### v0.0.9
+
+- Retain virtualized single-column history and keep completed reading pages fixed while the live right column grows.
+
+#### v0.1.10
+
+- Use the virtualized transcript at every editor size and remove the column reflow observers and positioning work.
 
 ### Markdown and media
 
@@ -296,6 +341,10 @@ This document tracks features by release, including how later versions changed t
 - Collapse consecutive reasoning and commands into one closed activity summary.
 - Keep messages, requests, checkpoints, subagent rows and rendered graphics outside command summaries.
 
+#### v0.0.9
+
+- Prevent long command output from shrinking its command-input block below one readable line.
+
 ### Interactive HTML graphics
 
 #### v0.0.8
@@ -318,6 +367,27 @@ This document tracks features by release, including how later versions changed t
 - Render inline/display LaTeX, matrices and aligned equations with bundled KaTeX fonts.
 - Support dollar and escaped-parenthesis/bracket delimiters while preserving code examples.
 - Offer Copy LaTeX, Copy LaTeX with delimiters and Copy MathML on right-click.
+
+#### v0.0.9
+
+- Keep equations with their surrounding text and allow wide display equations to scroll horizontally in either layout.
+- Open a floating equation preview by click or keyboard while retaining the LaTeX and MathML context menu.
+- Preserve inline or display delimiters when copying LaTeX from the floating preview.
+
+### Two-column reading
+
+#### v0.0.9
+
+- Flow completed conversation blocks down the left column, then the right column, before the next pair of columns.
+- Fill the left reading area without reserving a blank band for the right-column composer.
+- Use the editor’s dimensions and font scale to choose Auto mode, with a native 1–10 sensitivity dropdown and global Off setting.
+- Retain a one-column override and composer expansion independently for each editor tab.
+- Keep oversized equations and other blocks in place with scrolling instead of moving them away from their explanation.
+
+#### v0.1.10
+
+- Remove the two-column engine, automatic switching, per-tab override and related settings after reports of lag.
+- Retain equation scrolling, previews and copying in the single-column transcript.
 
 ## Providers and usage
 
@@ -380,6 +450,12 @@ This document tracks features by release, including how later versions changed t
 - Add Refresh and the selected account's reported update time inside Account & Usage without opening it by default.
 - Keep the dedicated Usage tab's refresh action and update time.
 
+#### v0.0.9
+
+- Remove the separate Usage editor and its header shortcut and consolidate additional quota windows, notices and provider links in the sidebar.
+- Remove the Remaining label from the Account & Usage summary.
+- Open the selected account’s expanded sidebar section from its status meter or the Account & Usage command.
+
 ### Status bar meters
 
 #### v0.0.7
@@ -390,6 +466,12 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.8
 
 - Label windows as `M   — | W  83 | S   —%` and preserve `—` for unreported limits.
+
+#### v0.0.9
+
+- Open sidebar Account & Usage for the clicked meter’s account.
+- Show only reported month/week/session percentages, name a single reported window in full and explain missing data on hover.
+- Remove the status-bar ellipsis and point to Configure Status Meters in the Command Palette.
 
 ## VS Code integration
 
@@ -417,6 +499,10 @@ This document tracks features by release, including how later versions changed t
 
 - Mark a new conversation as used as soon as a native editor reference is added.
 
+#### v0.0.9
+
+- Open an editor chat when no chat is available and preserve the last focused editor target while browsing sidebar usage.
+
 ### Assistant citations
 
 #### v0.0.4
@@ -426,6 +512,13 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.8
 
 - Retain source lookup and rendered text selection through grouped activity and rich Markdown.
+
+#### v0.1.11
+
+- Insert quotes at the saved prompt cursor or replace selected prompt text without splitting existing quote or attachment references.
+- Preserve source links and comments at their inline positions when sending, queueing or steering.
+- Open comments from an inline reference or quote chip, and omit deleted references from the sent quote context.
+- Retain quote identities across draft handoff and keep independent editor drafts separate.
 
 ### Response forks
 
@@ -443,6 +536,11 @@ This document tracks features by release, including how later versions changed t
 
 - Group changed files by folder and compare adjacent saved turn checkpoints.
 - Open immutable before/after blobs in native diff editors, independent of HEAD and later working-file edits.
+
+#### v0.0.9
+
+- Compare immutable checkpoint Git refs directly instead of looking up a numbered turn pair on the server.
+- Follow the saved parent checkpoint through cancelled turns, including ready baselines without a completed run.
 
 ### Conversation tab titles
 
@@ -464,6 +562,10 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.7
 
 - Add globe actions that open the current local T3 conversation in the default browser.
+
+#### v0.1.10
+
+- Open loopback T3 browser URLs through localhost while preserving the port, selected conversation and non-loopback hosts.
 
 ## Setup and settings
 
@@ -494,6 +596,17 @@ This document tracks features by release, including how later versions changed t
 - Add installation/service/manual-start links, copyable commands, Retry connection and native Settings.
 - State that remote servers are not supported yet.
 
+### Settings organization
+
+#### v0.0.9
+
+- Group native settings into Appearance, Reading, Usage and Connection with stable ordering.
+- Preserve existing setting keys so configured font sizes, navigation, usage accounts and server paths still apply.
+
+#### v0.1.10
+
+- Remove the two-column mode and sensitivity settings while keeping the Reading category for message navigation.
+
 ### Native themes and fonts
 
 #### v0.0.1
@@ -517,12 +630,24 @@ This document tracks features by release, including how later versions changed t
 - Use the editor foreground for readable message text and the main foreground for activity labels.
 - Theme inline graphics, Mermaid, math and equation menus without adding animation.
 
+#### v0.0.9
+
+- Keep the native settings shortcut in the session manager after removing the editor History page.
+
 ### T3 VSCode branding
 
 #### v0.0.7
 
 - Rename the extension, commands, documentation and setup instructions to T3 VSCode.
 - Use supplied ribbon icons for the activity bar and editor tabs.
+
+#### v0.1.10
+
+- Prepare alpha listing metadata, repository/support links, keywords and root license/changelog/support files.
+
+#### v0.1.11
+
+- Add README screenshots of the actual extension showing equations, diagrams, interactive graphics and quote comments.
 
 ### Isolated development and packaging
 
@@ -545,6 +670,29 @@ This document tracks features by release, including how later versions changed t
 - Verify native graphics, actual clipboard paste, file picking, attachment delivery and untouched-chat cleanup.
 - Select GPT-6 Luna with low effort for live provider tests and require an explicit model override instead of a premium fallback.
 
+#### v0.1.10
+
+- Mark packaged installers as Marketplace prereleases and include the project license, changelog and support information.
+- Require a root license instead of bypassing the packager’s license check.
+
+#### v0.1.11
+
+- Capture README images in a disposable native VS Code profile using schema-validated synthetic history without provider turns.
+- Include the screenshot assets in the installer and remove the separate release-label metadata and encoder.
+
+### Release versioning
+
+#### v0.1.10
+
+- Track major.minor.stage.build in release.json, with 0/1/2/3 denoting alpha/beta/RC/stable.
+- Encode stage × 10000 + build in the Marketplace patch component and validate the manifest before packaging.
+- Prepare label 0.1.0.10 as Marketplace v0.1.10 while preserving historical version entries.
+
+#### v0.1.11
+
+- Replace the label/encoding scheme with one package.json version used by the README, changelog, installer and Marketplace.
+- Use Alpha as a stage description and keep the prerelease channel separate from the three-number version.
+
 ### Feature tracking and regression review
 
 #### v0.0.8
@@ -563,6 +711,37 @@ This document tracks features by release, including how later versions changed t
 - Reject six linked writable fixture paths without changing an external sentinel.
 - Obtain a fresh-context regression audit against `3c34c58` with no blocking production regressions after resolving its findings.
 - Verify the subsequent inexpensive-model test defaults without further model calls; the completed native runs used Codex before that preference changed.
+
+### v0.0.9
+
+- Pass 113 unit tests, TypeScript checks, bundle builds and JavaScript syntax checks.
+- Pass deterministic browser and shared-host checks for reading pages, stable streaming, media resizing, navigation, independent drafts and Queue/Steer.
+- Pass isolated native VS Code checks for the sessions-only sidebar, account refresh, reported-window meters, grouped settings and live font changes.
+- Pass native editor references, exact saved checkpoint diffs, real provider replies, queued-message promotion and task progress.
+- Pass native two-column graphics, equation copying/previews, full-height command details, image paste/picking, attachment delivery and empty-chat cleanup.
+- Pass native input notifications that reveal an existing conversation tab without duplication and resume the provider after answering.
+- Use GPT-6 Luna with low effort for live provider checks in an isolated T3 home and disposable VS Code profiles.
+- Obtain a fresh-context regression audit against `72d60c8` with no blocking production regressions after resolving its findings.
+
+### v0.1.10
+
+- Pass 117 unit tests, TypeScript checks, bundle builds and JavaScript syntax checks.
+- Pass deterministic browser and shared-host checks for virtualized single-column reading, streaming, wide equations, navigation, independent drafts and existing conversation controls.
+- Verify native equations/copying, Mermaid, interactive HTML, command heights, image clipboard paste, file picking, provider delivery and sent thumbnails in an isolated VS Code profile.
+- Pass focused native untouched-chat deletion and typed-then-cleared preservation checks after fixing the test’s Close-button selector.
+- Verify localhost browser links, preserved remote hostnames, stage/build version guards, all 43 feature anchors and seven existing setting defaults.
+- Use GPT-6 Luna with low effort for live provider checks and isolate T3 state, VS Code storage and the test display.
+- Obtain final packaging signoff from a fresh-context regression reviewer against v0.0.8 and the preceding v0.0.9 local preview, with no blocking findings.
+- Inspect the generated alpha VSIX’s prerelease marker, seven settings, bundled licenses and 20 math fonts, with no development state or source maps included.
+
+### v0.1.11
+
+- Pass 117 unit tests, TypeScript checks, bundle builds and JavaScript syntax checks.
+- Pass deterministic UI and shared-host browser checks for quote cursor placement, selection replacement, comments, source links, independent drafts and existing Queue/Steer behavior.
+- Capture three native VS Code screenshots and verify saved-cursor quote insertion, collapsed commands, light/dark themes, KaTeX, Mermaid and HTML without provider turns.
+- Verify all 43 linked feature anchors and one v0.1.11 version with prerelease metadata.
+- Obtain final fresh-context regression signoff against the v0.1.10 source snapshot and Git baseline `72d60c8`, with no blocking findings.
+- Inspect the v0.1.11 prerelease VSIX for exact compiled bundles, three screenshot assets, seven settings, licenses and 20 math fonts.
 
 ## Maintenance
 

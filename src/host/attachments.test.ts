@@ -29,6 +29,19 @@ test("Removing a shared draft attachment keeps other views intact and deletes ab
   await host.releaseAttachment(image.attachment!.id); assert.deepEqual(client.deletedAttachments, []);
   await host.removeView("copy"); assert.deepEqual(client.deletedAttachments, [image.attachment!.id]);
 });
+test("Queue and steer preserve inline attachment positions with authoritative context bindings", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  const image = await host.uploadAttachment("pasted.png", "image/png", new Uint8Array([1, 2]));
+  const text = "Before ![pasted.png](t3-context://v1/image/image_one) after.";
+  const references = [{ contextId: "image_one", attachmentId: image.attachment!.id }];
+  for (const mode of ["queue", "steer"]) {
+    await host.sendMessage(text, "first", "sidebar", mode, [image.attachment!.id], references);
+    const command = client.commands.findLast((command) => command.type === "message.dispatch")!;
+    assert.equal(command.text, text);
+    assert.deepEqual(command.context?.records, [{ version: 1, kind: "image", contextId: "image_one", label: "pasted.png", attachmentId: image.attachment!.id, name: "pasted.png", mimeType: "image/png", sizeBytes: 2 }]);
+  }
+  await assert.rejects(host.sendMessage(text, "first", "sidebar", "auto", [image.attachment!.id], [{ contextId: "image_one", attachmentId: "unowned" }]), /Invalid inline/);
+});
 
 test("Closing a tab during Send cannot delete an attachment before its dispatch finishes", async (t) => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose());

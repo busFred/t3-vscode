@@ -67,7 +67,7 @@ if (process.argv.includes("--seed")) {
     for (let index = 0; index < 25; index++) { message(`Verification prompt ${index}`); add({ type: "assistant_message", messageId: randomUUID(), text: `Verification response ${index}`, streaming: false }); }
     const png = await readFile(new URL("../resources/t3-extension.png", import.meta.url));
     message("Show this screenshot, the actual mockup, diagrams and ML equations.", [{ type: "image", id: imageAttachmentId, name: "screenshot.png", mimeType: "image/png", sizeBytes: png.length }]);
-    for (let index = 0; index < 12; index++) add({ type: "command_execution", input: `echo verification-${index}`, output: `verification-${index}`, exitCode: 0 });
+    for (let index = 0; index < 12; index++) add({ type: "command_execution", input: index === 0 ? "printf 'command height verification with a long single line'" : `echo verification-${index}`, output: index === 0 ? Array.from({ length: 80 }, (_, line) => `Output line ${line}`).join("\n") : `verification-${index}`, exitCode: 0 });
     add({ type: "reasoning", text: "Collapsed reasoning verification", streaming: false });
     add({ type: "dynamic_tool", toolName: "html_render", input: {}, output: { htmlRender: { attachmentId: htmlAttachmentId, title: "Actual T3 navigation mockup", height: 1650, heights: [[360, 1422], [728, 728]] } } });
     add({ type: "assistant_message", messageId: randomUUID(), streaming: false, text: "Inline math: $p(y\\mid x)=\\operatorname{softmax}(Wx+b)$.\n\n$$\\mathcal{L}=-\\frac1N\\sum_{i=1}^N\\log p(y_i\\mid x_i)$$\n\n\\[\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\]\n\n```mermaid\nflowchart LR\nInput --> Encoder --> Prediction\n```\n\n![Local diagram](visual-image.svg)" });

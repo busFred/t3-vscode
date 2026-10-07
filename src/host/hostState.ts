@@ -36,9 +36,9 @@ import { ThreadId } from "@t3tools/contracts";
 import { htmlVisual, type ChatAssetReference, type ChatAssetSource } from "../shared/chatVisuals.js";
 import { resolveMessageNavigation, type MessageNavigationPlacement } from "../shared/messageNavigation.js";
 import { classifyMarkdownImageSource } from "@t3tools/client-runtime/markdown-images";
-import { attachmentUploadInput, type DraftAttachment } from "../shared/composerAttachments.js";
+import { attachmentMessageContext, attachmentUploadInput, type AttachmentReference, type DraftAttachment } from "../shared/composerAttachments.js";
 
-export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
+export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
   readonly home: string;
   readonly credentials: CredentialStore;
@@ -505,7 +505,7 @@ export class HostState {
     if (!this.views.has(viewId)) await this.cleanupEmptyThread(id);
     return id;
   }
-  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID, mode = "auto", attachmentIds: ReadonlyArray<string> = []): Promise<void> {
+  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID, mode = "auto", attachmentIds: ReadonlyArray<string> = [], attachmentReferences: ReadonlyArray<AttachmentReference> = []): Promise<void> {
     return this.enqueue(async () => {
       this.requireView(viewId);
       if (!["auto", "queue", "steer"].includes(mode)) throw new Error("Unknown message delivery mode.");
@@ -516,6 +516,7 @@ export class HostState {
         return upload.attachment;
       });
       const limitError = getProviderAttachmentLimitError(attachments); if (limitError) throw new Error(limitError);
+      const context = attachmentMessageContext(text, attachments, attachmentReferences);
       if (!text.trim() && !attachments.length) throw new Error("Enter a message or attach a file.");
       const id = targetThreadId ?? await this.createThread(undefined, viewId);
       this.emptyThreads.delete(id);
@@ -526,7 +527,7 @@ export class HostState {
       view.sending = true; this.emit();
       try {
         await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id,
-          createdBy: "user", creationSource: "web", messageId: randomUUID(), text, attachments,
+          createdBy: "user", creationSource: "web", messageId: randomUUID(), text, attachments, ...(context ? { context } : {}),
           titleSeed: deriveThreadTitleSeed({ text, attachments }), ...(mode !== "queue" ? { deliveryIntent: mode } : {}), dispatchMode: { type: mode === "queue" ? "queue_after_active" : "start_immediately" } });
         for (const id of attachmentIds) { const upload = this.uploads.get(id); if (upload) upload.sent = true; }
       } finally { view.sending = false; this.emit(); }
@@ -766,9 +767,9 @@ export class HostState {
     if (row?.item.type !== "checkpoint") throw new Error("The selected item is not a saved turn checkpoint.");
     const projection = await this.client.getThreadProjection(sourceId);
     const range = turnCheckpointRange(projection, row.item.checkpointId);
-    const result = await this.client.getTurnDiff(sourceId, range.turnNumber - 1, range.turnNumber);
+    const patch = await this.client.getSavedTurnDiff(range);
     this.requireView(viewId); this.requireThread(id); this.requireThread(sourceId);
-    const files = turnDiffFiles(result.diff);
+    const files = turnDiffFiles(patch);
     if (!files.length) throw new Error("This turn has no saved file changes.");
     return { ...range, files };
   }
@@ -869,6 +870,8 @@ export class HostState {
     const origin = this.server.runtime?.devUrl || this.server.origin;
     const url = new URL(origin);
     if (!['http:', 'https:'].includes(url.protocol)) throw new Error("Invalid T3 web UI address.");
+    // Browser pairing cookies belong to localhost, independently of the RPC origin.
+    if (["127.0.0.1", "[::1]"].includes(url.hostname)) url.hostname = "localhost";
     const threadId = this.snapshot(viewId).activeThreadId;
     url.pathname = threadId ? `/${encodeURIComponent(this.server.descriptor.environmentId)}/${encodeURIComponent(threadId)}` : "/";
     url.search = ""; url.hash = "";

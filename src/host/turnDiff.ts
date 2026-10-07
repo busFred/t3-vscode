@@ -22,11 +22,12 @@ export function turnCheckpointRange(projection: OrchestrationV2ThreadProjection,
   const run = projection.runs.find((run) => run.id === checkpoint?.runId);
   if (!checkpoint || checkpoint.status !== "ready" || checkpoint.appRunOrdinal === null || run?.status !== "completed") throw new Error("This turn's checkpoint is not ready for a diff.");
   const scope = projection.checkpointScopes.find((scope) => scope.id === checkpoint.scopeId);
-  const root = projection.checkpointScopes.find((scope) => scope.kind === "root_run");
-  const previous = checkpoint.appRunOrdinal === 1
-    ? projection.checkpoints.find((entry) => entry.scopeId === root?.id && entry.ordinalWithinScope === 0)
-    : projection.checkpoints.find((entry) => entry.appRunOrdinal === checkpoint.appRunOrdinal! - 1 && entry.status === "ready");
-  if (!scope || !previous || previous.status !== "ready") throw new Error("The previous turn's saved checkpoint is unavailable.");
+  // A cancelled run can materialize a baseline without an app run number.
+  // Follow the saved parent; older projections use the preceding scope ordinal.
+  const previous = checkpoint.parentCheckpointId !== null
+    ? projection.checkpoints.find((entry) => entry.id === checkpoint.parentCheckpointId)
+    : projection.checkpoints.find((entry) => entry.scopeId === checkpoint.scopeId && entry.ordinalWithinScope === checkpoint.ordinalWithinScope - 1);
+  if (!scope || !previous || previous.status !== "ready" || previous.scopeId !== checkpoint.scopeId || previous.ordinalWithinScope >= checkpoint.ordinalWithinScope) throw new Error("The previous turn's saved checkpoint is unavailable.");
   return { threadId: projection.thread.id, title: projection.thread.title, turnNumber: checkpoint.appRunOrdinal, cwd: scope.cwd, baseRef: previous.ref, headRef: checkpoint.ref };
 }
 export function turnDiffFiles(patch: string): TurnDiffFile[] {

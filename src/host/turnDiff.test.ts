@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ThreadId } from "@t3tools/contracts";
+import { CheckpointId, CheckpointScopeId } from "@t3tools/contracts";
 import { viewsHarness } from "./testing/fakeTransport.js";
 import { turnFixture, publishTurn, turnPatch } from "./testing/turnFixture.js";
 import { turnCheckpointRange, turnDiffFiles } from "./turnDiff.js";
@@ -13,12 +13,25 @@ test("Diffs compare consecutive saved turns, including the first turn's baseline
   assert.throws(() => turnCheckpointRange({ ...projection, checkpoints: projection.checkpoints.filter((checkpoint) => checkpoint.appRunOrdinal !== 1) }, "checkpoint-first-2"), /previous turn/);
   assert.throws(() => turnCheckpointRange({ ...projection, runs: projection.runs.map((run) => ({ ...run, status: "running" })) }, "checkpoint-first-2"), /not ready/);
 });
+test("Diffs follow an unnumbered saved parent after a cancelled run without crossing checkpoint scopes", () => {
+  const projection = turnFixture("first", 3);
+  const checkpoints = projection.checkpoints.map((checkpoint) => checkpoint.ordinalWithinScope === 2
+    ? { ...checkpoint, appRunOrdinal: null, runId: null }
+    : checkpoint.ordinalWithinScope === 3 ? { ...checkpoint, parentCheckpointId: CheckpointId.make("checkpoint-first-2") } : checkpoint);
+  const range = turnCheckpointRange({ ...projection, checkpoints }, "checkpoint-first-3");
+  assert.equal(range.baseRef, "refs/t3/checkpoints/first/2");
+  assert.equal(range.headRef, "refs/t3/checkpoints/first/3");
+  assert.throws(() => turnCheckpointRange({ ...projection, checkpoints: checkpoints.filter((entry) => entry.ordinalWithinScope !== 2) }, "checkpoint-first-3"), /previous turn/);
+  assert.throws(() => turnCheckpointRange({ ...projection, checkpoints: checkpoints.map((entry) => entry.ordinalWithinScope === 2 ? { ...entry, scopeId: CheckpointScopeId.make("unrelated") } : entry) }, "checkpoint-first-3"), /previous turn/);
+});
 test("Native diff contents use the persisted source turn after later working-file edits", async (t) => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose()); await host.selectThread("first"); publishTurn(client, "first");
-  client.getTurnDiff = async (id, from, to) => { client.diffRequests.push({ id, from, to }); return { threadId: ThreadId.make(id), fromTurnCount: from, toTurnCount: to, diff: turnPatch }; };
+  client.getSavedTurnDiff = async (range) => { client.savedDiffRequests.push(range); return turnPatch; };
   const diff = await host.prepareTurnDiff("first", "first", "changes-first");
   const contents = await host.loadTurnDiffFile(diff, diff.files[0]!);
-  assert.deepEqual(client.diffRequests, [{ id: "first", from: 1, to: 2 }]); assert.equal(contents.newContents, "after\n");
+  assert.equal(client.savedDiffRequests[0]?.baseRef, "refs/t3/checkpoints/first/1");
+  assert.equal(client.savedDiffRequests[0]?.headRef, "refs/t3/checkpoints/first/2");
+  assert.equal(client.diffRequests.length, 0); assert.equal(contents.newContents, "after\n");
   assert.deepEqual(client.diffFileRequests, [{ cwd: "/tmp/t3-vscode", sourceKind: "branch-range", baseRef: "refs/t3/checkpoints/first/1", headRef: "refs/t3/checkpoints/first/2", oldPath: "src/example.ts", newPath: "src/example.ts", changeType: "change" }]);
   await assert.rejects(host.prepareTurnDiff("first", "outside-thread", "changes-first"), /workspace/);
   await assert.rejects(host.prepareTurnDiff("first", "first", "invented"), /checkpoint/);

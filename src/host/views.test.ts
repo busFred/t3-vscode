@@ -53,6 +53,23 @@ test("The browser action opens the current session on the discovered local UI wi
   assert.equal(host.webUiUrl("second-view"), "http://audit.invalid/audit/second");
   assert.equal(host.webUiUrl().includes("fake"), false);
 });
+test("The browser action uses localhost cookies for loopback servers without changing the transport origin", async (t) => {
+  for (const origin of ["http://127.0.0.1:3773", "http://[::1]:3773", "https://t3.example.test:8443"]) {
+    const discovered = { ...server, origin };
+    const client = new FakeTransport();
+    const host = new HostState({ home: "/tmp/fake-t3-browser", credentials: { ...credentials, get: async () => ({ ...(await credentials.get()), origin }) }, discover: async () => ({ ok: true, server: discovered }) }, client);
+    t.after(() => host.dispose());
+    await host.start();
+    const id = host.snapshot().threads[0]!.id;
+    await host.selectThread(id);
+    const url = new URL(host.webUiUrl());
+    assert.equal(url.hostname, origin.includes('example.test') ? 't3.example.test' : 'localhost');
+    assert.equal(url.port, origin.includes('example.test') ? '8443' : '3773');
+    assert.equal(url.pathname, `/audit/${encodeURIComponent(id)}`);
+    assert.equal(discovered.origin, origin);
+    assert.equal(url.search, '');
+  }
+});
 test("Views of the same conversation share one subscription until its last view leaves", async (t) => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose());
   host.registerView("tab-one"); host.registerView("tab-two");

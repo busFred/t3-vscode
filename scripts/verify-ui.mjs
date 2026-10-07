@@ -15,7 +15,8 @@ let ordinal = 0;
 const row = (type, fields) => { const id = `${type}-${++ordinal}`; return { key: id, sourceThreadId: "thread-one", toolLabel: null, output: null, needsDetail: false, item: { ...baseItem, id, ordinal, type, ...fields } }; };
 const user = row("user_message", { messageId: "message-one", createdBy: "user", creationSource: "web", inputIntent: "turn", text: "Migrate the T3 chat experience into VS Code.", attachments: [] });
 const assistant = row("assistant_message", { messageId: "message-two", text: "The core chat is ready.\n\n- **Projects and threads** stay in sync.\n- Models come from the server catalog.\n- Approvals and questions appear above the composer.\n\n```ts\nconst client = new T3Client();\nawait client.connect(server, session);\n```\n\nOpen [the client](src/host/t3Client.ts) to inspect the transport.", streaming: false });
-const command = { ...row("command_execution", { input: "pnpm run typecheck", output: "Typecheck passed", exitCode: 0 }), output: "Typecheck passed" };
+const commandOutput = `Typecheck passed\n${Array.from({ length: 80 }, (_, line) => `Output line ${line}`).join('\n')}`;
+const command = { ...row("command_execution", { input: "pnpm run typecheck", output: commandOutput, exitCode: 0 }), output: commandOutput };
 const diff = row("file_change", { fileName: "src/host/t3Client.ts", additions: 2, deletions: 1, diffStr: "@@ -1,2 +1,3 @@\n-const thread = oldThread;\n+const thread = createdThread;\n+subscribe(thread);" });
 const fixtures = { user, assistant, command, diff };
 const initial = {
@@ -25,10 +26,11 @@ const initial = {
   favoriteModels: [],
   providers: [{ instanceId: "codex", driver: "codex", displayName: "Codex", installed: true, enabled: true, supportedRuntimeModes: ["approval-required", "auto", "full-access"], models: [{ slug: "gpt-6-astra", name: "GPT-6 Astra", isCustom: false, capabilities }] }, { instanceId: "kimi-acp", driver: "acp", displayName: "Kimi via ACP", installed: true, enabled: true, models: [{ slug: "kimi-for-coding", name: "Kimi for Coding", isCustom: false, capabilities }] }],
   draft: { projectId: "project-one", workspaceRoot: "/tmp/t3-vscode", supportsNoProject: true, modelSelection: selection, runtimeMode: "auto", interactionMode: "default" },
-  activeThreadId: "thread-one", transcript: [user, assistant, command, diff], pending: { approvals: [], userInputs: [] }, history: { hasMore: false, loading: false, error: null }, threadLoading: false, sending: false,
+  reader: { mode: "off", sensitivity: 5 }, activeThreadId: "thread-one", transcript: [user, assistant, command, diff], pending: { approvals: [], userInputs: [] }, history: { hasMore: false, loading: false, error: null }, threadLoading: false, sending: false,
 };
 function mockBridge() {
   window.__requests = [];
+  window.__initialForWide = window.__state;
   window.__replace = (patch) => { window.__state = { ...window.__state, ...patch, revision: window.__state.revision + 1 }; window.postMessage({ event: "stateChanged", data: window.__state }, "*"); };
   window.acquireVsCodeApi = () => ({ getState: () => null, setState: () => {}, postMessage: (request) => {
     window.__requests.push(request);
@@ -116,7 +118,12 @@ try {
   assert.ok(await page.locator(".markdown strong").count());
   await page.getByRole("button", { name: "Ran 1 command · 1 tool call" }).click();
   await page.getByRole("button", { name: "pnpm run typecheck" }).click();
-  await page.getByText("Typecheck passed", { exact: true }).waitFor();
+  await page.getByText("Typecheck passed", { exact: false }).waitFor();
+  assert.equal(await page.locator('.command-input').evaluate(element => {
+    const style = getComputedStyle(element);
+    return element.clientHeight + 1 >= parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  }), true, 'A command remains at least one full line tall beside long output');
+  assert.equal(await page.locator('.tool-output').evaluate(element => element.scrollHeight > element.clientHeight), true);
   await page.getByRole("button", { name: "Edited src/host/t3Client.ts" }).click();
   await page.locator(".diff-add").first().waitFor();
   await page.screenshot({ path: `${evidence}/chat-wide.png` });
@@ -143,8 +150,9 @@ try {
   await page.getByRole("button", { name: "Submit answers" }).click();
   assert.deepEqual(await page.evaluate(() => window.__requests.findLast((request) => request.method === "respondToRequest").params.answers.checks), ["browser", "real server"]);
   await page.setViewportSize({ width: 360, height: 820 });
-  await page.getByRole("button", { name: "History", exact: true }).click();
+  await page.evaluate(() => { document.body.dataset.surface = "sidebar"; window.__replace({}); });
   await page.getByRole("button", { name: "Server integration checks" }).click();
+  await page.evaluate(() => { document.body.dataset.surface = "panel"; window.__replace({}); });
   await page.locator(".chat-heading strong").filter({ hasText: "Server integration checks" }).waitFor();
   assert.equal(await page.locator(".projects-sidebar").count(), 0);
   await page.evaluate(() => window.__replace({ transcript: [window.__fixtures.user, window.__fixtures.assistant], pending: { approvals: [], userInputs: [] } }));
@@ -161,7 +169,8 @@ try {
   await page.evaluate(() => window.postMessage({ event: "showNavigation" }, "*"));
   await page.getByRole("textbox", { name: "Search threads" }).waitFor();
   assert.equal(await page.locator('.account-usage').evaluate(element => element.open), false);
-  await page.getByRole("button", { name: "Chat", exact: true }).click();
+  assert.equal(await page.getByRole("button", { name: "Chat", exact: true }).count(), 0);
+  await page.evaluate(() => { document.body.dataset.surface = "panel"; window.__replace({}); });
   await page.getByRole("textbox", { name: "Search threads" }).waitFor({ state: "hidden" });
   await page.screenshot({ path: `${evidence}/chat-sidebar.png` });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth); assert.equal(overflow, false, "Sidebar must not overflow horizontally");
@@ -330,6 +339,9 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.getByRole('button', { name: 'Jump to latest message' }).click();
   await page.getByRole('button', { name: 'Jump to latest message' }).waitFor({ state: 'hidden' });
   await page.waitForFunction(() => { const scroller=document.querySelector('.transcript-list');return scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<40; });
+  // Paste into the middle of a paragraph and preserve the provider reference position.
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Compare here then explain.');
+  await page.getByRole('textbox', { name: 'Message', exact: true }).evaluate(element => { element.focus(); element.setSelectionRange(12, 12); });
   // Paste the same image bytes a browser supplies for a system screenshot.
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a53sAAAAASUVORK5CYII=';
   await page.getByRole('textbox', { name: 'Message', exact: true }).evaluate((element, bytes) => {
@@ -338,12 +350,16 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   }, png);
   await page.getByRole('button', { name: 'Preview clipboard.png', exact: true }).waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('.composer-attachment img')].some(image => image.complete && image.naturalWidth > 0));
+  assert.match(await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue(), /^Compare here!\[clipboard\.png\]\(t3-context:\/\/v1\/image\/image_[a-z0-9_-]+\) then explain\.$/);
+  await page.getByRole('textbox', { name: 'Message', exact: true }).evaluate(element => { element.setSelectionRange(30, 30); element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await page.getByRole('dialog', { name: 'clipboard.png', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Close preview', exact: true }).click();
   await page.getByRole('button', { name: 'Attach files', exact: true }).click();
   await page.getByRole('button', { name: 'Remove outside-workspace.txt', exact: true }).waitFor();
   await page.screenshot({ path: `${evidence}/composer-attachments.png` });
   await page.getByRole('button', { name: 'Remove outside-workspace.txt', exact: true }).click();
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
-  await page.waitForFunction(() => window.__requests.some(request => request.method === 'sendMessage' && request.params.text === '' && request.params.attachmentIds?.includes('pending-pasted')));
+  await page.waitForFunction(() => window.__requests.some(request => request.method === 'sendMessage' && request.params.text.includes('t3-context://v1/image/') && request.params.attachmentIds?.includes('pending-pasted') && request.params.attachmentReferences?.[0]?.attachmentId === 'pending-pasted'));
   await page.waitForFunction(() => !document.querySelector('.composer-attachment'));
   assert.equal(await page.locator('.composer-attachment').count(), 0, 'Only a successful send clears attachment thumbnails');
   await page.evaluate(() => window.__replace({ activeThreadId: undefined, projects: [], threads: [], transcript: [],
@@ -436,6 +452,38 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   assert.equal(await page.locator('.session-list .thread[data-thread-id="subagent-archive"]').count(), 0);
   await page.screenshot({ path: `${evidence}/subagent-session-tree.png` });
   await page.getByRole('textbox', { name: 'Search threads' }).fill('');
+  // Wide editors retain the virtualized single-column layout after removing the reader.
+  await page.setViewportSize({ width: 1640, height: 920 });
+  await page.evaluate(() => {
+    document.body.dataset.surface = 'panel';
+    const { user, assistant } = window.__fixtures;
+    const transcript = [];
+    for (let index = 0; index < 30; index++) {
+      transcript.push({ ...user, key: `wide-user-${index}`, item: { ...user.item, id: `wide-user-${index}`, text: `Reading prompt ${index}`, attachments: [] } });
+      transcript.push({ ...assistant, key: `wide-reply-${index}`, item: { ...assistant.item, id: `wide-reply-${index}`, messageId: `wide-message-${index}`, text: `Reading response ${index}. The equation stays with its explanation.\n\n$$\n${Array.from({ length: 50 }, (_, term) => `x_{${term}}`).join('+')}\n$$\n\nContinue reading in one column.`, streaming: false } });
+    }
+    window.__replace({ ...window.__initialForWide, activeThreadId: 'thread-one', transcript, history: { hasMore: false, loading: false, error: null }, pending: { approvals: [], userInputs: [] } });
+  });
+  await page.locator('[data-reading-layout="one"] .transcript-list').waitFor();
+  assert.equal(await page.locator('.reader-flow, .reader-toggle, .composer-layout-control').count(), 0);
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Draft preserved while resizing the editor');
+  const originalTextarea = await page.getByRole('textbox', { name: 'Message', exact: true }).elementHandle();
+  assert.ok(await page.locator('.timeline-row').count() < 60, 'Wide conversations must remain virtualized');
+  const wideMath = page.locator('.katex-display').last();
+  assert.equal(await wideMath.evaluate(element => element.scrollWidth > element.clientWidth), true, 'Wide equations retain horizontal scrolling');
+  await wideMath.locator('.katex').click();
+  await page.getByRole('dialog', { name: 'Equation preview', exact: true }).waitFor();
+  await page.locator('.equation-preview .katex').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Copy LaTeX with delimiters', exact: true }).click();
+  assert.ok((await page.evaluate(() => window.__requests.findLast(request => request.method === 'copyText').params.text)).startsWith('$$\n'), 'Preview copying preserves display-equation delimiters');
+  await page.getByRole('button', { name: 'Close preview', exact: true }).click();
+  await page.screenshot({ path: `${evidence}/single-column-wide.png` });
+  await page.setViewportSize({ width: 620, height: 900 });
+  await page.locator('[data-reading-layout="one"] .transcript-list').waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue(), 'Draft preserved while resizing the editor');
+  assert.equal(await originalTextarea.evaluate(element => element === document.querySelector('textarea[aria-label="Message"]')), true);
+  assert.equal(await page.locator('.reader-flow, .reader-toggle, .composer-layout-control').count(), 0);
+  console.log('PASS: virtualized single-column chat in wide/narrow editors, draft retention on resize, wide equation scrolling, preview and delimiter-aware copying');
   assert.deepEqual(errors, []);
   console.log("PASS: configurable instant message rail, pagination, virtualized jumps, streaming read position, nested subagents/live hover cards/parent return, native frame bridge, interactive HTML, images, Mermaid, KaTeX and equation copying; markdown, collapsed work groups, tool details, diff, model catalog, modes, send, approvals, questions, narrow navigation, themes, virtualization, projectless first message, draft controls, folder selection, empty model catalog");
   console.log(`Screenshots: ${evidence}`);

@@ -53,7 +53,9 @@ export function accountWindows(account: UsageAccount) {
   return meterKinds.map((kind) => account.limits.unavailable ? null : account.limits.windows.find((window) => window.kind === kind) ?? null);
 }
 export function meterText(account: UsageAccount): string {
-  return accountWindows(account).map((window, index) => `${["M", "W", "S"][index]} ${(window ? String(remainingPercent(window)) : "—").padStart(3, "\u2007")}`).join(" | ") + "%";
+  const reported = accountWindows(account).flatMap((window, index) => window ? [{ window, index }] : []);
+  if (!reported.length) return "Usage unavailable";
+  return reported.map(({ window, index }) => `${reported.length === 1 ? meterLabels[index] : ["M", "W", "S"][index]} ${remainingPercent(window)}%`).join(" · ");
 }
 export interface MeterPreferences { readonly followActive: boolean; readonly pinnedAccounts: ReadonlyArray<string> }
 export function selectedUsageAccounts(accounts: ReadonlyArray<UsageAccount>, preferences: MeterPreferences, instanceId?: string): ReadonlyArray<UsageAccount> {

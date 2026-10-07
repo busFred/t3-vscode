@@ -67,5 +67,5 @@ export function ChatMedia({ src, alt = "Image", threadId, source, attachmentId, 
   if (!url) return <span className="visual-loading" role="status">Loading {alt}…</span>;
   if (kind === "video") return <video className="chat-media" controls preload="metadata" src={url} aria-label={alt} onError={() => setFailed(true)} />;
   if (kind === "audio") return <audio className="chat-media" controls preload="metadata" src={url} aria-label={alt} onError={() => setFailed(true)} />;
-  return <span className="chat-image"><img className="chat-media" src={url} alt={alt} loading="lazy" onError={() => setFailed(true)} /><button className="icon-button expand-visual" title="Expand image" aria-label={`Expand ${alt}`} onClick={() => openVisual({ title: alt, src: url })}><Maximize2Icon size={13} /></button></span>;
+  return <span className="chat-image"><button className="image-preview-button" aria-label={`Preview ${alt}`} onClick={() => openVisual({ title: alt, src: url })}><img className="chat-media" src={url} alt={alt} loading="lazy" onError={() => setFailed(true)} /></button><button className="icon-button expand-visual" title="Expand image" aria-label={`Expand ${alt}`} onClick={() => openVisual({ title: alt, src: url })}><Maximize2Icon size={13} /></button></span>;
 }

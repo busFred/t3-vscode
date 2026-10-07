@@ -19,6 +19,8 @@ const setupOnly = process.argv.includes('--setup-only');
 const requestsOnly = process.argv.includes('--requests-only');
 const referencesOnly = process.argv.includes('--references-only');
 const visualsOnly = process.argv.includes('--visuals-only');
+const cleanupOnly = process.argv.includes('--cleanup-only');
+const screenshotsOnly = process.argv.includes('--screenshots-only');
 const testModel = process.env.T3_VSCODE_TEST_MODEL || 'gpt-6-luna';
 if (!setupOnly) {
   const runtime = JSON.parse(await readFile(join(home, "userdata/server-runtime.json"), "utf8"));
@@ -32,14 +34,14 @@ await mkdir(join(profile, "User"));
 await mkdir(join(home, "workspace"), { recursive: true });
 if (process.argv.includes("--deep")) await rm(join(home, "workspace/roundtrip.txt"), { force: true });
 // Carry Default preferences into disposable storage; never share its extension catalog.
-for (const file of ["settings.json", "keybindings.json"]) {
+for (const file of screenshotsOnly ? [] : ["settings.json", "keybindings.json"]) {
   await cp(join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "Code/User", file), join(profile, "User", file)).catch((error) => { if (error.code !== "ENOENT") throw error; });
 }
 const require = createRequire(import.meta.url);
 const jsonc = createRequire(require.resolve("@vscode/vsce"))("jsonc-parser");
 const settingsFile = join(profile, "User/settings.json");
 let settingsText = await readFile(settingsFile, "utf8").catch(() => "{}");
-for (const [key, value] of Object.entries({ "update.mode": "none", "extensions.autoCheckUpdates": false, "extensions.autoUpdate": false, "window.zoomLevel": 0, "window.dialogStyle": "custom", "security.workspace.trust.enabled": false })) {
+for (const [key, value] of Object.entries({ "update.mode": "none", "extensions.autoCheckUpdates": false, "extensions.autoUpdate": false, "window.zoomLevel": 0, "window.dialogStyle": "custom", "t3-vscode.fontSizeInterface": 16, "t3-vscode.fontSizePrompt": 14, "t3-vscode.fontSizeCode": 13, "security.workspace.trust.enabled": false })) {
   settingsText = jsonc.applyEdits(settingsText, jsonc.modify(settingsText, [key], value, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
 }
 if (visualsOnly) settingsText = jsonc.applyEdits(settingsText, jsonc.modify(settingsText, ['files.simpleDialog.enable'], true, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
@@ -50,6 +52,7 @@ await writeFile(join(home, "workspace/.vscode/settings.json"), JSON.stringify({
   "workbench.iconTheme": null,
   "diffEditor.renderSideBySide": true, "diffEditor.useInlineViewWhenSpaceIsLimited": false,
   "chat.disableAIFeatures": true,
+  ...(screenshotsOnly ? { "t3-vscode.usage.followActiveConversation": false } : {}),
 }));
 const portServer = createServer();
 await new Promise((resolve) => portServer.listen(0, "127.0.0.1", resolve));
@@ -155,7 +158,7 @@ async function chooseLiveTestModel(view, favorite = false) {
   await view.wait(`document.querySelector(${JSON.stringify(selector)})`);
   if (favorite) {
     await view.evaluate(`(() => { const button=document.querySelector(${JSON.stringify(selector)}).closest('.model-row').querySelector('.model-favorite');if(button.getAttribute('aria-pressed') !== 'true')button.click(); })()`);
-    await view.wait(`document.querySelector(${JSON.stringify(selector)}).closest('.model-row').querySelector('.model-favorite').getAttribute('aria-pressed') === 'true'`);
+    await view.wait(`document.querySelector(${JSON.stringify(selector)})?.closest('.model-row').querySelector('.model-favorite').getAttribute('aria-pressed') === 'true'`);
   }
   await view.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   await view.wait('!document.querySelector(".model-picker")');
@@ -164,6 +167,12 @@ async function chooseLiveTestModel(view, favorite = false) {
     await view.evaluate(`(() => { const select=document.querySelector('select[aria-label="Effort level"]');select.value=${JSON.stringify(level)};select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
     await view.wait(`document.querySelector('select[aria-label="Effort level"]').value === ${JSON.stringify(level)} && !document.querySelector('select[aria-label="Effort level"]').disabled`);
   }
+}
+async function runCommand(label) {
+  await workbench.keyboard.press('F1');
+  await workbench.locator('.quick-input-widget input').filter({ visible: true }).fill(`>${label}`);
+  await workbench.locator('.quick-input-list .monaco-list-row').filter({ hasText: label }).first().waitFor();
+  await workbench.keyboard.press('Enter');
 }
 try {
   const deadline = Date.now() + 30_000;
@@ -207,21 +216,15 @@ try {
       for (let index = 1; index < line; index++) await workbench.keyboard.press('ArrowDown');
       await workbench.keyboard.press('Home'); await workbench.keyboard.press('Shift+End');
     };
-    await nativeAction('Usage').click();
-    const usage = await findWebview('usage'); await usage.wait('document.querySelector(".usage-page")');
     await selectFileLine(1); await workbench.keyboard.press('Alt+k');
-    await sidebar.wait('document.querySelectorAll(".context-chip").length === 1');
-    assert.ok(await sidebar.evaluate('document.querySelector(".sidebar-modes [aria-pressed=true]").textContent === "Chat"'));
-    assert.equal(await usage.evaluate('document.querySelectorAll(".context-chip").length'), 0);
-    await nativeAction('Open Chat in Editor Tab').click();
     const chat = await findWebview('panel'); await chat.wait('document.querySelectorAll(".context-chip").length === 1');
-    await nativeAction('Usage').click(); await usage.wait('document.querySelector(".usage-page")');
+    assert.equal(await sidebar.evaluate('document.querySelectorAll("textarea,.context-chip").length'), 0);
+    await runCommand('T3 VSCode: Account & Usage'); await sidebar.wait('document.querySelector(".account-usage").open');
     await selectFileLine(2); await workbench.keyboard.press('Alt+k');
     await chat.wait('document.querySelectorAll(".context-chip").length === 2');
-    assert.equal(await sidebar.evaluate('document.querySelectorAll(".context-chip").length'), 1);
-    assert.equal(await usage.evaluate('document.querySelectorAll(".context-chip").length'), 0);
+    assert.equal(await sidebar.evaluate('document.querySelectorAll(".context-chip").length'), 0);
     await workbench.screenshot({ path: join(evidence, 'edh-usage-reference-routing.png') });
-    console.log('PASS: Usage retains the last sidebar/editor chat for native Alt+K; Sessions switches to Chat, editor handoff copies references and later references preserve independent drafts');
+    console.log('PASS: native Alt+K opens an editor chat when none exists and retains that target after Account & Usage focuses the session manager');
   } else if (requestsOnly) {
     await sidebar.wait('document.querySelector(".dedicated-sessions")');
     // Remove notifications replayed on startup before generating a fresh request.
@@ -243,8 +246,20 @@ try {
     const notification = workbench.locator('.notification-list-item').filter({ hasText: 'needs your input' }).filter({ visible: true }).last();
     await notification.waitFor(); assert.ok((await notification.textContent()).includes('needs your input'));
     await workbench.screenshot({ path: join(evidence, 'edh-input-notification.png') });
-    await notification.getByRole('button', { name: 'Open session', exact: true }).click();
+    await sidebar.evaluate(`document.querySelector('.thread[data-thread-id="${inputId}"]').click()`);
     const inputPanel = await findWebview('panel');
+    const inputTabs = workbench.locator('.tab');
+    await inputTabs.first().waitFor(); assert.equal(await inputTabs.count(), 1);
+    await workbench.keyboard.press('Control+p');
+    await workbench.locator('.quick-input-widget input').filter({ visible: true }).fill(join(home, 'workspace/example.ts'));
+    await workbench.locator('.quick-input-list .monaco-list-row').filter({ hasText: 'example.ts' }).first().waitFor();
+    await workbench.keyboard.press('Enter');
+    await workbench.locator('.monaco-editor').filter({ visible: true }).first().waitFor();
+    assert.equal(await inputTabs.count(), 2);
+    await notification.getByRole('button', { name: 'Open session', exact: true }).click();
+    const title = await inputPanel.evaluate('document.querySelector(".chat-heading strong").textContent');
+    await workbench.waitForFunction(title => document.querySelector('.tab[aria-selected="true"]')?.textContent.includes(title), title);
+    assert.equal(await inputTabs.count(), 2, 'Notification must reveal the existing tab instead of duplicating it');
     await inputPanel.wait(`document.querySelector('.chat-main')?.dataset.threadId === ${JSON.stringify(inputId)} && document.querySelector('.question-card')`);
     await inputPanel.evaluate(`document.querySelector('.question-card input[type=radio]').click()`);
     await inputPanel.wait('!document.querySelector(".question-card button[type=submit]").disabled');
@@ -252,10 +267,16 @@ try {
     await sidebar.wait(`!document.querySelector('.thread[data-thread-id="${inputId}"] .thread-input')`);
     await inputPanel.wait(`[...document.querySelectorAll('.assistant-message')].some(node => node.textContent.includes('NOTIFICATION-ANSWERED') && !node.querySelector('.streaming-label'))`, 90_000);
     await workbench.screenshot({ path: join(evidence, 'edh-input-answered.png') });
-    console.log('PASS: unopened workspace session shows Input badge and native notification; Open session targets its conversation; answering clears the badge and resumes the provider');
+    console.log('PASS: workspace Input badge and native notification; Open session reveals the existing conversation tab without duplication; answering clears the badge and resumes the provider');
+  } else if (screenshotsOnly) {
+    const { captureReadme } = await import('./capture-readme.mjs');
+    await captureReadme({ home, workbench, sidebar, findWebview, runCommand });
+  } else if (cleanupOnly) {
+    const { verifyEmptyChat } = await import('./verify-rich-chat.mjs');
+    await verifyEmptyChat({ workbench, sidebar, findWebview });
   } else if (visualsOnly) {
     const { verifyRichChat } = await import('./verify-rich-chat.mjs');
-    await verifyRichChat({ home, evidence, workbench, sidebar, findWebview, chooseLiveTestModel, async findVisualFrame() {
+    await verifyRichChat({ home, evidence, workbench, sidebar, findWebview, chooseLiveTestModel, runCommand, async findVisualFrame() {
       const runtime = JSON.parse(await readFile(join(home, 'userdata/server-runtime.json'), 'utf8'));
       const deadline = Date.now() + 20_000;
       while (Date.now() < deadline) {
@@ -273,267 +294,10 @@ try {
       throw new Error('No native HTML visualization frame');
     } });
   } else {
-  await sidebar.wait('document.querySelector(".dedicated-sessions")');
-  assert.equal(await sidebar.evaluate('document.querySelector(".account-usage").open'), false);
-  assert.equal(await sidebar.evaluate('!!document.querySelector(".navigation-backdrop")'), false);
-  assert.equal(await sidebar.evaluate('document.querySelectorAll(".project-heading").length'), 0);
-  await sidebar.evaluate('document.querySelector(".account-usage > summary").click()');
-  await sidebar.wait('document.querySelector(".account-usage time[datetime]")');
-  await sidebar.evaluate('document.querySelector(".account-usage [aria-label=\\"Refresh usage\\"]").click()');
-  await sidebar.wait('!document.querySelector(".account-usage [aria-label=\\"Refresh usage\\"]").disabled');
-  await workbench.screenshot({ path: join(evidence, "edh-sidebar-usage-refresh.png") });
-  await sidebar.evaluate('document.querySelector(".account-usage > summary").click()');
-  console.log('PASS: sidebar account usage starts collapsed and exposes refresh plus its reported update time');
-  await workbench.screenshot({ path: join(evidence, "edh-sessions-default.png") });
-  await sidebar.evaluate(`[...document.querySelectorAll('.sidebar-modes button')].find(button => button.textContent === 'Chat').click()`);
-  await sidebar.wait('document.querySelector(".composer-box")');
-  assert.equal(await sidebar.evaluate('!!document.querySelector(".chat-header")'), false, "Sidebar must use the native title toolbar only");
-  const sidebarHeading = workbench.locator('.part.sidebar .composite.title h2').filter({ visible: true }).first();
-  assert.equal((await sidebarHeading.textContent()).trim().toLowerCase(), "t3 vscode");
-  assert.ok(await workbench.locator('.part.sidebar .codicon-history').count(), "History must use a clock icon");
-  const nativeAction = (label) => workbench.locator(`[aria-label="${label}"]`).filter({ visible: true }).first();
-  await nativeAction("History").click();
-  await sidebar.wait('document.querySelector(".dedicated-sessions .session-list")');
-  await sidebar.evaluate(`[...document.querySelectorAll('.sidebar-modes button')].find(button => button.textContent === 'Chat').click()`);
-  await sidebar.wait('document.querySelector(".chat-main")');
-  const beforeNewThread = await sidebar.evaluate('document.querySelector(".chat-main")?.dataset.threadId');
-  await nativeAction("New Thread").click();
-  const newPanel = await findWebview("panel");
-  await newPanel.wait('document.querySelector(".chat-empty")');
-  assert.ok(await newPanel.evaluate('document.querySelector(".chat-main").dataset.threadId'));
-  await workbench.keyboard.press('Control+w');
-  await sidebar.wait(`document.querySelector('.chat-empty') && document.querySelector('.chat-main')?.dataset.threadId && document.querySelector('.chat-main').dataset.threadId !== ${JSON.stringify(beforeNewThread)}`);
-  await chooseLiveTestModel(sidebar);
-  await sidebar.evaluate(`(() => {
-    const input = document.querySelector('textarea[aria-label="Message"]');
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Reply with exactly this markdown and no other text:\\nVSCODE-EDH-M1-OK\\n\\n[Open selected file](example.ts#L2-L3)');
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  })()`);
-  await sidebar.wait('!document.querySelector(".send-button").disabled');
-  await sidebar.evaluate('document.querySelector(".send-button").click()');
-  console.log("Sent the test message through the actual VS Code sidebar.");
-  const reply = '[...document.querySelectorAll(".assistant-message")].some(node => node.textContent.includes("VSCODE-EDH-M1-OK") && !node.querySelector(".streaming-label"))';
-  await sidebar.wait(reply, 150_000);
-  const selectedId = await sidebar.evaluate('document.querySelector(".chat-main")?.dataset.threadId');
-  assert.ok(selectedId);
-  console.log("PASS: native thread navigation, new thread, real message/reply, no duplicate sidebar header");
-  await workbench.screenshot({ path: join(evidence, "edh-sidebar.png") });
-  await sidebar.evaluate(`(() => { const input = document.querySelector('textarea[aria-label="Message"]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Draft copied with the current session'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
-  await nativeAction("Open Chat in Editor Tab").click();
-  const panel = await findWebview("panel");
-  await panel.wait(`document.querySelector('.chat-main')?.dataset.threadId === ${JSON.stringify(selectedId)} && ${reply}`);
-  await panel.wait(`document.querySelector('textarea[aria-label="Message"]').value === "Draft copied with the current session"`);
-  assert.equal(await panel.evaluate('!!document.querySelector(".navigation-open")'), false);
-  console.log("PASS: opening the editor preserves the current session and copies its unsent draft");
-  assert.equal((await sidebarHeading.textContent()).trim().toLowerCase(), "t3 vscode", "Changing conversations must not expand the sidebar title");
-  assert.equal(await panel.evaluate('!!document.querySelector(".chat-header")'), true);
-  await panel.evaluate(`document.querySelector('.chat-header [aria-label="New thread"]').click()`);
-  await panel.wait('document.querySelector(".chat-empty")');
-  await sidebar.wait(reply);
-  assert.equal(await sidebar.evaluate(`document.querySelector('textarea[aria-label="Message"]').value`), 'Draft copied with the current session');
-  console.log("PASS: editor new thread leaves the sidebar conversation and draft intact");
-  const workspaceSettingsPath = join(home, 'workspace/.vscode/settings.json');
-  const workspaceSettings = JSON.parse(await readFile(workspaceSettingsPath, 'utf8'));
-  await writeFile(workspaceSettingsPath, JSON.stringify({ ...workspaceSettings, 'workbench.colorCustomizations': { 'editor.background': '#2e3440', 'sideBar.background': '#242933', 'input.background': '#3b4252', 'input.foreground': '#eceff4', 'textLink.foreground': '#88c0d0' } }));
-  await panel.wait('getComputedStyle(document.body).backgroundColor === "rgb(46, 52, 64)" && getComputedStyle(document.querySelector(".composer-box")).backgroundColor === "rgb(59, 66, 82)"');
-  await sidebar.wait('getComputedStyle(document.querySelector(".sidebar-view")).backgroundColor === "rgb(36, 41, 51)"');
-  assert.equal(await sidebar.evaluate(`document.querySelector('textarea[aria-label="Message"]').value`), 'Draft copied with the current session');
-  await workbench.screenshot({ path: join(evidence, 'edh-custom-theme.png') });
-  await writeFile(workspaceSettingsPath, JSON.stringify(workspaceSettings));
-  await panel.wait('getComputedStyle(document.body).backgroundColor !== "rgb(46, 52, 64)"');
-  assert.ok(await workbench.locator('.statusbar-item .codicon-t3-vscode-codex').count(), 'Native provider mark must load from the packaged icon font');
-  assert.ok(await workbench.locator('.part.sidebar .codicon-globe').count(), 'Open Web UI must be available in the native title bar');
-  await nativeAction('Usage').click();
-  const usagePage = await findWebview('usage'); await usagePage.wait('document.querySelector(".usage-page .usage-account-choice")');
-  assert.equal(await usagePage.evaluate('document.querySelectorAll(".usage-overlay").length'), 0);
-  assert.equal(await usagePage.evaluate('document.querySelectorAll(".usage-window").length >= 3'), true);
-  await usagePage.evaluate(`document.querySelector('.usage-panel .text-button').click()`);
-  await workbench.locator('.quick-input-title').filter({ hasText: 'T3 VSCode: Configure Status Meters' }).waitFor();
-  assert.ok(await workbench.locator('.quick-input-list .codicon-t3-vscode-codex').count(), 'Account chooser must use the compact provider mark');
-  await workbench.keyboard.press('Escape');
-  await workbench.screenshot({ path: join(evidence, 'edh-account-usage.png') });
-  await workbench.keyboard.press('Control+w');
-  console.log('PASS: custom VS Code colors update chat, sidebar and input without losing drafts; native provider font, browser icon, per-account Usage tab and meter customization menu');
-
-  await panel.evaluate(`document.querySelector('.chat-header [aria-label="History"]').click()`);
-  await panel.wait('document.querySelector(".dedicated-sessions")');
-  await panel.evaluate(`document.querySelector('[aria-label="T3 VSCode settings"]').click()`);
-  await workbench.locator('.settings-editor').waitFor();
-  await panel.evaluate(`document.querySelector('[aria-label="Close history"]').click()`);
-  const settings = ['fontSizeInterface', 'fontSizePrompt', 'fontSizeCode'];
-  for (const [index, key] of settings.entries()) {
-    const row = workbench.locator('.setting-item-contents').filter({ hasText: ['Font Size Interface', 'Font Size Prompt', 'Font Size Code'][index] });
-    await row.waitFor();
-    const input = row.locator('input[type="number"], input[type="text"]').first();
-    const value = [18, 17, 16][index]; const persisted = preferenceWritten(`t3-vscode.${key}`, value);
-    await input.focus(); await input.press('Control+a'); await input.pressSequentially(String(value)); await input.press('Tab');
-    await persisted;
+    const { verifyEditorChat } = await import('./verify-editor-chat.mjs');
+    await verifyEditorChat({ home, evidence, profile, workbench, sidebar, findWebview, chooseLiveTestModel, runCommand, preferenceWritten });
   }
-  const fonts = 'getComputedStyle(document.documentElement).fontSize === "18px" && getComputedStyle(document.querySelector("textarea[aria-label=Message]")).fontSize === "17px" && getComputedStyle(document.documentElement).getPropertyValue("--font-size-code").trim() === "16px"';
-  await sidebar.wait(fonts); await panel.wait(fonts);
-  assert.ok((await readFile(join(profile, 'User/settings.json'), 'utf8')).includes('t3-vscode.fontSizeInterface'));
-  assert.equal(await workbench.getByText('Unable to write to User Settings', { exact: false }).count(), 0);
-  await workbench.screenshot({ path: join(evidence, "edh-native-settings.png") });
-  console.log("PASS: all three font settings are registered in native VS Code Settings; editing them updates both chat views and persists in the disposable Default profile");
-  await workbench.keyboard.press('Escape');
-  await workbench.locator('.settings-editor').waitFor({ state: 'hidden' });
-  await chooseLiveTestModel(panel, true);
-  assert.equal(await panel.evaluate('!!document.querySelector("select[aria-label=\\"Interaction mode\\"]")'), false);
-  console.log("PASS: real model search, favorite persistence and capability-driven effort; no Code/Plan toggle");
-  // Markdown links open the native editor with the linked range, instead of a web file panel.
-  await sidebar.evaluate(`(() => {
-    const link = document.querySelector('.assistant-message a[href="example.ts#L2-L3"]');
-    if (!link) throw new Error('The test response did not contain its requested file link.'); link.click();
-  })()`);
-  await workbench.locator('.monaco-editor').filter({ visible: true }).first().waitFor();
-  await workbench.keyboard.press('Alt+k');
-  await panel.wait('document.querySelector(".context-label")?.textContent === "@example.ts:2-3"');
-  assert.equal(await sidebar.evaluate('document.querySelectorAll(".context-chip").length'), 0);
-  assert.ok((await panel.evaluate('document.querySelector(".context-label").title')).includes('export const final = 3;'));
-  await panel.evaluate('document.querySelector(".context-chip [aria-label=\\"Remove reference 1\\"]").click()');
-  console.log("PASS: chat file link opens a native VS Code editor with its exact line range; Alt+K reads the native selection");
-  // Native editor selection and actual Alt+K command, including unsaved document text.
-  await workbench.locator('.tab').filter({ hasText: 'example.ts' }).filter({ visible: true }).first().click();
-  await workbench.locator('.monaco-editor').filter({ visible: true }).first().waitFor();
-  await workbench.keyboard.press('Control+Home'); await workbench.keyboard.press('ArrowDown'); await workbench.keyboard.press('End');
-  await workbench.keyboard.insertText(' // unsaved test'); await workbench.keyboard.press('Home'); await workbench.keyboard.press('Shift+End');
-  await workbench.keyboard.press('Alt+k');
-  await panel.wait('document.querySelector(".context-label")?.textContent === "@example.ts:2"');
-  assert.ok((await panel.evaluate('document.querySelector(".context-label").title')).includes('// unsaved test'));
-  assert.equal(await sidebar.evaluate('document.querySelectorAll(".context-chip").length'), 0);
-  assert.ok(!(await readFile(join(home, 'workspace/example.ts'), 'utf8')).includes('unsaved test'));
-  await workbench.screenshot({ path: join(evidence, "edh-editor-reference.png") });
-  console.log("PASS: native Alt+K captures the selected file range and unsaved text into one chat without saving the file or changing the other conversation");
-  // A real assistant response can be selected and cited through the webview's DOM selection API.
-  await sidebar.evaluate(`(() => {
-    const source = [...document.querySelectorAll('[data-assistant-citation-source]')].find(node => node.textContent.includes('VSCODE-EDH-M1-OK'));
-    const rect = source.getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(source.querySelector('p'));
-    source.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, isPrimary: true, button: 0 }));
-    const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
-    source.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, isPrimary: true, button: 0 }));
-    source.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, detail: 1, clientX: rect.right - 10, clientY: rect.bottom }));
-  })()`);
-  await sidebar.wait('document.querySelector(".citation-selection-button")');
-  await sidebar.evaluate('document.querySelector(".citation-selection-button").click()');
-  await sidebar.wait('document.querySelector(".citation-comment")');
-  await sidebar.evaluate(`(() => {
-    const input = document.querySelector('.citation-comment textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Explain this exact response.'); input.dispatchEvent(new Event('input', { bubbles: true }));
-  })()`);
-  await sidebar.evaluate('document.querySelector(".citation-comment .primary").click()');
-  await sidebar.wait('document.querySelector(".context-label")?.title.includes("Explain this exact response.")');
-  assert.equal(await panel.evaluate('document.querySelector(".context-label")?.textContent'), '@example.ts:2');
-  await workbench.screenshot({ path: join(evidence, "edh-citation.png") });
-  console.log("PASS: selection of a real assistant response opens an optional comment and adds a citation to its own composer; the editor tab retains its independent file reference");
-  const panelBeforeFork = await panel.evaluate('document.querySelector(".chat-main").dataset.threadId');
-  await sidebar.wait('document.querySelector(".fork-button:not(:disabled)")');
-  await sidebar.evaluate('document.querySelector(".fork-button").click()');
-  await sidebar.wait(`document.querySelector('.chat-main')?.dataset.threadId !== ${JSON.stringify(selectedId)} && ${reply}`);
-  const forkId = await sidebar.evaluate('document.querySelector(".chat-main").dataset.threadId');
-  assert.ok(forkId && forkId !== selectedId);
-  assert.equal(await panel.evaluate('document.querySelector(".chat-main").dataset.threadId'), panelBeforeFork);
-  await workbench.screenshot({ path: join(evidence, "edh-fork.png") });
-  await nativeAction("History").click();
-  await sidebar.wait('document.querySelector(".dedicated-sessions .session-list")');
-  await sidebar.evaluate(`document.querySelector('.thread[data-thread-id="${forkId}"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 210 }))`);
-  await sidebar.wait('document.querySelector(".thread-actions-popup")');
-  await sidebar.evaluate(`document.querySelector('.thread-actions-popup button').click()`);
-  await workbench.locator('.quick-input-widget input').filter({ visible: true }).fill('Native context-menu fork');
-  await workbench.keyboard.press('Enter');
-  await sidebar.wait(`document.querySelector('.thread[data-thread-id="${forkId}"] .thread-title')?.textContent === "Native context-menu fork"`);
-  await sidebar.evaluate(`document.querySelector('.thread[data-thread-id="${forkId}"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 210 }))`);
-  await sidebar.wait('document.querySelector(".thread-actions-popup .danger")');
-  await sidebar.evaluate('document.querySelector(".thread-actions-popup .danger").click()');
-  const deleteDialog = workbench.getByRole('dialog').filter({ hasText: 'Native context-menu fork' });
-  await deleteDialog.waitFor(); await deleteDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  assert.equal(await sidebar.evaluate(`document.querySelector('.thread[aria-current="page"]').dataset.threadId`), forkId);
-  await sidebar.evaluate(`document.querySelector('.thread[data-thread-id="${forkId}"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 210 }))`);
-  await sidebar.wait('document.querySelector(".thread-actions-popup .danger")');
-  await sidebar.evaluate('document.querySelector(".thread-actions-popup .danger").click()');
-  await deleteDialog.waitFor(); await deleteDialog.getByRole('button', { name: 'Delete thread', exact: true }).click();
-  await sidebar.wait(`!document.querySelector('.thread[data-thread-id="${forkId}"]')`);
-  assert.equal(await panel.evaluate('document.querySelector(".chat-main").dataset.threadId'), panelBeforeFork);
-  console.log("PASS: real response fork retains native history and changes only its sidebar; context-menu rename uses VS Code's input prompt; cancel/confirm delete leaves the other tab intact");
-  if (process.argv.includes("--deep")) {
-    // Open this known session in sidebar chat without the Session Manager's editor action.
-    await sidebar.evaluate(`(() => { const button = document.querySelector('.thread[data-thread-id="${selectedId}"]'); button.click(); })()`);
-    await findWebview("panel");
-    await sidebar.evaluate(`[...document.querySelectorAll('.sidebar-modes button')].find(button => button.textContent === 'Chat').click()`);
-    await sidebar.wait(`document.querySelector('.chat-main').dataset.threadId === ${JSON.stringify(selectedId)} && ${reply}`);
-    await sidebar.evaluate(`document.querySelector('[aria-label="Close history"]')?.click(); document.querySelectorAll('.context-chip button[aria-label^="Remove reference"]').forEach(button => button.click())`);
-    const setMessage = async (text) => {
-      await sidebar.evaluate(`(() => { const input = document.querySelector('textarea[aria-label="Message"]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${JSON.stringify(text)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
-    };
-    const sendMessage = async (text) => { await setMessage(text); await sidebar.wait('!document.querySelector(".send-button").disabled'); await sidebar.evaluate('document.querySelector(".send-button").click()'); };
-    const complete = async (marker) => {
-      // The citation checks deliberately leave an older response selected.
-      // Resume Latest before checking new responses in the virtualized DOM.
-      await sidebar.evaluate('document.querySelector(".message-nav-latest")?.click()');
-      await sidebar.wait(`[...document.querySelectorAll('.assistant-message')].some(node => node.textContent.includes(${JSON.stringify(marker)}) && !node.querySelector('.streaming-label')) && !document.querySelector('.stop-button')`, 150_000);
-    };
-    await nativeAction("Usage").click(); const usage = await findWebview("usage"); await usage.wait('document.querySelector(".usage-panel")');
-    await workbench.screenshot({ path: join(evidence, "edh-usage.png") });
-    await workbench.keyboard.press('Control+w');
-    await setMessage("/"); await sidebar.wait('document.querySelector(".composer-suggestions [role=option]")');
-    await workbench.screenshot({ path: join(evidence, "edh-slash-commands.png") });
-    await setMessage("Inspect @example"); await sidebar.wait('document.querySelector(".composer-suggestions")?.textContent.includes("example.ts")');
-    await workbench.screenshot({ path: join(evidence, "edh-file-suggestions.png") });
-    await setMessage("");
-    await sendMessage("In this temporary workspace, create roundtrip.txt containing exactly TURN-TWO followed by a newline. Use a file editing tool. Do not commit. Reply FIRST-DIFF-DONE after creating it.");
-    await complete("FIRST-DIFF-DONE");
-    await sidebar.wait('[...document.querySelectorAll(".turn-changes")].some(node => node.textContent.includes("roundtrip.txt"))');
-    const firstCheckpoint = await sidebar.evaluate('document.querySelectorAll(".turn-changes").item(document.querySelectorAll(".turn-changes").length - 1).dataset.checkpointId');
-    await sendMessage("Append exactly TURN-THREE followed by a newline to roundtrip.txt, keeping its existing TURN-TWO line unchanged. Use a file editing tool. Do not commit. Reply SECOND-DIFF-DONE after editing it.");
-    await complete("SECOND-DIFF-DONE");
-    await sidebar.wait(`document.querySelectorAll('.turn-changes').item(document.querySelectorAll('.turn-changes').length - 1)?.dataset.checkpointId !== ${JSON.stringify(firstCheckpoint)}`);
-    const secondCheckpoint = await sidebar.evaluate('document.querySelectorAll(".turn-changes").item(document.querySelectorAll(".turn-changes").length - 1).dataset.checkpointId');
-    assert.equal(await readFile(join(home, "workspace/roundtrip.txt"), "utf8"), "TURN-TWO\nTURN-THREE\n");
-    const openSavedDiff = async (checkpoint, oldText, newText) => {
-      await sidebar.evaluate(`(() => { const card = document.querySelector('.turn-changes[data-checkpoint-id="${checkpoint}"]'); const details = card.querySelector('details'); details.open = true; card.querySelector('[aria-label="Open turn diff: roundtrip.txt"]').click(); })()`);
-      const diff = workbench.locator('.monaco-diff-editor').filter({ visible: true }).first(); await diff.waitFor();
-      const original = diff.locator('.editor.original .view-lines'); const modified = diff.locator('.editor.modified .view-lines');
-      // The preview tab can reuse the existing diff widget while loading new models.
-      await workbench.waitForFunction(({ oldText, newText }) => {
-        const diff = [...document.querySelectorAll('.monaco-diff-editor')].find(node => node.getBoundingClientRect().height > 0);
-        const before = diff?.querySelector('.editor.original .view-lines')?.textContent;
-        const after = diff?.querySelector('.editor.modified .view-lines')?.textContent;
-        return before !== undefined && after?.includes(newText) && before.includes(oldText) && (oldText || !before.includes('TURN-TWO')) && (newText !== 'TURN-TWO' || !after.includes('TURN-THREE'));
-      }, { oldText, newText });
-      const before = (await original.textContent()).replaceAll('\u00a0', ''); const after = (await modified.textContent()).replaceAll('\u00a0', '');
-      assert.ok(before.includes(oldText)); assert.ok(after.includes(newText));
-      if (!oldText) assert.ok(!before.includes('TURN-TWO'));
-      if (newText === 'TURN-TWO') assert.ok(!after.includes('TURN-THREE'), 'Earlier saved diffs must not read the current working file');
-    };
-    await openSavedDiff(secondCheckpoint, "TURN-TWO", "TURN-THREE");
-    await workbench.screenshot({ path: join(evidence, "edh-adjacent-turn-diff.png") });
-    await openSavedDiff(firstCheckpoint, "", "TURN-TWO");
-    await workbench.screenshot({ path: join(evidence, "edh-earlier-turn-diff.png") });
-    console.log("PASS: native saved-turn diff compares adjacent checkpoints; an earlier creation diff remains unchanged after the next turn edits the working file");
-    await sendMessage("This is a Queue/Steer integration check in a disposable workspace. First use update_plan to record three steps: Start the integration check (completed), Wait for a follow-up (in_progress), Finish verification (pending). Then use your terminal tool to run sleep 20. Wait for that command to finish before responding. Include any follow-up marker in your final reply and mark all plan steps complete.");
-    await sidebar.wait('document.querySelector(".tasks-section") && document.querySelector("textarea[aria-label=\\"Message\\"]").title.includes("Enter to queue")', 90_000);
-    assert.equal(await sidebar.evaluate('document.querySelectorAll("select[aria-label=\\"Follow-up delivery\\"]").length'), 0);
-    await setMessage("Include QUEUE-STEER-OK in your final response.");
-    await sidebar.wait('!document.querySelector(".send-button").disabled');
-    await sidebar.evaluate(`document.querySelector('textarea[aria-label="Message"]').focus()`);
-    await workbench.keyboard.press('Enter');
-    await sidebar.wait('document.querySelector(".queued-preview")?.textContent.includes("QUEUE-STEER-OK")');
-    await workbench.screenshot({ path: join(evidence, "edh-queue-and-tasks.png") });
-    await sidebar.wait('!document.querySelector("[aria-label=\\"Steer with queued message\\"]").disabled');
-    await sidebar.evaluate('document.querySelector("[aria-label=\\"Steer with queued message\\"]").click()');
-    await sidebar.wait('!document.querySelector(".queued-message")');
-    await setMessage("Also include CTRL-STEER-OK in your final response.");
-    await sidebar.wait('!document.querySelector(".send-button").disabled');
-    await sidebar.evaluate(`document.querySelector('textarea[aria-label="Message"]').focus()`);
-    await workbench.keyboard.press('Control+Enter');
-    await sidebar.wait('document.querySelector("textarea[aria-label=\\"Message\\"]").value === "" && !document.querySelector(".queued-message")');
-    await complete("QUEUE-STEER-OK");
-    await complete("CTRL-STEER-OK");
-    await sidebar.wait('!document.querySelector(".tasks-section")');
-    await workbench.screenshot({ path: join(evidence, "edh-queue-steer-finished.png") });
-    console.log("PASS: real native command/file suggestions and Usage; Enter queues, queue-list promotion and Ctrl+Enter both steer the provider; current-run task progress clears at completion");
-  }
-  await workbench.screenshot({ path: join(evidence, "edh-both.png") });
   console.log(`Evidence: ${evidence}; isolated VS Code profile: ${profile}`);
-  }
 } catch (error) {
   await workbench?.screenshot({ path: join(evidence, "edh-failure.png") }).catch(() => {});
   console.error(`Inspect ${profile}/code.log and ${evidence}/edh-failure.png`);

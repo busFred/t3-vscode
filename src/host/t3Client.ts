@@ -24,7 +24,7 @@ import * as Stream from "effect/Stream";
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import * as Socket from "effect/unstable/socket/Socket";
 import type { DiscoveredServer } from "./serverDiscovery.js";
-import { readCheckpointFiles } from "./checkpointFiles.js";
+import { readCheckpointFiles, readCheckpointDiff } from "./checkpointFiles.js";
 
 export type Subscription = () => Promise<void>;
 const services = Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal);
@@ -172,6 +172,9 @@ export class T3Client {
   }
   getDiffFileContents(input: ReviewDiffFileContentsInput) {
     return readCheckpointFiles(input);
+  }
+  getSavedTurnDiff(input: Parameters<typeof readCheckpointDiff>[0]) {
+    return readCheckpointDiff(input);
   }
   async createAssetUrl(resource: AssetResource) {
     const server = this.server;
