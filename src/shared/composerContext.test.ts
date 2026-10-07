@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
 import { collectAssistantCitations, withAssistantCitationComment } from "@t3tools/shared/assistantCitations";
 import { createAssistantTextSelector, findAssistantCitationText } from "../webview/components/t3/assistantTextSelection.js";
-import { contextIsReferenced, formatComposerMessage, insertAssistantQuote, removeContextReference } from "./composerContext.js";
+import { contextIsReferenced, fileReferenceOccurrences, formatComposerMessage, insertAssistantQuote, insertFileReference, removeContextReference, type FileReference } from "./composerContext.js";
 import { insertAttachmentReferences } from "./composerAttachments.js";
 import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 import { parseDraftTransfer } from "./viewDraft.js";
@@ -38,6 +38,55 @@ test("Removing or editing a comment preserves the citation source and exact sele
 
 const inlineCitation = { version: 1 as const, environmentId: EnvironmentId.make("env"), threadId: ThreadId.make("thread"), messageId: MessageId.make("message"), text: "Keep the original source.", start: 0, end: 25, prefix: "", suffix: "", comment: "Explain this." };
 const inlineQuote = { type: "assistant" as const, contextId: "quote_one", citation: inlineCitation };
+const selectedFile: FileReference = { type: "file", uri: "file:///tmp/project/README.md", path: "/tmp/project/README.md", label: "README.md", range: { start: { line: 43, column: 3 }, end: { line: 47, column: 1 } }, text: "  unsaved selected text\n```\npartial line" };
+
+test("Editor references insert readable file/range tokens at the cursor and retain exact unsaved snapshots", () => {
+  const inserted = insertFileReference("Before replace after.", [], selectedFile, { start: 7, end: 14 });
+  assert.equal(inserted.text, "Before @README.md:43-46  after.");
+  assert.equal(inserted.cursor, "Before @README.md:43-46 ".length);
+  const sent = formatComposerMessage(inserted.text, inserted.contexts);
+  assert.ok(sent.startsWith("Before [README.md:43-46](file:///tmp/project/README.md#L43-L46)  after."));
+  assert.ok(sent.includes("43:3–47:1 (end exclusive)"));
+  assert.ok(sent.includes("````\n" + selectedFile.text + "\n````"));
+  assert.deepEqual(parseDraftTransfer({ draftKey: "file-chat", draft: { text: inserted.text, contexts: inserted.contexts } }, "file-chat")?.draft.contexts, inserted.contexts);
+});
+
+test("Deleting file tokens omits snapshots and cannot accidentally bind a longer range or an image label", () => {
+  const inserted = insertFileReference("", [], selectedFile, { start: 0, end: 0 });
+  const context = inserted.contexts[0]!;
+  assert.equal(contextIsReferenced(inserted.text, context), true);
+  assert.equal(formatComposerMessage(removeContextReference(inserted.text, context), inserted.contexts), "");
+  assert.equal(contextIsReferenced("@README.md:43-460", context), false);
+  assert.equal(fileReferenceOccurrences("[@README.md:43-46](t3-context://v1/image/one)", inserted.contexts).length, 0);
+  assert.ok(formatComposerMessage("legacy draft", [selectedFile]).includes(selectedFile.text));
+  const duplicate = formatComposerMessage(inserted.text.repeat(2), inserted.contexts);
+  assert.equal(duplicate.split("Snapshot from the editor").length, 2);
+});
+
+test("Repeated editor references refresh one snapshot and disambiguate paths from different workspace folders", () => {
+  const first = insertFileReference("", [], selectedFile, { start: 0, end: 0 });
+  const second = insertFileReference(first.text, first.contexts, { ...selectedFile, text: "new unsaved selection" }, { start: first.cursor, end: first.cursor });
+  assert.equal(second.contexts.length, 1);
+  assert.ok(formatComposerMessage(second.text, second.contexts).includes("new unsaved selection"));
+  assert.ok(!formatComposerMessage(second.text, second.contexts).includes(selectedFile.text));
+  const other = insertFileReference(second.text, second.contexts, { ...selectedFile, uri: "file:///tmp/other/README.md", path: "/tmp/other/README.md", text: "other file" }, { start: second.cursor, end: second.cursor });
+  assert.ok(other.text.includes("@/tmp/other/README.md:43:3-47:1"));
+  assert.equal(fileReferenceOccurrences(other.text, other.contexts).length, 3);
+  const spaced = insertFileReference("explain", [], { ...selectedFile, label: "notes with spaces.md" }, { start: 7, end: 7 });
+  assert.equal(spaced.text, 'explain @"notes with spaces.md:43-46" ');
+  assert.equal(fileReferenceOccurrences(spaced.text, spaced.contexts).length, 1);
+});
+
+test("Different partial selections on the same source lines preserve their own snapshots", () => {
+  const first = insertFileReference("", [], selectedFile, { start: 0, end: 0 });
+  const shorter: FileReference = { ...selectedFile, range: { start: { line: 43, column: 8 }, end: { line: 46, column: 12 } }, text: "different partial selection" };
+  const second = insertFileReference(first.text, first.contexts, shorter, { start: first.cursor, end: first.cursor });
+  assert.equal(fileReferenceOccurrences(second.text, second.contexts).length, 2);
+  const sent = formatComposerMessage(second.text, second.contexts);
+  assert.ok(sent.includes(selectedFile.text)); assert.ok(sent.includes(shorter.text));
+  const removed = formatComposerMessage(removeContextReference(second.text, second.contexts[1]!), second.contexts);
+  assert.ok(removed.includes(selectedFile.text)); assert.ok(!removed.includes(shorter.text));
+});
 
 test("Inline quotes replace the prompt selection, retain surrounding text and expand at the same send position", () => {
   const inserted = insertAssistantQuote("Before replace after 😀.", inlineQuote, { start: 7, end: 14 });

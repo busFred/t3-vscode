@@ -258,8 +258,10 @@ try {
   await second.getByRole("button", { name: "Assistant quote · Comment", exact: true }).click();
   await second.getByRole("textbox", { name: "Comment on selected text" }).fill("Updated comment");
   await second.getByRole("button", { name: "Save", exact: true }).click();
+  await quoteInput.focus(); await quoteInput.press("Control+End");
   registry.postWhenReady("tab-two", Events.insertReference, { draftKey: "second", reference: { type: "file", uri: "file:///tmp/t3-vscode/example.ts", path: "/tmp/t3-vscode/example.ts", label: "example.ts", range: { start: { line: 5, column: 3 }, end: { line: 8, column: 1 } }, text: "unsaved selected text" } });
   await second.getByRole("button", { name: "@example.ts:5-7", exact: true }).waitFor();
+  assert.equal(await quoteInput.inputValue(), inlineText + " @example.ts:5-7 ");
   assert.equal(await first.locator(".context-chip").count(), 0); assert.equal(await third.locator(".context-chip").count(), 0);
   await second.getByRole("button", { name: "Send message", exact: true }).click();
   await second.waitForFunction(() => document.querySelectorAll(".context-chip").length === 0 && (document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.value === "");

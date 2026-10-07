@@ -1,6 +1,6 @@
 # T3 VSCode feature history
 
-This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9 and v0.1.10 were local previews, and v0.1.11 is the current alpha candidate.
+This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the current alpha candidate.
 
 ## Overview
 
@@ -35,7 +35,7 @@ This document tracks features by release, including how later versions changed t
 | [Account usage](#account-usage) | Collapsed sidebar limits, reset times, notices and refresh. | v0.0.6 | v0.0.9 |
 | [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection. | v0.0.7 | v0.0.9 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.0.5 |
-| [Editor references](#editor-references) | Adds editor selections to the focused chat with Alt+K. | v0.0.4 | v0.0.9 |
+| [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.12 |
 | [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.11 |
 | [Response forks](#response-forks) | Forks supported completed responses into a separate conversation. | v0.0.5 | v0.0.6 |
 | [Saved turn diffs](#saved-turn-diffs) | Opens the preceding turn's saved changes in native diff editors. | v0.0.6 | v0.0.9 |
@@ -45,8 +45,8 @@ This document tracks features by release, including how later versions changed t
 | [Missing-server setup](#missing-server-setup) | Offers installation, service/manual startup links and Retry connection. | v0.0.1 | v0.0.7 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage and Connection. | v0.0.9 | v0.1.10 |
 | [Native themes and fonts](#native-themes-and-fonts) | Follows VS Code theme colors and exposes native font-size settings. | v0.0.1 | v0.0.9 |
-| [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.11 |
-| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces prerelease VSIX installers. | v0.0.1 | v0.1.11 |
+| [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.12 |
+| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces prerelease VSIX installers. | v0.0.1 | v0.1.12 |
 | [Release versioning](#release-versioning) | Uses one three-number version everywhere with Alpha as a stage description. | v0.1.10 | v0.1.11 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 
@@ -503,6 +503,13 @@ This document tracks features by release, including how later versions changed t
 
 - Open an editor chat when no chat is available and preserve the last focused editor target while browsing sidebar usage.
 
+#### v0.1.12
+
+- Add Ctrl+K for selected editor text, Cmd+K on macOS, and retain Alt+K and the context-menu action.
+- Insert readable file/range references at the saved prompt cursor or replace selected prompt text in the last-used open chat.
+- Preserve exact unsaved source snapshots through sending, queueing, steering and draft handoff, and omit snapshots whose inline references were removed.
+- Refresh repeated selections, distinguish different selections with the same line label and restore prompt focus after opening a chat.
+
 ### Assistant citations
 
 #### v0.0.4
@@ -649,6 +656,10 @@ This document tracks features by release, including how later versions changed t
 
 - Add README screenshots of the actual extension showing equations, diagrams, interactive graphics and quote comments.
 
+#### v0.1.12
+
+- Set the permanent Marketplace identity to `hungtienhuang.t3-vscode` using the owner-confirmed publisher.
+
 ### Isolated development and packaging
 
 #### v0.0.1
@@ -679,6 +690,11 @@ This document tracks features by release, including how later versions changed t
 
 - Capture README images in a disposable native VS Code profile using schema-validated synthetic history without provider turns.
 - Include the screenshot assets in the installer and remove the separate release-label metadata and encoder.
+
+#### v0.1.12
+
+- Move source setup, F5 debugging, automated verification and packaging instructions into [Development and testing](development.md).
+- Verify native Ctrl+K routing, saved prompt selections and unsaved source snapshots in disposable VS Code storage without provider turns.
 
 ### Release versioning
 
@@ -743,8 +759,18 @@ This document tracks features by release, including how later versions changed t
 - Obtain final fresh-context regression signoff against the v0.1.10 source snapshot and Git baseline `72d60c8`, with no blocking findings.
 - Inspect the v0.1.11 prerelease VSIX for exact compiled bundles, three screenshot assets, seven settings, licenses and 20 math fonts.
 
+### v0.1.12
+
+- Pass 121 unit tests, TypeScript checks, bundle builds and JavaScript syntax checks.
+- Pass deterministic UI and shared-host browser checks for inline file references, source payloads, independent drafts, quotes, attachments and Queue/Steer.
+- Verify Ctrl+K in an isolated native VS Code window, including saved-cursor insertion, selection replacement, unsaved source text, cold startup and last-used chat routing.
+- Retain Alt+K and verify that sidebar usage and a second chat preserve the original draft and reference target.
+- Verify all 43 feature anchors and the moved documentation's local links without provider turns.
+- Obtain final fresh-context regression signoff against `310a34f`, including distinct partial selections on the same source lines, with no blocking findings.
+- Inspect the prerelease VSIX's identity, exact bundles, shortcuts, settings, screenshots, math fonts and licenses, then install it successfully into disposable VS Code storage.
+
 ## Maintenance
 
 Update the overview's introduction/latest-change versions and the affected feature's version section in the same change. Add an entry only for an actual feature change; documentation-only edits do not change the feature's introduction version. Record removed behavior explicitly and keep historical sections intact. Keep each bullet to one sentence where possible, and at most two sentences.
 
-The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). Current setup and commands remain in [README.md](../README.md); the host/webview boundaries are in [the architecture](t3-vscode-architecture.md).
+The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructions remain in [README.md](../README.md); source setup and checks are in [Development and testing](development.md), and host/webview boundaries are in [the architecture](t3-vscode-architecture.md).

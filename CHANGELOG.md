@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.12 — Alpha prerelease
+
+- Insert editor selections at the last-used chat's prompt cursor with Ctrl+K (Cmd+K on macOS), retaining Alt+K.
+- Show readable file/range references inside the prompt and preserve exact unsaved source text when sending.
+- Exclude removed file references from the sent context and keep each chat's draft independent.
+- Move development setup and VS Code testing instructions into a separate guide.
+- Set the Marketplace publisher to `hungtienhuang` for the first public prerelease.
+
 ## 0.1.11 — Alpha preview
 
 - Insert assistant quotes at the prompt cursor and preserve inline source links when sending, queueing or steering.

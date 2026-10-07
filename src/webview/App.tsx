@@ -7,7 +7,7 @@ import { ChatView } from "./components/ChatView";
 import { StatusView } from "./components/StatusView";
 import { DEFAULT_APPEARANCE } from "../shared/appearance";
 import type { InsertReferenceEvent } from "../shared/composerContext";
-import { addDraftContext, readDraft, updateDraft } from "./composerDrafts";
+import { addEditorReference, readDraft, updateDraft } from "./composerDrafts";
 import type { DraftTransfer } from "../shared/viewDraft";
 import { SidebarView } from "./components/SidebarView";
 import { ServerSetup } from "./components/ServerSetup";
@@ -45,8 +45,9 @@ export function App() {
   useEffect(() => {
     const off = bridge.on(Events.stateChanged, (data) => receive(data as HostStateSnapshot));
     const offReference = bridge.on(Events.insertReference, (data) => {
-      const event = data as InsertReferenceEvent; addDraftContext(event.draftKey, event.reference);
-      window.dispatchEvent(new CustomEvent("t3-focus-composer"));
+      const event = data as InsertReferenceEvent;
+      const cursor = addEditorReference(event.draftKey, event.reference);
+      window.dispatchEvent(new CustomEvent("t3-focus-composer", { detail: { draftKey: event.draftKey, cursor } }));
     });
     const offDraft = bridge.on(Events.initializeDraft, (data) => {
       const transfer = data as DraftTransfer;

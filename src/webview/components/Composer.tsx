@@ -4,8 +4,8 @@ import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIco
 import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
-import { clearDraft, updateDraft, useComposerDraft } from "../composerDrafts";
-import { contextIsReferenced, fileReferenceLabel, formatComposerMessage, removeContextReference } from "../../shared/composerContext";
+import { clearDraft, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useComposerDraft } from "../composerDrafts";
+import { contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, removeContextReference } from "../../shared/composerContext";
 import type { AssistantCitation } from "@t3tools/contracts";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
 import { effortDescriptor } from "../../shared/modelOptions";
@@ -24,8 +24,9 @@ import { collectComposerContextReferences } from "@t3tools/shared/composerContex
 
 const runtimeLabels: Record<string, string> = { "approval-required": "Ask permission", "auto-accept-edits": "Auto-accept edits", auto: "Auto", "full-access": "Full access" };
 const steerShortcut = navigator.userAgent.includes("Mac") ? "Cmd+Enter" : "Ctrl+Enter";
-export function Composer({ state, onEditCitation, onUsage, onSelectionChange }: { readonly state: HostStateSnapshot; readonly onEditCitation: (citation: AssistantCitation, index: number) => void; readonly onUsage: () => void; readonly onSelectionChange: (selection: TextSelection) => void }) {
+export function Composer({ state, onEditCitation, onUsage, onSelectionChange: notifySelection }: { readonly state: HostStateSnapshot; readonly onEditCitation: (citation: AssistantCitation, index: number) => void; readonly onUsage: () => void; readonly onSelectionChange: (selection: TextSelection) => void }) {
   const draftKey = state.activeThreadId ?? "new";
+  const onSelectionChange = useCallback((selection: TextSelection) => { rememberDraftSelection(draftKey, selection); notifySelection(selection); }, [draftKey, notifySelection]);
   const { text, contexts, attachments = [] } = useComposerDraft(draftKey);
   const visibleContexts = contexts.map((context, index) => ({ context, index })).filter(({ context }) => contextIsReferenced(text, context));
   const touched = useRef(false);
@@ -92,13 +93,17 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange }: 
     const focus = (event: Event) => {
       const detail = (event as CustomEvent<{ draftKey?: string; cursor?: number }>).detail;
       if (detail?.draftKey && detail.draftKey !== draftKey) return;
+      const pendingCursor = takeEditorReferenceFocus(draftKey);
+      const nextCursor = detail?.cursor ?? pendingCursor;
       const input = textarea.current;
       requestAnimationFrame(() => {
         if (!input || input !== textarea.current) return;
         input.focus();
-        if (detail?.cursor !== undefined) { input.setSelectionRange(detail.cursor, detail.cursor); setCursor(detail.cursor); onSelectionChange({ start: detail.cursor, end: detail.cursor }); }
+        if (nextCursor !== undefined) { input.setSelectionRange(nextCursor, nextCursor); setCursor(nextCursor); onSelectionChange({ start: nextCursor, end: nextCursor }); }
       });
     }; window.addEventListener("t3-focus-composer", focus);
+    const pending = takeEditorReferenceFocus(draftKey);
+    if (pending !== undefined) focus(new CustomEvent("t3-focus-composer", { detail: { draftKey, cursor: pending } }));
     return () => window.removeEventListener("t3-focus-composer", focus);
   }, [draftKey, onSelectionChange]);
   useEffect(() => {
@@ -160,6 +165,8 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange }: 
     })).catch((cause) => setAttachmentError(cause instanceof Error ? cause.message : String(cause))).finally(() => { setPicking(false); textarea.current?.focus(); });
   };
   const activateInlineReference = (position: number): boolean => {
+    const fileContext = fileReferenceOccurrences(text, contexts).find(ref => ref.start <= position && position < ref.end)?.context;
+    if (fileContext) { void run("openLink", { href: `${fileContext.uri}:${fileContext.range.start.line}:${fileContext.range.start.column}` }); return true; }
     const reference = collectComposerContextReferences(text).find((ref) => ref.start <= position && position < ref.end);
     if (reference?.kind === "assistant-quote") {
       const index = contexts.findIndex((context) => context.type === "assistant" && context.contextId === reference.contextId);
@@ -204,7 +211,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange }: 
         }}>{context.type === "file" ? `@${fileReferenceLabel(context)}` : context.citation.comment ? "Assistant quote · Comment" : "Assistant quote"}</button>
         <button className="icon-button" aria-label={`Remove reference ${index + 1}`} onClick={() => updateDraft(draftKey, (draft) => ({ ...draft, text: removeContextReference(draft.text, context), contexts: draft.contexts.filter((_, position) => position !== index) }))}><XIcon size={12} /></button>
       </div>)}</div> : null}
-      <textarea ref={textarea} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description="Click an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor." disabled={disabled || picking} rows={2}
+      <textarea ref={textarea} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description="Click a file reference to open its source, an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor." disabled={disabled || picking} rows={2}
         onBlur={(event) => onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })}
         onClick={(event) => {
           if (event.currentTarget.selectionStart !== event.currentTarget.selectionEnd) return;

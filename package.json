@@ -2,8 +2,8 @@
   "name": "t3-vscode",
   "displayName": "T3 VSCode",
   "description": "Alpha client for local T3 Code servers: workspace sessions, editor chat, rich messages and account usage.",
-  "version": "0.1.11",
-  "publisher": "t3-vscode",
+  "version": "0.1.12",
+  "publisher": "hungtienhuang",
   "repository": {
     "type": "git",
     "url": "https://github.com/busFred/t3-vscode.git"
@@ -104,6 +104,12 @@
       }
     ],
     "keybindings": [
+      {
+        "command": "t3-vscode.insertReference",
+        "key": "ctrl+k",
+        "mac": "cmd+k",
+        "when": "editorTextFocus && editorHasSelection && resourceScheme == file"
+      },
       {
         "command": "t3-vscode.insertReference",
         "key": "alt+k",

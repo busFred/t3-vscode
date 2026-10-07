@@ -1,10 +1,10 @@
 # Publishing T3 VSCode
 
-The current candidate is **0.1.11 (Alpha)** and packaged for the **prerelease channel**. Publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
+The current candidate is **0.1.12 (Alpha)** and packaged for the **prerelease channel**. Publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
 
 ## Version policy
 
-Use one version everywhere: **0.1.11**, read directly from `package.json`. README headings, release notes, VSIX filenames and the Marketplace all use that same value; there is no separate release label or encoded version.
+Use one version everywhere: **0.1.12**, read directly from `package.json`. README headings, release notes, VSIX filenames and the Marketplace all use that same value; there is no separate release label or encoded version.
 
 VS Code accepts only `major.minor.patch`, so the four-number form `0.1.0.10` is not supported. Alpha, Beta and RC describe development stages on the Marketplace prerelease channel; the stage is not a fourth version component. Advance the three-number version for each package, and never reuse a published version. [VS Code version requirements](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#pre-release-extensions)
 
@@ -12,9 +12,9 @@ The packager validates the version through vsce and derives the prerelease flag 
 
 ## Details the owner must provide
 
-- A Marketplace publisher ID owned by the publishing account; `t3-vscode` in the manifest still needs ownership confirmation.
-- Confirmation of the prepared MIT license and the GitHub repository/issues links; the owner has confirmed the name “T3 VSCode”.
-- A supported publishing login with permission for that publisher, followed by approval of the final listing and package.
+- The Marketplace publisher is `hungtienhuang`, confirmed by the owner.
+- The prepared listing uses the owner-approved name “T3 VSCode”, MIT license and GitHub repository/issues links.
+- A publishing login must have permission for that publisher; publication of this prerelease is authorized by the owner.
 
 Create a publisher in [Marketplace publisher management](https://marketplace.visualstudio.com/manage/publishers/). The publisher ID becomes part of the permanent extension identity, `<publisher>.t3-vscode`, so set the actual ID before the final public package is built. Changing the publisher also changes the installed extension identity.
 
@@ -39,10 +39,10 @@ The packaging script reads the version from `package.json`, adds `--pre-release`
 
 ## Publish the reviewed package
 
-After the actual publisher is set, the package is rebuilt/reviewed, publishing credentials are configured and the owner approves publication:
+The owner has authorized publishing v0.1.12 under `hungtienhuang`; publish the reviewed package after all checks pass and credentials are verified:
 
 ```sh
-pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.1.11.vsix --pre-release
+pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.1.12.vsix --pre-release
 ```
 
 Using the reviewed package avoids rebuilding different code while publishing. Do not pass `patch` or another version argument: those commands can modify the version and create Git commits/tags. After publication, check the Marketplace page, verify prerelease installation in an isolated VS Code profile, and record the published URL and version.

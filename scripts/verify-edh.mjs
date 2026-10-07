@@ -204,27 +204,8 @@ try {
     assert.equal(await workbench.getByText('Unable to write to User Settings', { exact: false }).count(), 0);
     console.log('PASS: missing-server setup has install/service/manual guidance, Retry and native extension Settings');
   } else if (referencesOnly) {
-    await sidebar.wait('document.querySelector(".dedicated-sessions")');
-    const nativeAction = (label) => workbench.locator(`[aria-label="${label}"]`).filter({ visible: true }).first();
-    const selectFileLine = async (line) => {
-      await workbench.keyboard.press('Control+p');
-      await workbench.locator('.quick-input-widget input').filter({ visible: true }).fill(join(home, 'workspace/example.ts'));
-      await workbench.locator('.quick-input-list .monaco-list-row').filter({ hasText: 'example.ts' }).first().waitFor();
-      await workbench.keyboard.press('Enter');
-      await workbench.locator('.editor-instance .view-lines').filter({ visible: true }).first().waitFor();
-      await workbench.keyboard.press('Control+Home');
-      for (let index = 1; index < line; index++) await workbench.keyboard.press('ArrowDown');
-      await workbench.keyboard.press('Home'); await workbench.keyboard.press('Shift+End');
-    };
-    await selectFileLine(1); await workbench.keyboard.press('Alt+k');
-    const chat = await findWebview('panel'); await chat.wait('document.querySelectorAll(".context-chip").length === 1');
-    assert.equal(await sidebar.evaluate('document.querySelectorAll("textarea,.context-chip").length'), 0);
-    await runCommand('T3 VSCode: Account & Usage'); await sidebar.wait('document.querySelector(".account-usage").open');
-    await selectFileLine(2); await workbench.keyboard.press('Alt+k');
-    await chat.wait('document.querySelectorAll(".context-chip").length === 2');
-    assert.equal(await sidebar.evaluate('document.querySelectorAll(".context-chip").length'), 0);
-    await workbench.screenshot({ path: join(evidence, 'edh-usage-reference-routing.png') });
-    console.log('PASS: native Alt+K opens an editor chat when none exists and retains that target after Account & Usage focuses the session manager');
+    const { verifyNativeReferences } = await import('./verify-native-references.mjs');
+    await verifyNativeReferences({ home, evidence, workbench, sidebar, findWebview, runCommand });
   } else if (requestsOnly) {
     await sidebar.wait('document.querySelector(".dedicated-sessions")');
     // Remove notifications replayed on startup before generating a fresh request.
