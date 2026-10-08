@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scheduled task configuration — design preview</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--foreground, #252525); background: var(--background, #fff); font: 13px/1.5 var(--font-sans, system-ui, sans-serif); }
+.tc { width: 100%; }
+.tc-intro { margin: 0 0 10px; font-size: 13px; }
+.tc-workbench { --tc-bg: #fff; --tc-panel: #f7f7f7; --tc-text: #202020; --tc-subtle: #636363; --tc-line: #d3d3d3; --tc-input: #fff; --tc-hover: #e9e9e9; --tc-blue: #0067c0; --tc-selected: #e1edf9; --tc-danger: #b42318; height: 730px; overflow: hidden; border: 1px solid var(--tc-line); color: var(--tc-text); background: var(--tc-bg); font: 12px/1.45 system-ui, sans-serif; }
+body[data-demo-theme="dark"] .tc-workbench { --tc-bg: #1f1f1f; --tc-panel: #252526; --tc-text: #ddd; --tc-subtle: #aaa; --tc-line: #454545; --tc-input: #313131; --tc-hover: #37373d; --tc-blue: #75beff; --tc-selected: #094771; --tc-danger: #ff9b94; }
+.tc button, .tc input, .tc textarea, .tc select { font: inherit; color: inherit; }
+.tc button { cursor: pointer; }
+.tc button:disabled { opacity: .45; cursor: default; }
+.tc [hidden] { display: none !important; }
+.tc button:focus-visible, .tc input:focus-visible, .tc select:focus-visible, .tc textarea:focus-visible, .tc summary:focus-visible { outline: 2px solid var(--tc-blue, #007acc); outline-offset: 1px; }
+.tc-icon { width: 14px; height: 14px; flex: 0 0 14px; }
+.tc-icon-button { display: inline-flex; align-items: center; justify-content: center; padding: 4px; border: 0; border-radius: 3px; background: none; color: var(--tc-subtle) !important; }
+.tc-icon-button:hover { background: var(--tc-hover); }
+.tc-header { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 9px; border-bottom: 1px solid var(--tc-line); }
+.tc-header-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.tc-header-title small { color: var(--tc-subtle); font-weight: 400; }
+.tc-tasks-button { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; border-radius: 3px; padding: 4px 6px; white-space: nowrap; }
+.tc-tasks-button[aria-expanded="true"] { color: var(--tc-blue); background: var(--tc-selected); }
+.tc-task-count { font-size: 10px; color: var(--tc-subtle); }
+.tc-layout { display: grid; grid-template-columns: minmax(0, 1fr) 370px; height: calc(100% - 36px); min-height: 0; }
+.tc-layout.tc-panel-closed { grid-template-columns: minmax(0, 1fr); }
+.tc-chat { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 13px; }
+.tc-session-model { display: flex; flex-direction: column; gap: 3px; margin-bottom: 20px; }
+.tc-session-model small { font-size: 9px; font-weight: 650; letter-spacing: .04em; color: var(--tc-subtle); }
+.tc-session-model strong { font-size: 12px; font-weight: 600; }
+.tc-message { border: 1px solid var(--tc-line); border-radius: 6px; padding: 10px; background: var(--tc-panel); margin: 0 0 18px 17px; line-height: 1.6; }
+.tc-answer { line-height: 1.65; }
+.tc-answer strong { display: block; margin-bottom: 8px; font-size: 12px; }
+.tc-answer ul { margin: 0; padding-left: 17px; }
+.tc-answer li { margin-bottom: 6px; }
+.tc-answer small { color: var(--tc-subtle); display: block; margin-top: 12px; font-size: 10px; }
+.tc-composer { margin-top: auto; border: 1px solid var(--tc-line); border-radius: 4px; padding: 8px; background: var(--tc-input); }
+.tc-composer textarea { display: block; width: 100%; height: 76px; resize: none; padding: 0; border: 0; background: none; font-size: 12px; outline: none; }
+.tc-composer-footer { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; font-size: 11px; }
+.tc-composer-footer b { font-weight: 600; }
+.tc-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--tc-line); background: var(--tc-panel); }
+.tc-panel-header { display: flex; align-items: center; gap: 7px; padding: 8px 10px; height: 36px; flex: 0 0 36px; border-bottom: 1px solid var(--tc-line); }
+.tc-panel-header strong { flex: 1; font-size: 12px; }
+.tc-panel-scope { width: 100%; border: 0; border-bottom: 1px solid var(--tc-line); background: var(--tc-panel); padding: 6px 10px; font-size: 10px !important; height: 28px; }
+.tc-task-list { flex: 0 0 auto; max-height: 140px; overflow-y: auto; border-bottom: 1px solid var(--tc-line); }
+.tc-task-row { display: flex; align-items: center; gap: 5px; padding: 8px 9px; }
+.tc-task-row + .tc-task-row { border-top: 1px solid var(--tc-line); }
+.tc-task-info { flex: 1; min-width: 0; }
+.tc-task-title { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.tc-task-meta { display: block; color: var(--tc-subtle); font-size: 10px; margin-top: 3px; }
+.tc-task-model { display: block; color: var(--tc-blue); font-size: 10px; margin-top: 2px; }
+.tc-switch { appearance: none; width: 28px; height: 16px; flex: 0 0 28px; border-radius: 10px; background: #999; margin: 0 0 0 2px; position: relative; cursor: pointer; }
+.tc-switch:checked { background: #0067c0; }
+.tc-switch::after { content: ''; width: 12px; height: 12px; position: absolute; border-radius: 50%; background: #fff; top: 2px; left: 2px; }
+.tc-switch:checked::after { left: 14px; }
+.tc-empty { color: var(--tc-subtle); font-size: 11px; padding: 13px 10px; margin: 0; }
+.tc-form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tc-form-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px; scrollbar-width: thin; }
+.tc-form-heading { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+.tc-form-heading h2 { margin: 0; flex: 1; font-size: 13px; font-weight: 650; }
+.tc-draft-badge { color: var(--tc-subtle); font-size: 10px; }
+.tc-runs-on { margin: 0 0 10px; color: var(--tc-subtle); font-size: 10px; }
+.tc-field { display: block; margin-bottom: 10px; min-width: 0; }
+.tc-field > span:first-child { display: block; margin-bottom: 4px; font-size: 11px; }
+.tc-field input:not([type="checkbox"]), .tc-field textarea, .tc-field select { width: 100%; min-width: 0; border: 1px solid var(--tc-line); border-radius: 3px; background: var(--tc-input); padding: 6px 7px; font-size: 12px; }
+.tc-field input, .tc-field select { height: 30px; }
+.tc-field textarea { display: block; resize: vertical; height: 93px; min-height: 70px; max-height: 180px; line-height: 1.5; }
+.tc-model-fields { display: grid; grid-template-columns: minmax(0, 1fr) 94px; gap: 9px; }
+.tc-model-fields.tc-no-effort { grid-template-columns: minmax(0, 1fr); }
+.tc-model-field { position: relative; }
+.tc-model-button { width: 100%; min-width: 0; display: flex; align-items: center; gap: 6px; text-align: left; padding: 6px 7px; height: 30px; border: 1px solid var(--tc-line); border-radius: 3px; background: var(--tc-input); }
+.tc-model-button > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-task-only { margin: -3px 0 11px; color: var(--tc-subtle); font-size: 10px; }
+.tc-schedule-tabs { display: flex; gap: 3px; margin-bottom: 8px; border-radius: 4px; background: var(--tc-hover); padding: 2px; }
+.tc-schedule-tabs button { flex: 1; border: 0; background: none; border-radius: 3px; padding: 4px 7px; font-size: 11px; }
+.tc-schedule-tabs button[aria-pressed="true"] { background: var(--tc-input); box-shadow: 0 1px 3px #0002; }
+.tc-interval { display: flex; align-items: center; gap: 8px; font-size: 11px; margin-bottom: 10px; }
+.tc-interval input { width: 64px; height: 29px; border: 1px solid var(--tc-line); border-radius: 3px; padding: 5px 7px; background: var(--tc-input); }
+.tc-fixed { margin-bottom: 10px; }
+.tc-fixed input { height: 28px; border: 1px solid var(--tc-line); border-radius: 3px; padding: 4px; background: var(--tc-input); }
+.tc-days { display: flex; gap: 4px; margin-top: 6px; }
+.tc-days label { display: flex; align-items: center; gap: 2px; font-size: 10px; }
+.tc-days input { appearance: none; width: 0; height: 0; padding: 0; margin: 0; border: 0; }
+.tc-days span { display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 23px; border: 1px solid var(--tc-line); border-radius: 3px; cursor: pointer; }
+.tc-days input:checked + span { color: var(--tc-blue); background: var(--tc-selected); border-color: var(--tc-blue); }
+.tc-days input:focus-visible + span { outline: 2px solid var(--tc-blue); }
+.tc-advanced { border-top: 1px solid var(--tc-line); padding-top: 7px; margin-top: 2px; }
+.tc-advanced summary { cursor: pointer; color: var(--tc-subtle); font-size: 11px; }
+.tc-advanced .tc-field { margin-top: 9px; }
+.tc-enabled { display: flex; align-items: center; justify-content: space-between; font-size: 11px; margin-top: 9px; }
+.tc-form-footer { display: flex; justify-content: flex-end; gap: 7px; border-top: 1px solid var(--tc-line); padding: 8px 10px; flex: 0 0 auto; background: var(--tc-panel); }
+.tc-form-footer button { border: 1px solid var(--tc-line); border-radius: 3px; padding: 5px 10px; background: var(--tc-input); font-size: 11px; }
+.tc-form-footer .tc-save { background: #0067c0; border-color: #0067c0; color: #fff; }
+.tc-validation { font-size: 10px; color: var(--tc-danger); margin: 5px 0 0; }
+.tc-model-popup { position: fixed; display: flex; flex-direction: column; z-index: 30; max-height: 310px; border: 1px solid var(--tc-line); border-radius: 7px; padding: 5px; background: var(--tc-input); box-shadow: 0 5px 18px #0003; }
+.tc-model-search { width: 100%; padding: 7px; border: 0; border-bottom: 1px solid var(--tc-line); background: none; font-size: 11px !important; }
+.tc-picker-body { display: flex; min-height: 0; overflow: hidden; }
+.tc-providers { flex: 0 0 84px; display: flex; flex-direction: column; border-right: 1px solid var(--tc-line); padding: 4px 4px 4px 0; gap: 3px; }
+.tc-providers button { border: 0; background: none; text-align: left; padding: 7px 5px; border-radius: 3px; font-size: 10px; }
+.tc-providers button[aria-pressed="true"] { color: var(--tc-blue); background: var(--tc-hover); }
+.tc-model-options { flex: 1; min-width: 0; overflow-y: auto; padding: 4px; }
+.tc-model-options header { font-size: 10px; font-weight: 600; color: var(--tc-subtle); padding: 5px 4px 3px; }
+.tc-model-option { width: 100%; display: flex; align-items: center; gap: 5px; border: 0; border-radius: 3px; padding: 7px 5px; text-align: left; background: none; font-size: 11px !important; }
+.tc-model-option:hover { background: var(--tc-hover); }
+.tc-model-option[aria-pressed="true"] { color: var(--tc-blue); }
+.tc-model-option span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-model-popup-note { border-top: 1px solid var(--tc-line); padding: 5px 4px 0; color: var(--tc-subtle); font-size: 10px; }
+.tc-demo-tools { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 11px; }
+.tc-demo-tools button { padding: 3px 8px; border: 1px solid var(--border, #ccc); border-radius: 4px; background: var(--secondary, #f5f5f5); }
+.tc-theme { margin-left: auto; }
+.tc-status { display: block; min-height: 18px; margin-top: 8px; font-size: 12px; color: var(--muted-foreground, #666); }
+.tc-note { font-size: 11px; color: var(--muted-foreground, #666); margin: 4px 0 0; }
+@media (max-width: 640px) { .tc-layout { grid-template-columns: minmax(0, 1fr); } .tc-layout:not(.tc-panel-closed) .tc-chat { display: none; } .tc-panel { border-left: 0; } .tc-session-model { margin-bottom: 14px; } }
+</style>
+</head>
+<body>
+<section class="tc" aria-label="Scheduled task configuration mockup">
+  <p class="tc-intro">Give each task its own model and effort.</p>
+  <section class="tc-workbench" aria-label="Editor chat with scheduled tasks">
+    <header class="tc-header"><span class="tc-header-title"><small>cvafa / </small>Investigate MCTS Zero Sweep</span><button type="button" class="tc-tasks-button" id="tc-open" aria-label="Scheduled tasks" aria-expanded="true" aria-controls="tc-panel"><svg class="tc-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 9v4l3 2M8 2h8" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span>Tasks</span><span class="tc-task-count" id="tc-count">1</span></button></header>
+    <div class="tc-layout" id="tc-layout">
+      <article class="tc-chat" aria-label="Main session preview">
+        <div class="tc-session-model"><small>MAIN SESSION MODEL</small><strong id="tc-session-model">Codex · GPT-6-Astra · Max</strong></div>
+        <div class="tc-message">Investigate why the MCTS-Zero sweep failed. Keep checking the training while I work.</div>
+        <div class="tc-answer"><strong>Training progress</strong><ul><li>The next iteration is underway.</li><li>No new errors in the worker logs.</li><li>Checkpoints continue to advance.</li></ul><small>Example conversation · sample data</small></div>
+        <div class="tc-composer"><textarea id="tc-chat-draft" aria-label="Main session draft">Continue investigating the sweep failure.</textarea><div class="tc-composer-footer"><b>GPT-6-Astra ⌄</b><span>Max ⌄</span><span>Auto ⌄</span></div></div>
+      </article>
+      <aside class="tc-panel" id="tc-panel" aria-label="Scheduled tasks panel">
+        <header class="tc-panel-header"><strong>Scheduled tasks</strong><button type="button" class="tc-icon-button" id="tc-new" aria-label="New task" title="New task">＋</button><button type="button" class="tc-icon-button" id="tc-close" aria-label="Close task panel" title="Close">×</button></header>
+        <select class="tc-panel-scope" id="tc-scope" aria-label="Task scope"><option value="session">This session</option><option value="workspace">All workspace tasks</option></select>
+        <div class="tc-task-list" id="tc-list"></div>
+        <form class="tc-form" id="tc-form">
+          <div class="tc-form-body">
+            <div class="tc-form-heading"><h2 id="tc-form-title">Edit task</h2><span class="tc-draft-badge" id="tc-dirty" hidden>Unsaved</span></div>
+            <p class="tc-runs-on">Runs on hungtien-p1g6l · cvafa</p>
+            <label class="tc-field"><span>Name</span><input id="tc-name" required aria-label="Task name" value="Check training progress"></label>
+            <label class="tc-field"><span>Prompt</span><textarea id="tc-prompt" required aria-label="Task prompt">Check the running MCTS-Zero training. Read status, logs and metrics. Summarize completed iterations, GPU usage and errors. Do not modify the experiment.</textarea></label>
+            <div class="tc-model-fields"><div class="tc-field tc-model-field"><span id="tc-model-label">Task model</span><button type="button" class="tc-model-button" id="tc-model" aria-label="Choose task model" aria-haspopup="dialog" aria-expanded="false"><span id="tc-model-text">GPT-6-Luna</span><span aria-hidden="true">⌄</span></button></div><label class="tc-field" id="tc-effort-field"><span>Effort</span><select id="tc-effort" aria-label="Task effort"></select></label></div>
+            <p class="tc-task-only" id="tc-task-only">Codex · used for this task's scheduled runs.</p>
+            <div class="tc-schedule-tabs" aria-label="Schedule type"><button type="button" data-schedule="interval" aria-pressed="true">Every interval</button><button type="button" data-schedule="fixed_time" aria-pressed="false">At a time</button></div>
+            <label class="tc-interval" id="tc-interval-field"><span>Run every</span><input type="number" min="1" step="1" id="tc-interval" value="30" aria-label="Run interval in minutes"><span>minutes</span></label>
+            <div class="tc-fixed" id="tc-fixed-field" hidden><label>Run at <input type="time" id="tc-time" value="09:00" aria-label="Run time"></label><div class="tc-days" id="tc-days" aria-label="Run weekdays"></div></div>
+            <label class="tc-field"><span>Post results to</span><select id="tc-target" aria-label="Task result destination"><option value="session">This session</option><option value="new">A new session each run</option></select></label>
+            <details class="tc-advanced"><summary>Workspace</summary><label class="tc-field"><span>Checkout</span><select id="tc-workspace" aria-label="Task checkout"><option value="root">Project checkout</option><option value="worktree">New worktree</option><option value="existing_worktree">Existing checkout</option></select></label><label class="tc-field" id="tc-checkout-field" hidden><span id="tc-checkout-label">Base branch</span><input id="tc-checkout" value="main" aria-label="Checkout branch or path"></label></details>
+            <label class="tc-enabled"><span>Enabled</span><input class="tc-switch" type="checkbox" checked id="tc-enabled" aria-label="Task enabled"></label>
+            <p class="tc-validation" id="tc-validation" role="status" hidden></p>
+          </div>
+          <footer class="tc-form-footer"><button type="button" id="tc-cancel">Cancel</button><button type="submit" class="tc-save" id="tc-save">Save task</button></footer>
+        </form>
+        <section id="tc-idle" class="tc-empty" hidden>Select a task's pencil to edit its model or schedule.</section>
+      </aside>
+    </div>
+    <div class="tc-model-popup" id="tc-picker" role="dialog" aria-label="Choose task model" hidden><input class="tc-model-search" id="tc-model-search" aria-label="Search task models" placeholder="Search all models…"><div class="tc-picker-body"><nav class="tc-providers" id="tc-providers" aria-label="Task model providers"></nav><div class="tc-model-options" id="tc-model-options"></div></div><div class="tc-model-popup-note">Selects this task's model.</div></div>
+  </section>
+  <div class="tc-demo-tools"><button type="button" id="tc-reset">Reset demo</button><span>Try changing the task model, then Save.</span><button type="button" class="tc-theme" id="tc-theme">Dark theme</button></div>
+  <output class="tc-status" id="tc-status" aria-live="polite">The main session uses Astra. The scheduled task uses Luna with Low effort.</output>
+  <p class="tc-note">Design preview only. Save and Run now affect sample data.</p>
+</section>
+<script>
+(() => {
+  const catalog = [
+    { id: 'codex', name: 'Codex', models: [
+      { id: 'gpt-6-luna', name: 'GPT-6-Luna', efforts: ['Low','Medium','High'], defaultEffort: 'Low' },
+      { id: 'gpt-5.6-terra', name: 'GPT-5.6-Terra', efforts: ['Low','Medium','High'], defaultEffort: 'Medium' },
+      { id: 'gpt-6.1-sol', name: 'GPT-6.1-Sol', efforts: ['Low','Medium','High','Max'], defaultEffort: 'High' },
+      { id: 'gpt-6-astra', name: 'GPT-6-Astra', efforts: ['Low','Medium','High','Max'], defaultEffort: 'High' }
+    ] },
+    { id: 'claude', name: 'Claude', models: [
+      { id: 'claude-haiku-5.5', name: 'Claude Haiku 5.5', efforts: ['Low','Medium','High'], defaultEffort: 'Medium' },
+      { id: 'claude-sonnet-5.5', name: 'Claude Sonnet 5.5', efforts: ['Low','Medium','High'], defaultEffort: 'Medium' }
+    ] },
+    { id: 'kimi', name: 'Kimi CLI', models: [{ id: 'kimi-for-coding', name: 'Kimi for Coding', efforts: [], defaultEffort: '' }] }
+  ];
+  const initial = { id: 'training', title: 'Check training progress', prompt: 'Check the running MCTS-Zero training. Read status, logs and metrics. Summarize completed iterations, GPU usage and errors. Do not modify the experiment.', provider: 'codex', model: 'gpt-6-luna', effort: 'Low', enabled: true, schedule: 'interval', minutes: 30, time: '09:00', days: [0,1,2,3,4,5,6], target: 'session', workspace: 'root', checkout: 'main', runs: 3 };
+  let tasks = [structuredClone(initial)], draft = structuredClone(initial), baseline = structuredClone(initial), panelOpen = true, pickerCategory = 'codex', nextId = 1;
+  const el = id => document.querySelector(`#tc-${id}`), form = el('form'), picker = el('picker'), status = el('status');
+  const icon = path => `<svg class="tc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
+  const findModel = task => { const provider = catalog.find(provider => provider.id === task.provider); return { provider, model: provider?.models.find(model => model.id === task.model) }; };
+  const modelSummary = task => { const { model } = findModel(task); return `${model?.name ?? 'Model unavailable'}${task.effort ? ` · ${task.effort}` : ''}`; };
+  const scheduleSummary = task => task.schedule === 'interval' ? `Every ${task.minutes} min` : `${task.time} · ${task.days.length === 7 ? 'every day' : 'selected days'}`;
+  function renderList() {
+    const list = el('list'); list.replaceChildren();
+    const visible = tasks.filter(task => el('scope').value === 'workspace' || task.target === 'session');
+    el('count').textContent = tasks.filter(task => task.target === 'session').length;
+    visible.forEach(task => {
+      const row = document.createElement('div'); row.className = 'tc-task-row'; row.dataset.task = task.id;
+      const info = document.createElement('span'); info.className = 'tc-task-info';
+      const title = document.createElement('span'); title.className = 'tc-task-title'; title.textContent = task.title;
+      const meta = document.createElement('span'); meta.className = 'tc-task-meta'; meta.textContent = task.enabled ? `${scheduleSummary(task)}${task.schedule === 'interval' ? ` · next in ${task.minutes} min` : ''}` : `${scheduleSummary(task)} · paused`;
+      const model = document.createElement('span'); model.className = 'tc-task-model'; model.textContent = modelSummary(task); info.append(title, meta, model); row.append(info);
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'tc-icon-button'; edit.innerHTML = icon('m16 3 5 5-12 12-6 1 1-6L16 3Z M14 5l5 5'); edit.setAttribute('aria-label', `Edit ${task.title}`); edit.title = 'Edit task'; edit.addEventListener('click', () => beginEdit(task)); row.append(edit);
+      const run = document.createElement('button'); run.type = 'button'; run.className = 'tc-icon-button'; run.innerHTML = icon('m8 4 12 8-12 8V4Z'); run.setAttribute('aria-label', `Run ${task.title} now`); run.title = 'Run now'; run.addEventListener('click', () => { task.runs += 1; status.textContent = `Preview run requested with ${modelSummary(task)}. No provider was called.`; }); row.append(run);
+      const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.className = 'tc-switch'; enabled.checked = task.enabled; enabled.setAttribute('aria-label', `Enable ${task.title}`);
+      enabled.addEventListener('change', () => { task.enabled = enabled.checked; if (draft?.id === task.id) { draft.enabled = task.enabled; baseline.enabled = task.enabled; el('enabled').checked = task.enabled; } renderList(); status.textContent = task.enabled ? 'Task enabled in the preview.' : 'Task paused in the preview.'; }); row.append(enabled); list.append(row);
+    });
+    if (!visible.length) { const empty = document.createElement('p'); empty.className = 'tc-empty'; empty.textContent = 'No tasks in this session. Choose All workspace tasks or create one.'; list.append(empty); }
+  }
+  function updateModel() {
+    const { provider, model } = findModel(draft);
+    el('model-text').textContent = model?.name ?? 'Choose a model'; el('effort-field').hidden = !model?.efforts.length;
+    document.querySelector('.tc-model-fields').classList.toggle('tc-no-effort', !model?.efforts.length);
+    el('effort').replaceChildren(...(model?.efforts ?? []).map(value => new Option(value, value))); el('effort').value = draft.effort;
+    el('task-only').textContent = `${provider?.name ?? 'Provider unavailable'} · used for this task's scheduled runs.`;
+  }
+  function updateSections() {
+    document.querySelectorAll('[data-schedule]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.schedule === draft.schedule)));
+    el('interval-field').hidden = draft.schedule !== 'interval'; el('fixed-field').hidden = draft.schedule !== 'fixed_time';
+    el('checkout-field').hidden = draft.workspace === 'root'; el('checkout-label').textContent = draft.workspace === 'worktree' ? 'Base branch' : 'Checkout path';
+    el('checkout').value = draft.checkout;
+  }
+  function validate() {
+    if (!draft) return;
+    const error = !draft.title.trim() || !draft.prompt.trim() ? 'Add a name and prompt.' : !findModel(draft).model ? 'Choose an available task model.' : draft.schedule === 'interval' && (!Number.isSafeInteger(draft.minutes) || draft.minutes < 1) ? 'Use an interval of at least 1 minute.' : draft.schedule === 'fixed_time' && (!draft.time || !draft.days.length) ? 'Choose a time and at least one day.' : draft.workspace !== 'root' && !draft.checkout.trim() ? 'Enter a branch or checkout path.' : '';
+    el('validation').textContent = error; el('validation').hidden = !error; el('save').disabled = !!error;
+    el('dirty').hidden = JSON.stringify(draft) === JSON.stringify(baseline);
+  }
+  function fillForm() {
+    form.hidden = false; el('idle').hidden = true; el('form-title').textContent = tasks.some(task => task.id === draft.id) ? 'Edit task' : 'New task';
+    ['name','prompt','interval','time','target','workspace','enabled'].forEach(id => { const field = el(id); const key = { name:'title', interval:'minutes' }[id] ?? id; if (id === 'enabled') field.checked = draft.enabled; else field.value = draft[key]; });
+    el('days').replaceChildren(...['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, index) => {
+      const label = document.createElement('label'), input = document.createElement('input'), text = document.createElement('span'); input.type = 'checkbox'; input.checked = draft.days.includes(index); input.setAttribute('aria-label', day); text.textContent = day.slice(0,1); input.addEventListener('change', () => { draft.days = [...el('days').querySelectorAll('input')].flatMap((input, index) => input.checked ? [index] : []); validate(); }); label.append(input, text); return label;
+    }));
+    updateModel(); updateSections(); validate();
+  }
+  function setPanel(open) { panelOpen = open; el('panel').hidden = !open; el('layout').classList.toggle('tc-panel-closed', !open); el('open').setAttribute('aria-expanded', String(open)); if (!open) closePicker(false); }
+  function beginEdit(task) { closePicker(false); draft = structuredClone(task); baseline = structuredClone(task); setPanel(true); fillForm(); }
+  function closePicker(focus = true) { picker.hidden = true; el('model').setAttribute('aria-expanded', 'false'); if (focus && draft) el('model').focus(); }
+  function placePicker() {
+    const anchor = el('model').getBoundingClientRect(), panel = el('panel').getBoundingClientRect();
+    const width = Math.min(352, panel.width - 24, innerWidth - 16);
+    picker.style.width = `${width}px`; picker.style.left = `${Math.max(8, Math.min(anchor.left, innerWidth - width - 8))}px`;
+    const below = innerHeight - anchor.bottom - 8; picker.style.maxHeight = `${Math.min(310, Math.max(160, below >= 200 ? below : anchor.top - 8))}px`;
+    picker.style.top = below >= 200 ? `${anchor.bottom + 5}px` : ''; picker.style.bottom = below >= 200 ? '' : `${innerHeight - anchor.top + 5}px`;
+  }
+  function renderModels() {
+    const nav = el('providers'), options = el('model-options'), query = el('model-search').value.trim().toLowerCase(); nav.replaceChildren(); options.replaceChildren();
+    [{id:'favorites',name:'Favorites'}, {id:'all',name:'All providers'}, ...catalog].forEach(provider => { const button = document.createElement('button'); button.type = 'button'; button.textContent = provider.name; button.setAttribute('aria-pressed', String(pickerCategory === provider.id && !query)); button.addEventListener('click', () => { pickerCategory = provider.id; el('model-search').value = ''; renderModels(); }); nav.append(button); });
+    catalog.forEach(provider => {
+      const models = provider.models.filter(model => query ? `${provider.name} ${model.name}`.toLowerCase().includes(query) : pickerCategory === 'all' || pickerCategory === provider.id || pickerCategory === 'favorites' && model.id === 'gpt-6-luna');
+      if (!models.length) return;
+      const header = document.createElement('header'); header.textContent = provider.name; options.append(header);
+      models.forEach(model => { const button = document.createElement('button'); button.type = 'button'; button.className = 'tc-model-option'; button.dataset.model = `${provider.id}:${model.id}`; button.setAttribute('aria-pressed', String(draft.provider === provider.id && draft.model === model.id)); const label = document.createElement('span'); label.textContent = model.name; button.append(label); if (button.getAttribute('aria-pressed') === 'true') button.insertAdjacentHTML('beforeend', icon('m5 12 4 4L19 6')); button.addEventListener('click', () => { const sameProvider = draft.provider === provider.id; draft.provider = provider.id; draft.model = model.id; if (!sameProvider || !model.efforts.includes(draft.effort)) draft.effort = model.defaultEffort; updateModel(); validate(); closePicker(); }); options.append(button); });
+    });
+    if (!options.children.length) { const empty = document.createElement('p'); empty.className = 'tc-empty'; empty.textContent = 'No matching models.'; options.append(empty); }
+  }
+  el('model').addEventListener('click', () => { if (!picker.hidden) { closePicker(); return; } pickerCategory = draft.provider; el('model-search').value = ''; picker.hidden = false; el('model').setAttribute('aria-expanded','true'); renderModels(); placePicker(); el('model-search').focus(); });
+  el('model-search').addEventListener('input', renderModels);
+  picker.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closePicker(); return; } if (!['ArrowUp','ArrowDown','Home','End'].includes(event.key) || ['Home','End'].includes(event.key) && event.target === el('model-search')) return; const buttons = [...el('model-options').querySelectorAll('button')]; if (!buttons.length) return; const index = buttons.indexOf(document.activeElement); const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : event.key === 'ArrowDown' ? Math.min(index + 1, buttons.length - 1) : index - 1; event.preventDefault(); if (next < 0) el('model-search').focus(); else buttons[next]?.focus(); });
+  document.addEventListener('pointerdown', event => { if (!picker.hidden && !picker.contains(event.target) && !el('model').contains(event.target)) closePicker(false); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && picker.hidden && panelOpen) { event.preventDefault(); setPanel(false); el('open').focus(); } });
+  window.addEventListener('resize', () => { if (!picker.hidden) placePicker(); });
+  el('scope').addEventListener('change', renderList);
+  el('open').addEventListener('click', () => setPanel(!panelOpen)); el('close').addEventListener('click', () => { setPanel(false); el('open').focus(); });
+  el('new').addEventListener('click', () => { const task = { ...structuredClone(initial), id: `new-${nextId++}`, title: '', prompt: '', runs: 0 }; beginEdit(task); el('name').focus(); });
+  document.querySelectorAll('[data-schedule]').forEach(button => button.addEventListener('click', () => { draft.schedule = button.dataset.schedule; updateSections(); validate(); }));
+  ['name','prompt','interval','time','target','workspace','checkout','enabled','effort'].forEach(id => el(id).addEventListener('input', () => { const key = { name:'title', interval:'minutes' }[id] ?? id; draft[key] = id === 'enabled' ? el(id).checked : id === 'interval' ? Number(el(id).value) : el(id).value; if (id === 'workspace') { draft.checkout = draft.workspace === 'existing_worktree' ? '/workspaces/cvafa' : 'main'; updateSections(); } validate(); }));
+  function finishEditing() { closePicker(false); draft = null; baseline = null; form.hidden = true; el('idle').hidden = false; }
+  el('cancel').addEventListener('click', () => { finishEditing(); status.textContent = 'Changes cancelled. The saved task is unchanged.'; });
+  form.addEventListener('submit', event => { event.preventDefault(); validate(); if (el('save').disabled) return; const index = tasks.findIndex(task => task.id === draft.id); const saved = structuredClone(draft); if (index < 0) tasks.push(saved); else tasks[index] = { ...saved, runs: tasks[index].runs }; renderList(); finishEditing(); status.textContent = `Saved in preview. Future scheduled runs use ${modelSummary(saved)}.`; });
+  el('reset').addEventListener('click', () => { closePicker(false); tasks = [structuredClone(initial)]; el('scope').value = 'session'; el('chat-draft').value = 'Continue investigating the sweep failure.'; document.querySelector('.tc-advanced').open = false; renderList(); beginEdit(tasks[0]); status.textContent = 'The main session uses Astra. The scheduled task uses Luna with Low effort.'; });
+  el('theme').addEventListener('click', event => { const dark = document.body.dataset.demoTheme !== 'dark'; document.body.dataset.demoTheme = dark ? 'dark' : 'light'; event.currentTarget.textContent = dark ? 'Light theme' : 'Dark theme'; });
+  el('theme').textContent = document.body.dataset.demoTheme === 'dark' ? 'Light theme' : 'Dark theme';
+  renderList(); fillForm();
+  console.log('Task configuration mockup ready: panel, independent task model/effort, provider search, schedules, workspace, enabled state, Save/Cancel, new-task drafts and preview-only Run now. All data stays in memory; no API, provider or training calls.');
+})();
+</script>
+</body>
+</html>
