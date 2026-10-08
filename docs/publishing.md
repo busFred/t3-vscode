@@ -1,51 +1,21 @@
-# Publishing T3 VSCode
+# Local VSIX packaging and publication history
 
-The current release is **0.1.15 (Alpha)**, published to the [Marketplace release channel](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) with the same runtime as the owner-confirmed **0.1.14** preview. The 0.1.14 prerelease remains unchanged. Marketplace accepted 0.1.15; public validation is pending as of October 8, 2026 at 08:34 UTC. Future publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
+Current owner policy: build local installers after implementation and review, **never publish them**, and **do not change the version unless the owner explicitly requests it**. The manifest remains **0.1.16**. Earlier publication approvals recorded below are historical and do not authorize another upload.
+
+Current packaging checkpoint: wait until task configuration has been implemented. The session activity and model drag layouts are design mockups; no installer containing those proposed features has been built yet.
 
 ## Version policy
 
-Use one candidate version everywhere: **0.1.15**, read directly from `package.json`. README headings, release notes, VSIX filenames and the Marketplace all use that same value; there is no separate release label or encoded version.
-
-VS Code accepts only `major.minor.patch`, so the four-number form `0.1.0.10` is not supported. Alpha, Beta and RC describe development stages; they do not determine the distribution channel or add a fourth version component. Advance the three-number version for each package, and never reuse a published version. [VS Code version requirements](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#pre-release-extensions)
-
-The packager validates the version through vsce and derives the prerelease flag from `preview: true`. A later stable build needs its own higher version and `preview: false`; prerelease subscribers can update to a higher stable version. Historical local versions remain in the feature history.
-
-## Details the owner must provide
-
-- The Marketplace publisher is `hungtienhuang`, confirmed by the owner.
-- The prepared listing uses the owner-approved name “T3 VSCode”, MIT license and GitHub repository/issues links.
-- A publishing login must have permission for that publisher; publication of 0.1.15 on the release channel is authorized by the owner.
-
-Create a publisher in [Marketplace publisher management](https://marketplace.visualstudio.com/manage/publishers/). The publisher ID becomes part of the permanent extension identity, `<publisher>.t3-vscode`, so set the actual ID before the final public package is built. Changing the publisher also changes the installed extension identity.
-
-Microsoft recommends Entra ID–based publishing. Azure DevOps PATs currently work with **All accessible organizations** and **Marketplace → Manage**, but global PATs retire on **December 1, 2026**. Prefer the identity-based workflow for ongoing automation. Configure credentials locally or through a private credential mechanism; do not put a token in source files or chat. [Current authentication instructions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#secure-automated-publishing-to-visual-studio-marketplace)
-
-For local PAT-based publishing, use `pnpm exec vsce login <publisher-id>` and enter the token at its private terminal prompt. This version of vsce prefers the operating system keyring (`vscode-vsce`); on Linux it needs a working Secret Service/keyring. Its fallback stores credentials in `~/.vsce` with mode 0600, outside this repository, and `VSCE_STORE=file` explicitly selects that fallback. Prefer the keyring; this preparation does not read or create credential stores. CI publishing credentials belong in the CI secret/identity configuration. See the [vsce credential store implementation](https://github.com/microsoft/vscode-vsce/blob/main/src/store.ts).
-
-## Repository preparation
-
-The candidate includes a 256×256 PNG icon, alpha description, keywords, repository/support links, three native extension screenshots, `CHANGELOG.md`, `SUPPORT.md`, the project license and bundled dependency notices. Confirm the repository and support URLs are public and contain the release documentation and `docs/screenshots/` images before publishing; `vsce` rewrites relative Markdown links to repository URLs.
-
-Linux and local T3 servers are the verified scope. Other platforms need verification before the listing claims support for them. T3 Code and the selected provider are installed/configured separately; the extension does not bundle them.
+Read the version directly from `package.json`; use the same value in release notes and installer filenames. Local revisions may rebuild the same unpublished candidate version. Keep the three-number version and channel metadata unchanged unless the owner requests a change. Historical versions remain in the feature history.
 
 ## Build and review
 
-1. Update `package.json`, the changelog and linked feature history for the candidate.
+1. Complete the requested implementation and update the changelog and linked feature history without changing the manifest version.
 2. Run relevant unit, type, browser and isolated native checks; use GPT-6 Luna with low effort only when a live provider check is needed.
 3. Start a regression reviewer with fresh context, resolve blockers, obtain final signoff and record the outcome in the feature history.
-4. Run `pnpm package` and verify the VSIX version, publisher, channel metadata and bundled assets; 0.1.15 uses `preview: false` and must omit the prerelease property.
+4. Run `pnpm package` and verify the VSIX version, publisher, channel metadata and bundled assets. Store the installer and checksum under `target-installer/`.
 
-The packaging script reads the version from `package.json`, adds `--pre-release` when `preview: true`, and writes to `target-installer/`. The prerelease flag is required in addition to the Marketplace Preview label. Never use `--skip-license` for the public candidate.
-
-## Publish the reviewed package
-
-The owner has authorized publishing v0.1.15 on the release channel under `hungtienhuang`; publish the reviewed package after all checks pass and credentials are verified:
-
-```sh
-pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.1.15.vsix
-```
-
-Using the reviewed package avoids rebuilding different code while publishing. Do not pass `patch` or another version argument: those commands can modify the version and create Git commits/tags. After publication, check the Marketplace page, verify release-channel metadata and installation in an isolated VS Code profile, confirm the existing prerelease package is unchanged, and record the published URL and version.
+The packaging script reads the existing manifest and derives the prerelease flag from `preview: true`. Do not run publishing, version-bump, tagging or release-upload commands. Packaging does not authorize installation into the normal VS Code profile. T3 Code and providers remain separately installed applications.
 
 ## First public release
 

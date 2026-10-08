@@ -50,7 +50,7 @@ Version v0.1.16 is an unpublished local installer with model-preference import a
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.12 |
 | [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.1.15 |
-| [Release versioning](#release-versioning) | Uses one three-number version and explicitly selects the distribution channel. | v0.1.10 | v0.1.15 |
+| [Release versioning](#release-versioning) | Keeps the owner-selected version for local installers; publication is prohibited. | v0.1.10 | v0.1.16 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.13 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
@@ -908,6 +908,11 @@ Version v0.1.16 is an unpublished local installer with model-preference import a
 #### v0.1.15
 
 - Advance to v0.1.15 for the owner-authorized release-channel promotion, preserving the published v0.1.14 preview.
+
+#### v0.1.16 — local packaging policy
+
+- Keep the existing manifest version for local installer revisions until the owner explicitly requests a version change; never publish the packages.
+- Hold the next VSIX until task configuration is implemented, independently reviewed and verified; keep application changes inside the extension repository.
 
 ### Feature tracking and regression review
 
