@@ -42,8 +42,8 @@ This document tracks features by release, including how later versions changed t
 | [Saved turn diffs](#saved-turn-diffs) | Opens the preceding turn's saved changes in native diff editors. | v0.0.6 | v0.0.9 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
-| [Local connection and pairing](#local-connection-and-pairing) | Discovers a running local T3 server and stores credentials in SecretStorage. | v0.0.1 | v0.0.8 |
-| [Missing-server setup](#missing-server-setup) | Offers installation, service/manual startup links and Retry connection. | v0.0.1 | v0.0.7 |
+| [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, retaining credentials and reporting the failed connection stage. | v0.0.1 | v0.1.13 |
+| [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage and Connection. | v0.0.9 | v0.1.10 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.12 |
@@ -95,6 +95,9 @@ This document tracks features by release, including how later versions changed t
 
 - Route the sidebar New button through the dedicated new-editor action without replacing the sidebar selection.
 
+#### v0.1.13 — onboarding revision
+
+- Show Sessions immediately after connection, with provider setup guidance above the list when no models are available, while retaining access to existing conversations.
 
 ### Workspace scope
 
@@ -714,6 +717,10 @@ This document tracks features by release, including how later versions changed t
 - Keep asset/upload credentials in the host and permit only scoped attachment/media intents.
 - Accept VS Code's parent-frame message forwarding while rejecting child visualization frames.
 
+#### v0.1.13 — onboarding revision
+
+- Publish structured discovery and pairing diagnostics to every view and clear them after recovery without changing credential reuse or per-view selection.
+
 ### Missing-server setup
 
 #### v0.0.1
@@ -724,6 +731,14 @@ This document tracks features by release, including how later versions changed t
 
 - Add installation/service/manual-start links, copyable commands, Retry connection and native Settings.
 - State that remote servers are not supported yet.
+
+#### v0.1.13 — onboarding revision
+
+- Lead with installing the CLI, opening T3 and configuring a provider; describe the background service as optional and allow service-first setup.
+- Replace the invalid `t3 service start` hint with supported startup, status and restart instructions based on the actual connection failure.
+- Distinguish missing/stopped servers, failed probes, protocol mismatch, a missing CLI and pairing/transport errors using host-supplied diagnostics.
+- Keep copyable commands scoped to the configured home with shell quoting, preserve isolated development hints and omit normal-service instructions for custom homes.
+- Open Sessions directly when ready and show provider guidance above existing sessions without a success page; retain editor conversations and drafts across reconnects.
 
 ### Settings organization
 

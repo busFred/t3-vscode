@@ -10,6 +10,7 @@ import type {
 import type { PendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
 import type { AppearanceSettings } from "./appearance.js";
 import type { MessageNavigationPlacement } from "./messageNavigation.js";
+import type { ConnectionSetup } from "./connectionSetup.js";
 
 import type { SessionSearchState } from "./sessionSearch.js";
 import type { SearchPreferences } from "./sessionSearchPresentation.js";
@@ -109,6 +110,7 @@ export interface HostStateSnapshot {
   readonly appearance: AppearanceSettings;
   readonly messageNavigation?: MessageNavigationPlacement;
   readonly notice?: string;
+  readonly connectionSetup?: ConnectionSetup;
   readonly environment?: { readonly environmentId: string; readonly label: string; readonly serverVersion?: string };
   readonly projects: ReadonlyArray<ProjectSummary>;
   readonly threads: ReadonlyArray<ThreadSummary>;

@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>T3 VSCode · Connection setup proposal</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --page: var(--background, #fafafa);
+      --ink: var(--foreground, #23252a);
+      --quiet: var(--muted-foreground, #626872);
+      --line: var(--border, #dedfe3);
+      --surface: var(--secondary, #f1f2f4);
+      --button: #1769aa;
+      --link: var(--info, #1769aa);
+      --good: var(--success, #27774b);
+      --attention: var(--warning, #9b6717);
+      --focus: var(--ring, #1769aa);
+    }
+    :root[data-tone="light"] {
+      color-scheme: light;
+      --page: #fafafa; --ink: #23252a; --quiet: #626872; --line: #dedfe3;
+      --surface: #f0f1f3; --button: #1769aa; --link: #1769aa;
+      --good: #27774b; --attention: #966018; --focus: #1769aa;
+    }
+    :root[data-tone="dark"] {
+      color-scheme: dark;
+      --page: #1f1f1f; --ink: #e9e9eb; --quiet: #a8adb6; --line: #3a3d43;
+      --surface: #292b2f; --button: #1769aa; --link: #85bffa;
+      --good: #87cfa1; --attention: #e7ba79; --focus: #85bffa;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; color: var(--ink); background: var(--page); font: 13px/1.55 var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif); }
+    button, select { font: inherit; color: inherit; }
+    button, summary, select { cursor: pointer; }
+    button { border: 0; }
+    a { color: var(--link); text-decoration: none; }
+    a:hover, .text-button:hover { text-decoration: underline; }
+    button:focus-visible, a:focus-visible, summary:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+    button:disabled { cursor: wait; opacity: .7; }
+    p { margin: 0; }
+    code { font: .95em/1.5 var(--font-mono, ui-monospace, "Cascadia Code", monospace); overflow-wrap: anywhere; }
+    svg.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+    .symbol-library { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .preview-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; padding: 9px 0 11px; border-bottom: 1px dashed var(--line); font-size: 11px; color: var(--quiet); }
+    .preview-controls label { display: flex; align-items: center; gap: 6px; }
+    .preview-label { letter-spacing: .09em; font-size: 10px; font-weight: 650; }
+    .preview-controls select, .preview-controls button { border: 1px solid var(--line); border-radius: 4px; background: var(--page); padding: 4px 6px; color: var(--ink); font-size: 11px; min-height: 28px; }
+    .preview-controls button[aria-pressed="true"] { border-color: var(--link); color: var(--link); }
+    .preview-note { margin: 7px 0 0; color: var(--quiet); font-size: 11px; }
+    .app { width: 100%; max-width: 616px; margin: 0 auto; container-type: inline-size; }
+    .app.narrow { max-width: 340px; }
+    .brandbar { display: flex; align-items: center; gap: 9px; padding: 21px 0 15px; border-bottom: 1px solid var(--line); }
+    .brand-icon { width: 31px; height: 31px; flex: 0 0 auto; }
+    .brand-name { font-size: 14px; font-weight: 600; letter-spacing: -.2px; }
+    .connection-label { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 11px; color: var(--quiet); }
+    .dot { width: 6px; height: 6px; border-radius: 100%; background: var(--quiet); }
+    .connection-label.online { color: var(--good); }
+    .connection-label.online .dot { background: var(--good); }
+    .hero { padding: 25px 0 18px; }
+    h1 { font-size: 26px; line-height: 1.22; font-weight: 600; letter-spacing: -.65px; margin: 0 0 9px; }
+    .lede { color: var(--quiet); max-width: 56ch; font-size: 13px; }
+    .notice { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; padding: 12px 13px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 24px; background: color-mix(in srgb, var(--surface) 50%, var(--page)); }
+    .notice > .icon { margin-top: 3px; color: var(--attention); }
+    .notice.positive > .icon { color: var(--good); }
+    .notice strong { display: block; font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+    .notice p { color: var(--quiet); font-size: 12px; }
+    .notice-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 7px; margin-top: 6px; font-size: 11px; color: var(--quiet); }
+    .notice-meta code { color: var(--ink); }
+    .text-button { color: var(--link); background: none; padding: 0; font-size: inherit; text-align: left; }
+    .section-label { color: var(--quiet); font-size: 10px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 16px; }
+    .steps { padding: 0; margin: 0; list-style: none; }
+    .step { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; padding-bottom: 24px; }
+    .step:not(:last-child)::after { content: ""; position: absolute; width: 1px; background: var(--line); left: 12px; top: 32px; bottom: 7px; }
+    .step-number { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); font-size: 11px; color: var(--quiet); }
+    h2 { font-size: 14px; line-height: 1.5; font-weight: 600; letter-spacing: -.15px; margin: 2px 0 5px; }
+    .step p { color: var(--quiet); font-size: 12px; }
+    .step .doc-link { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; margin-top: 7px; }
+    .doc-link .icon { width: 12px; height: 12px; }
+    .command { display: flex; align-items: center; gap: 10px; min-height: 43px; padding: 7px 8px 7px 12px; border: 1px solid var(--line); background: var(--surface); border-radius: 5px; margin: 10px 0 8px; }
+    .command .prompt { color: var(--quiet); user-select: none; font-family: ui-monospace, monospace; }
+    .command code { flex: 1; min-width: 0; font-size: 12px; }
+    .copy { display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid transparent; border-radius: 4px; padding: 5px 6px; background: transparent; color: var(--quiet); font-size: 11px; min-height: 28px; }
+    .copy:hover { color: var(--ink); border-color: var(--line); background: var(--page); }
+    .copy .icon { width: 14px; height: 14px; }
+    .step .subnote { font-size: 11px; margin: 6px 0 0; }
+    .step .settings-path { color: var(--ink); font-weight: 500; }
+    details { font-size: 12px; }
+    summary { list-style: none; display: flex; align-items: center; gap: 7px; color: var(--quiet); }
+    summary::-webkit-details-marker { display: none; }
+    summary::before { content: ""; width: 5px; height: 5px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); flex: 0 0 auto; margin-right: 2px; }
+    details[open] > summary::before { transform: rotate(45deg); margin-top: -3px; }
+    .manual { margin-top: 11px; }
+    .manual[open] { margin-bottom: 5px; }
+    .manual > p { margin-top: 8px; }
+    .service-option { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 14px 0; }
+    .service-option summary { color: var(--ink); }
+    .optional { margin-left: auto; color: var(--quiet); font-size: 10px; white-space: nowrap; }
+    .details-body { padding: 13px 0 0 15px; }
+    .details-body p { color: var(--quiet); font-size: 12px; }
+    .details-body p + p { margin-top: 8px; }
+    .details-body a { display: inline-block; margin-top: 8px; }
+    .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin: 20px 0 9px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; border: 1px solid var(--line); border-radius: 5px; min-height: 35px; padding: 7px 12px; background: transparent; }
+    .btn:hover { background: var(--surface); }
+    .btn.primary { background: var(--button); color: #fff; border-color: var(--button); }
+    .btn.primary:hover { filter: brightness(1.1); }
+    .button-hint { color: var(--quiet); font-size: 11px; margin-bottom: 19px; }
+    .diagnostics { padding: 0 0 20px; }
+    .diagnostics .details-body { padding-top: 9px; }
+    .diagnostics dl { margin: 0 0 9px; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 12px; font-size: 11px; }
+    .diagnostics dt { color: var(--quiet); }
+    .diagnostics dd { margin: 0; overflow-wrap: anywhere; }
+    .footer { padding: 12px 0 20px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 11px; }
+    .footer a { color: var(--quiet); text-decoration: underline; text-underline-offset: 3px; }
+    .connection-steps { display: flex; flex-direction: column; gap: 11px; margin: 20px 0 26px; padding: 0; list-style: none; }
+    .connection-steps li { display: flex; align-items: center; gap: 10px; color: var(--quiet); font-size: 12px; }
+    .connection-steps .done { color: var(--good); }
+    .connection-steps .active { color: var(--ink); }
+    .spinner { animation: spin 1.1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 2; width: max-content; max-width: calc(100% - 20px); padding: 9px 13px; border: 1px solid var(--line); border-radius: 5px; background: var(--page); color: var(--ink); font-size: 12px; box-shadow: 0 4px 18px #0002; }
+    @container (max-width: 390px) {
+      h1 { font-size: 23px; }
+      .hero { padding-top: 21px; }
+      .step { gap: 9px; grid-template-columns: 24px minmax(0, 1fr); }
+      .step-number { width: 24px; height: 24px; }
+      .step:not(:last-child)::after { left: 11px; }
+      .copy span { display: none; }
+      .brand-name { font-size: 13px; }
+      .connection-label { font-size: 10px; }
+      .actions { align-items: stretch; }
+      .actions .btn { flex: 1 1 auto; }
+      .optional { font-size: 9px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  </style>
+</head>
+<body>
+  <svg class="symbol-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.5 6.5A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.5 5.5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5m6-5v5M7 8h10v4a5 5 0 0 1-10 0V8Zm5 9v4"/></symbol>
+    <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></symbol>
+  </svg>
+  <div class="preview-controls" aria-label="Mockup controls">
+    <span class="preview-label">MOCKUP</span>
+    <label for="scenario">State <select id="scenario">
+      <option value="missing">First connection</option>
+      <option value="stopped">Service stopped</option>
+      <option value="unreachable">Server unreachable</option>
+      <option value="pairing">Pairing failed</option>
+      <option value="provider">Provider needed</option>
+      <option value="ready">Connected</option>
+    </select></label>
+    <label for="tone">Theme <select id="tone"><option value="auto">Chat theme</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    <button id="width-toggle" type="button" aria-pressed="false">Sidebar width</button>
+  </div>
+  <p class="preview-note">Connection actions are simulated. Copy buttons copy commands; guide links open the official docs.</p>
+  <main class="app" id="app" aria-label="T3 VSCode connection setup">
+    <header class="brandbar">
+      <svg class="brand-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M33.4509 93V47.56H15.5309V37H64.3309V47.56H46.4109V93H33.4509ZM86.7253 93.96C82.832 93.96 78.9653 93.4533 75.1253 92.44C71.2853 91.3733 68.032 89.88 65.3653 87.96L70.4053 78.04C72.5386 79.5867 75.0186 80.8133 77.8453 81.72C80.672 82.6267 83.5253 83.08 86.4053 83.08C89.6586 83.08 92.2186 82.44 94.0853 81.16C95.952 79.88 96.8853 78.12 96.8853 75.88C96.8853 73.7467 96.0586 72.0667 94.4053 70.84C92.752 69.6133 90.0853 69 86.4053 69H80.4853V60.44L96.0853 42.76L97.5253 47.4H68.1653V37H107.365V45.4L91.8453 63.08L85.2853 59.32H89.0453C95.9253 59.32 101.125 60.8667 104.645 63.96C108.165 67.0533 109.925 71.0267 109.925 75.88C109.925 79.0267 109.099 81.9867 107.445 84.76C105.792 87.48 103.259 89.6933 99.8453 91.4C96.432 93.1067 92.0586 93.96 86.7253 93.96Z" transform="translate(31 52) scale(2.02) translate(-15.53 -37)"/><path fill="currentColor" d="M29 201L64 178H184L226 153V184L184 209H64L46 223Z"/></svg>
+      <span class="brand-name">T3 VSCode</span>
+      <span class="connection-label" id="connection-label"><span class="dot"></span><span id="connection-text">Not connected</span></span>
+    </header>
+    <div id="screen"></div>
+    <footer class="footer">Connects to T3 Code on this computer. <a href="https://github.com/pingdotgg/t3code/blob/main/docs/user/install.md" target="_blank" rel="noopener noreferrer">Setup guide ↗</a></footer>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const icon = (name, extra = '') => `<svg class="icon ${extra}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+    const docs = 'https://github.com/pingdotgg/t3code/blob/main/docs/user/';
+    const link = (path, label) => `<a class="doc-link" href="${docs}${path}" target="_blank" rel="noopener noreferrer">${label} ${icon('arrow')}</a>`;
+    const command = (value) => `<div class="command"><span class="prompt" aria-hidden="true">$</span><code>${value}</code><button type="button" class="copy" data-copy="${value}" aria-label="Copy ${value}">${icon('copy')}<span>Copy</span></button></div>`;
+    const step = (number, title, body) => `<li class="step"><span class="step-number" aria-hidden="true">${number}</span><div><h2>${title}</h2>${body}</div></li>`;
+    const home = '~/.t3';
+    let sequence = 0;
+    let toastTimer;
+
+    const diagnostic = (stage, reason, extra = '') => `<details class="diagnostics"><summary>Connection details</summary><div class="details-body"><dl><dt>Stage</dt><dd>${stage}</dd><dt>T3 directory</dt><dd><code>${home}</code></dd><dt>Result</dt><dd>${reason}</dd>${extra}</dl><p>Using a custom directory? Set <code>t3-vscode.t3Home</code> to the same directory used by T3, then reload VS Code.</p></div></details>`;
+    const settings = '<button type="button" class="btn" data-action="settings">Connection settings</button>';
+    const retry = (label = 'Retry connection', action = 'retry') => `<button type="button" class="btn primary" data-action="${action}">${icon('refresh')}<span>${label}</span></button>`;
+    const notice = (title, text, positive = false, showHome = true) => `<div class="notice${positive ? ' positive' : ''}">${icon(positive ? 'check' : 'info')}<div><strong>${title}</strong><p>${text}</p>${showHome ? `<div class="notice-meta"><span>T3 directory</span><code>${home}</code><button type="button" class="text-button" data-action="settings">Change</button></div>` : ''}</div></div>`;
+    const hero = (title, text) => `<div class="hero"><h1>${title}</h1><p class="lede">${text}</p></div>`;
+    const optionalService = `<details class="service-option"><summary>Run in the background <span class="optional">Optional · Linux &amp; macOS</span></summary><div class="details-body"><p>Keep T3 running without an open terminal.</p>${command('t3 service install')}<p>This installs and starts the service. If you started T3 in the terminal above, stop that foreground server before switching.</p><p>You can also install the service first and finish provider setup in T3’s web app afterward.</p>${link('background-service.md', 'Background service guide')}</div></details>`;
+
+    const screens = {
+      missing: () => hero('Connect to T3 Code', 'Start T3 Code on this computer to bring your conversations into VS Code.')
+        + notice('No running server found', 'T3 may already be installed. A running server is needed to connect.')
+        + '<p class="section-label">First-time setup</p><ol class="steps">'
+        + step(1, 'Install the T3 command-line tool', '<p>Already have the <code>t3</code> command? Go to the next step.</p>' + link('install.md#command-line', 'Open installation guide'))
+        + step(2, 'Open T3 and set up a provider', '<p>Run this in a terminal to start T3 and open its web app.</p>' + command('t3') + '<p>In T3, open <span class="settings-path">Settings → Providers</span> and connect a provider. Already set up? Just keep T3 running.</p><details class="manual"><summary>Prefer to open the browser yourself?</summary>' + command('t3 serve') + '<p>Keep this terminal running and open the web address it prints. Complete provider setup there.</p></details>')
+        + '</ol>' + optionalService
+        + `<div class="actions">${retry()}${settings}</div><p class="button-hint">Once T3 is running, retry here. VS Code pairs automatically.</p>`
+        + diagnostic('Find a local server', 'No server runtime file found in this directory.'),
+
+      stopped: () => hero('Your T3 server has stopped', 'Start it again to reconnect to your conversations.')
+        + notice('The last server is no longer running', 'It was recorded as a background service.')
+        + '<ol class="steps">'
+        + step(1, 'Check the service', '<p>See whether the service is installed and where to find its logs.</p>' + command('t3 service status'))
+        + step(2, 'Restart the installed service', command('t3 service restart') + '<p>If the status says it is not installed, use <code>t3 service install</code>. If it reports a different problem, follow its recovery instructions.</p>' + link('background-service.md#troubleshooting', 'Service troubleshooting'))
+        + '</ol>' + `<div class="actions">${retry()}${settings}</div><p class="button-hint">Your conversations stay in the same T3 data directory.</p>`
+        + diagnostic('Find a local server', 'The process recorded in server-runtime.json is no longer running.'),
+
+      unreachable: () => hero('T3 isn’t responding', 'A local server is recorded, but its connection check did not complete.')
+        + notice('Could not reach the recorded server', 'The recorded process is alive. The server may still be starting or may need attention.')
+        + '<ol class="steps">'
+        + step(1, 'Check T3’s output', '<p>If you started T3 in a terminal, check that terminal for errors. For a background service, check its status and logs.</p>' + command('t3 service status'))
+        + step(2, 'Check the data directory', `<p>T3 VSCode is looking in <code>${home}</code>. If T3 uses a different directory, update Connection settings and reload VS Code.</p>`)
+        + '</ol>' + `<div class="actions">${retry()}${settings}</div><p class="button-hint">Wait for startup to finish, then retry the connection.</p>`
+        + diagnostic('Check the server', 'The environment probe did not complete within 3 seconds.', '<dt>Endpoint</dt><dd><code>/.well-known/t3/environment</code></dd>'),
+
+      pairing: () => hero('T3 is running. Pairing needs attention.', 'VS Code found your server but could not create its connection credential.')
+        + notice('The t3 command could not be found', 'The command must be available to the VS Code extension host.')
+        + '<ol class="steps">'
+        + step(1, 'Check the T3 command', '<p>Open a new terminal and check that this displays T3’s help.</p>' + command('t3 --help') + link('install.md#command-line', 'Install the CLI or check its PATH'))
+        + step(2, 'Restart VS Code, then pair again', '<p>If you just installed T3 or updated your PATH, restart VS Code so it picks up the change.</p>')
+        + '</ol>' + `<div class="actions">${retry('Pair again')}${settings}</div><p class="button-hint">Pairing is automatic once VS Code can run the t3 command.</p>`
+        + diagnostic('Pair with the server', 'Could not execute t3: command not found.', '<dt>Command</dt><dd><code>t3 pair --label "VS Code" --base-dir &lt;T3 directory&gt;</code></dd>'),
+
+      provider: () => hero('Connected. Set up a provider next.', 'Your server is ready. Connect a coding provider in T3 to start a conversation.')
+        + notice('Local connection established', 'No available provider models were found.', true)
+        + '<ol class="steps">'
+        + step(1, 'Open T3’s provider settings', '<p>In the T3 web app, go to <span class="settings-path">Settings → Providers</span>.</p><div class="actions"><button type="button" class="btn" data-action="open-t3">Open T3 web app ' + icon('arrow') + '</button></div>')
+        + step(2, 'Connect a provider', '<p>Install or sign in to a provider, enable it, then return here.</p>' + link('install.md#providers', 'Provider setup guide'))
+        + '</ol>' + `<div class="actions">${retry('Check providers', 'providers')}</div><p class="button-hint">Provider setup happens in T3 and is shared with this extension.</p>`
+        + diagnostic('Load provider models', 'Connected and paired; no available models.'),
+
+      ready: () => hero('You’re connected', 'T3 Code is ready to use from VS Code.')
+        + notice('Local server connected', 'Paired with VS Code. Your provider is ready.', true)
+        + '<ul class="connection-steps"><li class="done">' + icon('check') + 'Found your local server</li><li class="done">' + icon('check') + 'Paired securely with VS Code</li><li class="done">' + icon('check') + 'Loaded your conversations and providers</li></ul>'
+        + '<div class="actions"><button type="button" class="btn primary" data-action="sessions">Open sessions</button><button type="button" class="btn" data-action="new-chat">New chat</button></div><p class="button-hint">Keep T3 running while you work in VS Code.</p>'
+        + diagnostic('Ready', 'Connected to the local server.')
+    };
+
+    function setConnection(label, online = false) {
+      $('connection-text').textContent = label;
+      $('connection-label').classList.toggle('online', online);
+    }
+    function render(name) {
+      sequence += 1;
+      $('scenario').value = name;
+      $('screen').innerHTML = screens[name]();
+      setConnection(name === 'provider' || name === 'ready' ? 'Connected' : 'Not connected', name === 'provider' || name === 'ready');
+    }
+    function toast(message) {
+      clearTimeout(toastTimer);
+      $('toast').textContent = message;
+      $('toast').hidden = false;
+      toastTimer = setTimeout(() => { $('toast').hidden = true; }, 3800);
+    }
+    async function copy(value) {
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+        await navigator.clipboard.writeText(value);
+      } catch {
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.style.cssText = 'position:fixed;left:-10000px;top:0';
+        document.body.append(area);
+        area.select();
+        const copied = document.execCommand('copy');
+        area.remove();
+        if (!copied) { toast('Copy is unavailable here. Select the command and copy it.'); return; }
+      }
+      toast(`Copied: ${value}`);
+    }
+    function simulateConnection(providerOnly = false) {
+      const run = ++sequence;
+      const labels = providerOnly ? ['Checking provider models'] : ['Finding your local server', 'Pairing with T3 Code', 'Loading conversations'];
+      setConnection('Connecting…');
+      const paint = (index) => {
+        if (run !== sequence) return;
+        $('screen').innerHTML = hero('Connecting to T3 Code', 'Checking the local server and restoring your connection.')
+          + '<ul class="connection-steps">' + labels.map((label, at) => `<li class="${at < index ? 'done' : at === index ? 'active' : ''}">${icon(at < index ? 'check' : at === index ? 'refresh' : 'circle', at === index ? 'spinner' : '')}${label}</li>`).join('') + '</ul>';
+      };
+      labels.forEach((_, index) => setTimeout(() => paint(index), index * 600));
+      setTimeout(() => { if (run === sequence) { render('ready'); toast('Preview: connection completed.'); } }, labels.length * 600);
+    }
+    $('scenario').addEventListener('change', (event) => render(event.target.value));
+    $('tone').addEventListener('change', (event) => { document.documentElement.dataset.tone = event.target.value; });
+    $('width-toggle').addEventListener('click', () => {
+      const narrow = $('app').classList.toggle('narrow');
+      $('width-toggle').setAttribute('aria-pressed', String(narrow));
+    });
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      if (button.dataset.copy) { void copy(button.dataset.copy); return; }
+      const action = button.dataset.action;
+      if (action === 'retry') simulateConnection();
+      if (action === 'providers') simulateConnection(true);
+      if (action === 'settings') toast('Preview: opens VS Code Settings → T3 VSCode → Connection.');
+      if (action === 'open-t3') toast('Preview: opens this server’s T3 web app in your browser.');
+      if (action === 'sessions') toast('Preview: opens the Sessions sidebar.');
+      if (action === 'new-chat') toast('Preview: opens a new chat editor.');
+    });
+    render('missing');
+    console.log('Onboarding mockup ready. Six preview states; no server requests or command execution.');
+  </script>
+</body>
+</html>

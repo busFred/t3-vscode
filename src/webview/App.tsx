@@ -63,14 +63,10 @@ export function App() {
   let content;
   if (!state) content = <StatusView title="Opening T3 VSCode…" detail="Connecting to the extension host." />;
   else if (state.phase === "ready") content = document.body.dataset.surface === "sidebar" ? <SidebarView state={state} usageRequest={usageRequest} onAppearance={() => { void run(Methods.openSettings); }} /> : <ChatView state={state} />;
-  else if (state.phase === "no-server") content = <ServerSetup state={state} />;
+  else if (state.phase === "no-server" || state.phase === "error") content = <ServerSetup state={state} />;
   else content = <StatusView
-    title={state.phase === "error" ? "Connection interrupted" : state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}
+    title={state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}
     detail={state.notice ?? state.environment?.label ?? state.home}
-    actions={state.phase === "error" ? [
-      { label: "Reconnect", onClick: () => { void run(Methods.reconnect); } },
-      { label: "Pair again", onClick: () => { void run(Methods.startPairing); } },
-    ] : []}
   />;
   return <Actions value={run}><div className="app">
     {error ? <div className="error-banner" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError(null)}><XIcon size={14} /></button></div> : null}

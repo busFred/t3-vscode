@@ -30,8 +30,9 @@ import { hasCompleteProviderWorkspaceSnapshot } from "@t3tools/client-runtime/pr
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import { turnCheckpointRange, turnDiffFiles, turnDiffFileRequest, type TurnDiff, type TurnDiffFile } from "./turnDiff.js";
 import { conversationActivity } from "./conversationActivity.js";
-import { pairWithServer } from "./pairing.js";
-import { discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
+import { pairWithServer, PairingError } from "./pairing.js";
+import { connectionSetup, discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
+import type { ConnectionProblem, ConnectionSetup } from "../shared/connectionSetup.js";
 import type { CredentialStore } from "./sessionStore.js";
 import type { T3Client, Subscription } from "./t3Client.js";
 import { DEFAULT_APPEARANCE, resolveAppearance, type AppearanceSettings } from "../shared/appearance.js";
@@ -103,6 +104,8 @@ export class HostState {
   private searchPreferences: SearchPreferences;
   private phase: HostPhase = "discovering";
   private notice: string | undefined;
+  private connectionProblem: ConnectionProblem | undefined;
+  private readonly setup: ConnectionSetup;
   private server: DiscoveredServer | null = null;
   private shell: OrchestrationV2ShellSnapshot | null = null;
   private readonly views = new Map<string, ViewState>([[SIDEBAR_VIEW_ID, blankView()]]);
@@ -126,6 +129,7 @@ export class HostState {
   private readonly client: HostTransport;
   constructor(options: HostStateOptions, client: HostTransport) {
     this.options = options; this.client = client; this.composerDrafts = options.draftStore ?? new ComposerDraftStore();
+    this.setup = connectionSetup(options.home, options.serverStartupHint);
     this.searchPreferences = resolveSearchPreferences(options.searchPreferences);
     client.onClose = () => {
       void this.enqueue(() => this.recoverConnection()).catch((cause) => {
@@ -318,7 +322,7 @@ export class HostState {
     await this.client.disconnect();
     this.setPhase("discovering");
     const discovered = await (this.options.discover ?? discoverServer)(this.options.home, this.options.serverStartupHint);
-    if (!discovered.ok) { this.setPhase("no-server", discovered.reason); return; }
+    if (!discovered.ok) { this.setPhase("no-server", discovered.reason, discovered.problem); return; }
     if (this.server?.descriptor.environmentId !== discovered.server.descriptor.environmentId) {
       this.shell = null; this.archive = null;
       for (const view of this.views.values()) Object.assign(view, blankView());
@@ -349,7 +353,8 @@ export class HostState {
       await this.reconcileViews(true);
       this.setPhase("ready");
     } catch (cause) {
-      this.setPhase("error", describeError(cause));
+      const kind = cause instanceof PairingError ? cause.kind : this.phase === "pairing" ? "pairing" : "connection";
+      this.setPhase("error", describeError(cause), { kind });
     }
   }
   private async recoverConnection(): Promise<void> {
@@ -1000,6 +1005,7 @@ export class HostState {
     return {
       ...(acknowledgedWorking ? { acknowledgedWorking } : {}),
       revision: this.revision, phase: this.phase, home: this.options.home,
+      connectionSetup: { ...this.setup, ...(this.connectionProblem ? { problem: this.connectionProblem } : {}) },
       searchPreferences: this.searchPreferences,
       ...(this.sessionSearches.get(viewId) ? { sessionSearch: this.sessionSearches.get(viewId)!.state } : {}),
       workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()),
@@ -1055,7 +1061,9 @@ export class HostState {
     url.search = ""; url.hash = "";
     return url.href;
   }
-  private setPhase(phase: HostPhase, notice?: string): void { this.phase = phase; this.notice = notice; this.emit(); }
+  private setPhase(phase: HostPhase, notice?: string, problem?: ConnectionProblem): void {
+    this.phase = phase; this.notice = notice; this.connectionProblem = problem; this.emit();
+  }
   private scheduleEmit(): void {
     if (this.disposed || this.emitTimer) return;
     this.emitTimer = setTimeout(() => { this.emitTimer = null; this.emit(); }, 32);

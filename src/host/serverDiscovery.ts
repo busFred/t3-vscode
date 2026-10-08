@@ -12,6 +12,7 @@ import type { ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
 import * as RemoteEnvironment from "@t3tools/client-runtime/environment";
 import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/unstable/http";
+import type { ConnectionProblem, ConnectionSetup } from "../shared/connectionSetup.js";
 
 /** T3 home precedence: explicit setting → T3CODE_HOME env → ~/.t3. */
 export const resolveT3Home = (configured: string | undefined): string => {
@@ -20,6 +21,22 @@ export const resolveT3Home = (configured: string | undefined): string => {
   const env = process.env.T3CODE_HOME?.trim() ?? "";
   if (env.length > 0) return env.startsWith("~") ? join(homedir(), env.slice(1)) : env;
   return join(homedir(), ".t3");
+};
+
+export const connectionSetup = (home: string, startupHint?: string, platform = process.platform, environmentHome = process.env.T3CODE_HOME): ConnectionSetup => {
+  const defaultHome = resolve(home) === join(homedir(), ".t3");
+  const env = environmentHome?.trim();
+  const differentEnvironmentHome = !!env && resolve(env.startsWith("~") ? join(homedir(), env.slice(1)) : env) !== resolve(home);
+  // Commands are copied into the user's shell, never executed by the extension.
+  // Quote even paths containing shell expansions, spaces or single quotes.
+  const quotedHome = `'${resolve(home).replaceAll("'", platform === "win32" ? "''" : "'\"'\"'")}'`;
+  const baseDir = defaultHome && !differentEnvironmentHome ? "" : ` --base-dir ${quotedHome}`;
+  return {
+    startCommand: `t3${baseDir}`,
+    serveCommand: `t3 serve${baseDir}`,
+    serviceSupported: defaultHome && !differentEnvironmentHome && !startupHint && (platform === "linux" || platform === "darwin"),
+    ...(startupHint ? { startupHint } : {}),
+  };
 };
 
 export interface ServerRuntimeState {
@@ -72,27 +89,28 @@ const fetchDescriptor = (origin: string) =>
 
 export type DiscoveryResult =
   | { ok: true; server: DiscoveredServer }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; problem?: ConnectionProblem };
 
 /**
  * Discover a live T3 server under `home`. Returns the reason when no usable
  * server exists (the setup view renders it).
  */
 export const discoverServer = async (home: string, startupHint?: string): Promise<DiscoveryResult> => {
-  const hint = startupHint ?? (resolve(home) === join(homedir(), ".t3")
-    ? "Start the T3 service with `t3 service start` (or install it with `t3 service install`), then retry the connection."
-    : "Start T3 with `t3 serve --base-dir` pointing to this directory, then retry the connection.");
+  const setup = connectionSetup(home, startupHint);
+  const hint = startupHint ?? `Start T3 with \`${setup.serveCommand}\`, then retry the connection.`;
   const found = readRuntimeState(home);
   if (!found) {
     return {
       ok: false,
       reason: `No running T3 server found under ${home}. ${hint}`,
+      problem: { kind: "missing-runtime" },
     };
   }
   if (!pidAlive(found.state.pid)) {
     return {
       ok: false,
       reason: `The server recorded in ${found.path} (pid ${found.state.pid}) is not running. ${hint}`,
+      problem: { kind: "server-stopped", serviceManaged: found.state.serviceManaged === true },
     };
   }
   const origin = found.state.origin;
@@ -103,12 +121,14 @@ export const discoverServer = async (home: string, startupHint?: string): Promis
     return {
       ok: false,
       reason: `A server is recorded at ${origin} but did not answer the environment probe. Is it healthy?`,
+      problem: { kind: "unreachable" },
     };
   }
   if (descriptor.orchestrationProtocolVersion !== undefined && descriptor.orchestrationProtocolVersion !== 2) {
     return {
       ok: false,
       reason: `Server at ${origin} speaks orchestration protocol ${descriptor.orchestrationProtocolVersion}; this extension requires protocol 2.`,
+      problem: { kind: "incompatible" },
     };
   }
   return { ok: true, server: { origin, runtime: found.state, descriptor } };

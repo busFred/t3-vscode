@@ -24,6 +24,11 @@ export interface PairedSession {
 
 const PAIR_TIMEOUT_MS = 45_000;
 
+export class PairingError extends Error {
+  readonly kind: "cli-missing" | "pairing";
+  constructor(message: string, kind: "cli-missing" | "pairing") { super(message); this.kind = kind; }
+}
+
 /** Tokens are uppercase alphanumeric (Crockford-ish: 23456789A-HJ-NP-Z, len 12). */
 const TOKEN_PATTERN = /Token:\s*([0-9A-Z]{6,})/;
 const URL_TOKEN_PATTERN = /[#?&]token=([0-9A-Z]{6,})/;
@@ -35,7 +40,8 @@ const runTPair = async (home: string): Promise<string> => {
     return run.stdout;
   } catch (cause) {
     const stderr = (cause as { stderr?: string }).stderr ?? "";
-    throw new Error(`\`t3 pair\` failed: ${stderr || String(cause)}`);
+    const missing = (cause as { code?: string }).code === "ENOENT";
+    throw new PairingError(`\`t3 pair\` failed: ${stderr || String(cause)}`, missing ? "cli-missing" : "pairing");
   }
 };
 
