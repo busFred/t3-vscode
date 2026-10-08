@@ -251,7 +251,7 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .queue-grip { width: 18px; cursor: grab; }
 .queue-resume { display: flex; align-items: center; gap: 4px; margin: 0 9px 6px; }
 .queue-editor { flex: 1; padding: 4px; min-width: 0; }
-.queue-editor textarea { width: 100%; min-height: 60px; resize: vertical; border: 1px solid var(--input); border-radius: 4px; padding: 5px; background: var(--background); color: var(--foreground); }
+.queue-editor textarea { width: 100%; min-height: 60px; resize: vertical; border: 1px solid var(--input); border-radius: 4px; padding: 5px; background: var(--background); color: var(--foreground); font-size: var(--font-size-prompt, 14px); line-height: 1.6; }
 .queue-editor > div { display: flex; justify-content: flex-end; gap: 5px; }
 .task-segments { display: flex; width: 65px; gap: 2px; flex-shrink: 0; }
 .task-segments i { flex: 1; height: 3px; border-radius: 2px; background: var(--input); }

@@ -22,7 +22,7 @@ The existing v0.1.16 installer is unpublished and includes model-preference impo
 | [Compact composer](#compact-composer) | Permanent toolbar and compact controls inside the message box. | v0.0.1 | v0.1.13 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.0.6 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
-| [Queue controls and task progress](#queue-controls-and-task-progress) | Edits, removes, reorders and promotes queued messages; shows current tasks. | v0.0.6 | v0.0.7 |
+| [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.13 |
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.1.16 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies through a virtualized timeline and loads older history. | v0.0.1 | v0.1.10 |
@@ -339,6 +339,11 @@ The existing v0.1.16 installer is unpublished and includes model-preference impo
 #### v0.0.7
 
 - Keep the compact queue/task layout above the composer and remove finished-run task banners.
+
+#### v0.1.16 — source revision, installer pending
+
+- Match the inline queued-message editor to the main composer's configurable prompt font size and line spacing, while keeping queued previews compact.
+- Retain the current composer draft and queued attachments through the existing inline Save/Cancel workflow.
 
 ### Attachment presentation
 
@@ -1105,6 +1110,12 @@ The existing v0.1.16 installer is unpublished and includes model-preference impo
 - Pass all 182 deterministic tests, TypeScript checking, the complete extension/webview build and the full multi-view browser suite, including the missing-import control, local model changes and cross-tab broadcasts.
 - Use fixture transports, temporary browser profiles and an explicitly isolated T3 home with no provider calls or T3 Code application changes.
 - Keep manifest v0.1.16 unchanged and defer the next VSIX until task configuration is implemented and receives its required regression review; the previous installer is not rebuilt or published.
+
+### v0.1.16 — queued-message editor font, installer pending
+
+- Pass TypeScript checking, the webview/Mermaid/math build and the complete multi-view browser suite after matching queued editing to the configurable prompt font.
+- Verify equal editor font size and line height at a custom 18 px prompt setting, unchanged compact preview text and preservation of the current composer draft.
+- Use disposable browser profiles and an explicitly isolated T3 home with fixture transports; leave the installer pending task configuration implementation.
 
 ## Maintenance
 

@@ -174,7 +174,7 @@
             "minimum": 12,
             "maximum": 20,
             "scope": "window",
-            "description": "Font size in pixels for the message input, independent of interface and code sizes. Changes apply immediately.",
+            "description": "Font size in pixels for message and queued-message editors, independent of interface and code sizes. Changes apply immediately.",
             "order": 2
           },
           "t3-vscode.fontSizeCode": {

@@ -12,7 +12,7 @@ export interface AppearanceSettings {
 }
 export const FONT_SIZE_OPTIONS = {
   fontSizeInterface: { label: "Interface font size", description: "Chat text, navigation and labels.", min: MIN_INTERFACE_FONT_SIZE, max: MAX_INTERFACE_FONT_SIZE, default: DEFAULT_INTERFACE_FONT_SIZE },
-  fontSizePrompt: { label: "Prompt font size", description: "Only the message box you type in.", min: MIN_PROMPT_FONT_SIZE, max: MAX_PROMPT_FONT_SIZE, default: DEFAULT_PROMPT_FONT_SIZE },
+  fontSizePrompt: { label: "Prompt font size", description: "Message and queued-message editors.", min: MIN_PROMPT_FONT_SIZE, max: MAX_PROMPT_FONT_SIZE, default: DEFAULT_PROMPT_FONT_SIZE },
   fontSizeCode: { label: "Code font size", description: "Code blocks, diffs and tool output.", min: MIN_CODE_FONT_SIZE, max: MAX_CODE_FONT_SIZE, default: DEFAULT_CODE_FONT_SIZE },
 } as const;
 export const FONT_SIZE_KEYS = Object.keys(FONT_SIZE_OPTIONS) as Array<keyof AppearanceSettings>;
