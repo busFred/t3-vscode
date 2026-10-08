@@ -17,14 +17,14 @@ This document tracks features by release, including how later versions changed t
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.0.8 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes newly created empty chats when their last chat surface closes. | v0.0.8 | v0.0.8 |
-| [Compact composer](#compact-composer) | Compact prompt controls below the single-column transcript. | v0.0.1 | v0.1.10 |
+| [Compact composer](#compact-composer) | Permanent toolbar and compact controls inside the message box. | v0.0.1 | v0.1.13 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.0.6 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits, removes, reorders and promotes queued messages; shows current tasks. | v0.0.6 | v0.0.7 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with image references in message text. | v0.0.1 | v0.0.9 |
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Attaches clipboard images and files selected from the local machine. | v0.0.8 | v0.0.9 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies through a virtualized timeline and loads older history. | v0.0.1 | v0.1.10 |
-| [Markdown and media](#markdown-and-media) | Renders formatted text, code, tables, images, video and audio. | v0.0.1 | v0.0.8 |
+| [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.1.13 |
 | [Collapsed activity](#collapsed-activity) | Keeps reasoning and command sequences inside closed summaries. | v0.0.1 | v0.1.13 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
@@ -32,7 +32,7 @@ This document tracks features by release, including how later versions changed t
 | [Math rendering and copying](#math-rendering-and-copying) | Renders KaTeX with scrolling, floating previews and copy actions. | v0.0.8 | v0.0.9 |
 | [Models and provider instances](#models-and-provider-instances) | Uses server-advertised providers and models, including ACP instances. | v0.0.1 | v0.0.7 |
 | [Model search and favorites](#model-search-and-favorites) | Searches model/provider names and saves favorite models. | v0.0.4 | v0.0.7 |
-| [Effort and permission controls](#effort-and-permission-controls) | Uses each model's advertised options and supported runtime modes. | v0.0.1 | v0.0.7 |
+| [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.1.13 |
 | [Account usage](#account-usage) | Collapsed sidebar limits, reset times, notices and refresh. | v0.0.6 | v0.0.9 |
 | [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection. | v0.0.7 | v0.0.9 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.0.5 |
@@ -52,6 +52,7 @@ This document tracks features by release, including how later versions changed t
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.13 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
+| [Markdown composer tools](#markdown-composer-tools) | Literal formatting, selection wrapping, automatic numbering, indentation and undo. | v0.1.13 | v0.1.13 |
 
 ## Sessions and navigation
 
@@ -266,6 +267,24 @@ This document tracks features by release, including how later versions changed t
 
 - Return the composer below the single-column transcript and remove the column expansion control.
 
+#### v0.1.13
+
+- Keep grouped formatting tools permanently above the input, with model/effort/mode selectors inside its bottom left.
+- Keep Send fixed at the bottom right, place the existing Stop immediately left, and put keyboard hints beside those buttons.
+- Wrap tool groups at narrow widths with the selected-state List assist toggle at the far right of the last toolbar row.
+
+### Markdown composer tools
+
+#### v0.1.13
+
+- Add a permanent, separated toolbar for emphasis (including underline), code/quotes, links/attachments, lists and indentation.
+- Continue ordered, bulleted and task lists with Shift+Enter, and use Tab or Shift+Tab to indent or outdent editing contexts.
+- Keep Enter send/queue, Ctrl/Cmd+Enter steer, IME input, autocomplete, image paste and native undo behavior intact.
+- Keep links and backticks editable as text and preserve the List assist preference within each editor view.
+- Wrap selected text with quotes, brackets, backticks and dollar signs; keep colon and semicolon as ordinary punctuation.
+- Repair ordered-list numbering after structural edits, retaining list starts and nested sequences while excluding paste, fenced code and display math.
+- Make immediate Undo reverse numbering repair while keeping the new line and cursor, without immediately reapplying the repair.
+
 ### Slash commands and file suggestions
 
 #### v0.0.6
@@ -374,6 +393,10 @@ This document tracks features by release, including how later versions changed t
 - Add sanitized raw Markdown HTML and inline images, video and audio.
 - Bind local media URLs to their persisted source item through the host's asset API.
 
+#### v0.1.13
+
+- Render the composer’s explicit `<u>...</u>` source as sanitized underline markup.
+
 ### Collapsed activity
 
 #### v0.0.1
@@ -481,6 +504,10 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.7
 
 - Remove the redundant delivery dropdown and preserve supported options in narrow layouts.
+
+#### v0.1.13
+
+- Place model, effort and permission selectors together at the bottom left inside the composer, retaining narrow overflow access.
 
 ### Account usage
 
@@ -688,10 +715,10 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.9
 
 - Keep the native settings shortcut in the session manager after removing the editor History page.
+
 #### v0.1.13
 
-- Match search-result text to chat font size and line height.
-
+- Match search-result text to chat font size and line height, and give entered prompt text the theme’s input foreground at full opacity.
 
 ### T3 VSCode branding
 

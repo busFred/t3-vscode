@@ -1,6 +1,6 @@
 import { bridge } from "../bridge-client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, PaperclipIcon, FileIcon } from "lucide-react";
+import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon } from "lucide-react";
 import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
@@ -21,11 +21,16 @@ import type { DraftAttachment, TextSelection } from "../../shared/composerAttach
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { openVisual } from "./ChatMedia";
 import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { collectAssistantCitations } from "@t3tools/shared/assistantCitations";
+import { changesListStructure, continueMarkdownList, formatMarkdown, indentMarkdown, protectMarkdownSelection, renumberMarkdownList, wrapMarkdownSelection, type MarkdownEdit, type MarkdownFormat } from "../../shared/composerEditing";
+import { useComposerPreferences } from "../composerPreferences";
+import { ComposerFormatting } from "./ComposerFormatting";
 
 const runtimeLabels: Record<string, string> = { "approval-required": "Ask permission", "auto-accept-edits": "Auto-accept edits", auto: "Auto", "full-access": "Full access" };
 const steerShortcut = navigator.userAgent.includes("Mac") ? "Cmd+Enter" : "Ctrl+Enter";
 export function Composer({ state, onEditCitation, onUsage, onSelectionChange: notifySelection }: { readonly state: HostStateSnapshot; readonly onEditCitation: (citation: AssistantCitation, index: number) => void; readonly onUsage: () => void; readonly onSelectionChange: (selection: TextSelection) => void }) {
   const draftKey = state.activeThreadId ?? "new";
+  const [editingPreferences, setEditingPreferences] = useComposerPreferences();
   const onSelectionChange = useCallback((selection: TextSelection) => { rememberDraftSelection(draftKey, selection); notifySelection(selection); }, [draftKey, notifySelection]);
   const { text, contexts, attachments = [] } = useComposerDraft(draftKey);
   const visibleContexts = contexts.map((context, index) => ({ context, index })).filter(({ context }) => contextIsReferenced(text, context));
@@ -70,6 +75,31 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const projectLabel = project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1)
     ?? (state.draft.supportsNoProject ? "No project" : "Choose project");
   const disabled = busy || state.sending || thread?.archived === true || thread?.providerNativeSubagent === true;
+  const inputSelection = (): TextSelection => ({ start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length });
+  const editing = useRef(false);
+  const numberingUndo = useRef<{ before: string; after: string; selection: TextSelection } | null>(null);
+  const repairNumbering = () => {
+    const input = textarea.current;
+    if (!input || !editingPreferences.listAssist) return;
+    const selection = inputSelection(), edit = renumberMarkdownList(input.value, selection);
+    if (edit) { numberingUndo.current = { before: input.value, after: input.value.slice(0, edit.start) + edit.text + input.value.slice(edit.end), selection }; applyEdit(edit); }
+  };
+  const applyEdit = (edit: MarkdownEdit | null, structural = false) => {
+    const input = textarea.current;
+    if (!edit || !input || disabled || picking) return;
+    input.focus(); input.setSelectionRange(edit.start, edit.end);
+    // Native insertion keeps formatting/indentation in the textarea's normal undo stack.
+    const before = input.value; editing.current = true;
+    if (!document.execCommand("insertText", false, edit.text) && input.value === before) input.setRangeText(edit.text, edit.start, edit.end, "end");
+    setText(input.value); setCursor(edit.selection.start); setDismissedTrigger(null);
+    input.setSelectionRange(edit.selection.start, edit.selection.end); onSelectionChange(edit.selection);
+    editing.current = false;
+    if (structural) repairNumbering();
+  };
+  const applyFormat = (format: MarkdownFormat) => {
+    const protectedSelection = protectMarkdownSelection(text, inputSelection(), [...collectComposerContextReferences(text), ...collectAssistantCitations(text), ...fileReferenceOccurrences(text, contexts)]);
+    applyEdit(formatMarkdown(text, protectedSelection, format));
+  };
   const trigger = detectComposerTrigger(text, cursor);
   const queryKind = trigger?.kind;
   const canSuggest = queryKind === "path" || queryKind === "slash-command" || queryKind === "skill";
@@ -201,6 +231,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     {thread?.archived ? <div className="archived-banner">This thread is archived.<button className="text-button" onClick={() => { void run("threadAction", { threadId: thread.id, action: "unarchive" }); }}>Restore thread</button></div> : null}
     {thread?.providerNativeSubagent ? <p className="subagent-readonly" role="status">This conversation is controlled by its provider. Send instructions in the parent conversation.</p> : null}
     <div className="composer-box" onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); addFiles([...event.dataTransfer.files]); } }}>
+      <ComposerFormatting disabled={disabled || picking} listAssist={editingPreferences.listAssist} onListAssist={() => setEditingPreferences({ listAssist: !editingPreferences.listAssist })} onAttach={pickFiles} onFormat={applyFormat} onIndent={(outdent) => applyEdit(indentMarkdown(text, inputSelection(), outdent, true), true)} />
       {suggestionsOpen ? <ComposerSuggestions items={items} selected={highlighted} pending={suggestions.pending} error={suggestions.error} onSelect={chooseSuggestion} onHighlight={setSuggestionIndex} /> : null}
       {attachments.length ? <div className="composer-attachments" aria-label="Message attachments">{attachments.map((file) => <div className={`composer-attachment${file.error ? " attachment-failed" : ""}`} key={file.key} title={`${file.name} · ${formatAttachmentSize(file.sizeBytes)}${file.error ? `\n${file.error}` : ""}`}>
         <button className="attachment-preview" aria-label={`Preview ${file.name}`} disabled={!file.previewUrl} onClick={() => { if (file.previewUrl) openVisual({ title: file.name, src: file.previewUrl }); }}>{file.previewUrl ? <img src={file.previewUrl} alt={file.name} /> : <FileIcon size={20} />}</button>
@@ -226,30 +257,53 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
           if (files.length) { event.preventDefault(); addFiles(files); }
         }}
         aria-controls={suggestionsOpen ? "composer-suggestions" : undefined} aria-expanded={suggestionsOpen} aria-autocomplete="list" aria-activedescendant={suggestionsOpen && items.length ? `composer-suggestion-${highlighted}` : undefined}
-        onSelect={(event) => { setCursor(event.currentTarget.selectionStart); onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }); }} onChange={(event) => { setText(event.target.value); setCursor(event.target.selectionStart); onSelectionChange({ start: event.target.selectionStart, end: event.target.selectionEnd }); setDismissedTrigger(null); }} onKeyDown={(event) => {
+        onSelect={(event) => { setCursor(event.currentTarget.selectionStart); onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }); }} onChange={(event) => {
+          const value = event.target.value, type = (event.nativeEvent as InputEvent).inputType ?? "";
+          const repair = !editing.current && editingPreferences.listAssist && changesListStructure(text, value, type);
+          const automatic = numberingUndo.current;
+          if (automatic && (type === "historyUndo" && value === automatic.before || type === "historyRedo" && value === automatic.after)) event.target.setSelectionRange(automatic.selection.start, automatic.selection.end);
+          setText(value); setCursor(event.target.selectionStart); onSelectionChange({ start: event.target.selectionStart, end: event.target.selectionEnd }); setDismissedTrigger(null);
+          if (repair) requestAnimationFrame(() => { if (textarea.current?.value === value) repairNumbering(); });
+        }} onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
         if (event.key === "Enter" && event.altKey) {
           if (activateInlineReference(event.currentTarget.selectionStart)) { event.preventDefault(); return; }
         }
         if (suggestionsOpen && !event.nativeEvent.isComposing) {
           if (event.key === "Escape") { event.preventDefault(); setDismissedTrigger(triggerKey); return; }
           if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setSuggestionIndex(items.length ? (highlighted + (event.key === "ArrowDown" ? 1 : items.length - 1)) % items.length : 0); return; }
-          if ((event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey) || event.key === "Tab") { event.preventDefault(); if (items[highlighted]) chooseSuggestion(items[highlighted]); return; }
+          if ((event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey) || (event.key === "Tab" && !event.shiftKey && !event.ctrlKey && !event.metaKey)) { event.preventDefault(); if (items[highlighted]) chooseSuggestion(items[highlighted]); return; }
+        }
+        if (!event.altKey && !event.ctrlKey && !event.metaKey) {
+          const selection = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd };
+          const edit = event.key === "Tab" ? indentMarkdown(text, selection, event.shiftKey)
+            : event.key === "Enter" && event.shiftKey && editingPreferences.listAssist ? continueMarkdownList(text, selection) : null;
+          if (edit) { event.preventDefault(); applyEdit(edit, true); return; }
+          const protectedSelection = protectMarkdownSelection(text, selection, [...collectComposerContextReferences(text), ...collectAssistantCitations(text), ...fileReferenceOccurrences(text, contexts)]);
+          const wrapped = wrapMarkdownSelection(text, protectedSelection, event.key);
+          if (wrapped) { event.preventDefault(); applyEdit(wrapped); return; }
+        }
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && ["b", "i"].includes(event.key.toLowerCase())) {
+          event.preventDefault(); applyFormat(event.key.toLowerCase() === "b" ? "bold" : "italic"); return;
         }
         if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(event.ctrlKey || event.metaKey); }
       }} />
-      <div className="composer-toolbar"><div className="composer-project">{!thread ? <button className="project-trigger" aria-label="Choose project" title={state.draft.workspaceRoot ?? projectLabel} disabled={busy || state.workspaceRoots.length === 1} onClick={() => {
-        setBusy(true); void run("chooseProject").finally(() => setBusy(false));
-      }}><FolderIcon size={12} /><span>{projectLabel}</span><ChevronDownIcon size={11} /></button> : null}</div>
       {!selection ? <div className="composer-hint">No models available. Configure a provider in T3 Code.</div> : null}
-      <div className="composer-send-controls"><button className="icon-button" aria-label="Attach files" title="Attach files from this machine" disabled={disabled || picking} onClick={pickFiles}><PaperclipIcon size={17} /></button>{thread?.activeRunId ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
-        <button className="send-button" aria-label="Send message" title={running ? `Queue after this turn${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Send message"} disabled={disabled || picking || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
-      </div></div>
+      {!thread ? <div className="composer-project"><button className="project-trigger" aria-label="Choose project" title={state.draft.workspaceRoot ?? projectLabel} disabled={busy || state.workspaceRoots.length === 1} onClick={() => {
+        setBusy(true); void run("chooseProject").finally(() => setBusy(false));
+      }}><FolderIcon size={12} /><span>{projectLabel}</span><ChevronDownIcon size={11} /></button></div> : null}
+      <div className="composer-bottom">
+        <div ref={controls} className="composer-controls">
+          <button ref={modelTrigger} className="model-trigger" title={modelLabel} disabled={busy || thread?.providerNativeSubagent} onClick={() => setModelsOpen(!modelsOpen)} aria-expanded={modelsOpen} aria-label="Choose model"><span>{modelLabel}</span><ChevronDownIcon size={12} /></button>
+          {modelsOpen && modelTrigger.current ? <ModelPicker state={state} selection={selection} anchor={modelTrigger.current} onClose={closeModels} /> : null}
+          {compactControls ? <details ref={overflow} className="composer-options-overflow" onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary className="icon-button" aria-label="Effort and permissions" title="Effort and permissions"><MoreHorizontalIcon size={16} /></summary><div className="composer-options-popup">{traits}</div></details> : traits}
+        </div>
+        <div className="composer-send-controls">
+          <span className="composer-shortcuts" aria-hidden="true"><span>{running ? "Enter to queue" : "Enter to send"}</span><span>{running && state.queue?.canSteer ? `${steerShortcut} to steer` : "Shift+Enter for a new line"}</span></span>
+          {running && thread ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
+          <button className="send-button" aria-label="Send message" title={shortcutHint} disabled={disabled || picking || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
+        </div>
+      </div>
     </div>
-    <div ref={controls} className="composer-controls">
-      <button ref={modelTrigger} className="model-trigger" title={modelLabel} disabled={busy || thread?.providerNativeSubagent} onClick={() => setModelsOpen(!modelsOpen)} aria-expanded={modelsOpen} aria-label="Choose model"><span>{modelLabel}</span><ChevronDownIcon size={12} /></button>
-      {modelsOpen && modelTrigger.current ? <ModelPicker state={state} selection={selection} anchor={modelTrigger.current} onClose={closeModels} /> : null}
-      {compactControls ? <details ref={overflow} className="composer-options-overflow" onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary className="icon-button" aria-label="Effort and permissions" title="Effort and permissions"><MoreHorizontalIcon size={16} /></summary><div className="composer-options-popup">{traits}</div></details> : traits}
-    </div>
-    <div className="composer-footnote"><span>{running ? "Agent is working" : ""}</span><span>{shortcutHint}</span></div>
   </div></div>;
 }

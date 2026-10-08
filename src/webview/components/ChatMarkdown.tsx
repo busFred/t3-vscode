@@ -18,7 +18,7 @@ import { parseComposerContextHref } from "@t3tools/shared/composerContextReferen
 import * as Schema from "effect/Schema";
 import { InlineAttachment } from "./InlineAttachment";
 import { previewEquation } from "./EquationPreview";
-const sanitizeSchema = { ...defaultSchema, tagNames: [...(defaultSchema.tagNames ?? []), "video", "audio", "source"],
+const sanitizeSchema = { ...defaultSchema, tagNames: [...(defaultSchema.tagNames ?? []), "video", "audio", "source", "u"],
   attributes: { ...defaultSchema.attributes, code: [["className", /^language-./, "math-inline", "math-display"]], video: ["src", "controls", "poster"], audio: ["src", "controls"], source: ["src", "type"] },
   protocols: { ...defaultSchema.protocols, href: [...(defaultSchema.protocols?.href ?? []), "file", "t3-citation", "t3-context"], src: [...(defaultSchema.protocols?.src ?? []), "file", "data", "t3-context"] } };
 export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source, assetSource, streaming = false, context, attachments = [] }: {

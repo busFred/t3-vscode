@@ -505,3 +505,18 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .compact-history .thread { padding: 6px; }
 .compact-history .thread-title { font-size: .8125rem; }
 .history-picker-hint { flex-shrink: 0; border-top: 1px solid var(--border); padding: 6px 3px; color: var(--muted-foreground); font-size: .625rem; }
+
+/* Permanent source-formatting tools; all composer controls share its border. */
+.composer-formatting { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 0; padding: 0 0 4px; margin: 0 0 5px; border-bottom: 1px solid var(--border); }
+.formatting-group { display: flex; align-items: center; flex: none; border-right: 1px solid var(--border); padding-right: 3px; margin-right: 3px; }
+.formatting-group:last-of-type { border-right: 0; padding-right: 0; margin-right: 0; }
+.composer-formatting .icon-button { width: 23px; height: 24px; }
+.list-assist-toggle { margin-left: auto; border: 1px solid transparent; border-radius: 2px; padding: 4px; font-size: .625rem; color: var(--foreground); background: transparent; white-space: nowrap; }
+.list-assist-toggle[aria-pressed="true"] { color: var(--vscode-inputOption-activeForeground, var(--primary)); background: var(--vscode-inputOption-activeBackground, var(--muted)); border-color: var(--vscode-inputOption-activeBorder, var(--ring)); }
+.composer-box textarea { color: var(--vscode-input-foreground, var(--foreground)); opacity: 1; -webkit-text-fill-color: currentColor; }
+.composer-bottom { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.composer-bottom .composer-controls { flex: 1; margin: 0; min-width: 0; }
+.composer-bottom .model-trigger { flex: 0 1 auto; max-width: 230px; }
+.composer-send-controls { margin-left: auto; gap: 6px; }
+.composer-shortcuts { display: flex; flex-direction: column; text-align: right; color: var(--muted-foreground); font-size: .5625rem; line-height: 1.35; white-space: nowrap; }
+@container (max-width: 570px) { .composer-shortcuts { display: none; } }
