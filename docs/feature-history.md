@@ -1174,6 +1174,13 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Build the 41-file `target-installer/t3-vscode-0.1.16.vsix` (2,632,898 bytes) and verify its unchanged release manifest, exact reviewed runtime/assets, current README/changelog, licenses, 20 math fonts and three screenshots.
 - Record SHA-256 `57dab245b00b29992b092c56b34a8294c63b3553b76cee8dd2e9935600970730` in the installer sidecar; leave the rebuilt installer unpublished and uninstalled.
 
+### v0.1.16 — compact task manager rebuild verification
+
+- Commit the redundant single-project heading removal separately as `3b171ef`, with its feature history, README, changelog and design notes updated; retain the multi-project selector and manifest v0.1.16.
+- Pass TypeScript checking, the complete extension/webview/Mermaid/math build, all 49 overview links and the isolated task browser fixture, including task scope, independent creation, editor navigation/recovery, draft preservation and 280 px layout.
+- Obtain fresh-context independent regression approval for runtime `3b171ef` against `0a256a3`, with no blocking findings; the reviewer checks the complete diff, fixture log, feature links, manifest and diff cleanliness before local packaging.
+- Use deterministic fixtures and an explicitly isolated T3 home without provider calls or normal VS Code/T3 state changes; keep the rebuilt installer local, unpublished and uninstalled.
+
 ## Maintenance
 
 Update the overview's introduction/latest-change versions and the affected feature's version section in the same change. Add an entry only for an actual feature change; documentation-only edits do not change the feature's introduction version. Record removed behavior explicitly and keep historical sections intact. Keep each bullet to one sentence where possible, and at most two sentences.
