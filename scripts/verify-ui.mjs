@@ -154,7 +154,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.__requests.findLast((request) => request.method === "respondToRequest").params.answers.checks), ["browser", "real server"]);
   await page.setViewportSize({ width: 360, height: 820 });
   await page.evaluate(() => { document.body.dataset.surface = "sidebar"; window.__replace({}); });
-  await page.getByRole("button", { name: "Server integration checks" }).click();
+  await page.getByRole("button", { name: "Server integration checks", exact: true }).click();
   await page.evaluate(() => { document.body.dataset.surface = "panel"; window.__replace({}); });
   await page.locator(".chat-heading strong").filter({ hasText: "Server integration checks" }).waitFor();
   assert.equal(await page.locator(".projects-sidebar").count(), 0);

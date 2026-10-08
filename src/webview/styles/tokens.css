@@ -647,3 +647,5 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
   .scheduled-header-button { padding: 3px; }
   .scheduled-header-button small { display: none; }
 }
+
+.retained-sidebar { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }

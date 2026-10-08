@@ -119,6 +119,12 @@ The existing v0.1.16 installer is unpublished and includes model-preference impo
 - Validate project/workspace scope and fresh configuration, reject deleted/stale tasks, preserve modes/attribution/provider options and newer server fields, and use partial enable updates. Display unsupported newer schedules without overwriting them.
 - Pass deterministic host tests and real create/edit/list/subscription/model/low-effort persistence checks against an isolated T3 home. Combined UI/review validation is recorded under Release verification before packaging.
 
+#### v0.1.16 — task navigation recovery
+
+- Keep the sidebar mounted during a same-environment reconnect so unsaved task forms, Back-retained drafts, list queries, scroll and expansion state survive connection recovery.
+- Route the existing Sessions command to the Sessions front page and Account & Usage to the visible front page, keeping any task draft for reopening.
+- Cover reconnect and both native navigation events in the deterministic multi-view task fixture. Independent regression review identified these cases before packaging.
+
 ### Workspace scope
 
 #### v0.0.2

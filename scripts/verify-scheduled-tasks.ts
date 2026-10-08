@@ -36,6 +36,23 @@ export async function verifyScheduledTasks(sidebar: Page, chat: Page, other: Pag
   assert.equal(await sidebar.getByRole("textbox", { name: "Search tasks", exact: true }).inputValue(), "Other session");
   await sidebar.getByRole("button", { name: "Edit task Other session task" }).click();
   assert.equal(await sidebar.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Unsaved task draft");
+  // A transient reconnect must preserve both the open form and the hidden list state.
+  const connect = client.connect.bind(client);
+  client.connect = async () => { await new Promise((resolve) => setTimeout(resolve, 180)); await connect(); };
+  await host.reconnect(); client.connect = connect;
+  await sidebar.getByRole("textbox", { name: "Task name", exact: true }).waitFor();
+  assert.equal(await sidebar.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Unsaved task draft");
+  await sidebar.evaluate(() => window.dispatchEvent(new MessageEvent("message", { data: { event: "showNavigation" } })));
+  await sidebar.getByRole("tab", { name: "Sessions", exact: true }).waitFor();
+  assert.equal(await sidebar.getByRole("tab", { name: "Sessions", exact: true }).getAttribute("aria-selected"), "true");
+  await sidebar.getByRole("tab", { name: /^Tasks/ }).click();
+  assert.equal(await sidebar.getByRole("textbox", { name: "Search tasks", exact: true }).inputValue(), "Other session");
+  await sidebar.getByRole("button", { name: "Edit task Other session task" }).click();
+  assert.equal(await sidebar.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Unsaved task draft");
+  await sidebar.evaluate(() => window.dispatchEvent(new MessageEvent("message", { data: { event: "showUsage", data: {} } })));
+  await sidebar.locator(".account-usage").waitFor({ state: "visible" });
+  await sidebar.getByRole("button", { name: "Edit task Other session task" }).click();
+  assert.equal(await sidebar.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Unsaved task draft");
   await sidebar.getByRole("button", { name: "Cancel", exact: true }).click();
   await sidebar.getByRole("button", { name: "Edit task Other session task" }).click();
   assert.equal(await sidebar.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Other session task");
@@ -71,6 +88,7 @@ export async function verifyScheduledTasks(sidebar: Page, chat: Page, other: Pag
   await sidebar.getByRole("textbox", { name: "Search tasks", exact: true }).waitFor();
   const independent = client.scheduledTasks.find((task) => task.title === "Independent check")!;
   assert.equal(independent.threadId, null); assert.equal(host.snapshot().scheduledTasks?.tasks.find((task) => task.id === independent.id)?.originThreadId, null);
+  if (await chat.getByRole("button", { name: "Scheduled tasks", exact: true }).getAttribute("aria-expanded") !== "true") await chat.getByRole("button", { name: "Scheduled tasks", exact: true }).click();
   await drawer.getByRole("button", { name: "Edit task Monitor this session" }).click();
   await sidebar.getByRole("combobox", { name: "Task result destination" }).selectOption("");
   await sidebar.getByRole("button", { name: "Save task", exact: true }).click();

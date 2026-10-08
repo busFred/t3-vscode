@@ -7,7 +7,7 @@ import { ProviderSetupNotice } from "./ServerSetup";
 import { ScheduledTaskList } from "./ScheduledTaskList";
 import { ScheduledTaskEditor, taskDraft, type TaskDraft } from "./ScheduledTaskEditor";
 
-export function SidebarView({ state, onAppearance, usageRequest, taskRequest }: { readonly state: HostStateSnapshot; readonly onAppearance: () => void; readonly usageRequest: { accountKey?: string } | null; readonly taskRequest: ScheduledTaskEditorRequest | null }) {
+export function SidebarView({ state, onAppearance, usageRequest, taskRequest, navigationRequest }: { readonly state: HostStateSnapshot; readonly onAppearance: () => void; readonly usageRequest: { accountKey?: string } | null; readonly taskRequest: ScheduledTaskEditorRequest | null; readonly navigationRequest: number }) {
   const [tab, setTab] = useState<"sessions" | "tasks">("sessions");
   const [selectedProject, setProject] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
@@ -24,7 +24,8 @@ export function SidebarView({ state, onAppearance, usageRequest, taskRequest }: 
     if (!editing) returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setDrafts((previous) => previous[key] ? previous : { ...previous, [key]: draft }); setEditing(key);
   }, [taskRequest]);
-  useEffect(() => { setEditing(null); setDrafts({}); }, [state.environment?.environmentId]);
+  useEffect(() => { if (navigationRequest) { setEditing(null); setTab("sessions"); } }, [navigationRequest]);
+  useEffect(() => { if (usageRequest) setEditing(null); }, [usageRequest]);
   const back = (discard: boolean) => {
     if (discard && editing) setDrafts((previous) => { const next = { ...previous }; delete next[editing]; return next; });
     setEditing(null);

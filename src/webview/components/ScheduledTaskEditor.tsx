@@ -34,7 +34,7 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
   const patch = (change: Partial<TaskDraft>) => { setFailed(false); onChange({ ...draft, ...change }); };
   const saved = state.scheduledTasks?.tasks.find((task) => task.id === draft.id && task.projectId === draft.projectId);
   const project = state.projects.find((project) => project.id === draft.projectId);
-  const stale = !!draft.base && (!saved || saved.editVersion !== draft.base.editVersion);
+  const stale = !!draft.base && !state.scheduledTasks?.loading && (!saved || saved.editVersion !== draft.base.editVersion);
   const provider = state.providers.find((provider) => provider.instanceId === draft.modelSelection?.instanceId);
   const model = provider?.models.find((model) => model.slug === draft.modelSelection?.model);
   const unavailable = !provider?.enabled || !provider.installed || provider.availability === "unavailable" || !model;
@@ -43,7 +43,7 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
   const origin = draft.originThreadId ? state.threads.find((thread) => thread.id === draft.originThreadId)?.title ?? "Origin session unavailable" : draft.base && !draft.base.originKnown ? "Origin unknown" : "Independent task";
   const interval = Number(draft.minutes) * 60_000;
   const scheduleValid = draft.scheduleType === "interval" ? Number.isSafeInteger(interval) && interval >= 60_000 : draft.scheduleType === "fixed_time" && /^([01]?\d|2[0-3]):[0-5]\d$/.test(draft.timeOfDay);
-  const valid = !!draft.title.trim() && !!draft.prompt.trim() && !unavailable && scheduleValid && !!project && !stale;
+  const valid = !!draft.title.trim() && !!draft.prompt.trim() && !unavailable && scheduleValid && !!project && !stale && state.scheduledTasks?.loading !== true;
   const submit = async () => {
     if (!valid || saving) return; setSaving(true); setFailed(false);
     const previousSchedule = draft.base && supportedSchedule(draft.base.schedule) && draft.base.schedule.type === draft.scheduleType ? draft.base.schedule : {};
