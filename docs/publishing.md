@@ -1,6 +1,6 @@
 # Publishing T3 VSCode
 
-The current candidate is **0.1.13 (Alpha)** for the [Marketplace release channel](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode). The owner authorized release-only publication; do not upload a new prerelease. The preceding published version is 0.1.12 on the prerelease channel. Future publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
+The current release is **0.1.13 (Alpha)**, published to the [Marketplace release channel](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode). The owner authorized release-only publication; do not upload a new prerelease. The preceding published version is 0.1.12 on the prerelease channel. Future publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
 
 ## Version policy
 
@@ -56,3 +56,12 @@ Using the reviewed package avoids rebuilding different code while publishing. Do
 - VSIX SHA-256: `82c59225f4f27f29ed561c4e39e441df76f6177b00ca74c60b41637b2be495ff`.
 
 At 04:22 UTC on October 7, the Marketplace reported version 0.1.12 with the prerelease property but had not marked it validated, and an isolated Marketplace installation still reported the extension unavailable. The local VSIX installation passed; Marketplace installation remains pending its validation and discovery update.
+
+## 0.1.13 release-channel publication
+
+- Published `hungtienhuang.t3-vscode` **0.1.13** to the release channel on **October 8, 2026 at 02:52 UTC**, from source commit `eaed9fe`, following the owner's release-only instruction.
+- Created separate feature commits for search (`6a8bf16`), new chats (`ce2ebd5`), History (`f710323`), Markdown tools (`3dfa071`), draft recovery (`b39b925`), response display/status (`ae88a2b`), usage labeling (`3775dc0`) and onboarding (`eb9c297`).
+- Passed 163 deterministic tests, per-commit TypeScript checks, both browser suites, the full build and fresh-context regression review; verified the exact package assets and installation in disposable VS Code/T3 storage.
+- Confirmed the authenticated Marketplace record has no prerelease property and matches the reviewed VSIX SHA-256: `1145eecba0f40d00debc42023867e41584d81ea8dbc899dafa58dbd6f7007b35`.
+- Confirmed prerelease 0.1.12 retains its version, properties, update time and package checksum; no prerelease was uploaded.
+- Marketplace accepted the upload; its validation flag is still pending and the public listing has not refreshed yet, so Marketplace installation is not claimed verified.

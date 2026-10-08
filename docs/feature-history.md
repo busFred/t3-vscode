@@ -1,6 +1,6 @@
 # T3 VSCode feature history
 
-This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is prepared for the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically.
+This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically.
 
 ## Overview
 
@@ -984,6 +984,12 @@ This document tracks features by release, including how later versions changed t
 - Obtain final fresh-context GPT-6 Luna regression review against `76be0b3`, with no actionable blockers and explicit packaging signoff.
 - Preserve prior isolated native coverage; the onboarding revision’s native display limitation remains recorded above.
 - Verify publisher authentication and prepare release-only publication without changing the version or the existing prerelease.
+
+#### Release-channel publication — v0.1.13
+
+- Publish the reviewed package from `eaed9fe` to the Marketplace release channel on October 8, 2026 at 02:52 UTC, without uploading a prerelease.
+- Confirm release-only publisher metadata and the exact VSIX SHA-256 `1145eecba0f40d00debc42023867e41584d81ea8dbc899dafa58dbd6f7007b35`, while preserving the existing 0.1.12 prerelease metadata and checksum.
+- Verify local VSIX installation using isolated user, extension, shared and T3 storage; Marketplace validation and public discovery are still pending after upload.
 
 ## Maintenance
 
