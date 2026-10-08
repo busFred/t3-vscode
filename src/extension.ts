@@ -24,6 +24,7 @@ import { UsageStatusBar } from "./host/usageStatusBar.js";
 import { InputNotificationTracker } from "./host/inputNotifications.js";
 import type { DraftTransfer } from "./shared/viewDraft.js";
 import { usageAccounts } from "./shared/usage.js";
+import { parseModelPreferencesImport, type ModelPickerPreferences } from "./shared/modelPreferences.js";
 
 let hostState: HostState | null = null;
 
@@ -39,10 +40,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
     workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject,
     appearance: readAppearance, messageNavigation: () => resolveMessageNavigation(vscode.workspace.getConfiguration("t3-vscode").get("messageNavigation")),
-    favoriteModels: () => context.globalState.get<ReadonlyArray<FavoriteModel>>("favoriteModels", []),
+    modelPreferences: () => context.globalState.get<ModelPickerPreferences>("modelPickerPreferences")
+      ?? { favoriteModels: context.globalState.get<ReadonlyArray<FavoriteModel>>("favoriteModels", []), providerModelPreferences: {} },
     searchPreferences: context.workspaceState.get("sessionSearchPreferences", {}),
     saveSearchPreferences: (preferences) => context.workspaceState.update("sessionSearchPreferences", preferences),
-    saveFavoriteModels: (favorites) => context.globalState.update("favoriteModels", favorites) }, client);
+    saveModelPreferences: (preferences) => context.globalState.update("modelPickerPreferences", preferences) }, client);
+
+  const importModelPreferences = async () => {
+    const json = await vscode.window.showInputBox({ title: "Import T3 Web Model Preferences",
+      prompt: "Paste the model-preferences JSON copied from T3 Web. See the README for the browser copy command.",
+      placeHolder: '{"favorites":[],"providerModelPreferences":{…}}', ignoreFocusOut: true,
+      validateInput: (value) => { try { parseModelPreferencesImport(value); return null; } catch (cause) { return String((cause as Error).message); } },
+    });
+    if (json === undefined) return;
+    await hostState!.importModelPreferences(json);
+    await vscode.window.showInformationMessage("T3 Web model preferences imported into VS Code.");
+  };
 
   const registry = new WebviewRegistry();
   const showSettings = () => vscode.commands.executeCommand("workbench.action.openSettings", `@ext:${context.extension.id}`);
@@ -51,7 +64,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const bridge = new BridgeHandler(hostState, registry, showSettings, undefined, registerNativeDiff(context), {
     openInTab: (id, draft) => provider.createPanel(id, draft),
     newChatTab: (id) => provider.createNewPanel(id),
-    showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(),
+    showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(), importModelPreferences,
   });
   provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState);
   const notifications = new InputNotificationTracker();
@@ -81,6 +94,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("t3-vscode.showThreads", () => provider.showThreads()),
     vscode.commands.registerCommand("t3-vscode.showUsage", (accountKey?: string) => provider.showUsage(accountKey)),
     vscode.commands.registerCommand("t3-vscode.configureUsage", () => meters.configure()),
+    vscode.commands.registerCommand("t3-vscode.importModelPreferences", importModelPreferences),
     vscode.commands.registerCommand("t3-vscode.openWebUi", async () => {
       try { await vscode.env.openExternal(vscode.Uri.parse(hostState!.webUiUrl(SIDEBAR_VIEW_ID))); }
       catch (cause) { await vscode.window.showInformationMessage(String(cause)); }

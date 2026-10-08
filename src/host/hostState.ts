@@ -45,6 +45,7 @@ import { attachmentMessageContext, attachmentUploadInput, type AttachmentReferen
 import { SessionSearchJob } from "./sessionSearch.js";
 import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
+import { defaultProviderModelPreference, orderedProviderModels, parseModelPreferencesImport, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
 export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
@@ -58,6 +59,8 @@ export interface HostStateOptions {
   readonly messageNavigation?: () => MessageNavigationPlacement;
   readonly favoriteModels?: () => ReadonlyArray<FavoriteModel>;
   readonly saveFavoriteModels?: (favorites: ReadonlyArray<FavoriteModel>) => PromiseLike<void>;
+  readonly modelPreferences?: () => ModelPickerPreferences;
+  readonly saveModelPreferences?: (preferences: ModelPickerPreferences) => PromiseLike<void>;
   readonly searchPreferences?: Partial<SearchPreferences>;
   readonly saveSearchPreferences?: (preferences: SearchPreferences) => PromiseLike<void>;
   readonly pickProject?: (projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean, workspaceRoots: ReadonlyArray<string>) => Promise<ProjectSelection | null>;
@@ -687,12 +690,59 @@ export class HostState {
   }
   toggleFavoriteModel(instanceId: string, model: string): Promise<void> {
     return this.enqueue(async () => {
-      const favorites = this.options.favoriteModels?.() ?? [];
+      const preferences = this.modelPreferences();
+      const favorites = preferences.favoriteModels;
       const exists = favorites.some((favorite) => favorite.instanceId === instanceId && favorite.model === model);
       if (!exists && !this.client.config?.providers.some((provider) => provider.instanceId === instanceId && provider.models.some((entry) => entry.slug === model))) throw new Error("Model not found.");
-      if (!this.options.saveFavoriteModels) throw new Error("Model favorites are unavailable.");
-      await this.options.saveFavoriteModels(exists ? favorites.filter((favorite) => favorite.instanceId !== instanceId || favorite.model !== model) : [...favorites, { instanceId, model }]);
+      const next = exists ? favorites.filter((favorite) => favorite.instanceId !== instanceId || favorite.model !== model) : [...favorites, { instanceId, model }];
+      if (this.options.saveModelPreferences) await this.options.saveModelPreferences({ ...preferences, favoriteModels: next });
+      else if (this.options.saveFavoriteModels) await this.options.saveFavoriteModels(next);
+      else throw new Error("Model favorites are unavailable.");
       this.emit();
+    });
+  }
+  private modelPreferences(): ModelPickerPreferences {
+    return this.options.modelPreferences?.() ?? { favoriteModels: this.options.favoriteModels?.() ?? [], providerModelPreferences: {} };
+  }
+  private async saveModelPreferences(preferences: ModelPickerPreferences): Promise<void> {
+    if (!this.options.saveModelPreferences) throw new Error("Model preferences are unavailable.");
+    await this.options.saveModelPreferences(preferences);
+    this.emit();
+  }
+  importModelPreferences(json: string): Promise<void> {
+    return this.enqueue(async () => {
+      const imported = parseModelPreferencesImport(json);
+      const current = this.modelPreferences();
+      await this.saveModelPreferences({ favoriteModels: imported.favoriteModels ?? current.favoriteModels,
+        providerModelPreferences: imported.providerModelPreferences ?? current.providerModelPreferences });
+    });
+  }
+  setModelVisibility(instanceId: string, model: string, visible: unknown): Promise<void> {
+    return this.enqueue(async () => {
+      if (typeof visible !== "boolean") throw new Error("Invalid model visibility.");
+      const provider = this.client.config?.providers.find((provider) => provider.instanceId === instanceId);
+      if (!provider?.models.some((entry) => entry.slug === model)) throw new Error("Model not found.");
+      const current = this.modelPreferences();
+      const previous = current.providerModelPreferences[instanceId] ?? defaultProviderModelPreference(provider);
+      const hiddenModels = previous.hiddenModels.filter((slug) => slug !== model);
+      if (!visible) hiddenModels.push(model);
+      await this.saveModelPreferences({ ...current, providerModelPreferences: { ...current.providerModelPreferences,
+        [instanceId]: { ...previous, hiddenModels } } });
+    });
+  }
+  moveModel(instanceId: string, model: string, direction: unknown): Promise<void> {
+    return this.enqueue(async () => {
+      if (direction !== "up" && direction !== "down") throw new Error("Invalid model direction.");
+      const provider = this.client.config?.providers.find((provider) => provider.instanceId === instanceId);
+      if (!provider?.models.some((entry) => entry.slug === model)) throw new Error("Model not found.");
+      const current = this.modelPreferences();
+      const previous = current.providerModelPreferences[instanceId] ?? defaultProviderModelPreference(provider);
+      const order = orderedProviderModels(provider, previous).map((entry) => entry.slug);
+      const from = order.indexOf(model), to = from + (direction === "up" ? -1 : 1);
+      if (to < 0 || to >= order.length) return;
+      [order[from], order[to]] = [order[to]!, order[from]!];
+      await this.saveModelPreferences({ ...current, providerModelPreferences: { ...current.providerModelPreferences,
+        [instanceId]: { ...previous, modelOrder: [...order, ...previous.modelOrder.filter((slug) => !order.includes(slug))] } } });
     });
   }
   setModes(id: string | undefined, input: { runtimeMode?: unknown; interactionMode?: unknown }, viewId = SIDEBAR_VIEW_ID): Promise<void> {
@@ -1036,7 +1086,8 @@ export class HostState {
       providers: this.client.config?.providers ?? [],
       archiveLoaded: this.archive !== null,
       usageLimitSources: this.client.config?.usageLimitSources ?? [],
-      favoriteModels: this.options.favoriteModels?.() ?? [],
+      favoriteModels: this.modelPreferences().favoriteModels,
+      providerModelPreferences: this.modelPreferences().providerModelPreferences,
       draft: this.conversationDraft(view),
       ...(activeThreadId ? { activeThreadId } : {}),
       ...conversationActivity(projection),

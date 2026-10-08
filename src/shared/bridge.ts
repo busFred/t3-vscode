@@ -14,6 +14,7 @@ import type { ConnectionSetup } from "./connectionSetup.js";
 
 import type { SessionSearchState } from "./sessionSearch.js";
 import type { SearchPreferences } from "./sessionSearchPresentation.js";
+import type { ProviderModelPreferences } from "./modelPreferences.js";
 
 export const Methods = {
   searchSession: "searchSession", cancelSessionSearch: "cancelSessionSearch", revealSessionMatch: "revealSessionMatch",
@@ -21,7 +22,7 @@ export const Methods = {
   restoreComposerDraft: "restoreComposerDraft", saveComposerDraft: "saveComposerDraft", chatAsset: "chatAsset", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
   newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
-  setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt",
+  setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModelVisibility: "setModelVisibility", moveModel: "moveModel", importModelPreferences: "importModelPreferences", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt",
   respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
   threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab",
@@ -118,6 +119,7 @@ export interface HostStateSnapshot {
   readonly providers: ReadonlyArray<ServerProvider>;
   readonly usageLimitSources?: UsageLimitSourceSnapshots;
   readonly favoriteModels: ReadonlyArray<FavoriteModel>;
+  readonly providerModelPreferences?: ProviderModelPreferences;
   readonly draft: ConversationDraft;
   readonly activeThreadId?: string;
   readonly transcript: ReadonlyArray<TranscriptItem>;

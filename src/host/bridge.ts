@@ -46,7 +46,7 @@ export class BridgeHandler {
   private readonly showSettings: () => PromiseLike<unknown>;
   private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean> };
   private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
-  private readonly viewActions: { openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
+  private readonly viewActions: { openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown>; importModelPreferences?: () => PromiseLike<unknown> };
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:hungtienhuang.t3-vscode"),
     prompts = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
@@ -57,6 +57,7 @@ export class BridgeHandler {
       newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown;
       showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown;
       configureUsage?: () => PromiseLike<unknown>;
+      importModelPreferences?: () => PromiseLike<unknown>;
     } = {}) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; this.prompts = prompts; this.openDiff = openDiff; this.viewActions = viewActions; }
   async performThreadAction(id: string, action: string, title?: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     const thread = this.hostState.snapshot(viewId).threads.find((thread) => thread.id === id);
@@ -180,6 +181,12 @@ export class BridgeHandler {
         case "setModel": await this.hostState.setModel(params.threadId === undefined ? undefined : id(), params.modelSelection, viewId); break;
         case "setModelOption": await this.hostState.setModelOption(params.threadId === undefined ? undefined : id(), stringParam(params, "optionId"), params.value, viewId); break;
         case "toggleFavoriteModel": await this.hostState.toggleFavoriteModel(stringParam(params, "instanceId"), stringParam(params, "model")); break;
+        case "setModelVisibility": await this.hostState.setModelVisibility(stringParam(params, "instanceId"), stringParam(params, "model"), params.visible); break;
+        case "moveModel": await this.hostState.moveModel(stringParam(params, "instanceId"), stringParam(params, "model"), params.direction); break;
+        case "importModelPreferences": {
+          if (!this.viewActions.importModelPreferences) throw new Error("Model preference import is unavailable.");
+          await this.viewActions.importModelPreferences(); break;
+        }
         case "setModes": await this.hostState.setModes(params.threadId === undefined ? undefined : id(), params, viewId); break;
         case "openSettings": await this.showSettings(); break;
         case "interrupt": await this.hostState.interrupt(id()); break;

@@ -30,8 +30,8 @@ This document tracks features by release, including how later versions changed t
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
 | [Two-column reading](#two-column-reading) | Removed in v0.1.10 after performance feedback. | v0.0.9 | v0.1.10 |
 | [Math rendering and copying](#math-rendering-and-copying) | Renders KaTeX with scrolling, floating previews and copy actions. | v0.0.8 | v0.0.9 |
-| [Models and provider instances](#models-and-provider-instances) | Uses server-advertised providers and models, including ACP instances. | v0.0.1 | v0.0.7 |
-| [Model search and favorites](#model-search-and-favorites) | Searches model/provider names and saves favorite models. | v0.0.4 | v0.0.7 |
+| [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility, ordering and T3 Web preference import. | v0.0.1 | v0.1.16 |
+| [Model search and favorites](#model-search-and-favorites) | Searches visible models and imports device-local favorites from T3 Web. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.1.13 |
 | [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.1.13 |
 | [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection. | v0.0.7 | v0.0.9 |
@@ -523,6 +523,11 @@ This document tracks features by release, including how later versions changed t
 
 - Show compact provider marks and retain account identity across provider instances.
 
+#### v0.1.16 — local preview
+
+- Add per-instance show/hide and reorder controls to the picker, with counts based on visible models and explicitly enabled legacy models in their saved order.
+- Import T3 Web's browser-local visibility and ordering explicitly, retaining server-advertised custom models, existing selections and independent drafts.
+
 ### Model search and favorites
 
 #### v0.0.4
@@ -532,6 +537,11 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.7
 
 - Retain favorites while moving appearance controls into native Settings.
+
+#### v0.1.16 — local preview
+
+- Apply saved visibility and ordering to provider lists, search and Favorites without altering the server catalog or current conversation.
+- Import browser favorites by provider-instance identity and persist all model preferences together, preserving earlier extension favorites during migration.
 
 ### Effort and permission controls
 

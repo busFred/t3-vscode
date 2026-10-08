@@ -66,7 +66,23 @@ Markdown images, video/audio, Mermaid diagrams and T3's `html_render` graphics r
 
 Select text in a file and press **Ctrl+K** (**Cmd+K** on macOS), or choose **Reference Editor Selection** from its context menu, to insert a compact reference such as `@README.md:43-46` at the last-used chat’s prompt cursor. **Alt+K** remains available. The shortcut preserves existing prompt text and includes the exact selected text, including unsaved changes, when you send; removing the inline reference omits its snapshot. If no chat is open, the shortcut opens an editor chat; browsing sidebar usage preserves the last focused editor target. Select text in an assistant response and choose **Cite** to insert its reference at the last cursor position in your prompt, replacing selected prompt text when present. Add an optional comment, then click the inline reference or its quote chip to edit it; **Alt+Enter** opens the reference at the cursor. Removing the quote chip also removes its inline references, and deleting an inline reference prevents that quote from being sent. Quotes keep their T3 source link and readable text when sent; saved source links can reopen and highlight the response. References and drafts stay with their own conversation and view.
 
-The model picker browses configured provider instances and Favorites. Search finds models across every provider using T3's fuzzy matching, and stars save favorites across extension sessions. Arrow keys navigate results; Enter chooses a model and Escape closes the picker. The effort control next to the model selects its advertised levels; models without that capability omit it. The visible Code/Plan toggle has been removed.
+The model picker browses configured provider instances and Favorites. Search finds visible models across every provider using T3's fuzzy matching, and stars save favorites across extension sessions. **Manage models** lets you show/hide models and change their order; provider counts reflect the visible list. Saved visibility also applies to search and Favorites, and explicitly enabled legacy models retain their configured position. Arrow keys navigate results; Enter chooses a model and Escape closes the picker. The effort control next to the model selects its advertised levels; models without that capability omit it. The visible Code/Plan toggle has been removed.
+
+T3 Web's favorites, visibility and ordering are stored on that browser/device, so VS Code cannot read them from the T3 server. To copy them into VS Code:
+
+1. Open your configured T3 Web page in the same browser, then open its developer console (F12).
+2. Run this read-only command to copy just the model preferences:
+
+   ```js
+   {
+     const s = JSON.parse(localStorage.getItem("t3code:client-settings:v1") || "{}");
+     copy(JSON.stringify({ favorites: s.favorites ?? [], providerModelPreferences: s.providerModelPreferences ?? {} }));
+   }
+   ```
+
+3. Run **T3 VSCode: Import T3 Web Model Preferences** from the Command Palette, or use **Manage models → Import from T3 Web**, and paste the copied JSON.
+
+Import replaces the supplied model preferences in VS Code, preserving existing conversations' selected models and drafts. Later browser changes require another import; you can also manage these preferences independently in VS Code. Custom models continue to come from the selected T3 server's catalog.
 
 Type `/` for the current provider's commands and skills, or `@` to find files in the conversation's workspace. Arrow keys navigate suggestions; Enter or Tab inserts one. `/model` opens model search, and `/usage-limits` expands **Account & Usage** in the session manager for that provider.
 

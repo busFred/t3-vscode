@@ -9,7 +9,7 @@ import { FakeWebview } from "../src/host/testing/fakeWebview.js";
 import { viewsHarness, publishText } from "../src/host/testing/fakeTransport.js";
 import { Events, type RpcMessage } from "../src/shared/bridge.js";
 import { DEFAULT_APPEARANCE, type AppearanceSettings } from "../src/shared/appearance.js";
-import type { FavoriteModel } from "../src/shared/bridge.js";
+import type { ModelPickerPreferences } from "../src/shared/modelPreferences.js";
 import { ProviderInstanceId, ProviderDriverKind, MessageId, RunId, ThreadId, ProjectId, RuntimeRequestId, TurnItemId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import { v2Now } from "../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
@@ -25,8 +25,8 @@ import { verifyComposerEditing } from "./verify-composer-editing.js";
 const evidence = process.env.T3_VSCODE_UI_EVIDENCE ?? "/tmp/t3-vscode-views-ui";
 await mkdir(evidence, { recursive: true });
 let preferences = DEFAULT_APPEARANCE;
-let favorites: ReadonlyArray<FavoriteModel> = [];
-const { host, client } = await viewsHarness({ appearance: () => preferences, favoriteModels: () => favorites, saveFavoriteModels: async (value) => { favorites = value; } });
+let modelPreferences: ModelPickerPreferences = { favoriteModels: [], providerModelPreferences: {} };
+const { host, client } = await viewsHarness({ appearance: () => preferences, modelPreferences: () => modelPreferences, saveModelPreferences: async (value) => { modelPreferences = value; } });
 const firstProvider = client.config.providers[0]!;
 const capabilities = { optionDescriptors: [{ id: "reasoningEffort", label: "Effort", type: "select" as const,
   options: [{ id: "high", label: "High" }, { id: "max", label: "Max", isDefault: true }] }] };
@@ -42,9 +42,10 @@ let renamesRequested = 0;
 let deleteConfirmed = false;
 const openedSessions: Array<string | undefined> = [];
 const openedDiffs: Array<{ turn: number; path: string; old: string; current: string }> = [];
+let modelImportJson = "";
 const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry, async () => { settingsOpened += 1; }, {
   rename: async () => { renamesRequested += 1; return "Renamed through history"; }, confirmDelete: async () => deleteConfirmed,
-}, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); }, { openInTab: (id) => { openedSessions.push(host.snapshot(id).activeThreadId); }, showUsage: (_id, key) => { registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key); } });
+}, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); }, { openInTab: (id) => { openedSessions.push(host.snapshot(id).activeThreadId); }, showUsage: (_id, key) => { registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key); }, importModelPreferences: () => host.importModelPreferences(modelImportJson) });
 const views = new Map<string, FakeWebview>(); const sinks = new Map<string, Set<ServerResponse>>();
 for (const id of [SIDEBAR_VIEW_ID, "tab-one", "tab-two", "tab-three", "tab-narrow"]) {
   if (id !== SIDEBAR_VIEW_ID) host.registerView(id);
@@ -353,6 +354,29 @@ try {
   await third.getByRole("checkbox", { name: "Show legacy models" }).check();
   await third.getByRole("button", { name: "Legacy Kimi", exact: true }).waitFor();
   assert.equal(await third.getByRole("button", { name: "Unavailable model", exact: true }).isDisabled(), true);
+  await third.getByRole("button", { name: "Manage models", exact: true }).click();
+  await third.locator('.model-providers button').filter({ hasText: "Kimi" }).click();
+  await third.getByRole("checkbox", { name: "Show Legacy Kimi", exact: true }).check();
+  await third.getByRole("checkbox", { name: "Show Kimi", exact: true }).uncheck();
+  await third.getByRole("button", { name: "Move Legacy Kimi up", exact: true }).click();
+  await third.getByRole("button", { name: "Done", exact: true }).click();
+  await third.getByRole("button", { name: "Legacy Kimi", exact: true }).waitFor();
+  assert.equal(await third.locator('.model-choice').filter({ hasText: /^Kimi$/ }).count(), 0);
+  await third.getByRole("textbox", { name: "Search models" }).fill("kimi-for-coding");
+  assert.equal(await third.locator('.model-options .model-choice').count(), 1, "Hidden default-instance models stay hidden in search; unavailable instances remain disabled");
+  await third.getByRole("button", { name: "Manage models", exact: true }).click();
+  modelImportJson = JSON.stringify({ favorites: [{ provider: "codex-personal", model: "gpt-6-astra" }],
+    providerModelPreferences: { kimi: { hiddenModels: [], modelOrder: ["old-kimi", "kimi-for-coding"] } } });
+  await third.getByRole("button", { name: "Import from T3 Web", exact: true }).click();
+  await third.getByRole("button", { name: "Done", exact: true }).click();
+  await third.locator('.model-providers button').filter({ hasText: "Kimi" }).click();
+  assert.deepEqual(await third.locator('.model-options .model-choice').allTextContents(), ["Legacy Kimi", "Kimi"]);
+  assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in third tab");
+  await second.getByRole("button", { name: "Choose model", exact: true }).click();
+  await second.locator('.model-providers button').filter({ hasText: "Kimi" }).click();
+  assert.deepEqual(await second.locator('.model-options .model-choice').allTextContents(), ["Legacy Kimi", "Kimi"], "Imported preferences broadcast to other chats");
+  await second.keyboard.press("Escape");
+  await host.importModelPreferences('{"providerModelPreferences":{}}');
   await third.keyboard.press("Escape");
   assert.equal(await third.getByRole("dialog").count(), 0);
   await third.getByRole("button", { name: "Choose model", exact: true }).click();
