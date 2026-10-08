@@ -738,6 +738,23 @@ export class HostState {
         [instanceId]: { ...previous, modelOrder: [...order, ...previous.modelOrder.filter((slug) => !order.includes(slug))] } } });
     });
   }
+  reorderModel(instanceId: string, model: string, before: unknown, expectedOrder: unknown): Promise<void> {
+    return this.enqueue(async () => {
+      const provider = this.client.config?.providers.find((entry) => entry.instanceId === instanceId);
+      if (!provider?.models.some((entry) => entry.slug === model)) throw new Error("Model not found.");
+      const current = this.modelPreferences();
+      const previous = getProviderModelPreference(current.providerModelPreferences, instanceId) ?? defaultProviderModelPreference(provider);
+      const order = orderedProviderModels(provider, previous).map((entry) => entry.slug);
+      if (!Array.isArray(expectedOrder) || JSON.stringify(expectedOrder) !== JSON.stringify(order)) throw new Error("Model order changed. Try the move again.");
+      if (before !== null && (typeof before !== "string" || !order.includes(before))) throw new Error("Invalid model destination.");
+      if (before === model) return;
+      const next = order.filter((slug) => slug !== model);
+      next.splice(before === null ? next.length : next.indexOf(before as string), 0, model);
+      if (next.every((slug, index) => slug === order[index])) return;
+      await this.saveModelPreferences({ ...current, providerModelPreferences: { ...current.providerModelPreferences,
+        [instanceId]: { ...previous, modelOrder: [...next, ...previous.modelOrder.filter((slug) => !order.includes(slug))] } } });
+    });
+  }
   setModes(id: string | undefined, input: { runtimeMode?: unknown; interactionMode?: unknown }, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     return this.enqueue(async () => {
       const view = this.requireView(viewId);

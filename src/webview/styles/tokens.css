@@ -580,3 +580,10 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .work-group { margin-bottom: 6px; }.work-group-toggle { padding: 4px 0; }
 
 .timeline-footer:has(.response-header) { height: auto; min-height: 42px; padding-top: 3px; }
+
+.model-grip { flex: none; cursor: grab; touch-action: none; }
+.model-grip:active { cursor: grabbing; }
+.model-grip:disabled { cursor: default; }
+.model-drag-source { opacity: .4; }
+.model-drag-ghost { position: fixed; z-index: 130; pointer-events: none; max-width: 180px; padding: 6px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--primary); border-radius: 4px; box-shadow: 0 3px 10px #0003; }
+.model-drop-line { position: fixed; z-index: 131; height: 2px; background: var(--primary); pointer-events: none; }

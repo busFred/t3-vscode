@@ -181,6 +181,7 @@ export class BridgeHandler {
         case "setModelOption": await this.hostState.setModelOption(params.threadId === undefined ? undefined : id(), stringParam(params, "optionId"), params.value, viewId); break;
         case "toggleFavoriteModel": await this.hostState.toggleFavoriteModel(stringParam(params, "instanceId"), stringParam(params, "model")); break;
         case "setModelVisibility": await this.hostState.setModelVisibility(stringParam(params, "instanceId"), stringParam(params, "model"), params.visible); break;
+        case "reorderModel": await this.hostState.reorderModel(stringParam(params, "instanceId"), stringParam(params, "model"), params.before, params.order); break;
         case "moveModel": await this.hostState.moveModel(stringParam(params, "instanceId"), stringParam(params, "model"), params.direction); break;
         case "setModes": await this.hostState.setModes(params.threadId === undefined ? undefined : id(), params, viewId); break;
         case "openSettings": await this.showSettings(); break;

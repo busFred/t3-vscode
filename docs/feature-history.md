@@ -32,7 +32,7 @@ The existing v0.1.16 installer is unpublished and includes model-preference impo
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
 | [Two-column reading](#two-column-reading) | Removed in v0.1.10 after performance feedback. | v0.0.9 | v0.1.10 |
 | [Math rendering and copying](#math-rendering-and-copying) | Renders KaTeX with scrolling, floating previews and copy actions. | v0.0.8 | v0.0.9 |
-| [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and ordering saved in VS Code. | v0.0.1 | v0.1.16 |
+| [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.1.13 |
 | [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.1.13 |
@@ -548,6 +548,13 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 
 - Remove the manual T3 Web import button, Command Palette entry, bridge action and JSON parser. Model controls store preferences only within the extension, without changing T3 Code.
 - Keep existing saved visibility and ordering, server-advertised custom models and independent conversation drafts. Update the model drag mockup to match the simplified footer.
+
+#### v0.1.16 — drag ordering
+
+- Replace Manage models arrows with grip-only pointer/touch dragging and Alt+Up/Down. Keep hidden/legacy models reorderable without changing selection, favorites or visibility.
+- Show a drag preview/insertion line, scroll near list edges and cancel on Escape, pointer cancellation, closure or catalog/filter changes. Disable ordering for partial search/Favorites lists.
+- Validate the complete provider order before saving, reject stale/cross-provider destinations, retain confirmed preferences on failures and broadcast successful changes across views.
+- Pass typechecking, deterministic persistence tests and the complete isolated multi-view browser suite, including mouse, touch, keyboard focus, cancellation and search guards.
 
 ### Model search and favorites
 

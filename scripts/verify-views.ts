@@ -20,6 +20,7 @@ import { publishActivity } from "../src/host/testing/activityFixture.js";
 import type { TurnDiff } from "../src/host/turnDiff.js";
 import { verifySearchPanel } from "./verify-session-find.js";
 import { verifyResponseLayout } from "./verify-response-layout.js";
+import { verifyModelReordering } from "./verify-model-reordering.js";
 import { verifyComposerEditing } from "./verify-composer-editing.js";
 
 const evidence = process.env.T3_VSCODE_UI_EVIDENCE ?? "/tmp/t3-vscode-views-ui";
@@ -357,7 +358,11 @@ try {
   await third.locator('.model-providers button').filter({ hasText: "Kimi" }).click();
   await third.getByRole("checkbox", { name: "Show Legacy Kimi", exact: true }).check();
   await third.getByRole("checkbox", { name: "Show Kimi", exact: true }).uncheck();
-  await third.getByRole("button", { name: "Move Legacy Kimi up", exact: true }).click();
+  await third.waitForFunction(() => !document.querySelector<HTMLButtonElement>('button[aria-label="Reorder Legacy Kimi"]')?.disabled);
+  await third.getByRole("button", { name: "Reorder Legacy Kimi", exact: true }).focus();
+  await third.keyboard.press("Alt+ArrowUp");
+  await third.waitForFunction(() => document.querySelector(".model-row")?.getAttribute("data-model-slug") === "old-kimi");
+  await verifyModelReordering(third);
   await third.getByRole("button", { name: "Done", exact: true }).click();
   await third.getByRole("button", { name: "Legacy Kimi", exact: true }).waitFor();
   assert.equal(await third.locator('.model-choice').filter({ hasText: /^Kimi$/ }).count(), 0);

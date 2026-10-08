@@ -1,6 +1,6 @@
 # Model reordering — proposed layout
 
-Status: design mockup only, awaiting feedback. No extension behavior or release version changes.
+Status: implemented in the v0.1.16 source revision; installer pending task configuration and combined review. The HTML remains a design reference.
 
 Open [the interactive mockup](model-reordering.html) in a browser. Model names and counts are sample data; changes stay in memory.
 
@@ -11,6 +11,6 @@ Open [the interactive mockup](model-reordering.html) in a browser. Model names a
 - Disable reordering while search or the Favorites filter shows a partial list; explain how to return to the complete provider order. All providers still allows reordering within each group.
 - **Done** returns to the normal picker with the new order. Grips and visibility controls disappear there. Keep a short note that preferences are saved in VS Code; there is no T3 Web import entry.
 
-Implementation follow-up after layout approval: persist a complete order by provider-instance ID; retain confirmed preferences on failed saves; synchronize sidebar/editor views; cancel safely on catalog changes or closure; verify scrolling, touch, keyboard and previously saved/hidden-model ordering.
+Implementation: persist complete provider-instance orders with stale-order validation. Preserve confirmed preferences on failed saves, synchronize views, and cancel on catalog/filter changes, Escape, pointer cancellation or closure. Pointer capture supports touch and scroll-edge movement. Deterministic persistence tests and the complete multi-view browser suite pass, including pointer/touch drag, keyboard focus, cancellation, search guards and unchanged visibility/drafts.
 
 Validation: previewed at 448px in the inline HTML renderer; checked pointer and touch drag, Alt+arrow reordering with retained focus, Escape cancellation, provider boundaries, reset, search/Favorites guards and the normal picker in a temporary Chromium profile. Confirmed unchanged favorites, visibility and selection after reordering, a visible insertion line, and responsive 728px light/360px dark layouts together with the session mockup. No browser errors, T3 state access or provider calls.

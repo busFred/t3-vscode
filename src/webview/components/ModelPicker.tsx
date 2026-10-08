@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDownIcon, ArrowUpIcon, CheckIcon, StarIcon } from "lucide-react";
+import { GripVerticalIcon, CheckIcon, StarIcon } from "lucide-react";
 import type { HostStateSnapshot, ModelSelection } from "../../shared/bridge";
 import { selectionForModel } from "../../shared/modelOptions";
+import { useModelDrag } from "../useModelDrag";
 import { useActions } from "../actions";
 import { scoreModelPickerSearch } from "./t3/modelPickerSearch";
 import { getProviderModelPreference, orderedProviderModels, visibleProviderModels } from "../../shared/modelPreferences";
@@ -26,6 +27,22 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
   const input = useRef<HTMLInputElement>(null);
   const providers = state.providers.filter((provider) => provider.enabled);
   const preferences = state.providerModelPreferences;
+  const [announcement, setAnnouncement] = useState("");
+  const reorderAllowed = managing && !search.trim() && providerId !== "favorites" && !busy;
+  const reorder = (instanceId: string, model: string, before: string | null, order: string[]) => {
+    setBusy(true);
+    const next = order.filter((slug) => slug !== model); next.splice(before === null ? next.length : next.indexOf(before), 0, model);
+    void run("reorderModel", { instanceId, model, before, order }).then((ok) => {
+      const label = providers.find((provider) => provider.instanceId === instanceId)?.models.find((entry) => entry.slug === model)?.name ?? model;
+      setAnnouncement(ok ? `${label}, position ${next.indexOf(model) + 1} of ${order.length}.` : "Order could not be saved.");
+    }).finally(() => {
+      setBusy(false);
+      requestAnimationFrame(() => [...(popup.current?.querySelectorAll<HTMLButtonElement>(".model-grip") ?? [])]
+        .find((node) => node.dataset.instanceId === instanceId && node.dataset.slug === model)?.focus());
+    });
+  };
+  const dragSignature = JSON.stringify([managing, search, providerId, state.providers.map((provider) => [provider.instanceId, provider.models.map((model) => model.slug)]), preferences]);
+  const { drag, start } = useModelDrag(popup, dragSignature, reorder);
   const entries = useMemo(() => providers.flatMap((provider) => (managing ? orderedProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId))
     : visibleProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId), showLegacy)).map((model) => {
     const favorite = favorites.some((item) => item.instanceId === provider.instanceId && item.model === model.slug);
@@ -76,12 +93,21 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
       const unavailable = !provider.installed || provider.availability === "unavailable";
       const ordered = orderedProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId));
       const visibleSlugs = new Set(visibleProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId), !managing && showLegacy).map((model) => model.slug));
-      return <section key={provider.instanceId}><header>{provider.displayName ?? provider.instanceId}{!provider.installed ? " · Not installed" : provider.availability === "unavailable" ? " · Unavailable" : ""}</header>
+      return <section key={provider.instanceId} data-model-provider={provider.instanceId}><header>{provider.displayName ?? provider.instanceId}{!provider.installed ? " · Not installed" : provider.availability === "unavailable" ? " · Unavailable" : ""}</header>
         {models.map(({ model, favorite }) => {
           const visible = pendingVisibility?.instanceId === provider.instanceId && pendingVisibility.model === model.slug
             ? pendingVisibility.visible : visibleSlugs.has(model.slug);
           const index = ordered.findIndex((entry) => entry.slug === model.slug);
-          return <div className={`model-row${managing && !visible ? " model-hidden" : ""}`} key={model.slug}>
+          return <div className={`model-row${managing && !visible ? " model-hidden" : ""}${drag?.active && drag.instanceId === provider.instanceId && drag.model === model.slug ? " model-drag-source" : ""}`} key={model.slug} data-model-slug={model.slug}>
+          {managing ? <button className="model-grip icon-button" data-instance-id={provider.instanceId} data-slug={model.slug} aria-label={`Reorder ${model.name}`} title="Drag to reorder · Alt+Up/Down" aria-describedby="model-reorder-help" disabled={!reorderAllowed}
+            onPointerDown={(event) => start(event, provider.instanceId, model.slug, model.name, ordered.map((entry) => entry.slug))}
+            onKeyDown={(event) => {
+              if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+              event.preventDefault(); event.stopPropagation();
+              const to = index + (event.key === "ArrowUp" ? -1 : 1);
+              if (to < 0 || to >= ordered.length) return;
+              reorder(provider.instanceId, model.slug, event.key === "ArrowUp" ? ordered[to]!.slug : ordered[to + 1]?.slug ?? null, ordered.map((entry) => entry.slug));
+            }}><GripVerticalIcon size={14} /></button> : null}
           {managing ? <span className="model-manage-name" title={model.slug}>{model.name}{model.isLegacy ? <small>Legacy</small> : null}</span>
             : <button className="model-choice" disabled={busy || unavailable} title={model.slug} aria-pressed={selection?.instanceId === provider.instanceId && selection.model === model.slug} onClick={() => {
             setBusy(true); void run("setModel", { ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}), modelSelection: selectionForModel(provider.instanceId, model, selection) })
@@ -92,12 +118,6 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
             setBusy(true); void run("toggleFavoriteModel", { instanceId: provider.instanceId, model: model.slug }).finally(() => setBusy(false));
           }}><StarIcon size={13} fill={favorite ? "currentColor" : "none"} /></button>
           {managing ? <div className="model-manage-controls">
-            <button className="icon-button" aria-label={`Move ${model.name} up`} disabled={busy || index === 0} onClick={() => {
-              setBusy(true); void run("moveModel", { instanceId: provider.instanceId, model: model.slug, direction: "up" }).finally(() => setBusy(false));
-            }}><ArrowUpIcon size={13} /></button>
-            <button className="icon-button" aria-label={`Move ${model.name} down`} disabled={busy || index === ordered.length - 1} onClick={() => {
-              setBusy(true); void run("moveModel", { instanceId: provider.instanceId, model: model.slug, direction: "down" }).finally(() => setBusy(false));
-            }}><ArrowDownIcon size={13} /></button>
             <input type="checkbox" aria-label={`Show ${model.name}`} checked={visible} disabled={busy} onChange={(event) => {
               const next = { instanceId: provider.instanceId, model: model.slug, visible: event.target.checked };
               setPendingVisibility(next); setBusy(true);
@@ -114,6 +134,9 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
         setManaging(!managing);
       }}>{managing ? "Done" : "Manage models"}</button>
     </div>
+    {drag?.active ? <><div className="model-drag-ghost" style={{ left: Math.min(drag.x + 12, window.innerWidth - 180), top: drag.y + 12 }}>{drag.label}</div>{drag.valid ? <div className="model-drop-line" style={{ left: drag.left, top: drag.line, width: drag.width }} /> : null}</> : null}
+    <span className="sr-only" role="status" aria-live="polite">{announcement}</span>
+    {managing ? <p id="model-reorder-help" className="model-preferences-note">{search.trim() || providerId === "favorites" ? "Clear search and choose a provider or All providers to reorder." : "Drag a grip or use Alt+Up/Down to reorder."}</p> : null}
     {managing ? <p className="model-preferences-note">Favorites, visibility and ordering are saved in VS Code.</p> : null}
   </div>, document.body);
 }

@@ -62,3 +62,26 @@ test("Providers named constructor can update visibility and ordering without inh
   assert.equal(Object.hasOwn(own, "constructor"), true);
   assert.deepEqual(own.constructor, { hiddenModels: [], modelOrder: [provider.models[0]!.slug, "terra", "luna"] });
 });
+
+test("Drag ordering validates the entire provider order and preserves other preferences", async (t) => {
+  const { client, options } = fixture(); const { host } = await harness(options, client); t.after(() => host.dispose());
+  host.registerView("another-tab");
+  const original = host.snapshot(); const order = client.config.providers[0]!.models.map((model) => model.slug);
+  await host.reorderModel("kimi", "terra", order[0]!, order);
+  const next = ["terra", ...order.filter((slug) => slug !== "terra")];
+  assert.deepEqual(host.snapshot("another-tab").providerModelPreferences?.kimi, { hiddenModels: ["terra"], modelOrder: next });
+  assert.deepEqual(host.snapshot().favoriteModels, original.favoriteModels);
+  assert.deepEqual(host.snapshot().threads, original.threads);
+  await assert.rejects(host.reorderModel("kimi", "luna", null, order), /order changed/);
+  await assert.rejects(host.reorderModel("kimi", "luna", "foreign-model", next), /Invalid model destination/);
+  await host.reorderModel("kimi", "terra", null, next);
+  assert.deepEqual(host.snapshot().providerModelPreferences?.kimi?.modelOrder, order);
+  assert.equal(client.commands.length, 0);
+});
+
+test("A failed drag save retains the confirmed order", async (t) => {
+  const { client, options } = fixture();
+  const { host } = await harness({ ...options, saveModelPreferences: async () => { throw new Error("Disk full"); } }, client); t.after(() => host.dispose());
+  await assert.rejects(host.reorderModel("kimi", "terra", client.config.providers[0]!.models[0]!.slug, client.config.providers[0]!.models.map((model) => model.slug)), /Disk full/);
+  assert.deepEqual(host.snapshot().providerModelPreferences, {});
+});
