@@ -96,6 +96,7 @@ export interface TranscriptItem {
   readonly canFork?: boolean;
 }
 export interface HostStateSnapshot {
+  readonly acknowledgedWorking?: { readonly messageId: string; readonly startedAt: string };
   readonly sessionSearch?: SessionSearchState;
   readonly searchPreferences?: SearchPreferences;
   readonly queue?: ConversationQueue | null;

@@ -44,6 +44,7 @@ test("Failed sends retain drafts and reject borrowed attachment metadata", async
   client.dispatch = async () => { throw new Error("dispatch rejected"); };
   await assert.rejects(host.sendMessage("Retry me", "first"), /dispatch rejected/);
   assert.equal((await host.restoreComposerDraft("first")).draft.text, "Retry me");
+  assert.equal(host.snapshot().acknowledgedWorking, undefined);
 });
 
 test("A host-owned upload finishes into a saved draft after its tab closes", async t => {

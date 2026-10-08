@@ -13,7 +13,7 @@ This document tracks features by release, including how later versions changed t
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.0.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.0.6 |
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.13 |
-| [Conversation status and notifications](#conversation-status-and-notifications) | Shows static Working/Input badges and notifies when input is needed. | v0.0.1 | v0.0.9 |
+| [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.1.13 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.0.8 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched new chats and rejected first-send threads. | v0.0.8 | v0.1.13 |
@@ -25,7 +25,7 @@ This document tracks features by release, including how later versions changed t
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Local image/file uploads that survive closing the originating tab. | v0.0.8 | v0.1.13 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies through a virtualized timeline and loads older history. | v0.0.1 | v0.1.10 |
 | [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.1.13 |
-| [Collapsed activity](#collapsed-activity) | Keeps reasoning and command sequences inside closed summaries. | v0.0.1 | v0.1.13 |
+| [Collapsed activity](#collapsed-activity) | Timed thought/tool groups separated by visible assistant messages and steers. | v0.0.1 | v0.1.13 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
 | [Two-column reading](#two-column-reading) | Removed in v0.1.10 after performance feedback. | v0.0.9 | v0.1.10 |
@@ -38,7 +38,7 @@ This document tracks features by release, including how later versions changed t
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.0.5 |
 | [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.12 |
 | [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.11 |
-| [Response forks](#response-forks) | Forks supported completed responses into a separate conversation. | v0.0.5 | v0.0.6 |
+| [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.13 |
 | [Saved turn diffs](#saved-turn-diffs) | Opens the preceding turn's saved changes in native diff editors. | v0.0.6 | v0.0.9 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
@@ -53,6 +53,7 @@ This document tracks features by release, including how later versions changed t
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.13 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
 | [Markdown composer tools](#markdown-composer-tools) | Literal formatting, selection wrapping, automatic numbering, indentation and undo. | v0.1.13 | v0.1.13 |
+| [Dense transcript spacing](#dense-transcript-spacing) | Compact gaps, one author per run and unobtrusive message actions. | v0.1.13 | v0.1.13 |
 
 ## Sessions and navigation
 
@@ -210,6 +211,11 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.9
 
 - Reveal an existing session tab from the input notification instead of creating a duplicate.
+
+#### v0.1.13
+
+- Show Assistant · Working and the existing Stop button immediately after dispatch is accepted, before streamed output arrives.
+- Keep one assistant header per run and pin only its status below the title while scrolling the active response; remove Working on terminal status.
 
 ### Message navigation rail
 
@@ -370,6 +376,16 @@ This document tracks features by release, including how later versions changed t
 
 ## Message rendering
 
+### Dense transcript spacing
+
+#### v0.1.13
+
+- Reduce message gaps to 8px, author gaps to 4px and paragraph gaps to 6px without changing font sizes or line height.
+- Place user Copy beside its bubble, assistant Copy beside each visible message, and supported Fork at the settled run’s end.
+- Display an assistant author once per run, keeping every assistant message visible between compact activity groups.
+- Retain internal code, math, image and interactive-visual spacing.
+
+
 ### Streaming and progressive history
 
 #### v0.0.1
@@ -433,6 +449,9 @@ This document tracks features by release, including how later versions changed t
 
 #### v0.1.13
 
+- Fold only typed reasoning/tool activity into timed groups separated by assistant messages, user steers, requests and visuals.
+- Keep all assistant prose visible, including partial answers and progress updates; never infer thought status from wording.
+- Update late command completion in its original group and expose individual tool status/details when expanded.
 - Expand matched activity groups and command details when navigating session-search results.
 
 ### Interactive HTML graphics
@@ -630,6 +649,11 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.6
 
 - Use an icon-only Fork action alongside response copying.
+
+#### v0.1.13
+
+- Offer one capability-gated fork after a settled run’s final content; interim assistant messages retain Copy without separate fork points.
+- Keep Copy/Fork actions out of the pinned Working status header.
 
 ### Saved turn diffs
 

@@ -173,7 +173,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     observer.observe(row); measure();
     return () => observer.disconnect();
   }, [modelLabel, effortLabel, Boolean(effort), runtimeMode, state.appearance.fontSizeInterface]);
-  const running = Boolean(thread?.activeRunId || state.queue?.activeRunId);
+  const running = Boolean(thread?.activeRunId || state.queue?.activeRunId || state.acknowledgedWorking);
   const shortcutHint = `${running ? `Enter to queue${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Enter to send"} · Shift+Enter for a new line`;
   const send = async (steer = false) => {
     const value = formatComposerMessage(text, contexts);

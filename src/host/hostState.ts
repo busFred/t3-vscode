@@ -71,6 +71,7 @@ interface ThreadState {
   loading: boolean;
   subscription: Subscription | null;
 }
+const threadActiveRun = (projection: OrchestrationV2ThreadProjection | null | undefined) => projection ? deriveThreadQueueWorkflowState(projection).activeRun : undefined;
 const blankThread = (): ThreadState => ({ projection: null, sequence: -1, history: EMPTY_THREAD_HISTORY_META, loading: true, subscription: null });
 export const SIDEBAR_VIEW_ID = "sidebar";
 interface ViewState {
@@ -95,6 +96,7 @@ function authFailure(cause: unknown): boolean {
 }
 
 export class HostState {
+  private readonly acceptedMessages = new Map<string, { messageId: string; startedAt: string }>();
   private readonly composerDrafts: ComposerDraftStore;
   private readonly draftUploads = new Set<string>();
   private readonly sessionSearches = new Map<string, SessionSearchJob>();
@@ -629,10 +631,12 @@ export class HostState {
       if (thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") throw new Error("This subagent conversation is controlled by its provider. Return to the parent conversation to send instructions.");
       view.sending = true; this.emit();
       try {
+        const messageId = randomUUID(), alreadyWorking = !!thread.activeRunId || !!(this.threads.get(id)?.projection && deriveThreadQueueWorkflowState(this.threads.get(id)!.projection!).activeRun) || this.acceptedMessages.has(id);
         await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id,
-          createdBy: "user", creationSource: "web", messageId: randomUUID(), text, attachments, ...(context ? { context } : {}),
+          createdBy: "user", creationSource: "web", messageId, text, attachments, ...(context ? { context } : {}),
           titleSeed: deriveThreadTitleSeed({ text, attachments }), ...(mode !== "queue" ? { deliveryIntent: mode } : {}), dispatchMode: { type: mode === "queue" ? "queue_after_active" : "start_immediately" } });
         this.emptyThreads.delete(id);
+        if (!alreadyWorking) this.acceptedMessages.set(id, { messageId, startedAt: new Date().toISOString() });
         for (const id of attachmentIds) { const upload = this.uploads.get(id); if (upload) upload.sent = true; }
         const record = this.composerDrafts.owned(this.draftScope(), targetThreadId ?? "new", viewId);
         if (record) {
@@ -710,7 +714,15 @@ export class HostState {
   interrupt(id: string): Promise<void> {
     return this.enqueue(async () => {
       const thread = this.requireThread(id);
-      const runId = thread.activeRunId;
+      const current = this.threads.get(id)?.projection;
+      let runId = thread.activeRunId ?? (current ? deriveThreadQueueWorkflowState(current).activeRun?.id : null);
+      const accepted = this.acceptedMessages.get(id);
+      if (!runId && accepted) {
+        const projection = await this.client.getThreadProjection(id);
+        const run = projection.runs.find(run => run.userMessageId === accepted.messageId);
+        if (run?.status === "queued") { await this.client.dispatch({ type: "queued-run.cancel", commandId: randomUUID(), threadId: id, runId: run.id }); this.acceptedMessages.delete(id); this.emit(); return; }
+        if (run && !["completed", "failed", "cancelled", "interrupted", "rolled_back"].includes(run.status)) runId = run.id;
+      }
       if (!runId) return;
       await this.client.dispatch({ type: "run.interrupt", commandId: randomUUID(), threadId: id, runId, holdQueue: true });
     });
@@ -754,6 +766,10 @@ export class HostState {
   }
   private canForkRow(projection: OrchestrationV2ThreadProjection, row: OrchestrationV2ThreadProjection["visibleTurnItems"][number]): boolean {
     if (row.item.type !== "assistant_message" || row.item.runId === null || row.item.status !== "completed") return false;
+    const run = projection.runs.find(run => run.id === row.item.runId);
+    if (run && !["completed", "failed", "cancelled", "interrupted", "rolled_back"].includes(run.status) || this.findThread(row.sourceThreadId)?.activeRunId === row.item.runId) return false;
+    const last = projection.visibleTurnItems.findLast(item => item.sourceThreadId === row.sourceThreadId && item.item.runId === row.item.runId && item.item.type === "assistant_message");
+    if (last && last.sourceItemId !== row.sourceItemId) return false;
     const providerThread = projection.providerThreads.find((thread) => thread.id === row.item.providerThreadId);
     const session = projection.providerSessions.find((session) => session.id === providerThread?.providerSessionId);
     return canForkProjectedAssistantItem({ projectedItem: row, capabilities: session?.capabilities });
@@ -976,7 +992,13 @@ export class HostState {
     const descriptor = this.server?.descriptor;
     const threads = this.visibleThreads();
     const visibleThreadIds = new Set(threads.map((thread) => thread.id));
+    const accepted = activeThreadId ? this.acceptedMessages.get(activeThreadId) : undefined;
+    const acceptedRun = accepted ? projection?.runs.find(run => run.userMessageId === accepted.messageId) : undefined;
+    const observedActive = threadActiveRun(projection);
+    const acknowledgedWorking = accepted && !observedActive && !(acceptedRun && ["completed", "failed", "cancelled", "interrupted", "rolled_back"].includes(acceptedRun.status)) ? accepted : undefined;
+    if (accepted && !acknowledgedWorking && activeThreadId) this.acceptedMessages.delete(activeThreadId);
     return {
+      ...(acknowledgedWorking ? { acknowledgedWorking } : {}),
       revision: this.revision, phase: this.phase, home: this.options.home,
       searchPreferences: this.searchPreferences,
       ...(this.sessionSearches.get(viewId) ? { sessionSearch: this.sessionSearches.get(viewId)!.state } : {}),

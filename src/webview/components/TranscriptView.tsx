@@ -14,7 +14,7 @@ import { findAssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 import { TurnChanges } from "./TurnChanges";
 import { MessageNavigator } from "./MessageNavigator";
 import { messageExchanges } from "../../shared/messageNavigation";
-import { transcriptRows, workSummary, type DisplayRow } from "../../shared/transcriptRows";
+import { transcriptRows, workSummary, workElapsed, responseBoundaries, isWorkItem, type DisplayRow } from "../../shared/transcriptRows";
 import { htmlVisual } from "../../shared/chatVisuals";
 import { HtmlVisual } from "./HtmlVisual";
 import { ChatMedia } from "./ChatMedia";
@@ -48,7 +48,7 @@ function Disclosure({ label, icon, children, row, threadId }: { label: string; i
   };
   return <WorkLogBlock><div className={`work-entry ${row.item.status}`}>
     <WorkLogButton icon={icon} label={label} aria-expanded={open} onClick={toggle}
-      trailing={<><span className="work-status">{row.item.status === "running" ? "Running" : row.item.status === "failed" ? "Failed" : ""}</span><ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /></>} />
+      trailing={<><span className="work-status">{row.item.status === "running" ? "Running" : row.item.status === "failed" ? "Failed" : row.item.status === "cancelled" || row.item.status === "interrupted" ? "Stopped" : row.item.status === "completed" ? "Completed" : ""}</span><ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /></>} />
     {open ? <WorkLogDetails>{loading ? <span>Loading details…</span> : children}</WorkLogDetails> : null}
   </div></WorkLogBlock>;
 }
@@ -78,11 +78,14 @@ function DynamicTool({ row, threadId }: { row: TranscriptItem; threadId: string 
   return <Disclosure label={row.toolLabel ?? row.item.title ?? row.item.toolName ?? "Tool"} icon={<WrenchIcon size={14} />} row={row} threadId={threadId}><pre className="command-input">{typeof row.item.input === "string" ? row.item.input : JSON.stringify(row.item.input, null, 2)}</pre>{row.output ? <pre className="tool-output">{row.output}</pre> : <span className="subtle">{row.needsDetail ? "Expand again to retry loading output." : "No output."}</span>}</Disclosure>;
 }
 function WorkGroup({ rows, threadId, environmentId }: { rows: ReadonlyArray<TranscriptItem>; threadId: string; environmentId: string }) {
-  const [open, setOpen] = useState(false); const label = workSummary(rows);
+  const [open, setOpen] = useState(false), [now, setNow] = useState(Date.now);
+  const running = rows.filter(row => row.item.status === "running" || row.item.status === "pending").length;
+  useEffect(() => { if (!running) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [running]);
+  const label = workElapsed(rows, now), description = workSummary(rows);
   const target = useContext(SearchTargetContext);
   useEffect(() => { if (target && rows.some((row) => row.key === target.rowKey)) setOpen(true); }, [target, rows]);
   const failures = rows.filter((row) => row.item.status === "failed").length;
-  return <section className="work-group"><button className="work-group-toggle" aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)}><TerminalIcon size={14} /><span>{label}</span>{failures ? <span className="work-group-failures">{failures} failed</span> : null}<ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /></button>
+  return <section className="work-group"><button className="work-group-toggle" aria-label={`${label} · ${description}`} title={description} aria-expanded={open} onClick={() => setOpen(!open)}><ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /><span>{label}</span>{running ? <span className="work-running">{running} running</span> : null}{failures ? <span className="work-group-failures">{failures} failed</span> : null}</button>
     {open ? <div className="work-group-items">{rows.map((row) => <TurnItem key={row.key} row={row} threadId={threadId} environmentId={environmentId} />)}</div> : null}
   </section>;
 }
@@ -96,8 +99,12 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
   const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} assetSource={assetSource} {...(item.type === "user_message" ? { context: item.context, attachments: item.attachments } : {})} />;
   const openThread = (id: string) => { void run("selectThread", { threadId: id }); };
   switch (item.type) {
-    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{markdown(item.text)}</div><CopyButton text={item.text} /></article>;
-    case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}><div className="message-author"><T3Wordmark className="size-5" /><span>Assistant</span>{item.streaming ? <span className="streaming-label">Writing…</span> : null}</div><ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} assetSource={assetSource} streaming={item.streaming} />{!item.streaming ? <div className="response-actions"><CopyButton text={item.text} /><ForkButton row={row} threadId={threadId} /></div> : null}</article>;
+    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.inputIntent === "steer" ? <span className="steer-label">↪ Steer</span> : null}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{markdown(item.text)}</div><CopyButton text={item.text} /></article>;
+    case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}>
+      {!item.runId ? <AssistantHeader /> : null}
+      {!row.canFork ? <div className="response-actions message-copy"><CopyButton text={item.text} /></div> : null}
+      <ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} assetSource={assetSource} streaming={item.streaming} />
+    </article>;
     case "reasoning": return <Disclosure label={item.streaming ? "Thinking…" : "Thought process"} icon={<BrainIcon size={14} />} row={row} threadId={threadId}>{markdown(item.text)}</Disclosure>;
     case "proposed_plan": return <section className="plan-card"><header><span className="plan-badge">Plan</span><strong>Proposed plan</strong><CopyButton text={item.markdown} /></header>{markdown(item.markdown)}</section>;
     case "todo_list": return <section className="todo-card">{item.explanation ? <p>{item.explanation}</p> : null}{item.steps.map((step, index) => <div key={index} className={`todo-step ${step.status}`}><span>{step.status === "completed" ? "✓" : step.status === "running" ? "◉" : "○"}</span><span>{step.text}</span></div>)}</section>;
@@ -122,19 +129,38 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
   }
 });
 
+function AssistantHeader({ working = false, headerKey }: { working?: boolean; headerKey?: string }) {
+  return <div className="message-author response-header" data-run-header={headerKey}><T3Wordmark className="size-5" /><span>Assistant</span>{working ? <span className="working-label" role="status">· Working</span> : null}</div>;
+}
+
 export function TranscriptView({ state, onViewport, citationTarget, searchTarget, onNavigate }: { readonly state: HostStateSnapshot; readonly onViewport?: (element: HTMLDivElement | null) => void; readonly citationTarget?: AssistantCitation | null; readonly searchTarget?: SearchTarget | null; readonly onNavigate?: () => void }) {
   const run = useActions();
   const id = state.activeThreadId;
   const list = useRef<LegendListRef>(null);
   const rows = useMemo(() => transcriptRows(state.transcript), [state.transcript]);
+  const boundaries = useMemo(() => responseBoundaries(state.transcript), [state.transcript]);
+  const thread = state.threads.find(thread => thread.id === id);
+  const activeRun = thread?.activeRunId ?? state.queue?.activeRunId ?? (state.acknowledgedWorking ? state.transcript.find(row => row.item.type === "user_message" && row.item.messageId === state.acknowledgedWorking?.messageId)?.item.runId : null);
+  const working = !!(activeRun || state.acknowledgedWorking);
+  const activeHeader = activeRun ? boundaries.get(`${id}:${activeRun}`)?.first : undefined;
+  const container = useRef<HTMLDivElement | null>(null), firstVisible = useRef(0);
+  const [sticky, setSticky] = useState(false);
+  const updateSticky = useCallback(() => {
+    const viewport = container.current;
+    if (!working || !activeHeader || !viewport) { setSticky(false); return; }
+    const heading = viewport.querySelector<HTMLElement>(`[data-run-header="${CSS.escape(activeHeader)}"]`);
+    setSticky(heading ? heading.getBoundingClientRect().bottom <= viewport.getBoundingClientRect().top : rows.findIndex(row => row.rows.some(item => item.key === activeHeader)) < firstVisible.current);
+  }, [working, activeHeader, rows]);
+  useEffect(() => { const frame = requestAnimationFrame(updateSticky); return () => cancelAnimationFrame(frame); }, [updateSticky]);
   const exchanges = useMemo(() => messageExchanges(state.transcript), [state.transcript]);
   const [viewedKey, setViewedKey] = useState<string | null>(null);
   const [atEnd, setAtEnd] = useState(true); const [followEnd, setFollowEnd] = useState(true);
   const [navigationNotice, setNavigationNotice] = useState<string | null>(null);
   const visible = useCallback((info: OnViewableItemsChangedInfo<DisplayRow>) => {
     const first = info.viewableItems.reduce<DisplayRow | null>((first, entry) => !first || entry.item.firstIndex < first.firstIndex ? entry.item : first, null);
-    if (first) setViewedKey(first.key);
-  }, []);
+    if (first) { setViewedKey(first.key); firstVisible.current = rows.findIndex(row => row.key === first.key); }
+    requestAnimationFrame(updateSticky);
+  }, [rows, updateSticky]);
   useEffect(() => { setViewedKey(null); setAtEnd(true); setFollowEnd(true); setNavigationNotice(null); }, [id]);
   const jump = useCallback((key: string) => {
     const index = rows.findIndex((row) => row.key === key); if (index < 0) return;
@@ -200,25 +226,33 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     frame = requestAnimationFrame(show);
     return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-assistant-citation"); };
   }, [citationTarget, id, sourceIndex, state.threadLoading, state.history.hasMore, state.history.loading, state.transcript.length, run]);
-  const viewportRef = useCallback((element: HTMLDivElement | null) => onViewport?.(element), [onViewport]);
-  const renderItem = useCallback(({ item }: { item: DisplayRow }) => <div data-message-key={item.key} className={`timeline-row${item.rows[0]!.item.type === "checkpoint" ? " checkpoint-row" : ""}`}>
-    {item.rows.length > 1 ? <WorkGroup rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : <TurnItem row={item.rows[0]!} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} />}
-  </div>, [id, state.environment?.environmentId]);
+  const viewportRef = useCallback((element: HTMLDivElement | null) => { container.current = element; onViewport?.(element); }, [onViewport]);
+  const renderItem = useCallback(({ item }: { item: DisplayRow }) => {
+    const first = item.rows[0]!, last = item.rows.at(-1)!;
+    const boundary = first.item.runId ? boundaries.get(`${first.sourceThreadId}:${first.item.runId}`) : undefined;
+    const finalAnswer = boundary?.last === last.key && boundary.answer?.canFork ? boundary.answer : undefined;
+    return <div data-message-key={item.key} className={`timeline-row${first.item.type === "checkpoint" ? " checkpoint-row" : ""}`}>
+      {boundary?.first === first.key ? <AssistantHeader working={working && first.item.runId === activeRun} headerKey={first.key} /> : null}
+      {isWorkItem(first) ? <WorkGroup rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : <TurnItem row={first} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} />}
+      {finalAnswer?.item.type === "assistant_message" ? <div className="response-actions response-end"><CopyButton text={finalAnswer.item.text} /><ForkButton row={finalAnswer} threadId={id ?? ""} /></div> : null}
+    </div>;
+  }, [id, state.environment?.environmentId, boundaries, working, activeRun]);
   const header = <div className="timeline-header">{state.history.hasMore || state.history.error ? <button className="btn" disabled={state.history.loading} onClick={() => { void run("loadHistory", { threadId: id }); }}>{state.history.loading ? "Loading…" : state.history.error ? "Retry loading earlier messages" : "Load earlier messages"}</button> : null}{state.history.error ? <p className="turn-error">{state.history.error}</p> : null}</div>;
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source response…"}</p></div>;
-  if (!id || (!state.transcript.length && !state.threadLoading)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
-  if (state.threadLoading && !state.transcript.length) return <div className="chat-empty"><p>Loading conversation…</p></div>;
+  if (!id || (!state.transcript.length && !state.threadLoading && !working)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
+  if (state.threadLoading && !state.transcript.length && !working) return <div className="chat-empty"><p>Loading conversation…</p></div>;
   return <SearchTargetContext.Provider value={searchTarget ?? null}><SubagentState value={state}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation">
     {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
     {navigationNotice ? <div className="citation-source-notice" role="status">{navigationNotice}</div> : null}
+    {sticky && working ? <div className="sticky-working"><AssistantHeader working /></div> : null}
     <MessageNavigator key={`nav:${id}`} exchanges={exchanges} currentRow={rows.find((row) => row.key === viewedKey)?.firstIndex ?? state.transcript.length - 1} placement={state.messageNavigation ?? "left"} atEnd={atEnd} history={state.history} onJump={jump} onLatest={latest} onEarlier={() => { void run("loadHistory", { threadId: id }); }} />
     <LegendList ref={list} key={id} data={rows} keyExtractor={(row) => row.key} renderItem={renderItem} estimatedItemSize={100}
       {...(sourceIndex >= 0 || matchIndex >= 0 ? { alwaysRender: { keys: [...new Set([sourceIndex, matchIndex].filter((index) => index >= 0).map((index) => rows[index]!.key))] } } : {})}
       initialScrollAtEnd={!searchTarget && followEnd && (!citationTarget || citationTarget.threadId !== id)} {...(!followEnd && viewedKey ? { initialScrollIndex: Math.max(0, rows.findIndex((row) => row.key === viewedKey)) } : {})} maintainScrollAtEnd={!searchTarget && followEnd && (!citationTarget || citationTarget.threadId !== id) ? { animated: false } : false} maintainScrollAtEndThreshold={0.15} maintainVisibleContentPosition
       className="transcript-list" style={{ height: "100%" }} onViewableItemsChanged={visible} viewabilityConfig={{ itemVisiblePercentThreshold: 0 }}
-      onScroll={(event) => { const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent; const node: unknown = list.current?.getScrollableNode(); const distance = node instanceof HTMLElement ? node.scrollHeight - node.scrollTop - node.clientHeight : contentSize.height - contentOffset.y - layoutMeasurement.height; const end = distance < 40; setAtEnd(end); if (end) setFollowEnd(true); }}
+      onScroll={(event) => { updateSticky(); const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent; const node: unknown = list.current?.getScrollableNode(); const distance = node instanceof HTMLElement ? node.scrollHeight - node.scrollTop - node.clientHeight : contentSize.height - contentOffset.y - layoutMeasurement.height; const end = distance < 40; setAtEnd(end); if (end) setFollowEnd(true); }}
       ListHeaderComponent={header}
-      ListFooterComponent={<div className="timeline-footer" />}
+      ListFooterComponent={<div className="timeline-footer">{working && !activeHeader ? <div className="timeline-row"><AssistantHeader working /></div> : null}</div>}
     />
   </div></SubagentState></SearchTargetContext.Provider>;
 }
