@@ -38,6 +38,36 @@ export class FakeTransport implements HostTransport {
   diffRequests: Array<{ id: string; from: number; to: number }> = [];
   savedDiffRequests: Parameters<HostTransport["getSavedTurnDiff"]>[0][] = [];
   diffFileRequests: Parameters<HostTransport["getDiffFileContents"]>[0][] = [];
+  scheduledTasks: Awaited<ReturnType<HostTransport["listScheduledTasks"]>>["tasks"] = [];
+  scheduledHandler: ((tasks: typeof this.scheduledTasks) => void) | null = null;
+  taskSaves: unknown[] = [];
+  taskRuns: string[] = [];
+  listScheduledTasks: HostTransport["listScheduledTasks"] = async () => ({ tasks: this.scheduledTasks });
+  subscribeScheduledTasks: HostTransport["subscribeScheduledTasks"] = async (handler) => {
+    this.scheduledHandler = handler; handler(this.scheduledTasks); return async () => { this.scheduledHandler = null; };
+  };
+  upsertScheduledTask: HostTransport["upsertScheduledTask"] = async (input) => {
+    const { ScheduledTask, ScheduledTaskUpsertInput } = await import("@t3tools/contracts");
+    const payload = Schema.decodeUnknownSync(ScheduledTaskUpsertInput)(input);
+    const previous = this.scheduledTasks.find((task) => task.id === payload.id);
+    if (payload.requireExisting && !previous) throw new Error("Task deleted.");
+    this.taskSaves.push(payload);
+    const task = Schema.decodeUnknownSync(ScheduledTask)({ ...previous, ...payload,
+      createdBy: payload.createdBy ?? "user", creationSource: payload.creationSource ?? "web",
+      threadId: payload.threadId ?? null, createdAt: previous?.createdAt ?? new Date().toISOString(), updatedAt: new Date().toISOString(),
+      nextRunAt: null, lastRunAt: previous?.lastRunAt ?? null, lastRunStatus: previous?.lastRunStatus ?? "never", runCount: previous?.runCount ?? 0, lastRunError: null });
+    this.scheduledTasks = [...this.scheduledTasks.filter((entry) => entry.id !== task.id), task]; this.scheduledHandler?.(this.scheduledTasks);
+    return { task };
+  };
+  setScheduledTaskEnabled: HostTransport["setScheduledTaskEnabled"] = async (id, enabled) => {
+    const previous = this.scheduledTasks.find((task) => task.id === id); if (!previous) throw new Error("Task deleted.");
+    const task = { ...previous, enabled }; this.scheduledTasks = this.scheduledTasks.map((entry) => entry.id === id ? task : entry); this.scheduledHandler?.(this.scheduledTasks); return { task };
+  };
+  runScheduledTask: HostTransport["runScheduledTask"] = async (id) => {
+    const previous = this.scheduledTasks.find((task) => task.id === id); if (!previous) throw new Error("Task deleted.");
+    this.taskRuns.push(id); const task = { ...previous, lastRunStatus: "running" as const };
+    this.scheduledTasks = this.scheduledTasks.map((entry) => entry.id === id ? task : entry); this.scheduledHandler?.(this.scheduledTasks); return { task };
+  };
   async searchThreads(query: string) { this.searches.push(query); return this.searchMatches; }
   async searchPaths(cwd: string, query: string) { this.pathSearches.push({ cwd, query }); return this.pathEntries; }
   async refreshProviders(instanceId?: string, cwd?: string) { this.providerRefreshes.push({ instanceId, cwd }); return { providers: this.config.providers }; }
@@ -151,11 +181,11 @@ export class FakeTransport implements HostTransport {
   getTurnItem: HostTransport["getTurnItem"] = async () => ({ item: null });
 }
 function structuredCloneShell() { return { ...v2ShellSnapshot, projects: [...v2ShellSnapshot.projects], threads: [...v2ShellSnapshot.threads], archivedThreads: [] }; }
-export async function harness(options: Pick<HostStateOptions, "workspaceRoot" | "workspaceRoots" | "pickProject" | "draftStore" | "appearance" | "messageNavigation" | "favoriteModels" | "saveFavoriteModels" | "modelPreferences" | "saveModelPreferences" | "searchPreferences" | "saveSearchPreferences"> = {}, client = new FakeTransport()) {
+export async function harness(options: Pick<HostStateOptions, "taskOrigins" | "saveTaskOrigin" | "workspaceRoot" | "workspaceRoots" | "pickProject" | "draftStore" | "appearance" | "messageNavigation" | "favoriteModels" | "saveFavoriteModels" | "modelPreferences" | "saveModelPreferences" | "searchPreferences" | "saveSearchPreferences"> = {}, client = new FakeTransport()) {
   const host = new HostState({ home: "/tmp/fake-t3-test", credentials, discover: async () => ({ ok: true, server }), reconnectDelayMs: 0, ...options }, client);
   await host.start(); return { host, client };
 }
-export async function viewsHarness(options: Pick<HostStateOptions, "draftStore" | "appearance" | "messageNavigation" | "favoriteModels" | "saveFavoriteModels" | "modelPreferences" | "saveModelPreferences" | "searchPreferences" | "saveSearchPreferences"> = {}) {
+export async function viewsHarness(options: Pick<HostStateOptions, "taskOrigins" | "saveTaskOrigin" | "draftStore" | "appearance" | "messageNavigation" | "favoriteModels" | "saveFavoriteModels" | "modelPreferences" | "saveModelPreferences" | "searchPreferences" | "saveSearchPreferences"> = {}) {
   const client = new FakeTransport();
   client.shell = { ...client.shell, projects: [
     { ...v2Project, workspaceRoot: "/tmp/t3-vscode", title: "t3-vscode" },

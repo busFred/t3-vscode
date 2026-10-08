@@ -1,3 +1,4 @@
+import type { ScheduledTaskEditorRequest } from "../shared/scheduledTasks.js";
 import { parseSearchFilters } from "../shared/sessionSearch.js";
 /** VS Code adapter for typed UI intents. Never exposes a generic T3 RPC tunnel. */
 import type * as vscode from "vscode";
@@ -46,13 +47,14 @@ export class BridgeHandler {
   private readonly showSettings: () => PromiseLike<unknown>;
   private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean> };
   private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
-  private readonly viewActions: { openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
+  private readonly viewActions: { editScheduledTask?: (request: ScheduledTaskEditorRequest) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:hungtienhuang.t3-vscode"),
     prompts = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
       confirmDelete: async (title: string): Promise<boolean> => (await (await import("vscode")).window.showWarningMessage(`Delete "${title}"?`, { modal: true }, "Delete thread")) === "Delete thread",
     }, openDiff: BridgeHandler["openDiff"] = async () => { throw new Error("Native diff editor is unavailable."); },
     viewActions: {
+      editScheduledTask?: (request: ScheduledTaskEditorRequest) => PromiseLike<unknown> | unknown;
       openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown;
       newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown;
       showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown;
@@ -98,6 +100,16 @@ export class BridgeHandler {
           return { id: message.id, result: this.hostState.sessionSearchPreviews(id(), stringParam(params, "query"), params.matchIds, viewId) };
         }
         case "revealSessionMatch": this.hostState.revealSessionMatch(stringParam(params, "matchId"), viewId); break;
+        case "refreshScheduledTasks": await this.hostState.refreshScheduledTasks(); break;
+        case "saveScheduledTask": await this.hostState.saveScheduledTask(params); break;
+        case "setScheduledTaskEnabled": await this.hostState.setScheduledTaskEnabled(stringParam(params, "taskId"), stringParam(params, "projectId"), params.enabled); break;
+        case "runScheduledTask": await this.hostState.runScheduledTask(stringParam(params, "taskId"), stringParam(params, "projectId")); break;
+        case "editScheduledTask": {
+          const request = this.hostState.scheduledTaskEditorRequest(params);
+          if (this.viewActions.editScheduledTask) await this.viewActions.editScheduledTask(request);
+          else this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.editScheduledTask, request);
+          break;
+        }
         case "getState": break;
         case "searchThreads": {
           if (typeof params.query !== "string") throw new Error("Invalid search query.");

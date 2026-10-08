@@ -16,7 +16,10 @@ import type { SessionSearchState } from "./sessionSearch.js";
 import type { SearchPreferences } from "./sessionSearchPresentation.js";
 import type { ProviderModelPreferences } from "./modelPreferences.js";
 
+import type { ScheduledTasksState } from "./scheduledTasks.js";
+
 export const Methods = {
+  refreshScheduledTasks: "refreshScheduledTasks", saveScheduledTask: "saveScheduledTask", setScheduledTaskEnabled: "setScheduledTaskEnabled", runScheduledTask: "runScheduledTask", editScheduledTask: "editScheduledTask",
   searchSession: "searchSession", cancelSessionSearch: "cancelSessionSearch", revealSessionMatch: "revealSessionMatch",
   sessionSearchPreviews: "sessionSearchPreviews", setSearchPreferences: "setSearchPreferences",
   restoreComposerDraft: "restoreComposerDraft", saveComposerDraft: "saveComposerDraft", chatAsset: "chatAsset", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
@@ -33,7 +36,7 @@ export const Methods = {
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
 export interface RpcResult { readonly id: string; readonly result?: unknown; readonly error?: string }
-export const Events = { stateChanged: "stateChanged", showNavigation: "showNavigation", showUsage: "showUsage", insertReference: "insertReference", openInTab: "openInTab", initializeDraft: "initializeDraft" } as const;
+export const Events = { editScheduledTask: "editScheduledTask", stateChanged: "stateChanged", showNavigation: "showNavigation", showUsage: "showUsage", insertReference: "insertReference", openInTab: "openInTab", initializeDraft: "initializeDraft" } as const;
 export type BridgeEvent = (typeof Events)[keyof typeof Events];
 
 export interface ModelSelection {
@@ -99,6 +102,7 @@ export interface TranscriptItem {
   readonly canFork?: boolean;
 }
 export interface HostStateSnapshot {
+  readonly scheduledTasks?: ScheduledTasksState;
   readonly acknowledgedWorking?: { readonly messageId: string; readonly startedAt: string };
   readonly sessionSearch?: SessionSearchState;
   readonly searchPreferences?: SearchPreferences;

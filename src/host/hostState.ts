@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { basename, isAbsolute, resolve } from "node:path";
 import {
-  OrchestrationV2TurnItemJson, ModelSelection as ModelSelectionSchema, type ChatAttachment, getProviderAttachmentLimitError,
+  ScheduledTaskUpsertInput, type ScheduledTask, OrchestrationV2TurnItemJson, ModelSelection as ModelSelectionSchema, type ChatAttachment, getProviderAttachmentLimitError,
   ProviderApprovalDecision, ProviderInteractionMode, RuntimeMode,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadProjection, type OrchestrationV2ThreadStreamItem,
@@ -30,6 +30,7 @@ import { hasCompleteProviderWorkspaceSnapshot } from "@t3tools/client-runtime/pr
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import { turnCheckpointRange, turnDiffFiles, turnDiffFileRequest, type TurnDiff, type TurnDiffFile } from "./turnDiff.js";
 import { conversationActivity } from "./conversationActivity.js";
+import { taskEditVersion, supportedSchedule, type TaskOrigin, type ScheduledTaskEditorRequest } from "../shared/scheduledTasks.js";
 import { sessionActivityAt } from "./sessionActivity.js";
 import { pairWithServer, PairingError } from "./pairing.js";
 import { connectionSetup, discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
@@ -48,8 +49,10 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
+export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
+  readonly taskOrigins?: () => ReadonlyArray<TaskOrigin>;
+  readonly saveTaskOrigin?: (origin: TaskOrigin) => PromiseLike<void>;
   readonly draftStore?: ComposerDraftStore;
   readonly home: string;
   readonly credentials: CredentialStore;
@@ -118,6 +121,11 @@ export class HostState {
   private readonly threads = new Map<string, ThreadState>();
   private shellSubscription: Subscription | null = null;
   private chain: Promise<unknown> = Promise.resolve();
+  private scheduledTasks: ReadonlyArray<ScheduledTask> = [];
+  private scheduledTaskError: string | undefined;
+  private scheduledTasksLoading = true;
+  private scheduledSubscription: Subscription | null = null;
+  private scheduledGeneration = 0;
   private disposed = false;
   private readonly emptyThreads = new Set<string>();
   private readonly uploads = new Map<string, { attachment: ChatAttachment; environmentId: string; owners: Set<string>; sent: boolean }>();
@@ -313,6 +321,9 @@ export class HostState {
 
   private async stopSubscriptions(): Promise<void> {
     for (const viewId of this.sessionSearches.keys()) this.cancelSessionSearch(viewId);
+    this.scheduledGeneration += 1;
+    await this.scheduledSubscription?.(); this.scheduledSubscription = null;
+    this.scheduledTasks = []; this.scheduledTasksLoading = true; this.scheduledTaskError = undefined;
     const shell = this.shellSubscription; const archive = this.archiveSubscription;
     const threads = [...this.threads.values()]; this.threads.clear();
     this.archiveSubscription = null;
@@ -356,6 +367,7 @@ export class HostState {
       if (this.archive) await this.subscribeArchive();
       await this.reconcileViews(true);
       this.setPhase("ready");
+      await this.loadScheduledTasks();
     } catch (cause) {
       const kind = cause instanceof PairingError ? cause.kind : this.phase === "pairing" ? "pairing" : "connection";
       this.setPhase("error", describeError(cause), { kind });
@@ -1072,6 +1084,11 @@ export class HostState {
       appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
       ...(this.notice ? { notice: this.notice } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
+      scheduledTasks: { loading: this.scheduledTasksLoading, ...(this.scheduledTaskError ? { error: this.scheduledTaskError } : {}), tasks: this.scheduledTasks.filter((task) => this.visibleProjects().some((project) => project.id === task.projectId)).map((task) => {
+        const association = this.options.taskOrigins?.().find((origin) => origin.environmentId === descriptor?.environmentId && origin.projectId === task.projectId && origin.taskId === task.id);
+        const serverOrigin = typeof task.originThreadId === "string" && this.findThread(task.originThreadId)?.projectId === task.projectId ? task.originThreadId : null;
+        return { ...task, editVersion: taskEditVersion(task), originThreadId: association ? association.threadId : serverOrigin, originKnown: !!association || serverOrigin !== null };
+      }) },
       projects: this.visibleProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })),
       threads: threads.map((thread) => ({
         id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
@@ -1110,6 +1127,96 @@ export class HostState {
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
       threadLoading: state?.loading ?? false, sending: view.sending,
     };
+  }
+  private async loadScheduledTasks(): Promise<void> {
+    const generation = ++this.scheduledGeneration;
+    await this.scheduledSubscription?.(); this.scheduledSubscription = null;
+    this.scheduledTasksLoading = true; this.scheduledTaskError = undefined; this.scheduleEmit();
+    try {
+      const result = await this.client.listScheduledTasks();
+      if (generation !== this.scheduledGeneration || this.disposed) return;
+      this.scheduledTasks = result.tasks; this.scheduledTasksLoading = false;
+      this.scheduledSubscription = await this.client.subscribeScheduledTasks((tasks) => {
+        if (generation !== this.scheduledGeneration || this.disposed) return;
+        this.scheduledTasks = tasks; this.scheduledTaskError = undefined; this.scheduleEmit();
+      }, () => { if (generation === this.scheduledGeneration) { this.scheduledTaskError = "Task updates disconnected. Refresh to reconnect."; this.scheduleEmit(); } });
+    } catch (cause) { if (generation === this.scheduledGeneration) { this.scheduledTasksLoading = false; this.scheduledTaskError = `Scheduled tasks unavailable: ${describeError(cause)}`; } }
+    this.scheduleEmit();
+  }
+  refreshScheduledTasks(): Promise<void> { return this.enqueue(() => this.loadScheduledTasks()); }
+  scheduledTaskEditorRequest(input: Record<string, unknown>): ScheduledTaskEditorRequest {
+    const projectId = input.projectId;
+    if (typeof projectId !== "string" || !this.visibleProjects().some((project) => project.id === projectId)) throw new Error("Project is not available in this workspace.");
+    if (input.taskId !== undefined) {
+      if (typeof input.taskId !== "string" || !this.scheduledTasks.some((task) => task.id === input.taskId && task.projectId === projectId)) throw new Error("Task no longer exists in this project.");
+      return { taskId: input.taskId, projectId };
+    }
+    if (input.originThreadId !== undefined && (typeof input.originThreadId !== "string" || this.findThread(input.originThreadId)?.projectId !== projectId)) throw new Error("Origin session is not available in this project.");
+    return { projectId, ...(typeof input.originThreadId === "string" ? { originThreadId: input.originThreadId } : {}) };
+  }
+  private async freshTask(id: string, projectId: string): Promise<ScheduledTask> {
+    if (this.phase !== "ready" || !this.visibleProjects().some((project) => project.id === projectId)) throw new Error("Project is not available in this workspace.");
+    const result = await this.client.listScheduledTasks(); this.scheduledTasks = result.tasks; this.scheduleEmit();
+    const task = result.tasks.find((task) => task.id === id && task.projectId === projectId);
+    if (!task) throw new Error("Task no longer exists in this project.");
+    return task;
+  }
+  saveScheduledTask(input: Record<string, unknown>): Promise<void> {
+    return this.enqueue(async () => {
+      const projectId = input.projectId;
+      if (this.phase !== "ready" || typeof projectId !== "string" || !this.visibleProjects().some((project) => project.id === projectId)) throw new Error("Project is not available in this workspace.");
+      if (typeof input.id !== "string" || !input.id || typeof input.existing !== "boolean") throw new Error("Invalid task identity.");
+      const previous = input.existing ? await this.freshTask(input.id, projectId) : undefined;
+      if (previous && input.editVersion !== taskEditVersion(previous)) throw new Error("Task changed elsewhere. Reopen it to load the latest settings; your draft has been kept.");
+      if (previous && !supportedSchedule(previous.schedule)) throw new Error("This task uses a newer schedule. Edit it in T3 Web.");
+      if (!previous) {
+        const tasks = await this.client.listScheduledTasks();
+        if (tasks.tasks.some((task) => task.id === input.id)) throw new Error("Task already exists. Reopen it before editing.");
+      }
+      const selection = Schema.decodeUnknownSync(ModelSelectionSchema)(input.modelSelection);
+      const provider = this.client.config?.providers.find((provider) => provider.instanceId === selection.instanceId);
+      const model = provider?.models.find((model) => model.slug === selection.model);
+      if (!provider?.enabled || !provider.installed || provider.availability === "unavailable" || !model) throw new Error("Choose an available model for this task.");
+      const changedModel = !previous || previous.modelSelection.instanceId !== selection.instanceId || previous.modelSelection.model !== selection.model;
+      for (const option of selection.options ?? []) {
+        if (!changedModel && previous.modelSelection.options?.some((saved) => saved.id === option.id && saved.value === option.value)) continue;
+        const descriptor = model.capabilities?.optionDescriptors?.find((entry) => entry.id === option.id);
+        if (!(descriptor?.type === "boolean" ? typeof option.value === "boolean" : descriptor?.type === "select" && descriptor.options.some((entry) => entry.id === option.value))) throw new Error("Choose an advertised model option.");
+      }
+      const target = input.threadId;
+      if (target !== null && (typeof target !== "string" || target !== previous?.threadId && this.findThread(target)?.projectId !== projectId)) throw new Error("Result session is not available in this project.");
+      const origin = previous ? undefined : this.scheduledTaskEditorRequest({ projectId, ...(input.originThreadId ? { originThreadId: input.originThreadId } : {}) });
+      // Only allow form-owned fields to override the fresh record; retain modes, attribution and newer server fields.
+      const payload = Schema.decodeUnknownSync(ScheduledTaskUpsertInput)({ ...previous, id: input.id,
+        requireExisting: input.existing, commandId: `vscode-task-${input.id}-${randomUUID()}`,
+        title: input.title, prompt: input.prompt, enabled: input.enabled, schedule: input.schedule, projectId,
+        threadId: target, workspaceStrategy: input.workspaceStrategy ?? previous?.workspaceStrategy ?? { type: "root" },
+        modelSelection: selection, runtimeMode: previous?.runtimeMode ?? this.compatibleRuntimeMode(selection, "full-access"),
+        interactionMode: previous?.interactionMode ?? "default", createdBy: previous?.createdBy ?? "user", creationSource: previous?.creationSource ?? "web" });
+      if (previous && this.compatibleRuntimeMode(selection, previous.runtimeMode) !== previous.runtimeMode) throw new Error("This model cannot keep the task's permission mode. Choose a compatible provider.");
+      if (origin) {
+        if (!this.options.saveTaskOrigin) throw new Error("Task origin storage is unavailable.");
+        await this.options.saveTaskOrigin({ environmentId: this.server!.descriptor.environmentId, projectId, taskId: input.id, threadId: origin.originThreadId ?? null });
+      }
+      const result = await this.client.upsertScheduledTask(payload);
+      this.scheduledTasks = [...this.scheduledTasks.filter((task) => task.id !== result.task.id), result.task]; this.emit();
+    });
+  }
+  setScheduledTaskEnabled(id: string, projectId: string, enabled: unknown): Promise<void> {
+    return this.enqueue(async () => {
+      if (typeof enabled !== "boolean") throw new Error("Invalid enabled setting.");
+      await this.freshTask(id, projectId);
+      const result = await this.client.setScheduledTaskEnabled(id, enabled);
+      this.scheduledTasks = this.scheduledTasks.map((task) => task.id === id ? result.task : task); this.emit();
+    });
+  }
+  runScheduledTask(id: string, projectId: string): Promise<void> {
+    return this.enqueue(async () => {
+      const task = await this.freshTask(id, projectId);
+      if (task.lastRunStatus === "running") throw new Error("This task is already running.");
+      const result = await this.client.runScheduledTask(id);
+      this.scheduledTasks = this.scheduledTasks.map((task) => task.id === id ? result.task : task); this.emit();
+    });
   }
   webUiUrl(viewId = SIDEBAR_VIEW_ID): string {
     if (!this.server || this.phase !== "ready") throw new Error("Connect to a local T3 Code server first.");

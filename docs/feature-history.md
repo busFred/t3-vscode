@@ -9,6 +9,7 @@ The existing v0.1.16 installer is unpublished and includes model-preference impo
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
 | [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.1.16 |
+| [Scheduled task management](#scheduled-task-management) | Project/session task lists and an independent model/effort editor in the sidebar. | v0.1.16 | v0.1.16 |
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.13 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
@@ -106,6 +107,17 @@ The existing v0.1.16 installer is unpublished and includes model-preference impo
 - Show last-active time beside the provider on the existing metadata line, including nested, settled and archived sessions. Branch names and snippets yield space before the time.
 - Use message/run timestamps, excluding visits and metadata changes; empty sessions use creation and unknown historical activity stays blank. Refresh every minute and on visibility changes.
 - Show minutes, hours and days through 7 days, then a local date (with year when needed); expose exact local time to hover and assistive technology. Boundary and timestamp-source tests cover metadata changes, unknown/future dates and older years.
+
+### Scheduled task management
+
+#### v0.1.16 — local source revision
+
+- Add Sessions/Tasks sidebar tabs, independent Subagents/Scheduled tasks groups in expanded sessions and a current-session-only Scheduled drawer in chat. Each manager owns its New button; project tasks require no parent thread.
+- Open a shared secondary sidebar editor from every task entry point. Preserve the main chat's model, selection and draft; return to the prior front page after Save, retain edits on Back and discard on Cancel.
+- Edit task prompt, model, advertised effort, interval/fixed schedule, result destination and enabled state. Default new tasks only to advertised GPT-6 Luna Low; otherwise require an explicit model. Saving does not run the task.
+- Keep task origin separate from its mutable result destination using extension-owned server/project/task associations. Older tasks without trustworthy origin remain in the project list; support explicit origin IDs from newer servers.
+- Validate project/workspace scope and fresh configuration, reject deleted/stale tasks, preserve modes/attribution/provider options and newer server fields, and use partial enable updates. Display unsupported newer schedules without overwriting them.
+- Pass deterministic host tests and real create/edit/list/subscription/model/low-effort persistence checks against an isolated T3 home. Combined UI/review validation is recorded under Release verification before packaging.
 
 ### Workspace scope
 

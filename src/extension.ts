@@ -24,6 +24,8 @@ import { UsageStatusBar } from "./host/usageStatusBar.js";
 import { InputNotificationTracker } from "./host/inputNotifications.js";
 import type { DraftTransfer } from "./shared/viewDraft.js";
 import { usageAccounts } from "./shared/usage.js";
+import { TaskOriginStore } from "./host/taskOrigins.js";
+import type { ScheduledTaskEditorRequest } from "./shared/scheduledTasks.js";
 import { ModelPreferenceStore } from "./host/modelPreferenceStore.js";
 
 let hostState: HostState | null = null;
@@ -38,7 +40,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const client = new T3Client();
   const modelPreferences = new ModelPreferenceStore(context.globalState);
+  const taskOrigins = new TaskOriginStore(context.globalState);
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
+    taskOrigins: () => taskOrigins.read(), saveTaskOrigin: (origin) => taskOrigins.save(origin),
     workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject,
     appearance: readAppearance, messageNavigation: () => resolveMessageNavigation(vscode.workspace.getConfiguration("t3-vscode").get("messageNavigation")),
     modelPreferences: () => modelPreferences.read(),
@@ -53,6 +57,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const bridge = new BridgeHandler(hostState, registry, showSettings, undefined, registerNativeDiff(context), {
     openInTab: (id, draft) => provider.createPanel(id, draft),
     newChatTab: (id) => provider.createNewPanel(id),
+    editScheduledTask: (request) => provider.editScheduledTask(request),
     showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(),
   });
   provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState);
@@ -199,6 +204,10 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
     for (const [id, panel] of this.panels) { const state = this.host.snapshot(id); panel.title = state.threads.find((thread) => thread.id === state.activeThreadId)?.title.trim() || "New conversation"; }
   }
 
+  async editScheduledTask(request: ScheduledTaskEditorRequest): Promise<void> {
+    await vscode.commands.executeCommand("t3.webview.focus");
+    this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.editScheduledTask, request);
+  }
   async showThreads(): Promise<void> {
     await vscode.commands.executeCommand("t3.webview.focus");
     this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showNavigation, undefined);

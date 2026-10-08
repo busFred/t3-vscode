@@ -1,7 +1,7 @@
 /** Transport adapter over T3's vendored contracts and Effect RPC client. */
 import { randomUUID } from "node:crypto";
 import {
-  CommandId, ProjectId, ThreadId, TurnItemId, OrchestrationV2Command,
+  CommandId, ProjectId, ThreadId, TurnItemId, OrchestrationV2Command, ScheduledTaskId, ScheduledTaskUpsertInput, type ScheduledTask,
   ORCHESTRATION_V2_WS_METHODS as V2, WS_METHODS,
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
@@ -152,6 +152,23 @@ export class T3Client {
     return this.run(this.requireSession().client[V2.getTurnItem]({
       threadId: threadId(id), itemId: Schema.decodeUnknownSync(TurnItemId)(itemId),
     }));
+  }
+  listScheduledTasks() {
+    return this.run(this.requireSession().client[WS_METHODS.scheduledTasksList]({}).pipe(Effect.timeout("10 seconds")));
+  }
+  subscribeScheduledTasks(handler: (tasks: ReadonlyArray<ScheduledTask>) => void, onError: (message: string) => void): Promise<Subscription> {
+    const stream = this.requireSession().client[WS_METHODS.scheduledTasksSubscribe]({}).pipe(
+      Stream.catch((cause) => { onError(String(cause)); return Stream.empty; }));
+    return this.subscribe(stream, (result) => handler(result.tasks));
+  }
+  upsertScheduledTask(input: unknown) {
+    return this.run(this.requireSession().client[WS_METHODS.scheduledTasksUpsert](Schema.decodeUnknownSync(ScheduledTaskUpsertInput)(input)));
+  }
+  setScheduledTaskEnabled(id: string, enabled: boolean) {
+    return this.run(this.requireSession().client[WS_METHODS.scheduledTasksSetEnabled]({ id: ScheduledTaskId.make(id), enabled }));
+  }
+  runScheduledTask(id: string) {
+    return this.run(this.requireSession().client[WS_METHODS.scheduledTasksRunNow]({ id: ScheduledTaskId.make(id) }));
   }
   searchThreads(query: string) {
     return this.run(this.requireSession().client[V2.searchThreads]({ query, limit: 50 }));

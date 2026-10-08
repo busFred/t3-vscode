@@ -106,6 +106,13 @@ Then re-apply the package.json edits by hand (they are **not** scripted):
    argument escaping separate as in [cross-spawn](https://github.com/moxystudio/node-cross-spawn/blob/master/lib/util/escape.js).
    The extension's `src/host/pairing.test.ts` covers this adapter change.
 
+5. Preserve the scheduled-task adapter in `contracts/src/scheduledTask.ts`:
+   task reads retain opaque schedule data and unknown server fields; writes still
+   validate interval/fixed schedules and keep additional task/schedule fields.
+   This lets the extension display newer schedules safely and retain fields
+   that its form does not edit. `src/host/scheduledTasks.test.ts` verifies this
+   boundary. The separate T3 Code application is not changed.
+
 Update the provenance block at the top of this file, and re-run the
 verification greps: no `three` imports outside `client-runtime/src/device/`,
 no imports of `./testing` / `@t3tools/shared/testing` outside test files.

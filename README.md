@@ -66,7 +66,7 @@ Markdown images, video/audio, Mermaid diagrams and T3's `html_render` graphics r
 
 Select text in a file and press **Ctrl+K** (**Cmd+K** on macOS), or choose **Reference Editor Selection** from its context menu, to insert a compact reference such as `@README.md:43-46` at the last-used chat’s prompt cursor. **Alt+K** remains available. The shortcut preserves existing prompt text and includes the exact selected text, including unsaved changes, when you send; removing the inline reference omits its snapshot. If no chat is open, the shortcut opens an editor chat; browsing sidebar usage preserves the last focused editor target. Select text in an assistant response and choose **Cite** to insert its reference at the last cursor position in your prompt, replacing selected prompt text when present. Add an optional comment, then click the inline reference or its quote chip to edit it; **Alt+Enter** opens the reference at the cursor. Removing the quote chip also removes its inline references, and deleting an inline reference prevents that quote from being sent. Quotes keep their T3 source link and readable text when sent; saved source links can reopen and highlight the response. References and drafts stay with their own conversation and view.
 
-The model picker browses configured provider instances and Favorites. Search finds visible models across every provider using T3's fuzzy matching, and stars save favorites across extension sessions. **Manage models** lets you show/hide models and change their order; provider counts reflect the visible list. Saved visibility also applies to search and Favorites, and explicitly enabled legacy models retain their configured position. Arrow keys navigate results; Enter chooses a model and Escape closes the picker. The effort control next to the model selects its advertised levels; models without that capability omit it. The visible Code/Plan toggle has been removed.
+The model picker browses configured provider instances and Favorites. Search finds visible models across every provider using T3's fuzzy matching, and stars save favorites across extension sessions. **Manage models** lets you show/hide models and reorder them by dragging the six-dot grip or pressing Alt+Up/Down on it; provider counts reflect the visible list. Saved visibility also applies to search and Favorites, and explicitly enabled legacy models retain their configured position. Arrow keys navigate results; Enter chooses a model and Escape closes the picker. The effort control next to the model selects its advertised levels; models without that capability omit it. The visible Code/Plan toggle has been removed.
 
 Favorites, visibility and ordering are saved independently in VS Code. Configure them with the picker's stars and **Manage models** controls. Custom models continue to come from the selected T3 server's catalog. Existing saved preferences remain available after the manual T3 Web import feature was removed.
 
@@ -93,6 +93,14 @@ code --user-data-dir /tmp/t3-vscode-preview/user-data --extensions-dir /tmp/t3-v
 ```
 
 The installed extension normally discovers your already-running T3 service under `~/.t3`. Leave **T3 VSCode: T3 Home** empty to use that default; an explicit setting or `T3CODE_HOME` overrides it. Packaging does not install the extension or start a server.
+
+## Scheduled tasks
+
+The sidebar has **Sessions** and **Tasks** tabs, each with its own **+** action. Expand a session to see independently collapsible **Subagents** and **Scheduled tasks** groups. Session activity appears beside the provider: minutes, hours and days through 7 days, then a local date; hover for the exact time.
+
+**Tasks** lists the selected project's scheduled work, including independent tasks with no parent conversation. The chat header's **Scheduled** button lists only tasks with a known origin in that session. Existing tasks whose origin T3 does not record remain in the project list as **Origin unknown**; result destinations are not treated as proof of origin. Origin associations created by this extension are saved locally in VS Code, scoped to server/project/task.
+
+Click a task to edit it on a secondary sidebar page. Choose its model, advertised effort, prompt, schedule, result destination and enabled state. Model changes apply only to the task. New tasks use advertised **GPT-6 Luna / Low** when available; otherwise choose a model explicitly. **Save task** updates future runs and returns to the list; **Run now** is separate. **Back** retains the task draft, and **Cancel** discards it. Unsupported newer schedules stay visible with enable/run controls, but require T3 Web for full editing.
 
 ## Current scope
 

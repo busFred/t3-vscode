@@ -150,3 +150,9 @@ Use the [feature-history overview](feature-history.md#overview) as the regressio
 The same suite calls `verify-session-find.ts` to check flat occurrences, matching chat fonts, persistent filters, floating collapse, Side-from-collapse, context lines, ordering, pagination, pointer/keyboard resizing, saved preferences and narrow/theme layouts. It verifies that display changes retain the search job and composer DOM node; all host data and browser profiles are disposable fixtures.
 
 `verify-response-layout.ts` runs from the same fixture suite and checks accepted-send status before output, visible early answers, independent activity groups around steers, late command completion, status-only sticky headers and settled-run forks. Host tests cover restart recovery, offline edits, rejected first sends, upload completion after close, concurrent draft leases and slot-removal races.
+
+## Scheduled tasks verification
+
+`verify-views.ts` includes `verify-scheduled-tasks.ts` for session/project scope, independent creation, the secondary sidebar editor, model isolation, Save/Back/Cancel, failure retention and narrow layouts. Use `--tasks-only` for that focused fixture. It does not call a provider.
+
+`pnpm exec tsx scripts/verify-scheduled-live.ts --base-dir <isolated-home>` checks real list/subscription/create/edit and saved model options; it creates only disabled tasks. Add `--run-turn` to verify one actual scheduled dispatch and its completed reply using advertised GPT-6 Luna Low (or the explicit `T3_VSCODE_TEST_MODEL` alternative). The script rejects normal T3 homes and missing low-effort catalogs. Stop the disposable server after verification.

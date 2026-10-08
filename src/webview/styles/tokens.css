@@ -587,3 +587,63 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .model-drag-source { opacity: .4; }
 .model-drag-ghost { position: fixed; z-index: 130; pointer-events: none; max-width: 180px; padding: 6px 10px; background: var(--background); color: var(--foreground); border: 1px solid var(--primary); border-radius: 4px; box-shadow: 0 3px 10px #0003; }
 .model-drop-line { position: fixed; z-index: 131; height: 2px; background: var(--primary); pointer-events: none; }
+
+/* Sessions and scheduled tasks share a sidebar; editing keeps the front page mounted. */
+.sidebar-front, .sidebar-manager { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
+.sidebar-tabs { display: flex; flex: none; border-bottom: 1px solid var(--border); padding: 0 8px; }
+.sidebar-tabs > button { flex: 1; padding: 8px 4px; border-bottom: 2px solid transparent; font-size: .75rem; }
+.sidebar-tabs > button[aria-selected="true"] { border-bottom-color: var(--primary); font-weight: 600; }
+.sidebar-tabs small { margin-left: 5px; color: var(--muted-foreground); }
+.task-scope-note { margin: 5px 8px; color: var(--muted-foreground); font-size: .6875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scheduled-task-list { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; padding: 0 8px; }
+.scheduled-task-list .history-heading { font-size: .6875rem; }
+.scheduled-task-list .history-heading strong { flex: 1; }
+.scheduled-task-scroll { overflow: auto; flex: 1; min-height: 0; }
+.scheduled-task-row { display: flex; align-items: center; min-width: 0; padding: 4px 2px; gap: 2px; border-radius: 5px; }
+.scheduled-task-row:hover { background: var(--sidebar-row-hover); }
+.scheduled-task-open { flex: 1; min-width: 0; text-align: left; padding: 4px; }
+.scheduled-task-title { display: flex; align-items: center; gap: 5px; font-size: .75rem; }
+.scheduled-task-title svg { flex: none; }
+.scheduled-task-title strong, .scheduled-task-open small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scheduled-task-open small { margin-top: 3px; color: var(--muted-foreground); font-size: .625rem; }
+.scheduled-task-row > input { margin: 0 2px; flex: none; }
+.task-refresh { display: flex; gap: 5px; align-items: center; flex: none; border-top: 1px solid var(--border); padding: 8px 4px; font-size: .6875rem; }
+.session-expanded-groups { padding-left: 16px; }
+.session-task-group > summary { cursor: pointer; padding: 4px 6px; color: var(--muted-foreground); font-size: .6875rem; }
+.session-task-group > summary small { margin-left: 6px; }
+.session-task-group .session-tree-children { margin-left: 0; }
+.session-task-group .empty-list { margin: 3px 8px; padding: 2px; font-size: .6875rem; }
+.task-project-select { display: grid; gap: 4px; margin: 8px; font-size: .6875rem; }
+.task-project-select select { min-width: 0; width: 100%; }
+.scheduled-task-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.scheduled-task-editor > header { padding: 10px 12px 6px; flex: none; border-bottom: 1px solid var(--border); }
+.scheduled-task-editor > header button { display: flex; gap: 4px; align-items: center; font-size: .75rem; }
+.scheduled-task-editor h2 { margin: 8px 0 0; font-size: .875rem; font-weight: 600; }
+.task-editor-fields { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; }
+.task-context { color: var(--muted-foreground); font-size: .6875rem; margin: 0 0 14px; overflow-wrap: anywhere; }
+.task-status { font-size: .75rem; color: var(--destructive); padding: 5px 0; overflow-wrap: anywhere; }
+.task-status button { display: block; margin-top: 5px; text-decoration: underline; }
+.task-editor-fields fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.task-editor-fields label, .task-model-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; font-size: .75rem; }
+.task-editor-fields input:not([type="checkbox"]), .task-editor-fields select, .task-editor-fields textarea { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--input); border-radius: 5px; background: var(--card); color: var(--foreground); }
+.task-editor-fields .task-prompt { min-height: 155px; resize: vertical; font-size: var(--font-size-prompt, 14px); line-height: 1.6; }
+.task-editor-fields small { font-size: .6875rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.task-model-choice { display: flex; align-items: center; justify-content: space-between; text-align: left; overflow-wrap: anywhere; padding: 6px 8px; border: 1px solid var(--input); border-radius: 5px; }
+.task-weekdays { display: flex; flex-wrap: wrap; gap: 8px; }
+.task-weekdays label { align-items: center; font-size: .625rem; }
+.task-workspace { font-size: .75rem; }
+.task-workspace summary { cursor: pointer; margin-bottom: 6px; }
+.task-workspace small { display: block; margin-top: 5px; }
+.task-editor-fields .task-enabled { flex-direction: row; align-items: center; gap: 7px; }
+.scheduled-task-editor > footer { display: flex; flex: none; justify-content: flex-end; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.scheduled-task-editor > footer button { padding: 6px 10px; border: 1px solid var(--input); border-radius: 5px; font-size: .75rem; }
+.scheduled-task-editor > footer .primary { background: var(--primary); color: var(--primary-foreground); }
+.scheduled-header-button { display: flex; align-items: center; gap: 4px; font-size: .6875rem; padding: 4px; flex: none; }
+.chat-main { position: relative; }
+.chat-scheduled-drawer { position: absolute; right: 8px; top: 46px; z-index: 40; width: min(330px, calc(100% - 16px)); max-height: min(450px, calc(100% - 60px)); display: flex; border: 1px solid var(--border); background: var(--sidebar); border-radius: 6px; box-shadow: 0 5px 18px #0003; }
+@media (max-width: 600px) { .scheduled-header-button > span { display: none; } }
+@media (max-width: 260px) {
+  .chat-header .icon-button { width: 22px; }
+  .scheduled-header-button { padding: 3px; }
+  .scheduled-header-button small { display: none; }
+}

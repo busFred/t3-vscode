@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { GripVerticalIcon, CheckIcon, StarIcon } from "lucide-react";
 import type { HostStateSnapshot, ModelSelection } from "../../shared/bridge";
@@ -8,11 +8,12 @@ import { useActions } from "../actions";
 import { scoreModelPickerSearch } from "./t3/modelPickerSearch";
 import { getProviderModelPreference, orderedProviderModels, visibleProviderModels } from "../../shared/modelPreferences";
 
-export function ModelPicker({ state, selection, anchor, onClose }: {
+export function ModelPicker({ state, selection, anchor, onClose, onSelect }: {
   readonly state: HostStateSnapshot;
   readonly selection: ModelSelection | null | undefined;
   readonly anchor: HTMLButtonElement;
   readonly onClose: () => void;
+  readonly onSelect?: (selection: ModelSelection) => void;
 }) {
   const run = useActions();
   const favorites = state.favoriteModels ?? [];
@@ -22,7 +23,7 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
   const [managing, setManaging] = useState(false);
   const [pendingVisibility, setPendingVisibility] = useState<{ instanceId: string; model: string; visible: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [position, setPosition] = useState({ left: 8, bottom: 8, width: 480, maxHeight: 400 });
+  const [position, setPosition] = useState<CSSProperties>({ left: 8, bottom: 8, width: 480, maxHeight: 400 });
   const popup = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const providers = state.providers.filter((provider) => provider.enabled);
@@ -55,8 +56,9 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
   useLayoutEffect(() => {
     const place = () => {
       const bounds = anchor.getBoundingClientRect(); const width = Math.min(480, window.innerWidth - 16);
-      const bottom = Math.max(8, window.innerHeight - bounds.top + 6);
-      setPosition({ left: Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8)), bottom, width, maxHeight: Math.max(160, window.innerHeight - bottom - 8) });
+      const above = bounds.top - 14, below = window.innerHeight - bounds.bottom - 14;
+      const placement = above >= below ? { bottom: Math.max(8, window.innerHeight - bounds.top + 6) } : { top: Math.max(8, bounds.bottom + 6) };
+      setPosition({ left: Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8)), ...placement, width, maxHeight: Math.max(120, Math.max(above, below)) });
     };
     place(); window.addEventListener("resize", place); return () => window.removeEventListener("resize", place);
   }, [anchor]);
@@ -110,6 +112,9 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
             }}><GripVerticalIcon size={14} /></button> : null}
           {managing ? <span className="model-manage-name" title={model.slug}>{model.name}{model.isLegacy ? <small>Legacy</small> : null}</span>
             : <button className="model-choice" disabled={busy || unavailable} title={model.slug} aria-pressed={selection?.instanceId === provider.instanceId && selection.model === model.slug} onClick={() => {
+            if (onSelect) {
+              onSelect(selection?.instanceId === provider.instanceId && selection.model === model.slug ? selection : selectionForModel(provider.instanceId, model, selection)); close(); return;
+            }
             setBusy(true); void run("setModel", { ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}), modelSelection: selectionForModel(provider.instanceId, model, selection) })
               .then((ok) => { if (ok) close(); }).finally(() => setBusy(false));
           }}><span>{model.name}{model.subProvider ? <small>{model.subProvider}</small> : null}</span>{model.badge === "new" ? <small>New</small> : model.isCustom ? <small>Custom</small> : null}

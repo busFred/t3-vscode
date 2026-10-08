@@ -1,6 +1,6 @@
 # Scheduled tasks — sidebar navigation and configuration
 
-Status: interactive design mockup only, awaiting feedback. The extension does not implement task configuration yet. Keep manifest version **0.1.16** and wait until implementation and regression review are complete before building the next VSIX; never publish it.
+Status: implemented in the v0.1.16 source revision; this mockup remains a design reference. Keep manifest version **0.1.16** and wait until implementation and regression review are complete before building the next VSIX; never publish it.
 
 Open [the interactive mockup](task-configuration.html) in a browser. All tasks, catalogs and effort levels are sample data; Save, Enable and Run now affect memory only. No training process, provider or T3 server is accessed. This revision replaces the previous chat-panel scope switch with separate session and project navigation.
 
@@ -13,7 +13,7 @@ Open [the interactive mockup](task-configuration.html) in a browser. All tasks, 
 | Sidebar **Tasks** tab | All scheduled tasks belonging to this project, across sessions, including project tasks without a known session. | Click a task to edit; Save returns to the project Tasks list. |
 
 - Keep project-wide tasks in the sidebar Tasks tab. The chat drawer has no global scope switch and never includes another session's or project's tasks.
-- Show counts on the navigation tabs and both session groups. Keep task titles prominent and use compact schedule/model metadata; include the originating session on project task rows with truncation and a full-name tooltip.
+- Show counts for project tasks and both session groups. Keep task titles prominent and use compact schedule/model metadata; include the originating session on project task rows with truncation and a full-name tooltip.
 - Open task configuration as a secondary page in the existing sidebar. It replaces the list while the main chat stays open; the top Back link identifies **Sessions** or **Project tasks**, and the fixed footer contains Cancel/Save.
 - Edit name, prompt, provider/model, advertised effort, schedule and result destination. Keep machine/project and originating-session context visible; collapse checkout settings under **Workspace**.
 - Reuse the provider/model picker with search and provider groups. Task prompts use the sample composer's text size; model editing does not invoke the chat's model selector.
@@ -31,7 +31,7 @@ Session membership follows the task's **origin**, independently of **Post result
 
 The pinned scheduled-task contract has `threadId` for result binding and `createdBy`/`creationSource` attribution, but no separate originating-session ID. The mockup uses explicit sample ownership; implementation must resolve trustworthy provenance from available server records or extension-owned associations scoped to server/project/task. It must not silently treat result binding as proof of origin. Existing tasks whose origin cannot be resolved remain in the project Tasks list as unlinked project tasks.
 
-## Existing API and implementation plan
+## Integration and implementation
 
 The vendored [scheduled-task contract](../../vendor/contracts/src/scheduledTask.ts) already includes a persisted `modelSelection` and provider options. Its [RPC definitions](../../vendor/contracts/src/rpc.ts) expose `scheduledTasks.list`, `subscribe`, `upsert`, `setEnabled` and `runNow`; no upstream application change is required for these controls.
 
@@ -50,4 +50,11 @@ The vendored [scheduled-task contract](../../vendor/contracts/src/scheduledTask.
 - Checked provider/model search and keyboard selection, effort editing, explicit Run now and enable controls, interval validation, cheap new-task defaults and preservation of the active chat's model and draft when editing another session's task.
 - Kept the fixed editor footer visible and matched prompt/composer text sizes; all fixtures stayed in memory in a disposable browser profile with zero network/provider/T3 calls.
 
-The earlier model/schedule mockup checks remain recorded in Git at `6f50203`; these design checks do not establish a runtime implementation. The feature overview remains unchanged because this revision edits only the mockup and its notes.
+The earlier model/schedule mockup checks remain recorded in Git at `6f50203`; these design checks do not establish a runtime implementation. Runtime behavior is now documented in the feature history; final runtime verification is recorded separately before packaging.
+
+## Implementation notes
+
+- The project header has no add button. Sessions has **New session**, Tasks has **New task**; the latter creates independent work by default. The chat drawer also allows a task tied to its current session.
+- Local origin associations are durable in VS Code and scoped by environment/project/task. A server's explicit origin ID is accepted only for a session in the same project; result bindings are never inferred as ownership. Unknown historical tasks remain accessible through the project list.
+- Full edits support interval/fixed schedules. The extension's vendored wire adapter retains newer task fields and opaque schedules; newer unsupported schedules remain visible and can be enabled/disabled without a full overwrite.
+- Workspace strategies and permissions are retained for existing tasks. Changing providers must preserve the saved permission mode; unsupported changes require a compatible provider.

@@ -20,14 +20,17 @@ import { publishActivity } from "../src/host/testing/activityFixture.js";
 import type { TurnDiff } from "../src/host/turnDiff.js";
 import { verifySearchPanel } from "./verify-session-find.js";
 import { verifyResponseLayout } from "./verify-response-layout.js";
+import { verifyScheduledTasks } from "./verify-scheduled-tasks.js";
+import type { TaskOrigin } from "../src/shared/scheduledTasks.js";
 import { verifyModelReordering } from "./verify-model-reordering.js";
 import { verifyComposerEditing } from "./verify-composer-editing.js";
 
 const evidence = process.env.T3_VSCODE_UI_EVIDENCE ?? "/tmp/t3-vscode-views-ui";
 await mkdir(evidence, { recursive: true });
+const taskOrigins: TaskOrigin[] = [];
 let preferences = DEFAULT_APPEARANCE;
 let modelPreferences: ModelPickerPreferences = { favoriteModels: [], providerModelPreferences: {} };
-const { host, client } = await viewsHarness({ appearance: () => preferences, modelPreferences: () => modelPreferences, saveModelPreferences: async (value) => { modelPreferences = value; } });
+const { host, client } = await viewsHarness({ taskOrigins: () => taskOrigins, saveTaskOrigin: async (origin) => { taskOrigins.push(origin); }, appearance: () => preferences, modelPreferences: () => modelPreferences, saveModelPreferences: async (value) => { modelPreferences = value; } });
 const firstProvider = client.config.providers[0]!;
 const capabilities = { optionDescriptors: [{ id: "reasoningEffort", label: "Effort", type: "select" as const,
   options: [{ id: "high", label: "High" }, { id: "max", label: "Max", isDefault: true }] }] };
@@ -198,7 +201,7 @@ try {
     await host.selectThread(threadId, new URL(page.url()).searchParams.get("view")!);
     await page.waitForFunction(id => document.querySelector('.chat-main')?.getAttribute('data-thread-id') === id, threadId);
   };
-  if (!process.argv.includes("--search-only")) {
+  if (!process.argv.includes("--search-only") && !process.argv.includes("--tasks-only")) {
   for (const [index, name] of ["first", "second", "third"].entries()) {
     await selectInView(pages[index]!, name);
     await pages[index]!.locator(".chat-heading strong").filter({ hasText: `${name} conversation` }).waitFor();
@@ -583,8 +586,11 @@ try {
   await submitFollowUp(second, "Idle Ctrl+Enter sends immediately", "Control+Enter", "auto");
   console.log("PASS: Enter queues and Ctrl/Cmd+Enter steers in wide/narrow editor chat, unsupported steering queues, idle shortcuts send normally; queued-message editing, reordering and promotion/cancellation preserve independent drafts.");
   }
-  await checkSessionFind(pages[1]!, pages[2]!, selectInView);
-  await verifyResponseLayout(pages[1]!, host, client, evidence);
+  if (!process.argv.includes("--tasks-only")) {
+    await checkSessionFind(pages[1]!, pages[2]!, selectInView);
+    await verifyResponseLayout(pages[1]!, host, client, evidence);
+  }
+  await verifyScheduledTasks(manager, pages[1]!, pages[2]!, host, client, taskOrigins, evidence);
   assert.deepEqual(errors, []);
   console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
   console.log(`Screenshots: ${evidence}`);

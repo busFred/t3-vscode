@@ -36,7 +36,7 @@ const ScheduledTaskIntervalSchedule = Schema.Struct({
   description: "Run repeatedly after a fixed number of milliseconds.",
 });
 
-const ScheduledTaskFixedTimeSchedule = Schema.Struct({
+const ScheduledTaskFixedTimeSchedule = Schema.StructWithRest(Schema.Struct({
   type: Schema.Literal("fixed_time").annotate({
     description: "Select a fixed local wall-clock time.",
   }),
@@ -50,7 +50,7 @@ const ScheduledTaskFixedTimeSchedule = Schema.Struct({
       description: "Optional weekdays; omit to run every day.",
     }),
   ),
-}).annotate({
+}), [Schema.Record(Schema.String, Schema.Unknown)]).annotate({
   description: "Run at a fixed local wall-clock time on selected weekdays.",
 });
 
@@ -69,7 +69,7 @@ export type ScheduledTaskSchedule = typeof ScheduledTaskSchedule.Type;
 
 /** Mutation model: newly created or updated interval schedules run at most once per minute. */
 export const ScheduledTaskUpsertSchedule = Schema.Union([
-  Schema.Struct({
+  Schema.StructWithRest(Schema.Struct({
     type: Schema.Literal("interval").annotate({
       description: "Select interval scheduling.",
     }),
@@ -78,7 +78,7 @@ export const ScheduledTaskUpsertSchedule = Schema.Union([
     ).annotate({
       description: "Interval in milliseconds, with a minimum of 60000 (one minute).",
     }),
-  }).annotate({
+  }), [Schema.Record(Schema.String, Schema.Unknown)]).annotate({
     description: "Run repeatedly after a fixed number of milliseconds.",
   }),
   ScheduledTaskFixedTimeSchedule,
@@ -90,12 +90,13 @@ export type ScheduledTaskUpsertSchedule = typeof ScheduledTaskUpsertSchedule.Typ
 export const ScheduledTaskRunStatus = Schema.Literals(["never", "running", "succeeded", "failed"]);
 export type ScheduledTaskRunStatus = typeof ScheduledTaskRunStatus.Type;
 
-export const ScheduledTask = Schema.Struct({
+// Extension adapter: retain newer server fields and schedules for safe display/preservation.
+export const ScheduledTask = Schema.StructWithRest(Schema.Struct({
   id: ScheduledTaskId,
   title: TrimmedNonEmptyString,
   prompt: TrimmedNonEmptyString,
   enabled: Schema.Boolean,
-  schedule: ScheduledTaskSchedule,
+  schedule: Schema.Unknown,
   projectId: ProjectId,
   threadId: Schema.NullOr(ThreadId),
   workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy,
@@ -111,7 +112,7 @@ export const ScheduledTask = Schema.Struct({
   lastRunStatus: ScheduledTaskRunStatus,
   lastRunError: Schema.NullOr(Schema.String),
   runCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-});
+}), [Schema.Record(Schema.String, Schema.Unknown)]);
 export type ScheduledTask = typeof ScheduledTask.Type;
 
 export const ScheduledTaskListInput = Schema.Struct({});
@@ -122,7 +123,7 @@ export const ScheduledTaskListResult = Schema.Struct({
 });
 export type ScheduledTaskListResult = typeof ScheduledTaskListResult.Type;
 
-export const ScheduledTaskUpsertInput = Schema.Struct({
+export const ScheduledTaskUpsertInput = Schema.StructWithRest(Schema.Struct({
   id: Schema.optional(ScheduledTaskId),
   requireExisting: Schema.optional(Schema.Boolean).annotate({
     description: "Reject the save if the task no longer exists, for edits from a client form.",
@@ -140,7 +141,7 @@ export const ScheduledTaskUpsertInput = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   createdBy: Schema.optional(OrchestrationV2Actor),
   creationSource: Schema.optional(OrchestrationV2CreationSource),
-});
+}), [Schema.Record(Schema.String, Schema.Unknown)]);
 export type ScheduledTaskUpsertInput = typeof ScheduledTaskUpsertInput.Type;
 
 /** Partial update that flips only the enabled flag — never overwrites other fields. */

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { XIcon } from "lucide-react";
+import type { ScheduledTaskEditorRequest } from "../shared/scheduledTasks";
 import type { HostStateSnapshot, RpcMethod } from "../shared/bridge";
 import { bridge, Events, Methods } from "./bridge-client";
 import { Actions } from "./actions";
@@ -19,6 +20,7 @@ import { settleDraftAttachments } from "./composerAttachments";
 export function App() {
   const [state, setState] = useState<HostStateSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [taskRequest, setTaskRequest] = useState<ScheduledTaskEditorRequest | null>(null);
   const [usageRequest, setUsageRequest] = useState<{ accountKey?: string } | null>(null);
   const appearance = state?.appearance ?? DEFAULT_APPEARANCE;
   useLayoutEffect(() => {
@@ -37,6 +39,7 @@ export function App() {
       return true;
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return false; }
   }, [receive]);
+  useEffect(() => bridge.on(Events.editScheduledTask, (data) => setTaskRequest(data as ScheduledTaskEditorRequest)), []);
   useEffect(() => bridge.on(Events.showUsage, (data) => setUsageRequest(typeof data === "string" ? { accountKey: data } : {})), []);
   useEffect(() => bridge.on(Events.openInTab, (data) => {
     const draftKey = typeof data === "string" ? data : state?.activeThreadId ?? "new";
@@ -62,7 +65,7 @@ export function App() {
   }, [run, receive]);
   let content;
   if (!state) content = <StatusView title="Opening T3 VSCode…" detail="Connecting to the extension host." />;
-  else if (state.phase === "ready") content = document.body.dataset.surface === "sidebar" ? <SidebarView state={state} usageRequest={usageRequest} onAppearance={() => { void run(Methods.openSettings); }} /> : <ChatView state={state} />;
+  else if (state.phase === "ready") content = document.body.dataset.surface === "sidebar" ? <SidebarView taskRequest={taskRequest} state={state} usageRequest={usageRequest} onAppearance={() => { void run(Methods.openSettings); }} /> : <ChatView state={state} />;
   else if (state.phase === "no-server" || state.phase === "error") content = <ServerSetup state={state} />;
   else content = <StatusView
     title={state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}

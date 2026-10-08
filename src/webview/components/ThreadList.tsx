@@ -5,6 +5,7 @@ import { searchThreads } from "../../shared/composerSuggestions";
 import { useActions } from "../actions";
 import { useBridgeQuery } from "../useBridgeQuery";
 import { ThreadActionsMenu } from "./ThreadActionsMenu";
+import { ScheduledTaskRows } from "./ScheduledTaskList";
 import { ProviderIcon } from "./ProviderIcon";
 import { providerBrand } from "../../shared/usage";
 import { sessionTree, type SessionTreeNode } from "../../shared/sessionTree";
@@ -24,6 +25,7 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   readonly compact?: boolean;
 }) {
   const [search, setSearch] = useState("");
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [menu, setMenu] = useState<{ threadId: string; x: number; y: number } | null>(null);
@@ -62,9 +64,14 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   const treeRow = (node: SessionTreeNode, members: ReadonlyArray<ThreadSummary>, section: string, depth = 0): ReactNode => {
     const expansionKey = `${section}:${node.thread.id}`;
     const open = !!query || expanded.has(expansionKey);
+    const tasks = state.scheduledTasks?.tasks.filter((task) => task.originThreadId === node.thread.id && task.projectId === node.thread.projectId) ?? [];
+    const group = (name: string, count: number, children: ReactNode) => <details className="session-task-group" open={!!query || !collapsedGroups.has(`${expansionKey}:${name}`)} onToggle={(event) => {
+      const isOpen = event.currentTarget.open; setCollapsedGroups((previous) => { const next = new Set(previous); const key = `${expansionKey}:${name}`; if (isOpen) next.delete(key); else next.add(key); return next; });
+    }}><summary>{name}<small>{count}</small></summary>{children}</details>;
     return <div className="session-tree-node" key={node.thread.id} data-session-depth={depth}>
-      <div className="session-tree-row">{node.children.length ? <button className="session-tree-toggle icon-button" aria-label={`${open ? "Collapse" : "Expand"} subagents of ${node.thread.title || "Untitled"}`} aria-expanded={open} onClick={() => setExpanded((previous) => { const next = new Set(previous); if (next.has(expansionKey)) next.delete(expansionKey); else next.add(expansionKey); return next; })}><ChevronRightIcon size={12} className={open ? "rotate-90" : ""} /></button> : <span className="session-tree-spacer" />}{row(node.thread, !members.some((entry) => entry.id === node.thread.id))}</div>
-      {node.children.length && open ? <div className="session-tree-children" aria-label={`Subagents of ${node.thread.title || "Untitled"}`}>{node.children.map((child) => treeRow(child, members, section, depth + 1))}</div> : null}
+      <div className="session-tree-row">{!compact || node.children.length ? <button className="session-tree-toggle icon-button" aria-label={`${open ? "Collapse" : "Expand"} ${compact ? "subagents" : "session"} of ${node.thread.title || "Untitled"}`} aria-expanded={open} onClick={() => setExpanded((previous) => { const next = new Set(previous); if (next.has(expansionKey)) next.delete(expansionKey); else next.add(expansionKey); return next; })}><ChevronRightIcon size={12} className={open ? "rotate-90" : ""} /></button> : <span className="session-tree-spacer" />}{row(node.thread, !members.some((entry) => entry.id === node.thread.id))}</div>
+      {open ? compact ? node.children.length ? <div className="session-tree-children" aria-label={`Subagents of ${node.thread.title || "Untitled"}`}>{node.children.map((child) => treeRow(child, members, section, depth + 1))}</div> : null
+        : <div className="session-expanded-groups">{group("Subagents", node.children.length, <div className="session-tree-children" aria-label={`Subagents of ${node.thread.title || "Untitled"}`}>{node.children.map((child) => treeRow(child, members, section, depth + 1))}{!node.children.length ? <p className="empty-list">No subagents.</p> : null}</div>)}{group("Scheduled tasks", tasks.length, <ScheduledTaskRows state={state} tasks={tasks} />)}</div> : null}
     </div>;
   };
   return <aside className={compact ? "compact-history" : "projects-sidebar dedicated-sessions"} aria-label={compact ? "Conversation history" : "Sessions"}>
