@@ -1081,6 +1081,8 @@ Version v0.1.16 is an unpublished local installer with model-preference import a
 - Independently exercise the installed VS Code Memento implementation with rejecting storage fixtures, retaining confirmed preferences through pending/failed writes, failed cache recovery and later successful saves.
 - Obtain final fresh-context regression signoff for runtime `48cb69f` against `f6af7cb`, resolving both P2 findings with no remaining actionable findings before packaging.
 - Use disposable deterministic fixtures and isolated T3 storage without provider calls, publication or installation into normal VS Code profiles.
+- Inspect the 41-file `target-installer/t3-vscode-0.1.16.vsix` for its release identity, exact compiled assets, unchanged native settings, 20 math fonts, three screenshots and licenses, then write its SHA-256 sidecar.
+- Record installer SHA-256 `acf5781622d970a8f071cd2a195615e06b2829b3908adcb121ec576d148bae86`; leave it unpublished and uninstalled.
 
 ## Maintenance
 
