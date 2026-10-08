@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.16 — Local preview, unpublished
+
+- Use selected composer text as a pasted image's description, preserving the filename when no text is selected and retaining attachment ownership and inline positions.
+
 ## 0.1.15 — Alpha, release channel
 
 - Make the Windows `t3.cmd` and `.bat` pairing fix available on the release channel, using the same runtime as the working 0.1.14 preview.

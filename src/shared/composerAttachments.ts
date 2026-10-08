@@ -18,6 +18,7 @@ export interface DraftAttachment {
 }
 export interface AttachmentReference { readonly contextId: string; readonly attachmentId: string }
 export interface TextSelection { readonly start: number; readonly end: number }
+export interface AttachmentInsertionOptions { readonly useSelectedTextAsImageDescription?: boolean }
 export function insertComposerReferenceText(text: string, referenceText: string, selection: TextSelection) {
   let start = Math.max(0, Math.min(text.length, selection.start));
   let end = Math.max(start, Math.min(text.length, selection.end));
@@ -33,10 +34,19 @@ export function insertComposerReferenceText(text: string, referenceText: string,
   }
   return { text: text.slice(0, start) + referenceText + text.slice(end), cursor: start + referenceText.length };
 }
-export function insertAttachmentReferences(text: string, attachments: ReadonlyArray<DraftAttachment>, selection: TextSelection) {
-  const references = attachments.filter((file) => file.contextId).map((file) => formatComposerContextReference({
-    kind: file.mimeType.startsWith("image/") ? "image" : "file", contextId: ComposerContextId.make(file.contextId!), label: file.name,
-  })).join(" ");
+export function insertAttachmentReferences(text: string, attachments: ReadonlyArray<DraftAttachment>, selection: TextSelection, options: AttachmentInsertionOptions = {}) {
+  const start = Math.max(0, Math.min(text.length, selection.start));
+  const end = Math.max(start, Math.min(text.length, selection.end));
+  // Existing context links remain whole tokens, rather than becoming another image's description.
+  const overlapsReference = [...collectComposerContextReferences(text), ...collectAssistantCitations(text)]
+    .some((reference) => reference.start < end && start < reference.end);
+  let description = options.useSelectedTextAsImageDescription && !overlapsReference ? text.slice(start, end).trim() : "";
+  const references = attachments.filter((file) => file.contextId).map((file) => {
+    const kind = file.mimeType.startsWith("image/") ? "image" : "file";
+    const label = kind === "image" && description ? description : file.name;
+    if (kind === "image") description = "";
+    return formatComposerContextReference({ kind, contextId: ComposerContextId.make(file.contextId!), label });
+  }).join(" ");
   return insertComposerReferenceText(text, references, selection);
 }
 /** Bind inline positions to host-owned uploads, rather than trusting filenames from the renderer. */
@@ -54,7 +64,7 @@ export function attachmentMessageContext(text: string, attachments: ReadonlyArra
     if (!file) continue;
     const kind = file.type === "image" ? "image" : "file";
     if (reference.kind !== kind) throw new Error("This inline reference does not match its attachment.");
-    const payload = { version: 1 as const, contextId: reference.contextId, label: file.name, attachmentId: file.id, name: file.name, mimeType: file.mimeType, sizeBytes: file.sizeBytes };
+    const payload = { version: 1 as const, contextId: reference.contextId, label: kind === "image" ? reference.label : file.name, attachmentId: file.id, name: file.name, mimeType: file.mimeType, sizeBytes: file.sizeBytes };
     records.set(reference.contextId, kind === "image" ? { ...payload, kind: "image" } : { ...payload, kind: "file" });
   }
   return records.size ? { version: 1, records: [...records.values()] } : undefined;

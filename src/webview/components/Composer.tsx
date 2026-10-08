@@ -184,13 +184,13 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     if (sent) clearDraft(draftKey);
     setBusy(false); textarea.current?.focus();
   };
-  const addFiles = (files: ReadonlyArray<File>) => {
+  const addFiles = (files: ReadonlyArray<File>, useSelectedTextAsImageDescription = false) => {
     if (disabled || !files.length) return;
     markTouched(); setAttachmentError(null);
     const selection = { start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length };
     void pasteAttachments(draftKey, files, state.activeThreadId, selection, (cursor) => {
       setCursor(cursor); requestAnimationFrame(() => textarea.current?.setSelectionRange(cursor, cursor));
-    }).catch((cause) => setAttachmentError(cause instanceof Error ? cause.message : String(cause)));
+    }, { useSelectedTextAsImageDescription }).catch((cause) => setAttachmentError(cause instanceof Error ? cause.message : String(cause)));
   };
   const pickFiles = () => {
     const selection = { start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length };
@@ -257,7 +257,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         }}
         onPaste={(event) => {
           const files = event.clipboardData.files.length ? [...event.clipboardData.files] : [...event.clipboardData.items].map((item) => item.kind === "file" ? item.getAsFile() : null).filter((file): file is File => file !== null);
-          if (files.length) { event.preventDefault(); addFiles(files); }
+          if (files.length) { event.preventDefault(); addFiles(files, true); }
         }}
         aria-controls={suggestionsOpen ? "composer-suggestions" : undefined} aria-expanded={suggestionsOpen} aria-autocomplete="list" aria-activedescendant={suggestionsOpen && items.length ? `composer-suggestion-${highlighted}` : undefined}
         onSelect={(event) => { setCursor(event.currentTarget.selectionStart); onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }); }} onChange={(event) => {

@@ -365,6 +365,20 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.waitForFunction(() => window.__requests.some(request => request.method === 'sendMessage' && request.params.text.includes('t3-context://v1/image/') && request.params.attachmentIds?.includes('pending-pasted') && request.params.attachmentReferences?.[0]?.attachmentId === 'pending-pasted'));
   await page.waitForFunction(() => !document.querySelector('.composer-attachment'));
   assert.equal(await page.locator('.composer-attachment').count(), 0, 'Only a successful send clears attachment thumbnails');
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Compare this result, then explain.');
+  await page.getByRole('textbox', { name: 'Message', exact: true }).evaluate((element, bytes) => {
+    element.focus(); element.setSelectionRange(8, 19);
+    const transfer = new DataTransfer(); transfer.items.add(new File([Uint8Array.from(atob(bytes), c => c.charCodeAt(0))], 'clipboard.png', { type: 'image/png' }));
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
+  }, png);
+  await page.waitForFunction(() => document.querySelector('textarea').value.includes('![this result](t3-context://v1/image/'));
+  await page.getByRole('textbox', { name: 'Message', exact: true }).press('Control+End');
+  await page.getByRole('textbox', { name: 'Message', exact: true }).pressSequentially(' More context.');
+  await page.waitForFunction(() => !document.querySelector('.composer-attachment .attachment-state')?.textContent.includes('Uploading'));
+  assert.match(await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue(), /^Compare !\[this result\]\(t3-context:\/\/v1\/image\/image_[a-z0-9_-]+\), then explain\. More context\.$/);
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await page.waitForFunction(() => window.__requests.some(request => request.method === 'sendMessage' && request.params.text.includes('![this result]') && request.params.attachmentIds?.includes('pending-pasted')));
+  await page.waitForFunction(() => !document.querySelector('.composer-attachment'));
   await page.evaluate(() => window.__replace({ activeThreadId: undefined, projects: [], threads: [], transcript: [],
     draft: { projectId: null, workspaceRoot: null, supportsNoProject: true, modelSelection: { instanceId: "codex", model: "gpt-6-astra" }, runtimeMode: "auto", interactionMode: "default" } }));
   await page.getByRole("button", { name: "Choose project", exact: true }).filter({ hasText: "No project" }).waitFor();

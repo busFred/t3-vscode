@@ -22,7 +22,7 @@ This document tracks features by release, including how later versions changed t
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits, removes, reorders and promotes queued messages; shows current tasks. | v0.0.6 | v0.0.7 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.13 |
-| [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Local image/file uploads that survive closing the originating tab. | v0.0.8 | v0.1.13 |
+| [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.1.16 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies through a virtualized timeline and loads older history. | v0.0.1 | v0.1.10 |
 | [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.1.13 |
 | [Collapsed activity](#collapsed-activity) | Timed thought/tool groups separated by visible assistant messages and steers. | v0.0.1 | v0.1.13 |
@@ -376,6 +376,11 @@ This document tracks features by release, including how later versions changed t
 #### v0.1.13
 
 - Retain host-owned uploads after tab closure and merge their completion only into still-present draft slots.
+
+#### v0.1.16 — local preview
+
+- Use selected prose as the first pasted image's description, normalizing it to a valid inline label while retaining filenames for an empty selection and later images.
+- Preserve whole existing references, cursor placement, upload ownership and the description delivered to the provider; file picking and drag/drop retain their existing behavior.
 
 ## Message rendering
 
