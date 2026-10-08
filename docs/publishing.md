@@ -1,10 +1,10 @@
 # Publishing T3 VSCode
 
-The current release is **0.1.13 (Alpha)**, published to the [Marketplace release channel](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode). The owner authorized release-only publication; do not upload a new prerelease. The preceding published version is 0.1.12 on the prerelease channel. Future publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
+The current release is **0.1.15 (Alpha)**, published to the [Marketplace release channel](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) with the same runtime as the owner-confirmed **0.1.14** preview. The 0.1.14 prerelease remains unchanged. Marketplace accepted 0.1.15; public validation is pending as of October 8, 2026 at 08:34 UTC. Future publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
 
 ## Version policy
 
-Use one version everywhere: **0.1.13**, read directly from `package.json`. README headings, release notes, VSIX filenames and the Marketplace all use that same value; there is no separate release label or encoded version.
+Use one candidate version everywhere: **0.1.15**, read directly from `package.json`. README headings, release notes, VSIX filenames and the Marketplace all use that same value; there is no separate release label or encoded version.
 
 VS Code accepts only `major.minor.patch`, so the four-number form `0.1.0.10` is not supported. Alpha, Beta and RC describe development stages; they do not determine the distribution channel or add a fourth version component. Advance the three-number version for each package, and never reuse a published version. [VS Code version requirements](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#pre-release-extensions)
 
@@ -14,7 +14,7 @@ The packager validates the version through vsce and derives the prerelease flag 
 
 - The Marketplace publisher is `hungtienhuang`, confirmed by the owner.
 - The prepared listing uses the owner-approved name “T3 VSCode”, MIT license and GitHub repository/issues links.
-- A publishing login must have permission for that publisher; publication of 0.1.13 on the release channel is authorized by the owner.
+- A publishing login must have permission for that publisher; publication of 0.1.15 on the release channel is authorized by the owner.
 
 Create a publisher in [Marketplace publisher management](https://marketplace.visualstudio.com/manage/publishers/). The publisher ID becomes part of the permanent extension identity, `<publisher>.t3-vscode`, so set the actual ID before the final public package is built. Changing the publisher also changes the installed extension identity.
 
@@ -33,19 +33,19 @@ Linux and local T3 servers are the verified scope. Other platforms need verifica
 1. Update `package.json`, the changelog and linked feature history for the candidate.
 2. Run relevant unit, type, browser and isolated native checks; use GPT-6 Luna with low effort only when a live provider check is needed.
 3. Start a regression reviewer with fresh context, resolve blockers, obtain final signoff and record the outcome in the feature history.
-4. Run `pnpm package` and verify the VSIX version, publisher, release-channel metadata and bundled assets; 0.1.13 uses `preview: false` and must omit the prerelease property.
+4. Run `pnpm package` and verify the VSIX version, publisher, channel metadata and bundled assets; 0.1.15 uses `preview: false` and must omit the prerelease property.
 
 The packaging script reads the version from `package.json`, adds `--pre-release` when `preview: true`, and writes to `target-installer/`. The prerelease flag is required in addition to the Marketplace Preview label. Never use `--skip-license` for the public candidate.
 
 ## Publish the reviewed package
 
-The owner has authorized publishing v0.1.13 on the release channel under `hungtienhuang`; publish the reviewed package after all checks pass and credentials are verified:
+The owner has authorized publishing v0.1.15 on the release channel under `hungtienhuang`; publish the reviewed package after all checks pass and credentials are verified:
 
 ```sh
-pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.1.13.vsix
+pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.1.15.vsix
 ```
 
-Using the reviewed package avoids rebuilding different code while publishing. Do not pass `patch` or another version argument: those commands can modify the version and create Git commits/tags. After publication, check the Marketplace page, verify release-channel metadata and installation in an isolated VS Code profile, and record the published URL and version.
+Using the reviewed package avoids rebuilding different code while publishing. Do not pass `patch` or another version argument: those commands can modify the version and create Git commits/tags. After publication, check the Marketplace page, verify release-channel metadata and installation in an isolated VS Code profile, confirm the existing prerelease package is unchanged, and record the published URL and version.
 
 ## First public release
 
@@ -65,3 +65,24 @@ At 04:22 UTC on October 7, the Marketplace reported version 0.1.12 with the prer
 - Confirmed the authenticated Marketplace record has no prerelease property and matches the reviewed VSIX SHA-256: `1145eecba0f40d00debc42023867e41584d81ea8dbc899dafa58dbd6f7007b35`.
 - Confirmed prerelease 0.1.12 retains its version, properties, update time and package checksum; no prerelease was uploaded.
 - Marketplace accepted the upload; its validation flag is still pending and the public listing has not refreshed yet, so Marketplace installation is not claimed verified.
+
+## 0.1.14 preview-channel publication
+
+- Published `hungtienhuang.t3-vscode` **0.1.14** to the prerelease channel on **October 8, 2026**, after the owner explicitly authorized the version increase for the Windows pairing fix.
+- Reviewed the complete working changes against stable source revision `74aed3f`; the fresh-context reviewer approved the final candidate with no blocking or actionable findings before packaging.
+- Passed 171 tests, TypeScript checking and the full build; the reviewer independently passed 28 focused tests and checked all 48 feature requirements.
+- Confirmed the host, webview and Mermaid bundles match the earlier tested Windows revision byte for byte, preserving its two complete browser suites and real isolated Linux pairing evidence; native Windows execution remains unverified.
+- Verified the 41-file universal VSIX has `preview: true`, the Marketplace prerelease property, the exact reviewed runtime/assets, 20 math fonts and three screenshots; installed it successfully into disposable user, extension, shared and T3 storage.
+- Downloaded the uploaded package and confirmed SHA-256 `6bb5df730f752f82619a9ad13d1fae63753f56584618d23c6bc46914b4628b04` matches `target-installer/t3-vscode-0.1.14.vsix` exactly.
+- Confirmed stable 0.1.13 retains its channel, properties, update time and package SHA-256 `1145eecba0f40d00debc42023867e41584d81ea8dbc899dafa58dbd6f7007b35`.
+- At 04:17 UTC, the authenticated record lists 0.1.14 as prerelease with validation pending; the public validated catalog still lists release 0.1.13 and prerelease 0.1.12, so installation of 0.1.14 from Marketplace is not yet claimed verified.
+
+## 0.1.15 release-channel publication
+
+- Published `hungtienhuang.t3-vscode` **0.1.15** to the release channel on **October 8, 2026**, after the owner confirmed that 0.1.14 preview works and explicitly requested release-channel availability.
+- Changed only version/channel metadata and release documentation relative to the published preview; the host, webview and Mermaid bundles are byte-identical to 0.1.14.
+- Passed all 171 tests, TypeScript checking and the full build; a fresh-context reviewer independently passed 56 focused tests, inspected all 48 feature requirements and approved the final 547-file candidate with no blocking or actionable findings before packaging.
+- Verified the 41-file universal VSIX uses `preview: false`, omits the prerelease property and contains the exact reviewed assets, including 20 math fonts and three screenshots; installation passed in disposable user, extension, shared and T3 storage.
+- Downloaded the published release and confirmed SHA-256 `b2a4f9ef7b0058161f91b29ed8e5ccb288a2cc08fa7af3fec45caacc58b0ed72` matches `target-installer/t3-vscode-0.1.15.vsix` exactly.
+- Confirmed existing 0.1.14 preview and 0.1.13 release packages retain their channels, properties, update times and exact checksums.
+- At 08:34 UTC, Marketplace has accepted 0.1.15 as a normal release but validation is pending; the public validated catalog still lists 0.1.14 preview and 0.1.13 release, so Marketplace installation of 0.1.15 is not yet claimed verified.

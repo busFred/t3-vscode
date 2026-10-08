@@ -5,13 +5,15 @@
  * result is a durable 30-day bearer session.
  */
 
-import { execFile } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import { resolveRemotePairingTarget } from "@t3tools/shared/remote";
+import { resolveSpawnCommand, type ResolvedSpawnCommand } from "@t3tools/shared/shell";
 import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/unstable/http";
 
+const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 export interface PairedSession {
@@ -33,10 +35,35 @@ export class PairingError extends Error {
 const TOKEN_PATTERN = /Token:\s*([0-9A-Z]{6,})/;
 const URL_TOKEN_PATTERN = /[#?&]token=([0-9A-Z]{6,})/;
 
-const runTPair = async (home: string): Promise<string> => {
+interface PairingCommandOptions {
+  readonly timeout: number;
+  readonly windowsHide: boolean;
+}
+
+/** Process boundary kept injectable so Windows launches can be checked without a live server. */
+export interface PairingCommandRuntime {
+  readonly resolve: (command: string, args: ReadonlyArray<string>) => ResolvedSpawnCommand;
+  readonly shell: (command: string, options: PairingCommandOptions) => Promise<{ stdout: string }>;
+  readonly direct: (command: string, args: Array<string>, options: PairingCommandOptions) => Promise<{ stdout: string }>;
+}
+
+const pairingCommandRuntime: PairingCommandRuntime = {
+  resolve: (command, args) => Effect.runSync(resolveSpawnCommand(command, args)),
+  shell: execAsync,
+  direct: execFileAsync,
+};
+
+export const runPairingCommand = async (home: string, runtime = pairingCommandRuntime): Promise<string> => {
   const baseArgs = ["pair", "--label", "VS Code"];
   try {
-    const run = await execFileAsync("t3", [...baseArgs, "--base-dir", home], { timeout: PAIR_TIMEOUT_MS });
+    const launch = runtime.resolve("t3", [...baseArgs, "--base-dir", home]);
+    const options = { timeout: PAIR_TIMEOUT_MS, windowsHide: true };
+    // The resolver escapes both the command and arguments for Windows batch
+    // launchers. Passing one prepared string also avoids Node's deprecated
+    // shell:true + args form; native executables keep literal argument arrays.
+    const run = launch.shell
+      ? await runtime.shell([launch.command, ...launch.args].join(" "), options)
+      : await runtime.direct(launch.command, [...launch.args], options);
     return run.stdout;
   } catch (cause) {
     const stderr = (cause as { stderr?: string }).stderr ?? "";
@@ -54,7 +81,7 @@ export const pairWithServer = async (input: {
   readonly origin: string;
   readonly environmentId: string;
 }): Promise<PairedSession> => {
-  const stdout = await runTPair(input.home);
+  const stdout = await runPairingCommand(input.home);
   const token = TOKEN_PATTERN.exec(stdout)?.[1] ?? URL_TOKEN_PATTERN.exec(stdout)?.[1];
   if (!token) {
     throw new Error("Could not parse the pairing token from `t3 pair` output.");

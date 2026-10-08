@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.15 — Alpha, release channel
+
+- Make the Windows `t3.cmd` and `.bat` pairing fix available on the release channel, using the same runtime as the working 0.1.14 preview.
+
+## 0.1.14 — Alpha prerelease
+
+- Publish the Windows pairing fix from the local 0.1.13 revision to the preview channel; the release channel remains on 0.1.13.
+- Resolve Windows `t3.cmd` and `.bat` launchers through the command shell with escaped paths and arguments, while retaining direct execution for native executables, Linux and macOS.
+- Cover CLI resolution, paths with spaces, pairing failures and the bearer exchange with regression tests; native Windows execution still needs verification.
+
+## 0.1.13 — Local Windows pairing revision
+
+- Fix automatic pairing with Windows `t3.cmd` and `.bat` launchers by resolving the CLI and escaping the shell command; retain direct execution for native executables, Linux and macOS.
+- Keep version 0.1.13 for the local installer; this revision does not update the Marketplace package.
+
 ## 0.1.13 — Alpha, release channel
 
 - Guide first connection through T3’s web/provider setup, keep the background service optional and enter Sessions automatically after connecting.

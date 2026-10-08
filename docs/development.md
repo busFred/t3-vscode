@@ -31,6 +31,8 @@ The repository's gitignored `.t3` directory holds the isolated VS Code profile a
 
 ## Automated verification
 
+`node --import tsx --test src/host/pairing.test.ts` checks CLI launching and pairing without a live T3 server or provider calls. It creates its own temporary home and synthetic CLI, including a real `.cmd` wrapper on Windows, and verifies paths with spaces, startup errors, token parsing and the credential exchange. Run it on Windows as well as Linux before claiming native Windows verification; the simulated Windows cases alone do not exercise `cmd.exe`.
+
 For development, start a separate server with an explicit home and point `t3-vscode.t3Home` at that directory. Never verify against the live `~/.t3` service:
 
 ```sh
@@ -82,7 +84,7 @@ pnpm install --frozen-lockfile
 pnpm run package
 ```
 
-This rebuilds both bundles, marks the package as a prerelease, and produces `target-installer/t3-vscode-0.1.13.vsix`. All packaged VSIX installers go into `target-installer/`, which is excluded from Git. The archive includes compiled code, icons, the lazy Mermaid renderer, KaTeX CSS/fonts and license notices; development profiles, server data, source maps and `node_modules` are excluded.
+This rebuilds both bundles, uses the channel metadata in `package.json`, and produces `target-installer/t3-vscode-0.1.15.vsix` without the prerelease flag. All packaged VSIX installers go into `target-installer/`, which is excluded from Git. The archive includes compiled code, icons, the lazy Mermaid renderer, KaTeX CSS/fonts and license notices; development profiles, server data, source maps and `node_modules` are excluded.
 
 For a revision that keeps the same version, update that canonical installer path too; keep superseded artifacts under `target-installer/archive/` with descriptive names. A preview in a subdirectory must not leave the documented installer pointing at an older build. Compare bundled files or SHA-256 hashes when diagnosing a same-version install, then reinstall the corrected VSIX in the intended profile and run **Developer: Reload Window**; CLI reinstalls can use `--force` with the same isolated storage arguments.
 

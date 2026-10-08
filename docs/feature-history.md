@@ -1,6 +1,6 @@
 # T3 VSCode feature history
 
-This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically.
+This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
 ## Overview
 
@@ -42,13 +42,13 @@ This document tracks features by release, including how later versions changed t
 | [Saved turn diffs](#saved-turn-diffs) | Opens the preceding turn's saved changes in native diff editors. | v0.0.6 | v0.0.9 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
-| [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, retaining credentials and reporting the failed connection stage. | v0.0.1 | v0.1.13 |
+| [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.1.15 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage and Connection. | v0.0.9 | v0.1.10 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.12 |
-| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.1.13 |
-| [Release versioning](#release-versioning) | Uses one three-number version and explicitly selects the distribution channel. | v0.1.10 | v0.1.13 |
+| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.1.15 |
+| [Release versioning](#release-versioning) | Uses one three-number version and explicitly selects the distribution channel. | v0.1.10 | v0.1.15 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.13 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
@@ -721,6 +721,20 @@ This document tracks features by release, including how later versions changed t
 
 - Publish structured discovery and pairing diagnostics to every view and clear them after recovery without changing credential reuse or per-view selection.
 
+#### v0.1.13 — Windows pairing revision
+
+- Resolve Windows CLI launchers using PATH/PATHEXT and execute escaped `.cmd`/`.bat` commands through the shell, fixing `spawn t3 ENOENT` when T3 is installed as a command wrapper.
+- Preserve direct execution for native executables, Linux and macOS, along with the pairing timeout, selected home, token exchange and failure classifications.
+- Escape Windows command paths separately from forwarded arguments in the vendored launcher helper and record the adjustment for future vendor updates.
+
+#### v0.1.14
+
+- Deliver the Windows pairing revision through the Marketplace prerelease channel under a distinct version, retaining v0.1.13 on the release channel.
+
+#### v0.1.15
+
+- Promote the same Windows pairing runtime to the release channel after the owner confirms the v0.1.14 preview works.
+
 ### Missing-server setup
 
 #### v0.0.1
@@ -842,6 +856,14 @@ This document tracks features by release, including how later versions changed t
 - Add deterministic host and browser checks for full-session search without provider calls.
 - Prepare the reviewed 0.1.13 installer for the release channel with `preview: false` and no prerelease property.
 
+#### v0.1.14
+
+- Package the Windows pairing fix as `target-installer/t3-vscode-0.1.14.vsix` with `preview: true` and the prerelease property.
+
+#### v0.1.15
+
+- Package the verified preview runtime as `target-installer/t3-vscode-0.1.15.vsix` with `preview: false` and no prerelease property.
+
 ### Release versioning
 
 #### v0.1.10
@@ -859,6 +881,14 @@ This document tracks features by release, including how later versions changed t
 
 - Keep version 0.1.13 for its first Marketplace release-channel publication; retain 0.1.12 as the preceding prerelease.
 - Separate feature changes and onboarding into Git commits, with publication metadata in a final release commit.
+
+#### v0.1.14
+
+- Use the owner's authorized v0.1.14 for the Windows pairing prerelease because Marketplace requires different versions across release and prerelease channels.
+
+#### v0.1.15
+
+- Advance to v0.1.15 for the owner-authorized release-channel promotion, preserving the published v0.1.14 preview.
 
 ### Feature tracking and regression review
 
@@ -990,6 +1020,38 @@ This document tracks features by release, including how later versions changed t
 - Publish the reviewed package from `eaed9fe` to the Marketplace release channel on October 8, 2026 at 02:52 UTC, without uploading a prerelease.
 - Confirm release-only publisher metadata and the exact VSIX SHA-256 `1145eecba0f40d00debc42023867e41584d81ea8dbc899dafa58dbd6f7007b35`, while preserving the existing 0.1.12 prerelease metadata and checksum.
 - Verify local VSIX installation using isolated user, extension, shared and T3 storage; Marketplace validation and public discovery are still pending after upload.
+
+#### Windows pairing revision — same v0.1.13
+
+- Keep version 0.1.13 and the release-channel manifest from Git `74aed3f`, with the fix limited to CLI launching and its regression coverage.
+- Pass 171 unit tests, TypeScript checks and the extension/webview, Mermaid and math builds.
+- Cover Windows PATH/PATHEXT lookup, `.cmd`/`.bat` handling, escaped command paths, literal native arguments, CLI failures and timeouts with deterministic fixtures.
+- Exercise a real synthetic CLI process and bearer-exchange fixture on Linux; the same test creates a real `.cmd` wrapper when run on Windows, but native Windows execution is unavailable in this environment.
+- Pass both complete browser regression suites and a real isolated Linux T3 pairing, bearer exchange, WebSocket connection and session snapshot without provider turns.
+- Obtain final fresh-context regression review against `74aed3f`, including the command-path escaping correction and all 48 feature requirements, with no blocking or actionable findings and approval for local packaging.
+- Verify the rebuilt canonical v0.1.13 VSIX has the exact reviewed host bundle, byte-identical webview/Mermaid bundles, unchanged release manifest, 20 math fonts and three screenshots; archive the prior installer and retain the new SHA-256 sidecar without installation or publication.
+
+### v0.1.14 — Windows pairing prerelease
+
+- Publish the Windows pairing revision from the local v0.1.13 installer as the owner's explicitly authorized v0.1.14 preview, using release commit `74aed3f` as the regression baseline.
+- Pass all 171 tests, TypeScript checking and the full extension/webview build again for v0.1.14, with no skipped tests or provider calls.
+- Confirm the rebuilt host, webview and Mermaid bundles match the previously tested Windows revision byte for byte, retaining both complete browser suites and real isolated Linux CLI pairing, bearer exchange, WebSocket and session-snapshot evidence.
+- Independently pass 28 focused pairing, connection-setup, discovery and view tests in fresh-context regression review; inspect all 48 linked feature requirements, credential handling and channel metadata with no blocking findings.
+- Verify publisher access and the existing release-channel v0.1.13 package against its recorded SHA-256 before publication; native Windows execution remains unverified.
+- Obtain the reviewer's final approval before packaging and verify the 41-file universal prerelease VSIX, its exact runtime/assets, 20 math fonts and three screenshots, followed by successful installation in disposable VS Code/T3 storage.
+- Confirm the uploaded prerelease package matches SHA-256 `6bb5df730f752f82619a9ad13d1fae63753f56584618d23c6bc46914b4628b04`, and stable v0.1.13 retains its properties, update time and package checksum.
+- Record Marketplace acceptance on October 8, 2026, with public validation still pending at 04:17 UTC and local VSIX installation verified; see [the publication record](publishing.md#0114-preview-channel-publication).
+
+### v0.1.15 — Windows pairing release
+
+- Promote the owner-confirmed v0.1.14 preview to the release channel with version and channel metadata changes only; retain `74aed3f` as the Git comparison revision and the reviewed v0.1.14 source/package hashes as the promotion baseline.
+- Record the owner's successful preview test without claiming that automated native Windows tests ran in this Linux environment.
+- Pass all 171 tests, TypeScript checking and the complete build again; verify the rebuilt host, webview and Mermaid bundles are byte-identical to the published v0.1.14 preview.
+- Retain the earlier browser and real isolated Linux pairing verification for the identical runtime, including CLI pairing, bearer exchange, WebSocket connection and session snapshots without provider turns.
+- Independently pass 56 focused pairing, setup, discovery, view and host-state tests in fresh-context regression review; inspect all 48 feature requirements and release metadata with no blocking or actionable findings.
+- Obtain final review approval before packaging; verify the 41-file universal VSIX has `preview: false`, no prerelease property, exact reviewed assets, 20 math fonts and three screenshots, then install successfully in disposable VS Code/T3 storage.
+- Confirm the uploaded release package matches SHA-256 `b2a4f9ef7b0058161f91b29ed8e5ccb288a2cc08fa7af3fec45caacc58b0ed72`, with existing v0.1.14 preview and v0.1.13 release properties, update times and package checksums unchanged.
+- Record Marketplace acceptance on October 8, 2026 with public validation pending at 08:34 UTC; see [the publication record](publishing.md#0115-release-channel-publication).
 
 ## Maintenance
 

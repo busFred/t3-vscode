@@ -707,7 +707,9 @@ export const resolveSpawnCommand = Effect.fnUntraced(function* (
   }
 
   return {
-    command: escapeWindowsShellArg(resolvedCommand),
+    // cmd.exe parses the command name separately from forwarded arguments.
+    // Match cross-spawn's command escaping without adding argv-style quotes.
+    command: resolvedCommand.replace(WINDOWS_SHELL_META_CHARS, "^$1"),
     args: sanitizeShellModeArgsForPlatform(args, platform),
     shell: true,
   };

@@ -101,6 +101,11 @@ Then re-apply the package.json edits by hand (they are **not** scripted):
    (upstream's `./rpc` barrel exports only `protocol.ts` and the `RpcSession`
    type; the extension needs `RpcSessionFactory` for connection lifecycle).
 
+4. Preserve the Windows launcher correction in `shared/src/shell.ts`: escape
+   command-path metacharacters without adding argument-style quotes, keeping
+   argument escaping separate as in [cross-spawn](https://github.com/moxystudio/node-cross-spawn/blob/master/lib/util/escape.js).
+   The extension's `src/host/pairing.test.ts` covers this adapter change.
+
 Update the provenance block at the top of this file, and re-run the
 verification greps: no `three` imports outside `client-runtime/src/device/`,
 no imports of `./testing` / `@t3tools/shared/testing` outside test files.
