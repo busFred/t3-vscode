@@ -1,9 +1,10 @@
 # Changelog
 
-## 0.1.16 — Local preview, unpublished
+## 0.1.16 — Local installer, unpublished
 
 - Use selected composer text as a pasted image's description, preserving the filename when no text is selected and retaining attachment ownership and inline positions.
 - Add model visibility and ordering controls, accurate visible-model counts and an explicit import of T3 Web's device-local favorites and model preferences.
+- Pass 183 deterministic tests and both browser regression suites; resolve independent review findings for custom provider IDs and failed native preference writes before local packaging.
 
 ## 0.1.15 — Alpha, release channel
 

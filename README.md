@@ -1,6 +1,6 @@
 # T3 VSCode
 
-**0.1.15 (Alpha) — release channel.** Install T3 VSCode from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) or a local VSIX. This release includes the Windows pairing fix from preview 0.1.14.
+**0.1.16 (Alpha) — local installer, unpublished.** This build adds model-preference import and management, plus selected-text descriptions for pasted images. The [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) release remains 0.1.15, including the Windows pairing fix from preview 0.1.14.
 
 A VS Code client for a separately running [T3 Code](https://github.com/pingdotgg/t3code) server. T3 VSCode adds a workspace session manager and chat in editor tabs. Colors follow your VS Code theme; the extension host owns connection, authentication and shared conversation state.
 

@@ -1072,6 +1072,16 @@ Version v0.1.16 is an unpublished local installer with model-preference import a
 - Confirm the uploaded release package matches SHA-256 `b2a4f9ef7b0058161f91b29ed8e5ccb288a2cc08fa7af3fec45caacc58b0ed72`, with existing v0.1.14 preview and v0.1.13 release properties, update times and package checksums unchanged.
 - Record Marketplace acceptance on October 8, 2026 with public validation pending at 08:34 UTC; see [the publication record](publishing.md#0115-release-channel-publication).
 
+### v0.1.16 — local installer, unpublished
+
+- Verify the preceding manifest version v0.1.15 from Git baseline `f6af7cb`, then prepare v0.1.16 with the existing release-channel metadata for local use only.
+- Commit selected-text image descriptions and model-preference import/management separately, with individual follow-up fixes for valid custom provider IDs and failed native preference writes.
+- Pass all 183 deterministic tests without skips, TypeScript checking, extension/webview/Mermaid/math builds, JavaScript syntax checks and all 48 linked feature requirements.
+- Pass both complete browser suites against the final runtime, including selected-image descriptions, import, hidden-model search, saved ordering, cross-chat updates, independent drafts, references, Queue/Steer, search, graphics and narrow/theme layouts.
+- Independently exercise the installed VS Code Memento implementation with rejecting storage fixtures, retaining confirmed preferences through pending/failed writes, failed cache recovery and later successful saves.
+- Obtain final fresh-context regression signoff for runtime `48cb69f` against `f6af7cb`, resolving both P2 findings with no remaining actionable findings before packaging.
+- Use disposable deterministic fixtures and isolated T3 storage without provider calls, publication or installation into normal VS Code profiles.
+
 ## Maintenance
 
 Update the overview's introduction/latest-change versions and the affected feature's version section in the same change. Add an entry only for an actual feature change; documentation-only edits do not change the feature's introduction version. Record removed behavior explicitly and keep historical sections intact. Keep each bullet to one sentence where possible, and at most two sentences.
