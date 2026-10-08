@@ -1,5 +1,4 @@
-import { ClientSettingsPatch, type ServerProvider, type ServerProviderModel } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
+import type { ServerProvider, ServerProviderModel } from "@t3tools/contracts";
 import type { FavoriteModel } from "./bridge.js";
 
 export interface ProviderModelPreference {
@@ -14,30 +13,6 @@ export interface ModelPickerPreferences {
   readonly favoriteModels: ReadonlyArray<FavoriteModel>;
   readonly providerModelPreferences: ProviderModelPreferences;
 }
-export interface ModelPreferencesImport {
-  readonly favoriteModels?: ReadonlyArray<FavoriteModel>;
-  readonly providerModelPreferences?: ProviderModelPreferences;
-}
-const importSchema = Schema.Struct({
-  favorites: ClientSettingsPatch.fields.favorites,
-  providerModelPreferences: ClientSettingsPatch.fields.providerModelPreferences,
-});
-
-/** Import only model display settings, even when given a full browser settings export. */
-export function parseModelPreferencesImport(json: string): ModelPreferencesImport {
-  try {
-    if (json.length > 200_000) throw new Error("Too large");
-    const parsed = Schema.decodeUnknownSync(importSchema)(JSON.parse(json));
-    if (parsed.favorites === undefined && parsed.providerModelPreferences === undefined) throw new Error("Missing preferences");
-    return {
-      ...(parsed.favorites !== undefined ? { favoriteModels: parsed.favorites.map((favorite) => ({ instanceId: favorite.provider, model: favorite.model })) } : {}),
-      ...(parsed.providerModelPreferences !== undefined ? { providerModelPreferences: parsed.providerModelPreferences } : {}),
-    };
-  } catch {
-    throw new Error("Paste valid T3 Web JSON containing favorites or providerModelPreferences.");
-  }
-}
-
 export function orderedProviderModels(provider: Pick<ServerProvider, "models">, preferences?: ProviderModelPreference): ServerProviderModel[] {
   const ranks = new Map<string, number>();
   for (const slug of preferences?.modelOrder ?? []) if (!ranks.has(slug)) ranks.set(slug, ranks.size);

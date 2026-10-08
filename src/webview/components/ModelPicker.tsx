@@ -113,10 +113,7 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
         if (!managing) { setSearch(""); if (providerId === "favorites") setProviderId(selection?.instanceId ?? "all"); }
         setManaging(!managing);
       }}>{managing ? "Done" : "Manage models"}</button>
-      {managing ? <button className="text-button" disabled={busy} onClick={() => {
-        setBusy(true); void run("importModelPreferences").finally(() => setBusy(false));
-      }}>Import from T3 Web</button> : null}
     </div>
-    {managing ? <p className="model-preferences-note">Saved in VS Code. Import to copy T3 Web’s device preferences.</p> : null}
+    {managing ? <p className="model-preferences-note">Favorites, visibility and ordering are saved in VS Code.</p> : null}
   </div>, document.body);
 }

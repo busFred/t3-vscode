@@ -42,10 +42,9 @@ let renamesRequested = 0;
 let deleteConfirmed = false;
 const openedSessions: Array<string | undefined> = [];
 const openedDiffs: Array<{ turn: number; path: string; old: string; current: string }> = [];
-let modelImportJson = "";
 const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry, async () => { settingsOpened += 1; }, {
   rename: async () => { renamesRequested += 1; return "Renamed through history"; }, confirmDelete: async () => deleteConfirmed,
-}, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); }, { openInTab: (id) => { openedSessions.push(host.snapshot(id).activeThreadId); }, showUsage: (_id, key) => { registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key); }, importModelPreferences: () => host.importModelPreferences(modelImportJson) });
+}, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); }, { openInTab: (id) => { openedSessions.push(host.snapshot(id).activeThreadId); }, showUsage: (_id, key) => { registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key); } });
 const views = new Map<string, FakeWebview>(); const sinks = new Map<string, Set<ServerResponse>>();
 for (const id of [SIDEBAR_VIEW_ID, "tab-one", "tab-two", "tab-three", "tab-narrow"]) {
   if (id !== SIDEBAR_VIEW_ID) host.registerView(id);
@@ -365,18 +364,16 @@ try {
   await third.getByRole("textbox", { name: "Search models" }).fill("kimi-for-coding");
   assert.equal(await third.locator('.model-options .model-choice').count(), 1, "Hidden default-instance models stay hidden in search; unavailable instances remain disabled");
   await third.getByRole("button", { name: "Manage models", exact: true }).click();
-  modelImportJson = JSON.stringify({ favorites: [{ provider: "codex-personal", model: "gpt-6-astra" }],
-    providerModelPreferences: { kimi: { hiddenModels: [], modelOrder: ["old-kimi", "kimi-for-coding"] } } });
-  await third.getByRole("button", { name: "Import from T3 Web", exact: true }).click();
+  assert.equal(await third.getByRole("button", { name: "Import from T3 Web", exact: true }).count(), 0);
+  await third.getByRole("checkbox", { name: "Show Kimi", exact: true }).check();
   await third.getByRole("button", { name: "Done", exact: true }).click();
   await third.locator('.model-providers button').filter({ hasText: "Kimi" }).click();
   assert.deepEqual(await third.locator('.model-options .model-choice').allTextContents(), ["Legacy Kimi", "Kimi"]);
   assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in third tab");
   await second.getByRole("button", { name: "Choose model", exact: true }).click();
   await second.locator('.model-providers button').filter({ hasText: "Kimi" }).click();
-  assert.deepEqual(await second.locator('.model-options .model-choice').allTextContents(), ["Legacy Kimi", "Kimi"], "Imported preferences broadcast to other chats");
+  assert.deepEqual(await second.locator('.model-options .model-choice').allTextContents(), ["Legacy Kimi", "Kimi"], "Local preferences broadcast to other chats");
   await second.keyboard.press("Escape");
-  await host.importModelPreferences('{"providerModelPreferences":{}}');
   await third.keyboard.press("Escape");
   assert.equal(await third.getByRole("dialog").count(), 0);
   await third.getByRole("button", { name: "Choose model", exact: true }).click();

@@ -69,8 +69,8 @@ body[data-demo-theme="dark"] .mr-shell { --mr-bg: #252526; --mr-text: #ddd; --mr
   <section class="mr-shell" aria-label="Model picker design preview">
     <input id="mr-search" class="mr-search" type="search" aria-label="Search demo models" placeholder="Search all models…">
     <div class="mr-body"><nav class="mr-nav" id="mr-nav" aria-label="Model providers"></nav><div class="mr-options" id="mr-options" aria-label="Models"></div></div>
-    <footer class="mr-footer"><span class="mr-footer-hint" id="mr-hint">Drag to reorder</span><button type="button" class="mr-text-button" id="mr-mode">Done</button><span class="mr-text-button" id="mr-import">Import from T3 Web</span></footer>
-    <p class="mr-saved" id="mr-saved">Saved in VS Code. Import to copy T3 Web’s device preferences.</p>
+    <footer class="mr-footer"><span class="mr-footer-hint" id="mr-hint">Drag to reorder</span><button type="button" class="mr-text-button" id="mr-mode">Done</button></footer>
+    <p class="mr-saved" id="mr-saved">Favorites, visibility and ordering are saved in VS Code.</p>
   </section>
   <div class="mr-demo-tools"><button type="button" id="mr-reset">Reset demo</button><button type="button" class="mr-theme" id="mr-theme">Dark theme</button></div>
   <output class="mr-status" id="mr-status" aria-live="polite">Keyboard: focus a grip, then Alt + ↑ / ↓.</output>
@@ -146,7 +146,7 @@ body[data-demo-theme="dark"] .mr-shell { --mr-bg: #252526; --mr-text: #ddd; --mr
     if (!options.children.length) { const empty = document.createElement('p'); empty.className = 'mr-empty'; empty.textContent = category === 'favorites' && !query ? 'Star a model to add it to Favorites.' : 'No matching models.'; options.append(empty); }
     document.querySelector('#mr-mode').textContent = managing ? 'Done' : 'Manage models';
     document.querySelector('#mr-hint').textContent = managing ? query ? 'Clear search to reorder' : category === 'favorites' ? 'Select a provider to reorder' : 'Drag to reorder' : '';
-    document.querySelector('#mr-import').hidden = !managing; document.querySelector('#mr-saved').hidden = !managing;
+    document.querySelector('#mr-saved').hidden = !managing;
   }
   const clearMarkers = () => options.querySelectorAll('.mr-drop-before, .mr-drop-after').forEach(row => row.classList.remove('mr-drop-before', 'mr-drop-after'));
   function startDrag(event, handle, row, provider, model) {

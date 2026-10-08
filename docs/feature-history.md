@@ -2,7 +2,7 @@
 
 This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
-Version v0.1.16 is an unpublished local installer with model-preference import and management plus selected-text descriptions for pasted images; the Git release baseline is `f6af7cb` (manifest v0.1.15).
+The existing v0.1.16 installer is unpublished and includes model-preference import and management plus selected-text descriptions for pasted images; the Git release baseline is `f6af7cb` (manifest v0.1.15). Later source revisions remove manual T3 Web import while retaining saved preferences; their installer is pending task configuration implementation. The manifest remains v0.1.16.
 
 ## Overview
 
@@ -32,8 +32,8 @@ Version v0.1.16 is an unpublished local installer with model-preference import a
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
 | [Two-column reading](#two-column-reading) | Removed in v0.1.10 after performance feedback. | v0.0.9 | v0.1.10 |
 | [Math rendering and copying](#math-rendering-and-copying) | Renders KaTeX with scrolling, floating previews and copy actions. | v0.0.8 | v0.0.9 |
-| [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility, ordering and T3 Web preference import. | v0.0.1 | v0.1.16 |
-| [Model search and favorites](#model-search-and-favorites) | Searches visible models and imports device-local favorites from T3 Web. | v0.0.4 | v0.1.16 |
+| [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and ordering saved in VS Code. | v0.0.1 | v0.1.16 |
+| [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.1.13 |
 | [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.1.13 |
 | [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection. | v0.0.7 | v0.0.9 |
@@ -531,6 +531,11 @@ Version v0.1.16 is an unpublished local installer with model-preference import a
 - Import T3 Web's browser-local visibility and ordering explicitly, retaining server-advertised custom models, existing selections and independent drafts.
 - Keep valid custom provider IDs such as `constructor` independent of inherited JavaScript object properties when looking up or editing preferences.
 
+#### v0.1.16 — source revision, installer pending
+
+- Remove the manual T3 Web import button, Command Palette entry, bridge action and JSON parser. Model controls store preferences only within the extension, without changing T3 Code.
+- Keep existing saved visibility and ordering, server-advertised custom models and independent conversation drafts. Update the model drag mockup to match the simplified footer.
+
 ### Model search and favorites
 
 #### v0.0.4
@@ -546,6 +551,11 @@ Version v0.1.16 is an unpublished local installer with model-preference import a
 - Apply saved visibility and ordering to provider lists, search and Favorites without altering the server catalog or current conversation.
 - Import browser favorites by provider-instance identity and persist all model preferences together, preserving earlier extension favorites during migration.
 - Retain the last confirmed preference snapshot during native storage writes and restore the optimistic VS Code cache on failure, including failed recovery writes.
+
+#### v0.1.16 — source revision, installer pending
+
+- Retain existing favorites and preference storage after removing browser import, including per-instance identity, broadcasts to other chat views and recovery after failed writes.
+- Replace browser-copy instructions with the extension's local model controls. Validation is recorded below before the removal commit.
 
 ### Effort and permission controls
 
@@ -1088,6 +1098,13 @@ Version v0.1.16 is an unpublished local installer with model-preference import a
 - Use disposable deterministic fixtures and isolated T3 storage without provider calls, publication or installation into normal VS Code profiles.
 - Inspect the 41-file `target-installer/t3-vscode-0.1.16.vsix` for its release identity, exact compiled assets, unchanged native settings, 20 math fonts, three screenshots and licenses, then write its SHA-256 sidecar.
 - Record installer SHA-256 `acf5781622d970a8f071cd2a195615e06b2829b3908adcb121ec576d148bae86`; leave it unpublished and uninstalled.
+
+### v0.1.16 — T3 Web import removal, installer pending
+
+- Remove all manual import entry points and parsing code while retaining the existing preference storage format, local controls, provider-instance isolation and failed-write recovery.
+- Pass all 182 deterministic tests, TypeScript checking, the complete extension/webview build and the full multi-view browser suite, including the missing-import control, local model changes and cross-tab broadcasts.
+- Use fixture transports, temporary browser profiles and an explicitly isolated T3 home with no provider calls or T3 Code application changes.
+- Keep manifest v0.1.16 unchanged and defer the next VSIX until task configuration is implemented and receives its required regression review; the previous installer is not rebuilt or published.
 
 ## Maintenance
 

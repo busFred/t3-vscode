@@ -101,11 +101,6 @@
         "title": "Configure Status Meters",
         "category": "T3 VSCode",
         "icon": "$(graph)"
-      },
-      {
-        "command": "t3-vscode.importModelPreferences",
-        "title": "Import T3 Web Model Preferences",
-        "category": "T3 VSCode"
       }
     ],
     "keybindings": [

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.16 — Source revision, installer pending
+
+- Remove the T3 Web import button, Command Palette command and JSON import path; keep existing saved favorites, visibility and ordering.
+- Keep version 0.1.16 and hold packaging until task configuration is implemented. Installers remain local and must not be published.
+- Pass 182 deterministic tests, TypeScript checking, the full build and the multi-view browser suite after import removal.
+
 ## 0.1.16 — Local installer, unpublished
 
 - Use selected composer text as a pasted image's description, preserving the filename when no text is selected and retaining attachment ownership and inline positions.

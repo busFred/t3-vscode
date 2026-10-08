@@ -9,8 +9,8 @@ Open [the interactive mockup](model-reordering.html) in a browser. Model names a
 - Hidden and legacy models retain their grip, favorite control and visibility checkbox. Reordering does not change visibility, favorites or the selected conversation model.
 - Keyboard alternative: focus the grip and use **Alt+Up/Down**. Keep focus on the moved grip and announce its new position.
 - Disable reordering while search or the Favorites filter shows a partial list; explain how to return to the complete provider order. All providers still allows reordering within each group.
-- **Done** returns to the normal picker with the new order. Grips and visibility controls disappear there. Keep the existing import entry and local preference note.
+- **Done** returns to the normal picker with the new order. Grips and visibility controls disappear there. Keep a short note that preferences are saved in VS Code; there is no T3 Web import entry.
 
-Implementation follow-up after layout approval: persist a complete order by provider-instance ID; retain confirmed preferences on failed saves; synchronize sidebar/editor views; cancel safely on catalog changes or closure; verify scrolling, touch, keyboard and imported/hidden-model ordering.
+Implementation follow-up after layout approval: persist a complete order by provider-instance ID; retain confirmed preferences on failed saves; synchronize sidebar/editor views; cancel safely on catalog changes or closure; verify scrolling, touch, keyboard and previously saved/hidden-model ordering.
 
 Validation: previewed at 448px in the inline HTML renderer; checked pointer and touch drag, Alt+arrow reordering with retained focus, Escape cancellation, provider boundaries, reset, search/Favorites guards and the normal picker in a temporary Chromium profile. Confirmed unchanged favorites, visibility and selection after reordering, a visible insertion line, and responsive 728px light/360px dark layouts together with the session mockup. No browser errors, T3 state access or provider calls.

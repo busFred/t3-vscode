@@ -12,26 +12,23 @@ function fixture() {
   const options = { modelPreferences: () => preferences, saveModelPreferences: async (value: ModelPickerPreferences) => { preferences = value; } };
   return { client, options };
 }
-test("Imported model preferences persist together and broadcast without changing conversations or catalogs", async (t) => {
+test("Local model preferences persist and broadcast without changing conversations or catalogs", async (t) => {
   const { client, options } = fixture(); const { host } = await harness(options, client); t.after(() => host.dispose());
   host.registerView("other-tab");
   const initial = host.snapshot(); const other = host.snapshot("other-tab");
-  await host.importModelPreferences(JSON.stringify({ favorites: [{ provider: "kimi", model: "terra" }],
-    providerModelPreferences: { kimi: { hiddenModels: [provider.models[0]!.slug], modelOrder: ["luna", "terra"] } } }));
+  await host.toggleFavoriteModel("kimi", "terra");
+  await host.setModelVisibility("kimi", provider.models[0]!.slug, false);
+  await host.setModelVisibility("kimi", "terra", true);
+  await host.moveModel("kimi", "luna", "up");
   const snapshot = host.snapshot("other-tab");
-  assert.deepEqual(snapshot.favoriteModels, [{ instanceId: "kimi", model: "terra" }]);
+  assert.deepEqual(snapshot.favoriteModels, [{ instanceId: "other-kimi", model: "luna" }, { instanceId: "kimi", model: "terra" }]);
   assert.deepEqual(snapshot.providerModelPreferences, options.modelPreferences().providerModelPreferences);
   assert.deepEqual(snapshot.providers, initial.providers);
   assert.deepEqual(snapshot.draft, other.draft); assert.deepEqual(host.snapshot().threads, initial.threads);
   assert.equal(client.commands.length, 0);
-  await assert.rejects(host.importModelPreferences('{"providerModelPreferences":{"kimi":{"hiddenModels":false}}}'), /Paste valid/);
-  assert.deepEqual(host.snapshot().providerModelPreferences, snapshot.providerModelPreferences);
   const restarted = await harness(options, client); t.after(() => restarted.host.dispose());
   assert.deepEqual(restarted.host.snapshot().providerModelPreferences, snapshot.providerModelPreferences);
-  await host.importModelPreferences('{"favorites":[]}');
-  assert.deepEqual(host.snapshot().providerModelPreferences, snapshot.providerModelPreferences);
-  await host.importModelPreferences('{"providerModelPreferences":{}}');
-  assert.deepEqual(host.snapshot().providerModelPreferences, {});
+  assert.deepEqual(restarted.host.snapshot().favoriteModels, snapshot.favoriteModels);
 });
 test("Visibility, ordering and favorites serialize independent updates by provider instance", async (t) => {
   const { client, options } = fixture(); const { host } = await harness(options, client); t.after(() => host.dispose());
@@ -50,7 +47,7 @@ test("Visibility, ordering and favorites serialize independent updates by provid
 test("Failed preference persistence preserves the prior display settings and favorites", async (t) => {
   const { client, options } = fixture(); const initial = options.modelPreferences();
   const { host } = await harness({ ...options, saveModelPreferences: async () => { throw new Error("Disk full"); } }, client); t.after(() => host.dispose());
-  await assert.rejects(host.importModelPreferences('{"favorites":[],"providerModelPreferences":{}}'), /Disk full/);
+  await assert.rejects(host.setModelVisibility("kimi", provider.models[0]!.slug, false), /Disk full/);
   assert.deepEqual(host.snapshot().favoriteModels, initial.favoriteModels);
   assert.deepEqual(host.snapshot().providerModelPreferences, initial.providerModelPreferences);
 });

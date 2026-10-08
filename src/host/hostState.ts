@@ -45,7 +45,7 @@ import { attachmentMessageContext, attachmentUploadInput, type AttachmentReferen
 import { SessionSearchJob } from "./sessionSearch.js";
 import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
-import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, parseModelPreferencesImport, type ModelPickerPreferences } from "../shared/modelPreferences.js";
+import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
 export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
@@ -708,14 +708,6 @@ export class HostState {
     if (!this.options.saveModelPreferences) throw new Error("Model preferences are unavailable.");
     await this.options.saveModelPreferences(preferences);
     this.emit();
-  }
-  importModelPreferences(json: string): Promise<void> {
-    return this.enqueue(async () => {
-      const imported = parseModelPreferencesImport(json);
-      const current = this.modelPreferences();
-      await this.saveModelPreferences({ favoriteModels: imported.favoriteModels ?? current.favoriteModels,
-        providerModelPreferences: imported.providerModelPreferences ?? current.providerModelPreferences });
-    });
   }
   setModelVisibility(instanceId: string, model: string, visible: unknown): Promise<void> {
     return this.enqueue(async () => {

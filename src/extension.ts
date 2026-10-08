@@ -24,7 +24,6 @@ import { UsageStatusBar } from "./host/usageStatusBar.js";
 import { InputNotificationTracker } from "./host/inputNotifications.js";
 import type { DraftTransfer } from "./shared/viewDraft.js";
 import { usageAccounts } from "./shared/usage.js";
-import { parseModelPreferencesImport } from "./shared/modelPreferences.js";
 import { ModelPreferenceStore } from "./host/modelPreferenceStore.js";
 
 let hostState: HostState | null = null;
@@ -47,17 +46,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     saveSearchPreferences: (preferences) => context.workspaceState.update("sessionSearchPreferences", preferences),
     saveModelPreferences: (preferences) => modelPreferences.save(preferences) }, client);
 
-  const importModelPreferences = async () => {
-    const json = await vscode.window.showInputBox({ title: "Import T3 Web Model Preferences",
-      prompt: "Paste the model-preferences JSON copied from T3 Web. See the README for the browser copy command.",
-      placeHolder: '{"favorites":[],"providerModelPreferences":{…}}', ignoreFocusOut: true,
-      validateInput: (value) => { try { parseModelPreferencesImport(value); return null; } catch (cause) { return String((cause as Error).message); } },
-    });
-    if (json === undefined) return;
-    await hostState!.importModelPreferences(json);
-    await vscode.window.showInformationMessage("T3 Web model preferences imported into VS Code.");
-  };
-
   const registry = new WebviewRegistry();
   const showSettings = () => vscode.commands.executeCommand("workbench.action.openSettings", `@ext:${context.extension.id}`);
   let provider: T3WebviewProvider;
@@ -65,7 +53,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const bridge = new BridgeHandler(hostState, registry, showSettings, undefined, registerNativeDiff(context), {
     openInTab: (id, draft) => provider.createPanel(id, draft),
     newChatTab: (id) => provider.createNewPanel(id),
-    showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(), importModelPreferences,
+    showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(),
   });
   provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState);
   const notifications = new InputNotificationTracker();
@@ -95,7 +83,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("t3-vscode.showThreads", () => provider.showThreads()),
     vscode.commands.registerCommand("t3-vscode.showUsage", (accountKey?: string) => provider.showUsage(accountKey)),
     vscode.commands.registerCommand("t3-vscode.configureUsage", () => meters.configure()),
-    vscode.commands.registerCommand("t3-vscode.importModelPreferences", importModelPreferences),
     vscode.commands.registerCommand("t3-vscode.openWebUi", async () => {
       try { await vscode.env.openExternal(vscode.Uri.parse(hostState!.webUiUrl(SIDEBAR_VIEW_ID))); }
       catch (cause) { await vscode.window.showInformationMessage(String(cause)); }
