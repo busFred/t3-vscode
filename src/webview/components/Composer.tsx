@@ -4,7 +4,7 @@ import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIco
 import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
-import { clearDraft, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useComposerDraft } from "../composerDrafts";
+import { clearDraft, readDraftSelection, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useComposerDraft } from "../composerDrafts";
 import { contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, removeContextReference } from "../../shared/composerContext";
 import type { AssistantCitation } from "@t3tools/contracts";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
@@ -99,7 +99,11 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       requestAnimationFrame(() => {
         if (!input || input !== textarea.current) return;
         input.focus();
-        if (nextCursor !== undefined) { input.setSelectionRange(nextCursor, nextCursor); setCursor(nextCursor); onSelectionChange({ start: nextCursor, end: nextCursor }); }
+        const remembered = nextCursor === undefined ? readDraftSelection(draftKey) : { start: nextCursor, end: nextCursor };
+        if (remembered) {
+          const selection = { start: Math.min(input.value.length, remembered.start), end: Math.min(input.value.length, remembered.end) };
+          input.setSelectionRange(selection.start, selection.end); setCursor(selection.start); onSelectionChange(selection);
+        }
       });
     }; window.addEventListener("t3-focus-composer", focus);
     const pending = takeEditorReferenceFocus(draftKey);

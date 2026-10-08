@@ -16,7 +16,12 @@ function elapsedLabel(start: string | null | undefined, now: number): string {
   return seconds < 60 ? "<1m" : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h ${Math.floor(seconds / 60) % 60}m`;
 }
 
-export function ThreadList({ state, onAppearance }: { readonly state: HostStateSnapshot; readonly onAppearance: () => void }) {
+export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
+  readonly state: HostStateSnapshot;
+  readonly onAppearance?: () => void;
+  readonly onSelect?: (threadId: string) => void;
+  readonly compact?: boolean;
+}) {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -44,8 +49,8 @@ export function ThreadList({ state, onAppearance }: { readonly state: HostStateS
   const row = (thread: ThreadSummary, context = false) => {
     const match = hits.data?.find((hit) => hit.threadId === thread.id);
     const provider = state.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId);
-    return <button key={thread.id} data-thread-id={thread.id} data-shelf-context={context || undefined} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={() => { void run("selectThread", { threadId: thread.id }).then((ok) => { if (ok) void run("openInTab"); }); }} onContextMenu={(event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
-      if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }
+    return <button key={thread.id} data-thread-id={thread.id} data-shelf-context={context || undefined} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={() => { if (onSelect) onSelect(thread.id); else void run("selectThread", { threadId: thread.id }).then((ok) => { if (ok) void run("openInTab"); }); }} onContextMenu={compact ? undefined : (event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
+      if (!compact && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }
     }} aria-label={thread.title || "Untitled"} aria-description={thread.pendingRuntimeRequest ? "Input needed" : working(thread) ? "Working" : undefined} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>
       {thread.pinned ? <PinIcon size={12} /> : thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : <MessageSquareIcon size={12} />}
       <span className="thread-text"><span className="thread-title-line"><span className="thread-title">{thread.title || "Untitled"}</span>{thread.pendingRuntimeRequest ? <span className="thread-input" title={thread.pendingRuntimeRequest.kind === "user_input" ? "Input needed" : "Approval needed"} aria-label="Input needed"><MessageCircleQuestionIcon size={13} /><span>{thread.pendingRuntimeRequest.kind === "user_input" ? "Input" : "Approval"}</span></span> : working(thread) ? <span className="thread-working" aria-label="Working"><CircleDashedIcon size={13} /><span>Working</span><time title={thread.workingStartedAt ?? undefined}>{elapsedLabel(thread.workingStartedAt, now)}</time></span> : null}</span>
@@ -60,11 +65,11 @@ export function ThreadList({ state, onAppearance }: { readonly state: HostStateS
       {node.children.length && open ? <div className="session-tree-children" aria-label={`Subagents of ${node.thread.title || "Untitled"}`}>{node.children.map((child) => treeRow(child, members, section, depth + 1))}</div> : null}
     </div>;
   };
-  return <aside className="projects-sidebar dedicated-sessions" aria-label="Sessions">
-    <div className="history-heading"><strong>SESSIONS</strong><button className="icon-button" aria-label="New thread" title="Open New Chat in Editor Tab" onClick={() => { void run("newChatTab"); }}><PlusIcon size={15} /></button></div>
+  return <aside className={compact ? "compact-history" : "projects-sidebar dedicated-sessions"} aria-label={compact ? "Conversation history" : "Sessions"}>
+    <div className="history-heading"><strong>{compact ? "History" : "SESSIONS"}</strong>{compact ? <span>Current workspace</span> : <button className="icon-button" aria-label="New thread" title="Open New Chat in Editor Tab" onClick={() => { void run("newChatTab"); }}><PlusIcon size={15} /></button>}</div>
     <label className="thread-search"><SearchIcon size={14} /><input placeholder="Search conversations…" aria-label="Search threads" value={search} onChange={(event) => setSearch(event.target.value)} />{search ? <button className="icon-button" aria-label="Clear search" onClick={() => setSearch("")}><XIcon size={13} /></button> : null}</label>
     {hits.pending ? <p className="search-status" role="status">Searching messages…</p> : hits.error ? <p className="search-status turn-error" role="status">{hits.error}</p> : null}
-    <nav className="session-list" aria-label="Active conversations">
+    <div className="thread-sections"><nav className="session-list" aria-label="Active conversations">
       {active.map((node) => treeRow(node, activeMatches, "active"))}
       {query && !active.length && !settled.length && !archived.length && !hits.pending && !hits.error ? <p className="empty-list">No matching threads.</p> : null}
       {!query && !active.length ? <p className="empty-list">No active conversations in this workspace.</p> : null}
@@ -72,8 +77,8 @@ export function ThreadList({ state, onAppearance }: { readonly state: HostStateS
     <div className="history-shelves">
       <details className="history-shelf" key={`settled:${!!query}`} open={query ? settled.length > 0 : undefined}><summary><CheckIcon size={13} /><span>Settled</span><span className="shelf-count">{settledMatches.length}</span></summary><div>{settled.map((node) => treeRow(node, settledMatches, "settled"))}{!settled.length ? <p className="empty-list">No settled threads.</p> : null}</div></details>
       <details className="history-shelf" open={archiveOpen} onToggle={(event) => { const open = event.currentTarget.open; setArchiveOpen(open); if (open && !state.archiveLoaded) void run("loadArchive"); }}><summary><ArchiveIcon size={13} /><span>Archive</span><span className="shelf-count">{state.archiveLoaded ? archiveMatches.length : "…"}</span></summary><div>{archived.map((node) => treeRow(node, archiveMatches, "archive"))}{state.archiveLoaded && !archived.length ? <p className="empty-list">No archived threads.</p> : null}</div></details>
-    </div>
-    <div className="history-settings"><button className="icon-button" aria-label="T3 VSCode settings" title="T3 VSCode settings" onClick={onAppearance}><SettingsIcon size={15} /></button><span>Current workspace only</span><button className="icon-button" aria-label="Refresh connection" title="Reconnect" onClick={() => { void run("reconnect"); }}><RefreshCwIcon size={14} /></button></div>
+    </div></div>
+    {compact ? <div className="history-picker-hint">Switch this tab · drafts stay with each conversation</div> : <div className="history-settings"><button className="icon-button" aria-label="T3 VSCode settings" title="T3 VSCode settings" onClick={onAppearance}><SettingsIcon size={15} /></button><span>Current workspace only</span><button className="icon-button" aria-label="Refresh connection" title="Reconnect" onClick={() => { void run("reconnect"); }}><RefreshCwIcon size={14} /></button></div>}
     {menu && menuThread ? <ThreadActionsMenu thread={menuThread} position={menu} onClose={closeMenu} /> : null}
   </aside>;
 }

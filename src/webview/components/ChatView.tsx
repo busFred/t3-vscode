@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDownIcon, GlobeIcon, BotIcon, ArrowLeftIcon, SearchIcon, PlusIcon } from "lucide-react";
+import { ChevronDownIcon, GlobeIcon, BotIcon, ArrowLeftIcon, SearchIcon, HistoryIcon, PlusIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { Composer } from "./Composer";
@@ -15,14 +15,18 @@ import type { AssistantCitationSourceAnchor } from "./t3/assistantTextSelection"
 import { ThreadActionsMenu } from "./ThreadActionsMenu";
 import { SessionFind, type SearchTarget } from "./SessionFind";
 import { useSearchPreferences } from "../searchPreferences";
+import { SessionHistory } from "./SessionHistory";
 
 export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
   const [searchPreferences, setSearchPreferences] = useSearchPreferences(state);
   const [findOpen, setFindOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const historyAnchor = useRef<HTMLButtonElement>(null);
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
   const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
   const closeFind = useCallback(() => { setFindOpen(false); setSearchTarget(null); }, []);
-  useEffect(() => { setFindOpen(false); setSearchTarget(null); }, [state.activeThreadId]);
+  useEffect(() => { setFindOpen(false); setSearchTarget(null); setHistoryOpen(false); }, [state.activeThreadId]);
   const [threadMenu, setThreadMenu] = useState<{ x: number; y: number } | null>(null);
   const closeThreadMenu = useCallback(() => setThreadMenu(null), []);
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
@@ -45,7 +49,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
   const thread = state.threads.find((item) => item.id === state.activeThreadId);
   const parent = thread?.relationshipToParent === "subagent" ? state.threads.find((entry) => entry.id === thread.parentThreadId) : undefined;
   const project = state.projects.find((item) => item.id === thread?.projectId);
-  return <div className="chat-view" onKeyDownCapture={(event) => { if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "f" && thread) { event.preventDefault(); event.stopPropagation(); setFindOpen(true); } }}>
+  return <div className="chat-view" onKeyDownCapture={(event) => { if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "f" && thread) { event.preventDefault(); event.stopPropagation(); setHistoryOpen(false); setFindOpen(true); } }}>
     <main className="chat-main" data-reading-layout="one" data-thread-id={state.activeThreadId ?? ""} onPointerDown={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }} onFocusCapture={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }}>
       <header className="chat-header">
         <div className="chat-heading"><span className="project-label">{project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1) ?? "No project"}</span><span className="breadcrumb-divider">/</span><strong title={thread ? "Double-click to rename conversation" : undefined} onDoubleClick={thread ? (event) => {
@@ -53,11 +57,13 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
           window.getSelection()?.removeAllRanges();
           void run("threadAction", { threadId: thread.id, action: "rename" });
         } : undefined}>{thread?.title || "New conversation"}</strong></div>
-        {thread ? <button className="icon-button" aria-label="Find in session" title="Find in this session (Ctrl/Cmd+F)" onClick={() => setFindOpen(!findOpen)}><SearchIcon size={15} /></button> : null}
-        <button className="icon-button" aria-label="Open New Chat in Editor Tab" title="Open New Chat in Editor Tab" disabled={creating} onClick={() => { setCreating(true); void run("newChatTab").finally(() => setCreating(false)); }}><PlusIcon size={15} /></button>
+        {thread ? <button className="icon-button" aria-label="Find in session" title="Find in this session (Ctrl/Cmd+F)" onClick={() => { setHistoryOpen(false); if (findOpen) closeFind(); else setFindOpen(true); }}><SearchIcon size={15} /></button> : null}
+        <button ref={historyAnchor} className="icon-button" aria-label="History" title="History — switch conversation in this tab" aria-expanded={historyOpen} aria-controls={historyOpen ? "session-history" : undefined} onClick={() => { setHistoryOpen(!historyOpen); setThreadMenu(null); }}><HistoryIcon size={15} /></button>
+        <button className="icon-button" aria-label="Open New Chat in Editor Tab" title="Open New Chat in Editor Tab" disabled={creating} onClick={() => { setCreating(true); setHistoryOpen(false); void run("newChatTab").finally(() => setCreating(false)); }}><PlusIcon size={15} /></button>
         <button className="icon-button" aria-label="Open Web UI" title="Open current conversation in your default browser" onClick={() => { void run("openWebUi"); }}><GlobeIcon size={15} /></button>
         {thread ? <button className="icon-button" aria-label="Thread actions" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); setThreadMenu(threadMenu ? null : { x: box.right - 190, y: box.bottom + 5 }); }}><ChevronDownIcon size={14} /></button> : null}
       </header>
+      {historyOpen && historyAnchor.current ? <SessionHistory state={state} anchor={historyAnchor.current} onClose={closeHistory} /> : null}
       {threadMenu && thread ? <ThreadActionsMenu thread={thread} position={threadMenu} onClose={closeThreadMenu} /> : null}
       <div className="chat-reading" data-find-layout={findOpen && thread ? searchPreferences.layout : undefined}>
       {findOpen && thread ? <SessionFind key={`find:${thread.id}`} state={state} preferences={searchPreferences} onPreferences={setSearchPreferences} onClose={closeFind} onSelect={(target) => { setSearchTarget(target); if (target) setCitationTarget(null); }} /> : null}

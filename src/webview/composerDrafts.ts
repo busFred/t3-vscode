@@ -12,6 +12,7 @@ const selections = new Map<string, TextSelection>();
 const editorFocus = new Map<string, number>();
 const listeners = new Map<string, Set<() => void>>();
 export const readDraft = (key: string): ComposerDraft => drafts.get(key) ?? EMPTY;
+export const readDraftSelection = (key: string): TextSelection | undefined => selections.get(key);
 export function rememberDraftSelection(key: string, selection: TextSelection): void { selections.set(key, selection); }
 export function takeEditorReferenceFocus(key: string): number | undefined { const cursor = editorFocus.get(key); editorFocus.delete(key); return cursor; }
 export function addEditorReference(key: string, reference: FileReference): number {

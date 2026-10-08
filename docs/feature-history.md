@@ -50,9 +50,19 @@ This document tracks features by release, including how later versions changed t
 | [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces prerelease VSIX installers. | v0.0.1 | v0.1.13 |
 | [Release versioning](#release-versioning) | Uses one three-number version everywhere with Alpha as a stage description. | v0.1.10 | v0.1.11 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
+| [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.13 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
 
 ## Sessions and navigation
+
+### Tab History
+
+#### v0.1.13
+
+- Add a default-closed, searchable History picker to each editor tab with workspace sessions, status badges and nested subagents.
+- Switch only the originating tab while retaining its conversation drafts and keeping Settled and Archive separate.
+- Support keyboard navigation, Escape and outside-click dismissal in narrow editor groups.
+
 ### New chat editor actions
 
 #### v0.1.13

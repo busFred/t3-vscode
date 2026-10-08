@@ -283,7 +283,7 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .composer-suggestions .suggestion-description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 0.6875rem; }
 .composer-suggestions > p { padding: 4px 8px; margin: 0; font-size: 0.75rem; }
 
-/* Dedicated session management fills the whole sidebar; history never overlays chat. */
+/* Dedicated session management fills the sidebar; editor History uses a separate compact picker. */
 .sidebar-view { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--sidebar); color: var(--sidebar-foreground); }
 .sidebar-view .dedicated-sessions { display: flex; position: static; inset: auto; flex: 1; width: 100%; min-width: 0; border: 0; box-shadow: none; }
 .dedicated-sessions .history-heading { font-size: .6875rem; font-weight: 600; }
@@ -492,3 +492,16 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 @container (max-width: 440px) { .session-find-toolbar .find-case { display: none; } }
 .session-match-row { outline: 1px solid var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder)); outline-offset: 2px; }
 ::highlight(t3-session-match) { background-color: var(--vscode-editor-findMatchBackground, #ea9e3288); color: var(--vscode-editor-foreground); }
+
+/* The same session rows serve the sidebar and each editor's local History picker. */
+.thread-sections { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.session-history-picker { position: fixed; z-index: 100; display: flex; border: 1px solid var(--vscode-widget-border, var(--border)); border-radius: 4px; background: var(--vscode-editorWidget-background, var(--card)); color: var(--foreground); box-shadow: 0 5px 18px var(--vscode-widget-shadow, #0003); }
+.compact-history { display: flex; flex-direction: column; min-height: 0; width: 100%; padding: 4px 6px 0; }
+.compact-history .history-heading { font-size: .75rem; }
+.compact-history .history-heading > span { color: var(--muted-foreground); font-size: .625rem; }
+.compact-history .thread-sections { display: block; overflow: auto; overscroll-behavior: contain; }
+.compact-history .session-list { overflow: visible; padding-bottom: 6px; }
+.compact-history .history-shelves { max-height: none; overflow: visible; }
+.compact-history .thread { padding: 6px; }
+.compact-history .thread-title { font-size: .8125rem; }
+.history-picker-hint { flex-shrink: 0; border-top: 1px solid var(--border); padding: 6px 3px; color: var(--muted-foreground); font-size: .625rem; }
