@@ -8,7 +8,7 @@ This document tracks features by release, including how later versions changed t
 | --- | --- | --- | --- |
 | [Sessions sidebar](#sessions-sidebar) | Session manager with chat in editor tabs. | v0.0.7 | v0.1.13 |
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
-| [Independent chat views](#independent-chat-views) | Editor tabs keep independent conversations and drafts. | v0.0.2 | v0.0.9 |
+| [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.13 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.0.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.0.6 |
@@ -16,13 +16,13 @@ This document tracks features by release, including how later versions changed t
 | [Conversation status and notifications](#conversation-status-and-notifications) | Shows static Working/Input badges and notifies when input is needed. | v0.0.1 | v0.0.9 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.0.8 |
-| [Untouched chat cleanup](#untouched-chat-cleanup) | Removes newly created empty chats when their last chat surface closes. | v0.0.8 | v0.0.8 |
+| [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched new chats and rejected first-send threads. | v0.0.8 | v0.1.13 |
 | [Compact composer](#compact-composer) | Permanent toolbar and compact controls inside the message box. | v0.0.1 | v0.1.13 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.0.6 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits, removes, reorders and promotes queued messages; shows current tasks. | v0.0.6 | v0.0.7 |
-| [Attachment presentation](#attachment-presentation) | Draft and sent previews with image references in message text. | v0.0.1 | v0.0.9 |
-| [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Attaches clipboard images and files selected from the local machine. | v0.0.8 | v0.0.9 |
+| [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.13 |
+| [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Local image/file uploads that survive closing the originating tab. | v0.0.8 | v0.1.13 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies through a virtualized timeline and loads older history. | v0.0.1 | v0.1.10 |
 | [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.1.13 |
 | [Collapsed activity](#collapsed-activity) | Keeps reasoning and command sequences inside closed summaries. | v0.0.1 | v0.1.13 |
@@ -134,6 +134,13 @@ This document tracks features by release, including how later versions changed t
 - Reuse the existing editor tab when selecting an already open conversation.
 - Keep the last focused editor as the reference and account-meter target when the session manager gains focus.
 
+#### v0.1.13
+
+- Persist text, cursor position, references and attachment bytes in extension-owned local storage across tab closure and restart; web UI drafts remain separate.
+- Preserve concurrent drafts with per-view records and file leases, retain uploads through closure, and clear only the accepted sending draft.
+- Keep failed first sends and offline edits recoverable, with retryable restoration after reconnect.
+- Keep tab-local History selection independent from sidebar links and notifications that reveal an existing editor.
+
 ### Conversation management
 
 #### v0.0.1
@@ -235,6 +242,10 @@ This document tracks features by release, including how later versions changed t
 - Preserve chats after typing, adding an attachment/reference, sending, managing the thread or opening it in another chat surface.
 - Recheck durable server content and metadata before deletion, preserving external renames/pins and preexisting empty conversations.
 
+#### v0.1.13
+
+- Keep a rejected first send in its original unsaved composer and remove only its newly created, untouched empty thread.
+
 ## Composer and attachments
 
 ### Compact composer
@@ -334,6 +345,10 @@ This document tracks features by release, including how later versions changed t
 - Open floating image previews from the thumbnail itself or its inline message reference.
 - Display message-owned image references in place while retaining the attached-image thumbnail strip.
 
+#### v0.1.13
+
+- Restore local thumbnail previews and file bytes after closing or restarting, reuploading saved bytes when needed without mixing concurrent drafts.
+
 ### Clipboard paste and file picker
 
 #### v0.0.8
@@ -348,6 +363,10 @@ This document tracks features by release, including how later versions changed t
 - Send structured attachment context so the provider receives the image position within the paragraph.
 - Remove an attachment’s references when removing its draft thumbnail.
 - Keep existing references intact when a new attachment is inserted from a caret or selection inside a reference.
+
+#### v0.1.13
+
+- Retain host-owned uploads after tab closure and merge their completion only into still-present draft slots.
 
 ## Message rendering
 

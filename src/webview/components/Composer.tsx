@@ -4,7 +4,7 @@ import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIco
 import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
-import { clearDraft, readDraftSelection, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useComposerDraft } from "../composerDrafts";
+import { clearDraft, readDraftSelection, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useDraftRecovery, useComposerDraft } from "../composerDrafts";
 import { contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, removeContextReference } from "../../shared/composerContext";
 import type { AssistantCitation } from "@t3tools/contracts";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
@@ -32,6 +32,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const draftKey = state.activeThreadId ?? "new";
   const [editingPreferences, setEditingPreferences] = useComposerPreferences();
   const onSelectionChange = useCallback((selection: TextSelection) => { rememberDraftSelection(draftKey, selection); notifySelection(selection); }, [draftKey, notifySelection]);
+  const recovery = useDraftRecovery(draftKey);
   const { text, contexts, attachments = [] } = useComposerDraft(draftKey);
   const visibleContexts = contexts.map((context, index) => ({ context, index })).filter(({ context }) => contextIsReferenced(text, context));
   const touched = useRef(false);
@@ -74,7 +75,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const project = state.projects.find((item) => item.id === state.draft.projectId);
   const projectLabel = project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1)
     ?? (state.draft.supportsNoProject ? "No project" : "Choose project");
-  const disabled = busy || state.sending || thread?.archived === true || thread?.providerNativeSubagent === true;
+  const disabled = !recovery.ready || busy || state.sending || thread?.archived === true || thread?.providerNativeSubagent === true;
   const inputSelection = (): TextSelection => ({ start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length });
   const editing = useRef(false);
   const numberingUndo = useRef<{ before: string; after: string; selection: TextSelection } | null>(null);
@@ -146,6 +147,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     textarea.current.style.height = `${Math.min(textarea.current.scrollHeight, 220)}px`;
   }, [text, state.appearance.fontSizePrompt]);
   useEffect(() => { setModelsOpen(false); }, [draftKey]);
+  useEffect(() => { if (recovery.ready && textarea.current) { const selection = readDraftSelection(draftKey); if (selection) { textarea.current.setSelectionRange(selection.start, selection.end); setCursor(selection.start); } } }, [draftKey, recovery.ready]);
   useEffect(() => {
     const dismiss = (event: PointerEvent) => { if (overflow.current && !overflow.current.contains(event.target as Node)) overflow.current.open = false; };
     document.addEventListener("pointerdown", dismiss);
@@ -227,6 +229,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   </div>;
   return <div className="composer-area"><div className="composer-column">
     <PendingRequests state={state} />
+    {recovery.error ? <p className="composer-attachment-error" role="alert">{recovery.error}</p> : null}
     <ConversationActivity key={draftKey} state={state} />
     {thread?.archived ? <div className="archived-banner">This thread is archived.<button className="text-button" onClick={() => { void run("threadAction", { threadId: thread.id, action: "unarchive" }); }}>Restore thread</button></div> : null}
     {thread?.providerNativeSubagent ? <p className="subagent-readonly" role="status">This conversation is controlled by its provider. Send instructions in the parent conversation.</p> : null}

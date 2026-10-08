@@ -1,3 +1,6 @@
+import { ComposerDraftStore, type StoredComposerDraft } from "./composerDraftStore.js";
+import type { ViewDraft } from "../shared/viewDraft.js";
+import type { TextSelection } from "../shared/composerAttachments.js";
 /** Shared T3 connection and projections, with navigation and drafts owned by each webview. */
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
@@ -44,6 +47,7 @@ import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPre
 
 export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
+  readonly draftStore?: ComposerDraftStore;
   readonly home: string;
   readonly credentials: CredentialStore;
   readonly serverStartupHint?: string | undefined;
@@ -91,6 +95,8 @@ function authFailure(cause: unknown): boolean {
 }
 
 export class HostState {
+  private readonly composerDrafts: ComposerDraftStore;
+  private readonly draftUploads = new Set<string>();
   private readonly sessionSearches = new Map<string, SessionSearchJob>();
   private searchPreferences: SearchPreferences;
   private phase: HostPhase = "discovering";
@@ -117,7 +123,7 @@ export class HostState {
   private readonly options: HostStateOptions;
   private readonly client: HostTransport;
   constructor(options: HostStateOptions, client: HostTransport) {
-    this.options = options; this.client = client;
+    this.options = options; this.client = client; this.composerDrafts = options.draftStore ?? new ComposerDraftStore();
     this.searchPreferences = resolveSearchPreferences(options.searchPreferences);
     client.onClose = () => {
       void this.enqueue(() => this.recoverConnection()).catch((cause) => {
@@ -147,6 +153,7 @@ export class HostState {
     for (const [listener, id] of this.listeners) if (id === viewId) this.listeners.delete(listener);
     if (this.disposed) return Promise.resolve();
     return this.enqueue(async () => {
+      this.composerDrafts.release(viewId);
       // Sends ahead of this closure must finish claiming uploads before abandonment deletes them.
       for (const [id, upload] of this.uploads) if (upload.owners.has(viewId)) await this.releaseAttachment(id, viewId).catch(() => undefined);
       if (closedThreadId) await this.cleanupEmptyThread(closedThreadId);
@@ -179,13 +186,95 @@ export class HostState {
     if (!view) throw new Error("This conversation tab has been closed.");
     return view;
   }
-  async uploadAttachment(name: string, mimeType: string, bytes: Uint8Array, viewId = SIDEBAR_VIEW_ID, threadId?: string): Promise<DraftAttachment> {
+  private draftScope(): string { return `${this.options.home}:${this.server?.descriptor.environmentId ?? ""}`; }
+  async restoreComposerDraft(threadId: string, viewId = SIDEBAR_VIEW_ID): Promise<{ draft: ViewDraft; selection?: TextSelection | undefined }> {
+    this.requireView(viewId);
+    if (!this.client.connected || !this.server) throw new Error("Reconnect to T3 to recover this draft.");
+    if (threadId !== "new") this.requireThread(threadId);
+    const record = this.composerDrafts.claim(this.draftScope(), threadId, viewId);
+    for (const file of record.draft.attachments ?? []) {
+      let restored = file;
+      const bytes = this.composerDrafts.file(record, file.key);
+      if ((!file.attachment || !this.uploads.has(file.attachment.id)) && bytes && !this.draftUploads.has(`${record.id}:${file.key}`)) {
+        try { restored = await this.completeDraftUpload(record, file, bytes, viewId); }
+        catch (cause) { if (!this.client.connected) throw cause; restored = { ...file, pending: true, error: describeError(cause) }; }
+      } else if (file.pending && !this.draftUploads.has(`${record.id}:${file.key}`)) restored = { ...file, pending: false, error: "Upload was interrupted before its file reached the extension. Attach it again." };
+      // A recovery upload can finish after the user has removed a slot or attached another file.
+      // Merge only into the original slot; never overwrite the current draft's attachment array.
+      if (restored !== file && record.draft.attachments?.includes(file)) this.composerDrafts.save(record, {
+        ...record.draft, attachments: record.draft.attachments.map(current => current === file ? restored : current),
+      }, record.selection);
+      const current = record.draft.attachments?.find(current => current.key === file.key);
+      if (!current || current.pending || current.attachment?.id !== restored.attachment?.id) continue;
+      if (restored.attachment && restored.environmentId === this.server?.descriptor.environmentId) {
+        const upload = this.uploads.get(restored.attachment.id);
+        if (upload) { upload.owners.add(viewId); upload.owners.add(`draft:${record.id}`); }
+        else this.uploads.set(restored.attachment.id, { attachment: restored.attachment, environmentId: restored.environmentId!, owners: new Set([viewId, `draft:${record.id}`]), sent: false });
+      }
+    }
+    return { draft: record.draft, selection: record.selection };
+  }
+  saveComposerDraft(threadId: string, draft: ViewDraft, selection: TextSelection | undefined, viewId = SIDEBAR_VIEW_ID): void {
+    this.requireView(viewId);
+    const known = this.composerDrafts.owned(this.draftScope(), threadId, viewId);
+    // Local durability must not depend on the server staying connected between input and save.
+    if (!this.client.connected && !known) throw new Error("Reconnect to T3 before opening this draft.");
+    if (threadId !== "new") {
+      if (this.client.connected) this.requireThread(threadId);
+      if (draft.text || draft.contexts.length || draft.attachments?.length) this.emptyThreads.delete(threadId);
+    }
+    const record = known ?? this.composerDrafts.claim(this.draftScope(), threadId, viewId), owner = `draft:${record.id}`;
+    const attachments = draft.attachments?.map(file => {
+      const previous = record.draft.attachments?.find(old => old.key === file.key);
+      // A final upload reply may beat a renderer save containing the earlier pending slot.
+      if (file.pending && previous?.attachment) return { ...previous, ...(file.contextId ? { contextId: file.contextId } : {}) };
+      if (!file.attachment) return file;
+      const upload = this.uploads.get(file.attachment.id);
+      if (!upload || !upload.owners.has(viewId) || upload.environmentId !== this.server?.descriptor.environmentId) throw new Error("Cannot save an attachment owned by another chat.");
+      this.composerDrafts.copyAttachmentFile(record, file.key, file.attachment.id);
+      return { ...file, attachment: upload.attachment, environmentId: upload.environmentId, ...((file.previewUrl ?? previous?.previewUrl) ? { previewUrl: (file.previewUrl ?? previous?.previewUrl)! } : {}) };
+    });
+    const retained = new Set(attachments?.flatMap(file => file.attachment ? [file.attachment.id] : []));
+    for (const [id, upload] of this.uploads) {
+      if (retained.has(id)) upload.owners.add(owner);
+      else if (upload.owners.has(owner)) void this.releaseAttachment(id, owner).catch(() => undefined);
+    }
+    this.composerDrafts.save(record, { ...draft, ...(attachments ? { attachments } : {}) }, selection);
+  }
+  private async completeDraftUpload(record: StoredComposerDraft, file: DraftAttachment, bytes: Uint8Array, viewId: string): Promise<DraftAttachment> {
+    const key = `${record.id}:${file.key}`, environmentId = this.server!.descriptor.environmentId;
+    this.draftUploads.add(key);
+    const releaseLease = this.composerDrafts.retain(record);
+    try {
+      const attachment = await this.client.uploadAttachment(attachmentUploadInput(file.name, file.mimeType, bytes.byteLength), bytes);
+      const stillAttached = record.draft.attachments?.some(current => current.key === file.key);
+      if (!stillAttached || this.server?.descriptor.environmentId !== environmentId) {
+        await this.client.deleteAttachment(attachment.id).catch(() => undefined); throw new Error("The file was removed before its upload finished.");
+      }
+      const { error: _error, ...source } = file;
+      const ready: DraftAttachment = { ...source, pending: false, attachment, environmentId,
+        ...(attachment.type === "image" ? { previewUrl: `data:${attachment.mimeType};base64,${Buffer.from(bytes).toString("base64")}` } : {}) };
+      this.uploads.set(attachment.id, { attachment, environmentId, owners: new Set([`draft:${record.id}`, ...(this.views.has(viewId) ? [viewId] : [])]), sent: false });
+      this.composerDrafts.save(record, { ...record.draft, attachments: record.draft.attachments!.map(current => current.key === file.key ? { ...ready, ...(current.contextId ? { contextId: current.contextId } : {}) } : current) }, record.selection);
+      this.composerDrafts.flush();
+      return ready;
+    } finally { this.draftUploads.delete(key); releaseLease(); }
+  }
+  async uploadAttachment(name: string, mimeType: string, bytes: Uint8Array, viewId = SIDEBAR_VIEW_ID, threadId?: string, slotKey?: string): Promise<DraftAttachment> {
     const view = this.requireView(viewId);
     if (!this.client.connected || !this.server) throw new Error("T3 is disconnected. Retry after reconnecting.");
     if (threadId && view.activeThreadId !== threadId) throw new Error("The conversation changed before the file could be attached.");
     if (view.activeThreadId) this.emptyThreads.delete(view.activeThreadId);
     const input = attachmentUploadInput(name, mimeType, bytes.byteLength);
     const environmentId = this.server.descriptor.environmentId;
+    const record = this.composerDrafts.owned(this.draftScope(), threadId ?? view.activeThreadId ?? "new", viewId);
+    if (record) {
+      const key = slotKey ?? randomUUID();
+      const file: DraftAttachment = record.draft.attachments?.find(file => file.key === key) ?? { key, name: input.name, mimeType: input.mimeType, sizeBytes: input.sizeBytes, pending: true, contextId: `${input.type === "image" ? "image" : "file"}_${randomUUID()}` };
+      if (!record.draft.attachments?.some(file => file.key === key)) this.composerDrafts.save(record, { ...record.draft, attachments: [...(record.draft.attachments ?? []), file] }, record.selection);
+      this.composerDrafts.keepFile(record, key, bytes); this.composerDrafts.flush();
+      return this.completeDraftUpload(record, file, bytes, viewId);
+    }
     const attachment = await this.client.uploadAttachment(input, bytes);
     if (!this.views.has(viewId) || this.server?.descriptor.environmentId !== environmentId) {
       await this.client.deleteAttachment(attachment.id).catch(() => undefined); throw new Error("The chat closed before its file could be attached.");
@@ -480,7 +569,7 @@ export class HostState {
     this.applyProjectSelection(this.requireView(viewId), selected);
     return true;
   }
-  private async createThread(requestedProjectId: string | undefined, viewId: string): Promise<string> {
+  private async createThread(requestedProjectId: string | undefined, viewId: string, activate = true): Promise<string> {
     const view = this.requireView(viewId);
     if (!this.client.connected) throw new Error("T3 is disconnected.");
     this.chooseModel();
@@ -514,9 +603,9 @@ export class HostState {
     this.shell = await this.client.snapshotShell();
     this.emptyThreads.add(id);
     const previous = view.chatThreadId;
-    if (this.views.get(viewId) === view) { view.activeThreadId = id; if (view.chatActive) view.chatThreadId = id; }
+    if (activate && this.views.get(viewId) === view) { view.activeThreadId = id; if (view.chatActive) view.chatThreadId = id; }
     await this.syncThreadSubscriptions(); this.emit();
-    if (previous) await this.cleanupEmptyThread(previous);
+    if (activate && previous) await this.cleanupEmptyThread(previous);
     if (!this.views.has(viewId)) await this.cleanupEmptyThread(id);
     return id;
   }
@@ -533,8 +622,7 @@ export class HostState {
       const limitError = getProviderAttachmentLimitError(attachments); if (limitError) throw new Error(limitError);
       const context = attachmentMessageContext(text, attachments, attachmentReferences);
       if (!text.trim() && !attachments.length) throw new Error("Enter a message or attach a file.");
-      const id = targetThreadId ?? await this.createThread(undefined, viewId);
-      this.emptyThreads.delete(id);
+      const id = targetThreadId ?? await this.createThread(undefined, viewId, false);
       const view = this.requireView(viewId);
       const thread = this.requireThread(id);
       if (thread.archivedAt) throw new Error("Restore this thread before sending a message.");
@@ -544,7 +632,17 @@ export class HostState {
         await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id,
           createdBy: "user", creationSource: "web", messageId: randomUUID(), text, attachments, ...(context ? { context } : {}),
           titleSeed: deriveThreadTitleSeed({ text, attachments }), ...(mode !== "queue" ? { deliveryIntent: mode } : {}), dispatchMode: { type: mode === "queue" ? "queue_after_active" : "start_immediately" } });
+        this.emptyThreads.delete(id);
         for (const id of attachmentIds) { const upload = this.uploads.get(id); if (upload) upload.sent = true; }
+        const record = this.composerDrafts.owned(this.draftScope(), targetThreadId ?? "new", viewId);
+        if (record) {
+          for (const file of record.draft.attachments ?? []) if (file.attachment) await this.releaseAttachment(file.attachment.id, `draft:${record.id}`);
+          this.composerDrafts.save(record, { text: "", contexts: [] }); this.composerDrafts.flush();
+        }
+        if (!targetThreadId && this.views.get(viewId) === view) { view.activeThreadId = id; if (view.chatActive) view.chatThreadId = id; await this.syncThreadSubscriptions(); }
+      } catch (cause) {
+        if (!targetThreadId) await this.cleanupEmptyThread(id).catch(() => undefined);
+        throw cause;
       } finally { view.sending = false; this.emit(); }
     });
   }
@@ -946,6 +1044,7 @@ export class HostState {
     for (const [listener, viewId] of this.listeners) listener(this.snapshot(viewId));
   }
   async dispose(): Promise<void> {
+    this.composerDrafts.dispose();
     this.disposed = true; this.client.onClose = null; this.client.onConfig = null;
     if (this.emitTimer) clearTimeout(this.emitTimer);
     await this.stopSubscriptions(); await this.client.disconnect(); this.listeners.clear();

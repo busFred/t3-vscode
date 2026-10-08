@@ -4,6 +4,8 @@
  * connection/state lives in the extension host (see host/hostState.ts).
  */
 
+import { createHash } from "node:crypto";
+import { ComposerDraftStore } from "./host/composerDraftStore.js";
 import { basename, resolve } from "node:path";
 import * as vscode from "vscode";
 import { BridgeHandler, WebviewRegistry } from "./host/bridge.js";
@@ -34,7 +36,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     : undefined;
 
   const client = new T3Client();
-  hostState = new HostState({ home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
+  hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
     workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject,
     appearance: readAppearance, messageNavigation: () => resolveMessageNavigation(vscode.workspace.getConfiguration("t3-vscode").get("messageNavigation")),
     favoriteModels: () => context.globalState.get<ReadonlyArray<FavoriteModel>>("favoriteModels", []),

@@ -17,7 +17,7 @@ import type { SearchPreferences } from "./sessionSearchPresentation.js";
 export const Methods = {
   searchSession: "searchSession", cancelSessionSearch: "cancelSessionSearch", revealSessionMatch: "revealSessionMatch",
   sessionSearchPreviews: "sessionSearchPreviews", setSearchPreferences: "setSearchPreferences",
-  chatAsset: "chatAsset", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
+  restoreComposerDraft: "restoreComposerDraft", saveComposerDraft: "saveComposerDraft", chatAsset: "chatAsset", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
   newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
   setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt",

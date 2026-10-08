@@ -45,7 +45,7 @@ export function pasteAttachments(draftKey: string, files: ReadonlyArray<File>, t
         const encoded = await dataUrl(file);
         updateDraft(draftKey, (draft) => ({ ...draft, attachments: (draft.attachments ?? []).map((attachment) => attachment.key === key && input.type === "image" ? { ...attachment, previewUrl: encoded } : attachment) }));
         if (!readDraft(draftKey).attachments?.some((attachment) => attachment.key === key)) continue;
-        const ready = await bridge.request<DraftAttachment>("uploadAttachment", { name: input.name, mimeType: input.mimeType, base64: encoded.slice(encoded.indexOf(",") + 1), ...(threadId ? { threadId } : {}) }, 6 * 60_000);
+        const ready = await bridge.request<DraftAttachment>("uploadAttachment", { slotKey: key, name: input.name, mimeType: input.mimeType, base64: encoded.slice(encoded.indexOf(",") + 1), ...(threadId ? { threadId } : {}) }, 6 * 60_000);
         if (!readDraft(draftKey).attachments?.some((attachment) => attachment.key === key)) { if (ready.attachment) await bridge.request("releaseAttachment", { attachmentId: ready.attachment.id }); continue; }
         updateDraft(draftKey, (draft) => ({ ...draft, attachments: (draft.attachments ?? []).map((attachment) => attachment.key === key ? { ...ready, key, ...(attachment.contextId ? { contextId: attachment.contextId } : {}) } : attachment) }));
       } catch (cause) {

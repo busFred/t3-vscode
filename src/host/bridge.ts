@@ -107,6 +107,15 @@ export class BridgeHandler {
           if (typeof params.query !== "string" || typeof params.atPromptStart !== "boolean") throw new Error("Invalid composer query.");
           return { id: message.id, result: await this.hostState.composerSuggestions(stringParam(params, "kind"), params.query, params.atPromptStart, viewId) };
         }
+        case "restoreComposerDraft": return { id: message.id, result: await this.hostState.restoreComposerDraft(stringParam(params, "draftKey"), viewId) };
+        case "saveComposerDraft": {
+          const key = stringParam(params, "draftKey");
+          const draft = parseDraftTransfer(params, key, true); if (!draft) throw new Error("Invalid draft.");
+          const selection = params.selection;
+          if (selection !== undefined && (!isObject(selection) || !Number.isSafeInteger(selection.start) || !Number.isSafeInteger(selection.end) || Number(selection.start) < 0 || Number(selection.end) < Number(selection.start))) throw new Error("Invalid draft cursor.");
+          this.hostState.saveComposerDraft(key, draft.draft, selection as { start: number; end: number } | undefined, viewId);
+          return { id: message.id, result: true };
+        }
         case "composerState": {
           if ((params.active !== undefined && typeof params.active !== "boolean") || (params.touched !== undefined && typeof params.touched !== "boolean")) throw new Error("Invalid composer state.");
           await this.hostState.composerState(id(), params.active as boolean | undefined, params.touched === true, viewId); break;
@@ -115,7 +124,7 @@ export class BridgeHandler {
           const base64 = stringParam(params, "base64");
           if (base64.length > Math.ceil(PROVIDER_SEND_TURN_MAX_FILE_BYTES / 3) * 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error("Invalid attachment data or file too large.");
           const bytes = Buffer.from(base64, "base64");
-          return { id: message.id, result: await this.hostState.uploadAttachment(stringParam(params, "name"), stringParam(params, "mimeType"), bytes, viewId, params.threadId === undefined ? undefined : id()) };
+          return { id: message.id, result: await this.hostState.uploadAttachment(stringParam(params, "name"), stringParam(params, "mimeType"), bytes, viewId, params.threadId === undefined ? undefined : id(), params.slotKey === undefined ? undefined : stringParam(params, "slotKey")) };
         }
         case "pickAttachments": {
           const vscode = await import("vscode");
