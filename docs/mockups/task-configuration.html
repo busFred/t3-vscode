@@ -179,9 +179,10 @@ body[data-demo-theme="dark"] .tn-workbench { --tc-bg: #1f1f1f; --tc-panel: #2525
   <p class="tn-intro">Expand a session’s groups, open the project Tasks tab, or click a task to edit.</p>
   <section class="tn-workbench" id="tn-workbench" aria-label="VS Code sidebar and current chat preview">
     <aside class="tn-sidebar" aria-label="Project sidebar">
-      <header class="tn-project"><strong>cvafa</strong><small>Project</small><button type="button" class="tc-icon-button" id="tn-new" aria-label="New session" title="New session">＋</button></header>
+      <header class="tn-project"><strong>cvafa</strong><small>Project</small></header>
       <div class="tn-root" id="tn-root">
         <nav class="tn-tabs" role="tablist" aria-label="Project navigation"><button type="button" id="tn-sessions-tab" role="tab" aria-selected="true" aria-controls="tn-content" tabindex="0">Sessions <small>3</small></button><button type="button" id="tn-tasks-tab" role="tab" aria-selected="false" aria-controls="tn-content" tabindex="-1">Tasks <small id="tn-project-count">4</small></button></nav>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:3px 10px;font-size:11px"><strong id="tn-manager-label">SESSIONS</strong><button type="button" class="tc-icon-button" id="tn-new" aria-label="New session" title="New session">＋</button></div>
         <label class="tn-search"><svg class="tc-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m15 15 5 5" stroke="currentColor" stroke-width="1.5"/></svg><input type="search" id="tn-search" aria-label="Search sessions" placeholder="Search conversations…"></label>
         <div class="tn-content" id="tn-content" role="tabpanel" aria-labelledby="tn-sessions-tab"></div>
         <footer class="tn-footer"><span aria-hidden="true">⚙</span><span id="tn-footer-scope">Current workspace only</span><span aria-hidden="true">⟳</span></footer>
@@ -337,6 +338,7 @@ body[data-demo-theme="dark"] .tn-workbench { --tc-bg: #1f1f1f; --tc-panel: #2525
     for (const name of ['sessions','tasks']) { const button = el(`${name}-tab`); button.setAttribute('aria-selected',String(name === tab)); button.tabIndex = name === tab ? 0 : -1; }
     el('search').value = queries[tab]; el('search').placeholder = tab === 'tasks' ? 'Search project tasks…' : 'Search conversations…'; el('search').setAttribute('aria-label',tab === 'tasks' ? 'Search project tasks' : 'Search sessions');
     el('footer-scope').textContent = tab === 'tasks' ? 'Current project only' : 'Current workspace only'; content.setAttribute('aria-labelledby',`tn-${tab}-tab`);
+    el('manager-label').textContent = tab === 'tasks' ? 'TASKS' : 'SESSIONS';
     el('new').setAttribute('aria-label',tab === 'tasks' ? 'New project task' : 'New session'); el('new').title = tab === 'tasks' ? 'New project task' : 'New session';
     renderRoot(); content.scrollTop = scrolls[tab]; if (focus) el(`${tab}-tab`).focus();
   }

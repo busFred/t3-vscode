@@ -81,6 +81,46 @@ export async function verifyNativeEditorControls({ evidence, workbench, sidebar,
   await recovered.wait(`document.querySelector('textarea')?.value === ${JSON.stringify(draftBeforeClose)}`);
   await recovered.wait('document.querySelector(".composer-attachment img")');
   assert.equal(await second.evaluate('document.querySelector("textarea").value'), 'Second editor draft must survive');
+  // Native chat-to-sidebar task routing must retain the chat and its attachment draft.
+  await recovered.evaluate(`document.querySelector('[aria-label="Scheduled tasks"]').click()`);
+  await recovered.wait('document.querySelector(".chat-scheduled-drawer")');
+  await recovered.evaluate(`document.querySelector('[aria-label="New task for this session"]').click()`);
+  await sidebar.wait('document.querySelector(".scheduled-task-editor")');
+  const setTaskField = async (label, value, textarea = false) => sidebar.evaluate(`(() => {
+    const input = document.querySelector('[aria-label="${label}"]');
+    Object.getOwnPropertyDescriptor(${textarea ? 'HTMLTextAreaElement' : 'HTMLInputElement'}.prototype, 'value').set.call(input, ${JSON.stringify(value)});
+    input.dispatchEvent(new Event('input', {bubbles:true}));
+  })()`);
+  const taskTitle = `Native task ${Date.now()}`;
+  await setTaskField('Task name', taskTitle);
+  await setTaskField('Task prompt', 'Read the training log and report progress.', true);
+  assert.equal(await sidebar.evaluate(`document.querySelector('[aria-label="Task effort"]').value`), 'low');
+  await sidebar.evaluate(`document.querySelector('[aria-label="Task enabled"]').click()`);
+  await sidebar.evaluate(`document.querySelector('.scheduled-task-editor').requestSubmit()`);
+  await sidebar.wait('!document.querySelector(".scheduled-task-editor")');
+  await recovered.wait(`[...document.querySelectorAll('.scheduled-task-open')].some(button=>button.textContent.includes(${JSON.stringify(taskTitle)}))`);
+  await recovered.evaluate(`[...document.querySelectorAll('.scheduled-task-open')].find(button=>button.textContent.includes(${JSON.stringify(taskTitle)})).click()`);
+  await sidebar.wait('document.querySelector(".scheduled-task-editor")');
+  await setTaskField('Task name', taskTitle + ' draft');
+  await runCommand('T3 VSCode: Sessions');
+  await sidebar.wait(`!document.querySelector('.scheduled-task-editor') && document.querySelector('#sessions-tab')?.getAttribute('aria-selected') === 'true'`);
+  await recovered.evaluate(`[...document.querySelectorAll('.scheduled-task-open')].find(button=>button.textContent.includes(${JSON.stringify(taskTitle)})).click()`);
+  await sidebar.wait(`document.querySelector('[aria-label="Task name"]')?.value === ${JSON.stringify(taskTitle + ' draft')}`);
+  await runCommand('T3 VSCode: Account & Usage');
+  await sidebar.wait(`!document.querySelector('.scheduled-task-editor') && document.querySelector('.account-usage')?.open`);
+  assert.equal(await recovered.evaluate('document.querySelector("textarea").value'), draftBeforeClose);
+  assert.equal(await recovered.evaluate('!!document.querySelector(".composer-attachment img")'), true);
+  await sidebar.evaluate(`document.querySelector('#tasks-tab').click()`);
+  await sidebar.evaluate(`document.querySelector('[aria-label="New task"]').click()`);
+  await sidebar.wait('document.querySelector(".scheduled-task-editor")');
+  assert.equal(await sidebar.evaluate(`document.querySelector('[aria-label="Task result destination"]').value`), '');
+  await setTaskField('Task name', taskTitle + ' independent');
+  await setTaskField('Task prompt', 'Report progress without a parent conversation.', true);
+  await sidebar.evaluate(`document.querySelector('[aria-label="Task enabled"]').click()`);
+  await sidebar.evaluate(`document.querySelector('.scheduled-task-editor').requestSubmit()`);
+  await sidebar.wait('!document.querySelector(".scheduled-task-editor")');
+  await sidebar.wait(`[...document.querySelectorAll('.scheduled-task-open')].some(button=>button.textContent.includes(${JSON.stringify(taskTitle + ' independent')}))`);
+  console.log('PASS: native chat task entry opens the sidebar editor, disabled session/independent tasks save, Sessions and Usage commands retain task drafts, and the chat text/image draft remains intact; no task runs.');
   await workbench.screenshot({ path: join(evidence, 'edh-editor-controls.png') });
   console.log('PASS: native New Chat command uses the active group, header + uses the originating group, closed tabs recover text and images, existing drafts survive, History switches only its tab, titles follow selection and untouched tabs are cleaned up; no provider messages sent.');
 }

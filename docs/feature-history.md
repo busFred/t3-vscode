@@ -2,7 +2,7 @@
 
 This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
-The existing v0.1.16 installer is unpublished and includes model-preference import and management plus selected-text descriptions for pasted images; the Git release baseline is `f6af7cb` (manifest v0.1.15). Later source revisions remove manual T3 Web import while retaining saved preferences; their installer is pending task configuration implementation. The manifest remains v0.1.16.
+The v0.1.16 local revision includes selected-text image descriptions, local model management with drag ordering, compact session activity, scheduled-task navigation/configuration and readable queued-message editing; it removes manual T3 Web import. The Git release baseline is `f6af7cb` (manifest v0.1.15). The manifest remains v0.1.16 and publication is prohibited. See the release verification entries below for the earlier installer and this same-version rebuild.
 
 ## Overview
 
@@ -1149,6 +1149,15 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Pass TypeScript checking, the webview/Mermaid/math build and the complete multi-view browser suite after matching queued editing to the configurable prompt font.
 - Verify equal editor font size and line height at a custom 18 px prompt setting, unchanged compact preview text and preservation of the current composer draft.
 - Use disposable browser profiles and an explicitly isolated T3 home with fixture transports; leave the installer pending task configuration implementation.
+
+### v0.1.16 — task management rebuild verification
+
+- Keep the manifest at v0.1.16; commit session activity (`f7d9789`), model drag ordering (`3837930`), task management (`978b807`) and task navigation recovery (`dc9ac0e`) separately with their feature documentation.
+- Pass all 192 deterministic tests, TypeScript checking, complete extension/webview/Mermaid/math builds and all 49 linked feature-history anchors.
+- Pass both complete browser regression suites, including pointer/touch/keyboard model ordering, task project/session scope, independent creation, 280 px editing, Save/Back/Cancel, failure retention, same-environment reconnect, native navigation events and preserved conversation model/draft.
+- Pass real isolated T3 task list/subscription/create/edit checks, including disabled saves, persisted model/Low effort and one completed GPT-6 Luna Low scheduled dispatch with server attribution and saved run model selection.
+- Pass real VS Code checks in disposable user-data, extension and shared-data directories, including task creation/editing from chat, independent disabled tasks, Sessions/Account & Usage commands, retained task drafts and unchanged text/image chat drafts; stop the disposable T3 server afterward.
+- Resolve the independent review's two P2 findings—lost task drafts during reconnect and hidden Sessions/Usage navigation—before packaging; final signoff and installer checksum are recorded below when available.
 
 ## Maintenance
 
