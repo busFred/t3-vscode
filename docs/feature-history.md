@@ -1,6 +1,6 @@
 # T3 VSCode feature history
 
-This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is a local preview whose same-version revisions include double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically.
+This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is prepared for the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically.
 
 ## Overview
 
@@ -47,8 +47,8 @@ This document tracks features by release, including how later versions changed t
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage and Connection. | v0.0.9 | v0.1.10 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.12 |
-| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces prerelease VSIX installers. | v0.0.1 | v0.1.13 |
-| [Release versioning](#release-versioning) | Uses one three-number version everywhere with Alpha as a stage description. | v0.1.10 | v0.1.11 |
+| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.1.13 |
+| [Release versioning](#release-versioning) | Uses one three-number version and explicitly selects the distribution channel. | v0.1.10 | v0.1.13 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.13 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
@@ -840,6 +840,7 @@ This document tracks features by release, including how later versions changed t
 #### v0.1.13
 
 - Add deterministic host and browser checks for full-session search without provider calls.
+- Prepare the reviewed 0.1.13 installer for the release channel with `preview: false` and no prerelease property.
 
 ### Release versioning
 
@@ -853,6 +854,11 @@ This document tracks features by release, including how later versions changed t
 
 - Replace the label/encoding scheme with one package.json version used by the README, changelog, installer and Marketplace.
 - Use Alpha as a stage description and keep the prerelease channel separate from the three-number version.
+
+#### v0.1.13
+
+- Keep version 0.1.13 for its first Marketplace release-channel publication; retain 0.1.12 as the preceding prerelease.
+- Separate feature changes and onboarding into Git commits, with publication metadata in a final release commit.
 
 ### Feature tracking and regression review
 
@@ -969,6 +975,15 @@ This document tracks features by release, including how later versions changed t
 - Attempt native setup verification with isolated user, extension, shared and T3 storage; the environment has no display server and Electron’s headless mode could not expose the extension view.
 - Keep version 0.1.13 for the requested local installer and retain normal VS Code profiles and T3 state without installation or publication.
 - Verify the rebuilt canonical `target-installer/t3-vscode-0.1.13.vsix` contains the exact compiled bundles, unchanged manifest, prerelease marker, notices, 20 math fonts and three screenshots; retain its SHA-256 sidecar and archive the preceding same-version build.
+
+#### Release-channel preparation — same v0.1.13
+
+- Record eight separate feature commits, including the other session’s onboarding work, and a separate combined-regression commit without changing the reviewed runtime.
+- Pass TypeScript checks for each intermediate commit, all 163 deterministic unit tests, the extension/webview/Mermaid/math builds and both complete browser suites.
+- Recheck draft recovery, composer editing, queue/steer, search layouts and filters, response grouping, onboarding, graphics and virtualization using isolated fixture state without provider calls.
+- Obtain final fresh-context GPT-6 Luna regression review against `76be0b3`, with no actionable blockers and explicit packaging signoff.
+- Preserve prior isolated native coverage; the onboarding revision’s native display limitation remains recorded above.
+- Verify publisher authentication and prepare release-only publication without changing the version or the existing prerelease.
 
 ## Maintenance
 

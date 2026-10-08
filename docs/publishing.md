@@ -1,12 +1,12 @@
 # Publishing T3 VSCode
 
-The current release is **0.1.12 (Alpha)**, uploaded to the [Marketplace prerelease channel](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode). Future publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
+The current candidate is **0.1.13 (Alpha)** for the [Marketplace release channel](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode). The owner authorized release-only publication; do not upload a new prerelease. The preceding published version is 0.1.12 on the prerelease channel. Future publishing requires the owner’s explicit permission; building a VSIX does not authorize publication or installation.
 
 ## Version policy
 
-Use one version everywhere: **0.1.12**, read directly from `package.json`. README headings, release notes, VSIX filenames and the Marketplace all use that same value; there is no separate release label or encoded version.
+Use one version everywhere: **0.1.13**, read directly from `package.json`. README headings, release notes, VSIX filenames and the Marketplace all use that same value; there is no separate release label or encoded version.
 
-VS Code accepts only `major.minor.patch`, so the four-number form `0.1.0.10` is not supported. Alpha, Beta and RC describe development stages on the Marketplace prerelease channel; the stage is not a fourth version component. Advance the three-number version for each package, and never reuse a published version. [VS Code version requirements](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#pre-release-extensions)
+VS Code accepts only `major.minor.patch`, so the four-number form `0.1.0.10` is not supported. Alpha, Beta and RC describe development stages; they do not determine the distribution channel or add a fourth version component. Advance the three-number version for each package, and never reuse a published version. [VS Code version requirements](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#pre-release-extensions)
 
 The packager validates the version through vsce and derives the prerelease flag from `preview: true`. A later stable build needs its own higher version and `preview: false`; prerelease subscribers can update to a higher stable version. Historical local versions remain in the feature history.
 
@@ -14,7 +14,7 @@ The packager validates the version through vsce and derives the prerelease flag 
 
 - The Marketplace publisher is `hungtienhuang`, confirmed by the owner.
 - The prepared listing uses the owner-approved name “T3 VSCode”, MIT license and GitHub repository/issues links.
-- A publishing login must have permission for that publisher; publication of this prerelease is authorized by the owner.
+- A publishing login must have permission for that publisher; publication of 0.1.13 on the release channel is authorized by the owner.
 
 Create a publisher in [Marketplace publisher management](https://marketplace.visualstudio.com/manage/publishers/). The publisher ID becomes part of the permanent extension identity, `<publisher>.t3-vscode`, so set the actual ID before the final public package is built. Changing the publisher also changes the installed extension identity.
 
@@ -33,19 +33,19 @@ Linux and local T3 servers are the verified scope. Other platforms need verifica
 1. Update `package.json`, the changelog and linked feature history for the candidate.
 2. Run relevant unit, type, browser and isolated native checks; use GPT-6 Luna with low effort only when a live provider check is needed.
 3. Start a regression reviewer with fresh context, resolve blockers, obtain final signoff and record the outcome in the feature history.
-4. Run `pnpm package` and verify the VSIX version, publisher, prerelease marker and bundled assets.
+4. Run `pnpm package` and verify the VSIX version, publisher, release-channel metadata and bundled assets; 0.1.13 uses `preview: false` and must omit the prerelease property.
 
 The packaging script reads the version from `package.json`, adds `--pre-release` when `preview: true`, and writes to `target-installer/`. The prerelease flag is required in addition to the Marketplace Preview label. Never use `--skip-license` for the public candidate.
 
 ## Publish the reviewed package
 
-The owner has authorized publishing v0.1.12 under `hungtienhuang`; publish the reviewed package after all checks pass and credentials are verified:
+The owner has authorized publishing v0.1.13 on the release channel under `hungtienhuang`; publish the reviewed package after all checks pass and credentials are verified:
 
 ```sh
-pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.1.12.vsix --pre-release
+pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.1.13.vsix
 ```
 
-Using the reviewed package avoids rebuilding different code while publishing. Do not pass `patch` or another version argument: those commands can modify the version and create Git commits/tags. After publication, check the Marketplace page, verify prerelease installation in an isolated VS Code profile, and record the published URL and version.
+Using the reviewed package avoids rebuilding different code while publishing. Do not pass `patch` or another version argument: those commands can modify the version and create Git commits/tags. After publication, check the Marketplace page, verify release-channel metadata and installation in an isolated VS Code profile, and record the published URL and version.
 
 ## First public release
 

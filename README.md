@@ -1,6 +1,6 @@
 # T3 VSCode
 
-**Local alpha preview — 0.1.13.** The published prerelease remains 0.1.12 on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode). Install this preview from a local VSIX.
+**0.1.13 (Alpha) — release channel.** Install T3 VSCode from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) or a local VSIX.
 
 A VS Code client for a separately running [T3 Code](https://github.com/pingdotgg/t3code) server. T3 VSCode adds a workspace session manager and chat in editor tabs. Colors follow your VS Code theme; the extension host owns connection, authentication and shared conversation state.
 

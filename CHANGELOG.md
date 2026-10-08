@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.13 — Local alpha preview
+## 0.1.13 — Alpha, release channel
 
 - Guide first connection through T3’s web/provider setup, keep the background service optional and enter Sessions automatically after connecting.
 - Show accurate discovery/pairing diagnostics and copy startup commands for the configured T3 directory, preserving isolated development setup.
@@ -13,7 +13,7 @@
 - Show Working as soon as dispatch succeeds, keep all assistant prose visible, and fold only thought/tool groups separated by messages and steers.
 - Use one assistant header per run, a status-only pinned Working header, dense message gaps and one capability-gated fork at the end of a settled run.
 - Keep the account refresh/update time and shorten its settings link to **Status meters**.
-- Keep the version at 0.1.13; this revision is a local VSIX only.
+- Release version 0.1.13 on the Marketplace release channel; no new prerelease is published.
 
 ## 0.1.12 — Alpha prerelease
 
