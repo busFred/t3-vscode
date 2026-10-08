@@ -3,60 +3,86 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Scheduled task configuration — design preview</title>
+<title>Session and project task navigation — design preview</title>
 <style>
 * { box-sizing: border-box; }
 body { margin: 0; color: var(--foreground, #252525); background: var(--background, #fff); font: 13px/1.5 var(--font-sans, system-ui, sans-serif); }
 .tc { width: 100%; }
-.tc-intro { margin: 0 0 10px; font-size: 13px; }
-.tc-workbench { --tc-bg: #fff; --tc-panel: #f7f7f7; --tc-text: #202020; --tc-subtle: #636363; --tc-line: #d3d3d3; --tc-input: #fff; --tc-hover: #e9e9e9; --tc-blue: #0067c0; --tc-selected: #e1edf9; --tc-danger: #b42318; height: 730px; overflow: hidden; border: 1px solid var(--tc-line); color: var(--tc-text); background: var(--tc-bg); font: 12px/1.45 system-ui, sans-serif; }
-body[data-demo-theme="dark"] .tc-workbench { --tc-bg: #1f1f1f; --tc-panel: #252526; --tc-text: #ddd; --tc-subtle: #aaa; --tc-line: #454545; --tc-input: #313131; --tc-hover: #37373d; --tc-blue: #75beff; --tc-selected: #094771; --tc-danger: #ff9b94; }
+.tn-intro { margin: 0 0 10px; }
+.tn-workbench { --tc-bg: #fff; --tc-panel: #f3f3f3; --tc-text: #202020; --tc-subtle: #666; --tc-line: #d3d3d3; --tc-input: #fff; --tc-hover: #e6e6e6; --tc-blue: #0067c0; --tc-selected: #0067c0; --tc-selected-text: #fff; --tc-danger: #b42318; display: grid; grid-template-columns: 286px minmax(0, 1fr); height: 686px; position: relative; overflow: hidden; border: 1px solid var(--tc-line); color: var(--tc-text); background: var(--tc-bg); font: 12px/1.45 system-ui, sans-serif; }
+body[data-demo-theme="dark"] .tn-workbench { --tc-bg: #1f1f1f; --tc-panel: #252526; --tc-text: #ddd; --tc-subtle: #aaa; --tc-line: #454545; --tc-input: #313131; --tc-hover: #37373d; --tc-blue: #75beff; --tc-selected: #094771; --tc-selected-text: #fff; --tc-danger: #ff9b94; }
 .tc button, .tc input, .tc textarea, .tc select { font: inherit; color: inherit; }
-.tc button { cursor: pointer; }
+.tc button, .tc summary { cursor: pointer; }
 .tc button:disabled { opacity: .45; cursor: default; }
 .tc [hidden] { display: none !important; }
-.tc button:focus-visible, .tc input:focus-visible, .tc select:focus-visible, .tc textarea:focus-visible, .tc summary:focus-visible { outline: 2px solid var(--tc-blue, #007acc); outline-offset: 1px; }
-.tc-icon { width: 14px; height: 14px; flex: 0 0 14px; }
+.tc button:focus-visible, .tc input:focus-visible, .tc select:focus-visible, .tc textarea:focus-visible, .tc summary:focus-visible { outline: 2px solid var(--tc-blue, #007acc); outline-offset: -1px; }
+.tc-icon { width: 13px; height: 13px; flex: 0 0 13px; }
 .tc-icon-button { display: inline-flex; align-items: center; justify-content: center; padding: 4px; border: 0; border-radius: 3px; background: none; color: var(--tc-subtle) !important; }
 .tc-icon-button:hover { background: var(--tc-hover); }
-.tc-header { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 9px; border-bottom: 1px solid var(--tc-line); }
-.tc-header-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
-.tc-header-title small { color: var(--tc-subtle); font-weight: 400; }
-.tc-tasks-button { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; border-radius: 3px; padding: 4px 6px; white-space: nowrap; }
-.tc-tasks-button[aria-expanded="true"] { color: var(--tc-blue); background: var(--tc-selected); }
-.tc-task-count { font-size: 10px; color: var(--tc-subtle); }
-.tc-layout { display: grid; grid-template-columns: minmax(0, 1fr) 370px; height: calc(100% - 36px); min-height: 0; }
-.tc-layout.tc-panel-closed { grid-template-columns: minmax(0, 1fr); }
-.tc-chat { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 13px; }
-.tc-session-model { display: flex; flex-direction: column; gap: 3px; margin-bottom: 20px; }
-.tc-session-model small { font-size: 9px; font-weight: 650; letter-spacing: .04em; color: var(--tc-subtle); }
-.tc-session-model strong { font-size: 12px; font-weight: 600; }
-.tc-message { border: 1px solid var(--tc-line); border-radius: 6px; padding: 10px; background: var(--tc-panel); margin: 0 0 18px 17px; line-height: 1.6; }
-.tc-answer { line-height: 1.65; }
-.tc-answer strong { display: block; margin-bottom: 8px; font-size: 12px; }
-.tc-answer ul { margin: 0; padding-left: 17px; }
-.tc-answer li { margin-bottom: 6px; }
-.tc-answer small { color: var(--tc-subtle); display: block; margin-top: 12px; font-size: 10px; }
-.tc-composer { margin-top: auto; border: 1px solid var(--tc-line); border-radius: 4px; padding: 8px; background: var(--tc-input); }
-.tc-composer textarea { display: block; width: 100%; height: 76px; resize: none; padding: 0; border: 0; background: none; font-size: 12px; outline: none; }
-.tc-composer-footer { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; font-size: 11px; }
-.tc-composer-footer b { font-weight: 600; }
-.tc-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--tc-line); background: var(--tc-panel); }
-.tc-panel-header { display: flex; align-items: center; gap: 7px; padding: 8px 10px; height: 36px; flex: 0 0 36px; border-bottom: 1px solid var(--tc-line); }
-.tc-panel-header strong { flex: 1; font-size: 12px; }
-.tc-panel-scope { width: 100%; border: 0; border-bottom: 1px solid var(--tc-line); background: var(--tc-panel); padding: 6px 10px; font-size: 10px !important; height: 28px; }
-.tc-task-list { flex: 0 0 auto; max-height: 140px; overflow-y: auto; border-bottom: 1px solid var(--tc-line); }
-.tc-task-row { display: flex; align-items: center; gap: 5px; padding: 8px 9px; }
-.tc-task-row + .tc-task-row { border-top: 1px solid var(--tc-line); }
-.tc-task-info { flex: 1; min-width: 0; }
-.tc-task-title { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.tc-task-meta { display: block; color: var(--tc-subtle); font-size: 10px; margin-top: 3px; }
-.tc-task-model { display: block; color: var(--tc-blue); font-size: 10px; margin-top: 2px; }
-.tc-switch { appearance: none; width: 28px; height: 16px; flex: 0 0 28px; border-radius: 10px; background: #999; margin: 0 0 0 2px; position: relative; cursor: pointer; }
+.tn-sidebar { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--tc-panel); border-right: 1px solid var(--tc-line); }
+.tn-project { display: flex; align-items: center; gap: 7px; height: 36px; flex: 0 0 36px; padding: 0 11px; border-bottom: 1px solid var(--tc-line); }
+.tn-project strong { flex: 1; font-weight: 600; }
+.tn-project small { color: var(--tc-subtle); font-size: 10px; }
+.tn-root { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tn-tabs { display: flex; flex: 0 0 35px; padding: 0 9px; gap: 10px; }
+.tn-tabs button { flex: 1; border: 0; border-bottom: 2px solid transparent; background: none; font-size: 12px; text-align: center; }
+.tn-tabs button[aria-selected="true"] { border-color: var(--tc-blue); font-weight: 600; }
+.tn-tabs small { font-size: 10px; font-weight: 400; color: var(--tc-subtle); margin-left: 4px; }
+.tn-search { display: flex; align-items: center; gap: 6px; margin: 9px 9px 8px; border: 1px solid var(--tc-line); border-radius: 3px; background: var(--tc-input); padding: 5px 7px; color: var(--tc-subtle); }
+.tn-search input { min-width: 0; width: 100%; background: none; border: 0; outline: 0; font-size: 12px; }
+.tn-search input::placeholder { color: var(--tc-subtle); }
+.tn-content { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 8px; scrollbar-width: thin; }
+.tn-content > * { flex: 0 0 auto; }
+.tn-session-row { display: flex; align-items: center; }
+.tn-session-toggle { flex: 0 0 17px; padding: 3px 1px; border: 0; background: none; color: var(--tc-subtle); }
+.tn-session-toggle[aria-expanded="true"] .tc-icon { transform: rotate(90deg); }
+.tn-session-button { flex: 1; min-width: 0; border: 0; background: none; border-radius: 3px; padding: 7px; text-align: left; display: flex; align-items: center; gap: 7px; min-height: 48px; }
+.tn-session-button:hover, .tn-task-open:hover, .tn-subagent:hover { background: var(--tc-hover); }
+.tn-session-button[aria-current="page"] { background: var(--tc-selected); color: var(--tc-selected-text); }
+.tn-session-text { flex: 1; min-width: 0; }
+.tn-session-title { display: block; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tn-session-meta { display: flex; gap: 7px; margin-top: 3px; font-size: 10px; color: var(--tc-subtle); }
+.tn-session-meta span:first-child { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tn-session-button[aria-current="page"] .tn-session-meta { color: inherit; opacity: .9; }
+.tn-children { margin: 3px 0 7px 22px; border-left: 1px solid var(--tc-line); padding-left: 6px; }
+.tn-group + .tn-group { margin-top: 4px; }
+.tn-group summary { display: flex; align-items: center; gap: 5px; list-style: none; padding: 5px 3px; color: var(--tc-subtle); font-size: 11px; }
+.tn-group summary::-webkit-details-marker { display: none; }
+.tn-group summary span { flex: 1; }
+.tn-group summary small { font-size: 10px; }
+.tn-group[open] summary > .tc-icon:first-child { transform: rotate(90deg); }
+.tn-subagent { display: flex; gap: 6px; align-items: center; width: 100%; text-align: left; border: 0; border-radius: 3px; background: none; padding: 6px 5px; }
+.tn-subagent[aria-current="page"] { background: var(--tc-selected); color: var(--tc-selected-text); }
+.tn-subagent span { min-width: 0; flex: 1; }
+.tn-subagent strong { display: block; font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tn-subagent small { display: block; font-size: 10px; color: var(--tc-subtle); margin-top: 2px; }
+.tn-subagent[aria-current="page"] small { color: inherit; }
+.tn-task-row { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--tc-line); padding: 5px 1px; }
+.tn-task-open { display: block; flex: 1; min-width: 0; background: none; border: 0; border-radius: 3px; text-align: left; padding: 5px; }
+.tn-task-title { display: block; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tn-task-meta, .tn-task-model, .tn-task-origin { display: block; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+.tn-task-meta, .tn-task-origin { color: var(--tc-subtle); }
+.tn-task-model { color: var(--tc-blue); }
+.tn-task-draft { font-size: 9px; color: var(--tc-subtle); font-weight: 400; margin-left: 4px; }
+.tn-dense { border: 0; padding: 0; }
+.tn-dense .tn-task-title { font-size: 11px; font-weight: 500; }
+.tn-dense .tn-task-model { margin-top: 1px; }
+.tn-dense .tn-task-meta { margin-top: 2px; }
+.tc-switch { appearance: none; width: 25px; height: 15px; flex: 0 0 25px; border-radius: 10px; background: #999; margin: 0 2px; position: relative; cursor: pointer; }
 .tc-switch:checked { background: #0067c0; }
-.tc-switch::after { content: ''; width: 12px; height: 12px; position: absolute; border-radius: 50%; background: #fff; top: 2px; left: 2px; }
-.tc-switch:checked::after { left: 14px; }
-.tc-empty { color: var(--tc-subtle); font-size: 11px; padding: 13px 10px; margin: 0; }
+.tc-switch::after { content: ''; width: 11px; height: 11px; position: absolute; border-radius: 50%; background: #fff; top: 2px; left: 2px; }
+.tc-switch:checked::after { left: 12px; }
+.tn-task-controls { display: flex; align-items: center; gap: 1px; }
+.tn-empty { margin: 6px 4px; padding: 7px 0; color: var(--tc-subtle); font-size: 11px; }
+.tn-shelves { margin-top: auto; padding-top: 10px; }
+.tn-shelves details { border-top: 1px solid var(--tc-line); }
+.tn-shelves summary { display: flex; align-items: center; gap: 7px; padding: 8px 5px; list-style: none; font-size: 11px; }
+.tn-shelves summary span { flex: 1; }.tn-shelves small { color: var(--tc-subtle); font-size: 10px; }
+.tn-footer { flex: 0 0 30px; display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; border-top: 1px solid var(--tc-line); color: var(--tc-subtle); font-size: 10px; }
+.tn-editor { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tn-editor-nav { display: flex; align-items: center; gap: 5px; border-bottom: 1px solid var(--tc-line); padding: 7px 9px; flex: 0 0 35px; }
+.tn-editor-nav button { display: flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none; font-size: 11px; color: var(--tc-blue); }
+.tn-editor-nav small { margin-left: auto; color: var(--tc-subtle); font-size: 10px; }
 .tc-form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .tc-form-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px; scrollbar-width: thin; }
 .tc-form-heading { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
@@ -108,34 +134,64 @@ body[data-demo-theme="dark"] .tc-workbench { --tc-bg: #1f1f1f; --tc-panel: #2525
 .tc-model-option[aria-pressed="true"] { color: var(--tc-blue); }
 .tc-model-option span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tc-model-popup-note { border-top: 1px solid var(--tc-line); padding: 5px 4px 0; color: var(--tc-subtle); font-size: 10px; }
-.tc-demo-tools { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 11px; }
-.tc-demo-tools button { padding: 3px 8px; border: 1px solid var(--border, #ccc); border-radius: 4px; background: var(--secondary, #f5f5f5); }
-.tc-theme { margin-left: auto; }
-.tc-status { display: block; min-height: 18px; margin-top: 8px; font-size: 12px; color: var(--muted-foreground, #666); }
-.tc-note { font-size: 11px; color: var(--muted-foreground, #666); margin: 4px 0 0; }
-@media (max-width: 640px) { .tc-layout { grid-template-columns: minmax(0, 1fr); } .tc-layout:not(.tc-panel-closed) .tc-chat { display: none; } .tc-panel { border-left: 0; } .tc-session-model { margin-bottom: 14px; } }
+
+.tc-form-heading h2 { font-size: 13px; }
+.tc-form-body { padding: 10px; }
+.tc-field input:not([type="checkbox"]), .tc-field textarea, .tc-field select { font-size: 13px; }
+.tc-field textarea { font-size: 14px; height: 126px; line-height: 1.6; }
+.tc-model-fields { grid-template-columns: minmax(0,1fr) 72px; gap: 7px; }
+.tc-model-fields.tc-no-effort { grid-template-columns: minmax(0,1fr); }
+.tc-runs-on { margin-bottom: 5px; }
+.tn-origin { margin: 0 0 10px; color: var(--tc-subtle); font-size: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tc-advanced .tc-field { margin-top: 8px; }
+.tn-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.tn-chat-header { height: 36px; flex: 0 0 36px; border-bottom: 1px solid var(--tc-line); display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+.tn-chat-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tn-chat-tasks-button { display: flex; align-items: center; gap: 4px; border: 0; border-radius: 3px; background: none; padding: 4px; white-space: nowrap; font-size: 11px; color: var(--tc-blue) !important; }
+.tn-chat-tasks-button[aria-expanded="true"] { background: var(--tc-hover); }
+.tn-chat-layout { display: grid; grid-template-columns: minmax(0,1fr); flex: 1; min-height: 0; }
+.tn-chat { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding: 13px; }
+.tn-current-model { color: var(--tc-subtle); margin-bottom: 14px; font-size: 11px; }
+.tn-current-model strong { display: block; color: var(--tc-text); font-size: 12px; margin-top: 2px; }
+.tn-chat-copy { flex: 1; overflow-y: auto; }
+.tn-message { background: var(--tc-panel); border: 1px solid var(--tc-line); border-radius: 5px; padding: 9px; margin: 0 0 18px 8px; font-size: 13px; line-height: 1.6; }
+.tn-answer { font-size: 13px; line-height: 1.65; }
+.tn-answer strong { display: block; margin-bottom: 6px; }
+.tn-answer ul { margin: 0; padding-left: 18px; }
+.tn-composer { border: 1px solid var(--tc-line); border-radius: 4px; padding: 8px; margin-top: 14px; background: var(--tc-input); }
+.tn-composer textarea { display: block; width: 100%; height: 86px; resize: none; padding: 0; border: 0; outline: 0; background: none; font-size: 14px; line-height: 1.6; }
+.tn-composer-footer { display: flex; flex-wrap: wrap; gap: 8px; font-size: 10px; margin-top: 5px; }
+.tn-session-tasks { min-width: 0; overflow-y: auto; background: var(--tc-panel); border-left: 1px solid var(--tc-line); position: absolute; right: 8px; top: 42px; width: min(286px, calc(100% - 16px)); max-height: calc(100% - 70px); border: 1px solid var(--tc-line); border-radius: 4px; box-shadow: 0 4px 15px #0002; z-index: 5; }
+.tn-session-tasks header { display: flex; align-items: center; gap: 5px; border-bottom: 1px solid var(--tc-line); padding: 7px 8px; }
+.tn-session-tasks header strong { flex: 1; font-size: 12px; }.tn-session-tasks p { margin: 0; padding: 5px 8px; color: var(--tc-subtle); font-size: 10px; }
+.tn-session-task-list { padding: 0 6px 5px; }
+.tn-demo-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 9px 0 0; font-size: 11px; }
+.tn-demo-tools button { padding: 4px 8px; border: 1px solid var(--border, #ccc); border-radius: 4px; background: var(--secondary, #f5f5f5); }
+.tn-demo-theme { margin-left: auto; }
+.tn-status { display: block; min-height: 18px; margin-top: 8px; font-size: 12px; color: var(--muted-foreground, #666); }
+.tn-note { margin: 4px 0 0; font-size: 11px; color: var(--muted-foreground, #666); }
+@media (min-width: 950px) { .tn-chat-layout:not(.tn-tasks-closed) { grid-template-columns: minmax(0,1fr) 236px; } .tn-session-tasks { position: static; width: auto; max-height: none; border: 0; border-left: 1px solid var(--tc-line); border-radius: 0; box-shadow: none; } }
+@media (max-width: 600px) { .tn-workbench { grid-template-columns: minmax(0,1fr); } .tn-sidebar { border-right: 0; } .tn-main { display: none; } .tn-workbench.tn-show-chat .tn-sidebar { display: none; } .tn-workbench.tn-show-chat .tn-main { display: flex; } }
 </style>
 </head>
 <body>
-<section class="tc" aria-label="Scheduled task configuration mockup">
-  <p class="tc-intro">Give each task its own model and effort.</p>
-  <section class="tc-workbench" aria-label="Editor chat with scheduled tasks">
-    <header class="tc-header"><span class="tc-header-title"><small>cvafa / </small>Investigate MCTS Zero Sweep</span><button type="button" class="tc-tasks-button" id="tc-open" aria-label="Scheduled tasks" aria-expanded="true" aria-controls="tc-panel"><svg class="tc-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 9v4l3 2M8 2h8" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span>Tasks</span><span class="tc-task-count" id="tc-count">1</span></button></header>
-    <div class="tc-layout" id="tc-layout">
-      <article class="tc-chat" aria-label="Main session preview">
-        <div class="tc-session-model"><small>MAIN SESSION MODEL</small><strong id="tc-session-model">Codex · GPT-6-Astra · Max</strong></div>
-        <div class="tc-message">Investigate why the MCTS-Zero sweep failed. Keep checking the training while I work.</div>
-        <div class="tc-answer"><strong>Training progress</strong><ul><li>The next iteration is underway.</li><li>No new errors in the worker logs.</li><li>Checkpoints continue to advance.</li></ul><small>Example conversation · sample data</small></div>
-        <div class="tc-composer"><textarea id="tc-chat-draft" aria-label="Main session draft">Continue investigating the sweep failure.</textarea><div class="tc-composer-footer"><b>GPT-6-Astra ⌄</b><span>Max ⌄</span><span>Auto ⌄</span></div></div>
-      </article>
-      <aside class="tc-panel" id="tc-panel" aria-label="Scheduled tasks panel">
-        <header class="tc-panel-header"><strong>Scheduled tasks</strong><button type="button" class="tc-icon-button" id="tc-new" aria-label="New task" title="New task">＋</button><button type="button" class="tc-icon-button" id="tc-close" aria-label="Close task panel" title="Close">×</button></header>
-        <select class="tc-panel-scope" id="tc-scope" aria-label="Task scope"><option value="session">This session</option><option value="workspace">All workspace tasks</option></select>
-        <div class="tc-task-list" id="tc-list"></div>
+<section class="tc" aria-label="Task navigation mockup">
+  <p class="tn-intro">Expand a session’s groups, open the project Tasks tab, or click a task to edit.</p>
+  <section class="tn-workbench" id="tn-workbench" aria-label="VS Code sidebar and current chat preview">
+    <aside class="tn-sidebar" aria-label="Project sidebar">
+      <header class="tn-project"><strong>cvafa</strong><small>Project</small><button type="button" class="tc-icon-button" id="tn-new" aria-label="New session" title="New session">＋</button></header>
+      <div class="tn-root" id="tn-root">
+        <nav class="tn-tabs" role="tablist" aria-label="Project navigation"><button type="button" id="tn-sessions-tab" role="tab" aria-selected="true" aria-controls="tn-content" tabindex="0">Sessions <small>3</small></button><button type="button" id="tn-tasks-tab" role="tab" aria-selected="false" aria-controls="tn-content" tabindex="-1">Tasks <small id="tn-project-count">4</small></button></nav>
+        <label class="tn-search"><svg class="tc-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m15 15 5 5" stroke="currentColor" stroke-width="1.5"/></svg><input type="search" id="tn-search" aria-label="Search sessions" placeholder="Search conversations…"></label>
+        <div class="tn-content" id="tn-content" role="tabpanel" aria-labelledby="tn-sessions-tab"></div>
+        <footer class="tn-footer"><span aria-hidden="true">⚙</span><span id="tn-footer-scope">Current workspace only</span><span aria-hidden="true">⟳</span></footer>
+      </div>
+      <section class="tn-editor" id="tn-editor" aria-label="Sidebar task editor" hidden>
+        <div class="tn-editor-nav"><button type="button" id="tn-back"><svg class="tc-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span id="tn-back-label">Sessions</span></button><small>Task settings</small></div>
         <form class="tc-form" id="tc-form">
           <div class="tc-form-body">
             <div class="tc-form-heading"><h2 id="tc-form-title">Edit task</h2><span class="tc-draft-badge" id="tc-dirty" hidden>Unsaved</span></div>
-            <p class="tc-runs-on">Runs on hungtien-p1g6l · cvafa</p>
+            <p class="tc-runs-on">Runs on hungtien-p1g6l · cvafa</p><p class="tn-origin" id="tc-origin">From: Investigate MCTS Zero Sweep</p>
             <label class="tc-field"><span>Name</span><input id="tc-name" required aria-label="Task name" value="Check training progress"></label>
             <label class="tc-field"><span>Prompt</span><textarea id="tc-prompt" required aria-label="Task prompt">Check the running MCTS-Zero training. Read status, logs and metrics. Summarize completed iterations, GPU usage and errors. Do not modify the experiment.</textarea></label>
             <div class="tc-model-fields"><div class="tc-field tc-model-field"><span id="tc-model-label">Task model</span><button type="button" class="tc-model-button" id="tc-model" aria-label="Choose task model" aria-haspopup="dialog" aria-expanded="false"><span id="tc-model-text">GPT-6-Luna</span><span aria-hidden="true">⌄</span></button></div><label class="tc-field" id="tc-effort-field"><span>Effort</span><select id="tc-effort" aria-label="Task effort"></select></label></div>
@@ -150,18 +206,24 @@ body[data-demo-theme="dark"] .tc-workbench { --tc-bg: #1f1f1f; --tc-panel: #2525
           </div>
           <footer class="tc-form-footer"><button type="button" id="tc-cancel">Cancel</button><button type="submit" class="tc-save" id="tc-save">Save task</button></footer>
         </form>
-        <section id="tc-idle" class="tc-empty" hidden>Select a task's pencil to edit its model or schedule.</section>
-      </aside>
-    </div>
+      </section>
+    </aside>
+    <section class="tn-main" aria-label="Current session preview">
+      <header class="tn-chat-header"><span class="tn-chat-title" id="tn-chat-title">Investigate MCTS Zero Sweep</span><button type="button" class="tn-chat-tasks-button" id="tn-chat-tasks" aria-label="Current session scheduled tasks" aria-expanded="false" aria-controls="tn-session-tasks"><span>Scheduled</span><span id="tn-session-count">2</span></button></header>
+      <div class="tn-chat-layout tn-tasks-closed" id="tn-chat-layout">
+        <article class="tn-chat"><div class="tn-current-model">Session model<strong id="tn-session-model">Codex · GPT-6-Astra · Max</strong></div><div class="tn-chat-copy"><p class="tn-message" id="tn-chat-message">Investigate why the MCTS-Zero sweep failed. Keep checking the training while I work.</p><div class="tn-answer"><strong>Training progress</strong><ul><li>The next iteration is underway.</li><li>No new worker errors.</li><li>Checkpoints continue to advance.</li></ul></div></div><div class="tn-composer"><textarea id="tn-chat-draft" aria-label="Main session draft">Continue investigating the sweep failure.</textarea><div class="tn-composer-footer"><b id="tn-composer-model">GPT-6-Astra</b><span id="tn-composer-effort">Max</span><span>Auto</span></div></div></article>
+        <aside class="tn-session-tasks" id="tn-session-tasks" aria-label="Current session tasks" hidden><header><strong>Scheduled tasks</strong><button type="button" class="tc-icon-button" id="tn-session-new" aria-label="New task for this session" title="New task">＋</button><button type="button" class="tc-icon-button" id="tn-session-close" aria-label="Close current session tasks">×</button></header><p id="tn-session-scope">Created by this session</p><div class="tn-session-task-list" id="tn-session-task-list"></div></aside>
+      </div>
+    </section>
     <div class="tc-model-popup" id="tc-picker" role="dialog" aria-label="Choose task model" hidden><input class="tc-model-search" id="tc-model-search" aria-label="Search task models" placeholder="Search all models…"><div class="tc-picker-body"><nav class="tc-providers" id="tc-providers" aria-label="Task model providers"></nav><div class="tc-model-options" id="tc-model-options"></div></div><div class="tc-model-popup-note">Selects this task's model.</div></div>
   </section>
-  <div class="tc-demo-tools"><button type="button" id="tc-reset">Reset demo</button><span>Try changing the task model, then Save.</span><button type="button" class="tc-theme" id="tc-theme">Dark theme</button></div>
-  <output class="tc-status" id="tc-status" aria-live="polite">The main session uses Astra. The scheduled task uses Luna with Low effort.</output>
-  <p class="tc-note">Design preview only. Save and Run now affect sample data.</p>
+  <div class="tn-demo-tools"><button type="button" id="tn-demo-sessions">Session groups</button><button type="button" id="tn-demo-project">Project tasks</button><button type="button" id="tn-demo-editor">Edit a task</button><button type="button" id="tn-demo-chat">Chat task list</button><button type="button" id="tn-reset">Reset</button><button type="button" class="tn-demo-theme" id="tn-theme">Dark theme</button></div>
+  <output class="tn-status" id="tn-status" aria-live="polite">Sessions and Tasks are separate lists. Editing opens a sidebar page; Save returns to the list.</output>
+  <p class="tn-note">Design preview only · sample tasks and models · no provider or server calls.</p>
 </section>
 <script>
 (() => {
-  const catalog = [
+    const catalog = [
     { id: 'codex', name: 'Codex', models: [
       { id: 'gpt-6-luna', name: 'GPT-6-Luna', efforts: ['Low','Medium','High'], defaultEffort: 'Low' },
       { id: 'gpt-5.6-terra', name: 'GPT-5.6-Terra', efforts: ['Low','Medium','High'], defaultEffort: 'Medium' },
@@ -174,98 +236,209 @@ body[data-demo-theme="dark"] .tc-workbench { --tc-bg: #1f1f1f; --tc-panel: #2525
     ] },
     { id: 'kimi', name: 'Kimi CLI', models: [{ id: 'kimi-for-coding', name: 'Kimi for Coding', efforts: [], defaultEffort: '' }] }
   ];
-  const initial = { id: 'training', title: 'Check training progress', prompt: 'Check the running MCTS-Zero training. Read status, logs and metrics. Summarize completed iterations, GPU usage and errors. Do not modify the experiment.', provider: 'codex', model: 'gpt-6-luna', effort: 'Low', enabled: true, schedule: 'interval', minutes: 30, time: '09:00', days: [0,1,2,3,4,5,6], target: 'session', workspace: 'root', checkout: 'main', runs: 3 };
-  let tasks = [structuredClone(initial)], draft = structuredClone(initial), baseline = structuredClone(initial), panelOpen = true, pickerCategory = 'codex', nextId = 1;
-  const el = id => document.querySelector(`#tc-${id}`), form = el('form'), picker = el('picker'), status = el('status');
+
+  const projectId = 'cvafa';
+  const sessions = [
+    { id: 'training', title: 'Investigate MCTS Zero Sweep', branch: 'main', age: '<1 min', model: 'GPT-6-Astra', effort: 'Max', subagents: [
+      { id: 'logs', title: 'Review worker logs', status: 'Done', model: 'GPT-6-Luna' },
+      { id: 'checkpoints', title: 'Check checkpoint paths', status: 'Running', model: 'GPT-6-Luna' }
+    ] },
+    { id: 'policies', title: 'Review distance-aware policies', branch: 'main', age: '15 min', model: 'GPT-6.1-Sol', effort: 'High', subagents: [
+      { id: 'metrics', title: 'Inspect rollout metrics', status: 'Done', model: 'GPT-6-Luna' }
+    ] },
+    { id: 'deployment', title: 'Diagnose early deployment', branch: 'feature/rollout', age: '7 days', model: 'GPT-6.1-Sol', effort: 'High', subagents: [] }
+  ];
+  const base = { projectId, prompt: 'Read the current status and logs. Summarize progress and errors without modifying the experiment.', provider: 'codex', model: 'gpt-6-luna', effort: 'Low', enabled: true, schedule: 'interval', minutes: 30, time: '09:00', days: [0,1,2,3,4,5,6], target: 'session', workspace: 'root', checkout: 'main', runs: 3 };
+  const initialTasks = [
+    { ...base, id: 'training-check', title: 'Check training progress', ownerSessionId: 'training', resultSessionId: 'training' },
+    { ...base, id: 'morning-report', title: 'Morning training report', ownerSessionId: 'training', resultSessionId: null, target: 'new', schedule: 'fixed_time', model: 'gpt-5.6-terra', effort: 'Medium' },
+    { ...base, id: 'rollout-check', title: 'Check rollout metrics', ownerSessionId: 'policies', resultSessionId: 'policies', minutes: 15 },
+    { ...base, id: 'project-summary', title: 'Nightly project summary', ownerSessionId: null, resultSessionId: null, target: 'new', schedule: 'fixed_time', time: '20:00', enabled: false, provider: 'claude', model: 'claude-haiku-5.5', effort: 'Medium' },
+    { ...base, projectId: 'another-project', id: 'outside-project', title: 'Task from another project', ownerSessionId: 'training', resultSessionId: 'training' }
+  ];
+  let tasks = structuredClone(initialTasks), activeSession = 'training', tab = 'sessions', draft = null, baseline = null, draftKey = null, origin = null, pickerCategory = 'codex', nextId = 1, chatTasksOpen = false;
+  const expanded = new Set(['training']), groupOpen = new Map([['training:subagents',true],['training:tasks',true]]);
+  const queries = { sessions: '', tasks: '' }, scrolls = { sessions: 0, tasks: 0 }, pendingDrafts = new Map();
+  const chatDrafts = new Map([['training', 'Continue investigating the sweep failure.'], ['policies', 'Review the next rollout results.']]);
+  const el = id => document.getElementById(`tn-${id}`), field = id => document.getElementById(`tc-${id}`);
+  const root = el('root'), editor = el('editor'), content = el('content'), form = field('form'), picker = field('picker'), status = el('status');
   const icon = path => `<svg class="tc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
+  const chevron = () => icon('m9 6 6 6-6 6'), messageIcon = () => icon('M4 4h16v13H9l-5 4V4Z'), botIcon = () => icon('M5 8h14v12H5z M12 3v5 M9 12v2 M15 12v2 M9 17h6');
+  const projectTasks = () => tasks.filter(task => task.projectId === projectId);
+  const ownerTasks = id => projectTasks().filter(task => task.ownerSessionId === id);
+  const sessionInfo = id => sessions.find(session => session.id === id) ?? sessions.flatMap(session => session.subagents).find(agent => agent.id === id);
+  const ownerName = task => sessionInfo(task.ownerSessionId)?.title ?? 'Project task';
   const findModel = task => { const provider = catalog.find(provider => provider.id === task.provider); return { provider, model: provider?.models.find(model => model.id === task.model) }; };
   const modelSummary = task => { const { model } = findModel(task); return `${model?.name ?? 'Model unavailable'}${task.effort ? ` · ${task.effort}` : ''}`; };
   const scheduleSummary = task => task.schedule === 'interval' ? `Every ${task.minutes} min` : `${task.time} · ${task.days.length === 7 ? 'every day' : 'selected days'}`;
-  function renderList() {
-    const list = el('list'); list.replaceChildren();
-    const visible = tasks.filter(task => el('scope').value === 'workspace' || task.target === 'session');
-    el('count').textContent = tasks.filter(task => task.target === 'session').length;
-    visible.forEach(task => {
-      const row = document.createElement('div'); row.className = 'tc-task-row'; row.dataset.task = task.id;
-      const info = document.createElement('span'); info.className = 'tc-task-info';
-      const title = document.createElement('span'); title.className = 'tc-task-title'; title.textContent = task.title;
-      const meta = document.createElement('span'); meta.className = 'tc-task-meta'; meta.textContent = task.enabled ? `${scheduleSummary(task)}${task.schedule === 'interval' ? ` · next in ${task.minutes} min` : ''}` : `${scheduleSummary(task)} · paused`;
-      const model = document.createElement('span'); model.className = 'tc-task-model'; model.textContent = modelSummary(task); info.append(title, meta, model); row.append(info);
-      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'tc-icon-button'; edit.innerHTML = icon('m16 3 5 5-12 12-6 1 1-6L16 3Z M14 5l5 5'); edit.setAttribute('aria-label', `Edit ${task.title}`); edit.title = 'Edit task'; edit.addEventListener('click', () => beginEdit(task)); row.append(edit);
-      const run = document.createElement('button'); run.type = 'button'; run.className = 'tc-icon-button'; run.innerHTML = icon('m8 4 12 8-12 8V4Z'); run.setAttribute('aria-label', `Run ${task.title} now`); run.title = 'Run now'; run.addEventListener('click', () => { task.runs += 1; status.textContent = `Preview run requested with ${modelSummary(task)}. No provider was called.`; }); row.append(run);
+  const addText = (parent, className, text) => { const span = document.createElement('span'); span.className = className; span.textContent = text; parent.append(span); return span; };
+  function taskRow(task, { dense = false, showOrigin = false } = {}) {
+    const row = document.createElement('div'); row.className = `tn-task-row${dense ? ' tn-dense' : ''}`; row.dataset.task = task.id;
+    const open = document.createElement('button'); open.type = 'button'; open.className = 'tn-task-open'; open.dataset.openTask = task.id; open.setAttribute('aria-label', `Edit scheduled task ${task.title}`); open.title = `${task.title}\n${modelSummary(task)}`;
+    const title = addText(open, 'tn-task-title', task.title);
+    if (pendingDrafts.has(task.id)) addText(title, 'tn-task-draft', 'Draft');
+    addText(open, 'tn-task-meta', `${scheduleSummary(task)}${task.enabled ? '' : ' · paused'}`);
+    addText(open, 'tn-task-model', modelSummary(task));
+    if (showOrigin) { const owner = addText(open, 'tn-task-origin', task.ownerSessionId ? `From: ${ownerName(task)}` : 'Project task · no linked session'); owner.title = ownerName(task); }
+    open.addEventListener('click', () => beginEdit(task)); row.append(open);
+    if (!dense) {
+      const controls = document.createElement('span'); controls.className = 'tn-task-controls';
+      const run = document.createElement('button'); run.type = 'button'; run.className = 'tc-icon-button'; run.innerHTML = icon('m8 4 12 8-12 8V4Z'); run.setAttribute('aria-label', `Run ${task.title} now`); run.title = 'Run now';
+      run.addEventListener('click', () => { task.runs++; status.textContent = `Preview run requested with ${modelSummary(task)}. No provider was called.`; });
       const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.className = 'tc-switch'; enabled.checked = task.enabled; enabled.setAttribute('aria-label', `Enable ${task.title}`);
-      enabled.addEventListener('change', () => { task.enabled = enabled.checked; if (draft?.id === task.id) { draft.enabled = task.enabled; baseline.enabled = task.enabled; el('enabled').checked = task.enabled; } renderList(); status.textContent = task.enabled ? 'Task enabled in the preview.' : 'Task paused in the preview.'; }); row.append(enabled); list.append(row);
-    });
-    if (!visible.length) { const empty = document.createElement('p'); empty.className = 'tc-empty'; empty.textContent = 'No tasks in this session. Choose All workspace tasks or create one.'; list.append(empty); }
+      enabled.addEventListener('change', () => { task.enabled = enabled.checked; if (draft?.id === task.id) { draft.enabled = task.enabled; baseline.enabled = task.enabled; field('enabled').checked = task.enabled; validate(); } renderRoot(); renderChatTasks(); status.textContent = task.enabled ? 'Task enabled in the preview.' : 'Task paused in the preview.'; });
+      controls.append(run, enabled); row.append(controls);
+    }
+    return row;
+  }
+  function group(session, kind, members) {
+    const details = document.createElement('details'); details.className = 'tn-group'; details.dataset.group = `${session.id}:${kind}`;
+    details.open = groupOpen.get(`${session.id}:${kind}`) ?? false;
+    const summary = document.createElement('summary'); summary.innerHTML = chevron(); addText(summary, '', kind === 'subagents' ? 'Subagents' : 'Scheduled tasks');
+    const count = document.createElement('small'); count.textContent = members.length; summary.append(count); details.append(summary);
+    details.addEventListener('toggle', () => { if (details.isConnected) groupOpen.set(`${session.id}:${kind}`, details.open); });
+    if (!members.length) { const empty = document.createElement('p'); empty.className = 'tn-empty'; empty.textContent = kind === 'subagents' ? 'No subagents.' : 'No scheduled tasks.'; details.append(empty); }
+    members.forEach(member => {
+      if (kind === 'tasks') { details.append(taskRow(member, { dense: true })); return; }
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'tn-subagent'; button.innerHTML = botIcon(); button.setAttribute('aria-label', `Open subagent ${member.title}`);
+      if (activeSession === member.id) button.setAttribute('aria-current','page');
+      const text = document.createElement('span'), title = document.createElement('strong'), meta = document.createElement('small'); title.textContent = member.title; meta.textContent = `${member.status} · ${member.model}`; text.append(title, meta); button.append(text); button.addEventListener('click', () => selectSession(member.id)); details.append(button);
+    }); return details;
+  }
+  function renderRoot() {
+    const top = content.scrollTop, query = queries[tab].trim().toLowerCase();
+    content.querySelectorAll('.tn-group').forEach(details => groupOpen.set(details.dataset.group,details.open)); content.replaceChildren();
+    el('project-count').textContent = projectTasks().length;
+    if (tab === 'tasks') {
+      projectTasks().filter(task => `${task.title} ${task.prompt} ${ownerName(task)} ${modelSummary(task)}`.toLowerCase().includes(query)).forEach(task => content.append(taskRow(task, { showOrigin: true })));
+      if (!content.children.length) { const empty = document.createElement('p'); empty.className = 'tn-empty'; empty.textContent = 'No matching project tasks.'; content.append(empty); }
+    } else {
+      sessions.filter(session => `${session.title} ${session.subagents.map(agent => agent.title).join(' ')} ${ownerTasks(session.id).map(task => task.title).join(' ')}`.toLowerCase().includes(query)).forEach(session => {
+        const container = document.createElement('div'); container.dataset.session = session.id;
+        const row = document.createElement('div'); row.className = 'tn-session-row';
+        const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'tn-session-toggle'; toggle.innerHTML = chevron(); toggle.setAttribute('aria-label', `${expanded.has(session.id) ? 'Collapse' : 'Expand'} groups of ${session.title}`); toggle.setAttribute('aria-expanded', String(expanded.has(session.id)));
+        toggle.addEventListener('click', () => { if (expanded.has(session.id)) expanded.delete(session.id); else expanded.add(session.id); renderRoot(); content.querySelector(`[data-session="${session.id}"] .tn-session-toggle`)?.focus(); });
+        const select = document.createElement('button'); select.type = 'button'; select.className = 'tn-session-button'; select.innerHTML = messageIcon(); select.setAttribute('aria-label', `Open session ${session.title}`); select.title = session.title;
+        if (activeSession === session.id) select.setAttribute('aria-current','page');
+        const text = document.createElement('span'); text.className = 'tn-session-text'; addText(text, 'tn-session-title', session.title); const meta = document.createElement('span'); meta.className = 'tn-session-meta'; addText(meta,'',session.branch); addText(meta,'',session.age); text.append(meta); select.append(text); select.addEventListener('click', () => selectSession(session.id)); row.append(toggle, select); container.append(row);
+        if (expanded.has(session.id)) { const children = document.createElement('div'); children.className = 'tn-children'; children.append(group(session,'subagents',session.subagents), group(session,'tasks',ownerTasks(session.id))); container.append(children); }
+        content.append(container);
+      });
+      if (!content.children.length) { const empty = document.createElement('p'); empty.className = 'tn-empty'; empty.textContent = 'No matching sessions.'; content.append(empty); }
+      const shelves = document.createElement('div'); shelves.className = 'tn-shelves';
+      for (const label of ['Settled','Archive']) { const shelf = document.createElement('details'); const summary = document.createElement('summary'); summary.innerHTML = chevron(); addText(summary,'',label); const count = document.createElement('small'); count.textContent = '0'; summary.append(count); const empty = document.createElement('p'); empty.className = 'tn-empty'; empty.textContent = 'No sample conversations here.'; shelf.append(summary,empty); shelves.append(shelf); }
+      content.append(shelves);
+    }
+    content.scrollTop = top;
+  }
+  function setTab(next, focus = false) {
+    if (draft) returnToRoot(true, false);
+    scrolls[tab] = content.scrollTop; tab = next;
+    for (const name of ['sessions','tasks']) { const button = el(`${name}-tab`); button.setAttribute('aria-selected',String(name === tab)); button.tabIndex = name === tab ? 0 : -1; }
+    el('search').value = queries[tab]; el('search').placeholder = tab === 'tasks' ? 'Search project tasks…' : 'Search conversations…'; el('search').setAttribute('aria-label',tab === 'tasks' ? 'Search project tasks' : 'Search sessions');
+    el('footer-scope').textContent = tab === 'tasks' ? 'Current project only' : 'Current workspace only'; content.setAttribute('aria-labelledby',`tn-${tab}-tab`);
+    el('new').setAttribute('aria-label',tab === 'tasks' ? 'New project task' : 'New session'); el('new').title = tab === 'tasks' ? 'New project task' : 'New session';
+    renderRoot(); content.scrollTop = scrolls[tab]; if (focus) el(`${tab}-tab`).focus();
+  }
+  function selectSession(id) {
+    chatDrafts.set(activeSession, el('chat-draft').value); activeSession = id; const session = sessionInfo(id); renderRoot(); renderChatTasks();
+    el('chat-title').textContent = session.title; el('session-model').textContent = `Codex · ${session.model} · ${session.effort ?? 'Low'}`; el('composer-model').textContent = session.model; el('composer-effort').textContent = session.effort ?? 'Low'; el('chat-draft').value = chatDrafts.get(id) ?? '';
+    el('chat-message').textContent = id === 'training' ? 'Investigate why the MCTS-Zero sweep failed. Keep checking the training while I work.' : `Continue ${session.title.toLowerCase()}.`;
+  }
+  function renderChatTasks() {
+    const owned = ownerTasks(activeSession); el('session-count').textContent = owned.length; el('session-task-list').replaceChildren(...owned.map(task => taskRow(task)));
+    if (!owned.length) { const empty = document.createElement('p'); empty.className = 'tn-empty'; empty.textContent = 'No scheduled tasks created by this session.'; el('session-task-list').append(empty); }
+  }
+  function setChatTasks(open) { chatTasksOpen = open; el('session-tasks').hidden = !open; el('chat-tasks').setAttribute('aria-expanded',String(open)); el('chat-layout').classList.toggle('tn-tasks-closed',!open); closePicker(false); }
+  function showSidebar() { el('workbench').classList.remove('tn-show-chat'); }
+  function beginEdit(task, key = task.id) {
+    const previous = draft ? origin : { tab, top: content.scrollTop };
+    if (draft) pendingDrafts.set(draftKey,structuredClone(draft));
+    origin = { ...previous, taskId: task.id };
+    draft = structuredClone(pendingDrafts.get(key) ?? task); baseline = structuredClone(task); draftKey = key;
+    closePicker(false); root.hidden = true; editor.hidden = false; el('new').hidden = true; el('back-label').textContent = tab === 'tasks' ? 'Project tasks' : 'Sessions';
+    showSidebar(); fillForm(); field('name').focus();
+  }
+  function beginNew(ownerSessionId) {
+    const key = `new:${ownerSessionId ?? 'project'}`;
+    const sample = { ...structuredClone(base), id:`new-${nextId++}`, title:'', prompt:'', ownerSessionId, resultSessionId:ownerSessionId, target:ownerSessionId ? 'session' : 'new', runs:0 };
+    beginEdit(sample,key);
   }
   function updateModel() {
-    const { provider, model } = findModel(draft);
-    el('model-text').textContent = model?.name ?? 'Choose a model'; el('effort-field').hidden = !model?.efforts.length;
-    document.querySelector('.tc-model-fields').classList.toggle('tc-no-effort', !model?.efforts.length);
-    el('effort').replaceChildren(...(model?.efforts ?? []).map(value => new Option(value, value))); el('effort').value = draft.effort;
-    el('task-only').textContent = `${provider?.name ?? 'Provider unavailable'} · used for this task's scheduled runs.`;
+    const { provider, model } = findModel(draft); field('model-text').textContent = model?.name ?? 'Choose a model'; field('effort-field').hidden = !model?.efforts.length;
+    document.querySelector('.tc-model-fields').classList.toggle('tc-no-effort',!model?.efforts.length);
+    field('effort').replaceChildren(...(model?.efforts ?? []).map(value => new Option(value,value))); field('effort').value = draft.effort; field('task-only').textContent = `${provider?.name ?? 'Provider unavailable'} · used for this task’s scheduled runs.`;
   }
   function updateSections() {
-    document.querySelectorAll('[data-schedule]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.schedule === draft.schedule)));
-    el('interval-field').hidden = draft.schedule !== 'interval'; el('fixed-field').hidden = draft.schedule !== 'fixed_time';
-    el('checkout-field').hidden = draft.workspace === 'root'; el('checkout-label').textContent = draft.workspace === 'worktree' ? 'Base branch' : 'Checkout path';
-    el('checkout').value = draft.checkout;
+    document.querySelectorAll('[data-schedule]').forEach(button => button.setAttribute('aria-pressed',String(button.dataset.schedule === draft.schedule)));
+    field('interval-field').hidden = draft.schedule !== 'interval'; field('fixed-field').hidden = draft.schedule !== 'fixed_time'; field('checkout-field').hidden = draft.workspace === 'root'; field('checkout-label').textContent = draft.workspace === 'worktree' ? 'Base branch' : 'Checkout path'; field('checkout').value = draft.checkout;
   }
   function validate() {
     if (!draft) return;
     const error = !draft.title.trim() || !draft.prompt.trim() ? 'Add a name and prompt.' : !findModel(draft).model ? 'Choose an available task model.' : draft.schedule === 'interval' && (!Number.isSafeInteger(draft.minutes) || draft.minutes < 1) ? 'Use an interval of at least 1 minute.' : draft.schedule === 'fixed_time' && (!draft.time || !draft.days.length) ? 'Choose a time and at least one day.' : draft.workspace !== 'root' && !draft.checkout.trim() ? 'Enter a branch or checkout path.' : '';
-    el('validation').textContent = error; el('validation').hidden = !error; el('save').disabled = !!error;
-    el('dirty').hidden = JSON.stringify(draft) === JSON.stringify(baseline);
+    field('validation').textContent = error; field('validation').hidden = !error; field('save').disabled = !!error; field('dirty').hidden = JSON.stringify(draft) === JSON.stringify(baseline);
   }
   function fillForm() {
-    form.hidden = false; el('idle').hidden = true; el('form-title').textContent = tasks.some(task => task.id === draft.id) ? 'Edit task' : 'New task';
-    ['name','prompt','interval','time','target','workspace','enabled'].forEach(id => { const field = el(id); const key = { name:'title', interval:'minutes' }[id] ?? id; if (id === 'enabled') field.checked = draft.enabled; else field.value = draft[key]; });
-    el('days').replaceChildren(...['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, index) => {
-      const label = document.createElement('label'), input = document.createElement('input'), text = document.createElement('span'); input.type = 'checkbox'; input.checked = draft.days.includes(index); input.setAttribute('aria-label', day); text.textContent = day.slice(0,1); input.addEventListener('change', () => { draft.days = [...el('days').querySelectorAll('input')].flatMap((input, index) => input.checked ? [index] : []); validate(); }); label.append(input, text); return label;
-    }));
-    updateModel(); updateSections(); validate();
+    field('form-title').textContent = tasks.some(task => task.id === draft.id) ? 'Edit task' : 'New task';
+    field('origin').textContent = draft.ownerSessionId ? `From: ${ownerName(draft)}` : 'Project task · no linked session'; field('origin').title = ownerName(draft);
+    field('target').querySelector('[value="session"]').textContent = draft.ownerSessionId ? 'Originating session' : 'Current session';
+    ['name','prompt','interval','time','target','workspace','enabled'].forEach(id => { const input = field(id), key = {name:'title',interval:'minutes'}[id] ?? id; if (id === 'enabled') input.checked = draft.enabled; else input.value = draft[key]; });
+    field('days').replaceChildren(...['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day,index) => { const label = document.createElement('label'), input = document.createElement('input'), text = document.createElement('span'); input.type = 'checkbox'; input.checked = draft.days.includes(index); input.setAttribute('aria-label',day); text.textContent = day.slice(0,1); input.addEventListener('change',() => { draft.days = [...field('days').querySelectorAll('input')].flatMap((input,index) => input.checked ? [index] : []); validate(); }); label.append(input,text); return label; }));
+    document.querySelector('.tc-advanced').open = false; field('form').querySelector('.tc-form-body').scrollTop = 0; updateModel(); updateSections(); validate();
   }
-  function setPanel(open) { panelOpen = open; el('panel').hidden = !open; el('layout').classList.toggle('tc-panel-closed', !open); el('open').setAttribute('aria-expanded', String(open)); if (!open) closePicker(false); }
-  function beginEdit(task) { closePicker(false); draft = structuredClone(task); baseline = structuredClone(task); setPanel(true); fillForm(); }
-  function closePicker(focus = true) { picker.hidden = true; el('model').setAttribute('aria-expanded', 'false'); if (focus && draft) el('model').focus(); }
+  function returnToRoot(keepDraft = false, announce = true) {
+    if (!draft) return;
+    const previous = origin, retained = keepDraft && JSON.stringify(draft) !== JSON.stringify(baseline);
+    if (retained) pendingDrafts.set(draftKey,structuredClone(draft)); else pendingDrafts.delete(draftKey);
+    closePicker(false); draft = null; baseline = null; draftKey = null; editor.hidden = true; root.hidden = false; el('new').hidden = false;
+    setTab(previous.tab); content.scrollTop = previous.top;
+    const focus = content.querySelector(`[data-open-task="${previous.taskId}"]`) ?? el(`${tab}-tab`);
+    focus.focus({preventScroll:true});
+    if (announce) status.textContent = retained ? 'Task draft retained. Returned to the previous list.' : keepDraft ? 'Returned to the previous list.' : 'Changes cancelled. Returned to the previous list.';
+    renderChatTasks();
+  }
+  function closePicker(focus = true) { picker.hidden = true; field('model').setAttribute('aria-expanded','false'); if (focus && draft) field('model').focus(); }
   function placePicker() {
-    const anchor = el('model').getBoundingClientRect(), panel = el('panel').getBoundingClientRect();
-    const width = Math.min(352, panel.width - 24, innerWidth - 16);
-    picker.style.width = `${width}px`; picker.style.left = `${Math.max(8, Math.min(anchor.left, innerWidth - width - 8))}px`;
-    const below = innerHeight - anchor.bottom - 8; picker.style.maxHeight = `${Math.min(310, Math.max(160, below >= 200 ? below : anchor.top - 8))}px`;
-    picker.style.top = below >= 200 ? `${anchor.bottom + 5}px` : ''; picker.style.bottom = below >= 200 ? '' : `${innerHeight - anchor.top + 5}px`;
+    if (picker.hidden || !draft) return;
+    const anchor = field('model').getBoundingClientRect(), sidebar = document.querySelector('.tn-sidebar').getBoundingClientRect(), width = Math.min(352, Math.max(sidebar.width - 20, 248), innerWidth - 16);
+    picker.style.width = `${width}px`; picker.style.left = `${Math.max(8,Math.min(anchor.left,innerWidth - width - 8))}px`;
+    const below = innerHeight - anchor.bottom - 8; picker.style.maxHeight = `${Math.min(310,Math.max(160,below >= 200 ? below : anchor.top - 8))}px`; picker.style.top = below >= 200 ? `${anchor.bottom + 5}px` : ''; picker.style.bottom = below >= 200 ? '' : `${innerHeight - anchor.top + 5}px`;
   }
   function renderModels() {
-    const nav = el('providers'), options = el('model-options'), query = el('model-search').value.trim().toLowerCase(); nav.replaceChildren(); options.replaceChildren();
-    [{id:'favorites',name:'Favorites'}, {id:'all',name:'All providers'}, ...catalog].forEach(provider => { const button = document.createElement('button'); button.type = 'button'; button.textContent = provider.name; button.setAttribute('aria-pressed', String(pickerCategory === provider.id && !query)); button.addEventListener('click', () => { pickerCategory = provider.id; el('model-search').value = ''; renderModels(); }); nav.append(button); });
+    const nav = field('providers'), options = field('model-options'), query = field('model-search').value.trim().toLowerCase(); nav.replaceChildren(); options.replaceChildren();
+    [{id:'favorites',name:'Favorites'},{id:'all',name:'All providers'},...catalog].forEach(provider => { const button = document.createElement('button'); button.type = 'button'; button.textContent = provider.name; button.setAttribute('aria-pressed',String(pickerCategory === provider.id && !query)); button.addEventListener('click',() => { pickerCategory = provider.id; field('model-search').value = ''; renderModels(); }); nav.append(button); });
     catalog.forEach(provider => {
-      const models = provider.models.filter(model => query ? `${provider.name} ${model.name}`.toLowerCase().includes(query) : pickerCategory === 'all' || pickerCategory === provider.id || pickerCategory === 'favorites' && model.id === 'gpt-6-luna');
-      if (!models.length) return;
+      const models = provider.models.filter(model => query ? `${provider.name} ${model.name}`.toLowerCase().includes(query) : pickerCategory === 'all' || pickerCategory === provider.id || pickerCategory === 'favorites' && model.id === 'gpt-6-luna'); if (!models.length) return;
       const header = document.createElement('header'); header.textContent = provider.name; options.append(header);
-      models.forEach(model => { const button = document.createElement('button'); button.type = 'button'; button.className = 'tc-model-option'; button.dataset.model = `${provider.id}:${model.id}`; button.setAttribute('aria-pressed', String(draft.provider === provider.id && draft.model === model.id)); const label = document.createElement('span'); label.textContent = model.name; button.append(label); if (button.getAttribute('aria-pressed') === 'true') button.insertAdjacentHTML('beforeend', icon('m5 12 4 4L19 6')); button.addEventListener('click', () => { const sameProvider = draft.provider === provider.id; draft.provider = provider.id; draft.model = model.id; if (!sameProvider || !model.efforts.includes(draft.effort)) draft.effort = model.defaultEffort; updateModel(); validate(); closePicker(); }); options.append(button); });
+      models.forEach(model => { const button = document.createElement('button'); button.type = 'button'; button.className = 'tc-model-option'; button.setAttribute('aria-pressed',String(draft.provider === provider.id && draft.model === model.id)); addText(button,'',model.name); if (button.getAttribute('aria-pressed') === 'true') button.insertAdjacentHTML('beforeend',icon('m5 12 4 4L19 6')); button.addEventListener('click',() => { const sameProvider = draft.provider === provider.id; draft.provider = provider.id; draft.model = model.id; if (!sameProvider || !model.efforts.includes(draft.effort)) draft.effort = model.defaultEffort; updateModel(); validate(); closePicker(); }); options.append(button); });
     });
-    if (!options.children.length) { const empty = document.createElement('p'); empty.className = 'tc-empty'; empty.textContent = 'No matching models.'; options.append(empty); }
+    if (!options.children.length) { const empty = document.createElement('p'); empty.className = 'tn-empty'; empty.textContent = 'No matching models.'; options.append(empty); }
   }
-  el('model').addEventListener('click', () => { if (!picker.hidden) { closePicker(); return; } pickerCategory = draft.provider; el('model-search').value = ''; picker.hidden = false; el('model').setAttribute('aria-expanded','true'); renderModels(); placePicker(); el('model-search').focus(); });
-  el('model-search').addEventListener('input', renderModels);
-  picker.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closePicker(); return; } if (!['ArrowUp','ArrowDown','Home','End'].includes(event.key) || ['Home','End'].includes(event.key) && event.target === el('model-search')) return; const buttons = [...el('model-options').querySelectorAll('button')]; if (!buttons.length) return; const index = buttons.indexOf(document.activeElement); const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : event.key === 'ArrowDown' ? Math.min(index + 1, buttons.length - 1) : index - 1; event.preventDefault(); if (next < 0) el('model-search').focus(); else buttons[next]?.focus(); });
-  document.addEventListener('pointerdown', event => { if (!picker.hidden && !picker.contains(event.target) && !el('model').contains(event.target)) closePicker(false); });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && picker.hidden && panelOpen) { event.preventDefault(); setPanel(false); el('open').focus(); } });
-  window.addEventListener('resize', () => { if (!picker.hidden) placePicker(); });
-  el('scope').addEventListener('change', renderList);
-  el('open').addEventListener('click', () => setPanel(!panelOpen)); el('close').addEventListener('click', () => { setPanel(false); el('open').focus(); });
-  el('new').addEventListener('click', () => { const task = { ...structuredClone(initial), id: `new-${nextId++}`, title: '', prompt: '', runs: 0 }; beginEdit(task); el('name').focus(); });
-  document.querySelectorAll('[data-schedule]').forEach(button => button.addEventListener('click', () => { draft.schedule = button.dataset.schedule; updateSections(); validate(); }));
-  ['name','prompt','interval','time','target','workspace','checkout','enabled','effort'].forEach(id => el(id).addEventListener('input', () => { const key = { name:'title', interval:'minutes' }[id] ?? id; draft[key] = id === 'enabled' ? el(id).checked : id === 'interval' ? Number(el(id).value) : el(id).value; if (id === 'workspace') { draft.checkout = draft.workspace === 'existing_worktree' ? '/workspaces/cvafa' : 'main'; updateSections(); } validate(); }));
-  function finishEditing() { closePicker(false); draft = null; baseline = null; form.hidden = true; el('idle').hidden = false; }
-  el('cancel').addEventListener('click', () => { finishEditing(); status.textContent = 'Changes cancelled. The saved task is unchanged.'; });
-  form.addEventListener('submit', event => { event.preventDefault(); validate(); if (el('save').disabled) return; const index = tasks.findIndex(task => task.id === draft.id); const saved = structuredClone(draft); if (index < 0) tasks.push(saved); else tasks[index] = { ...saved, runs: tasks[index].runs }; renderList(); finishEditing(); status.textContent = `Saved in preview. Future scheduled runs use ${modelSummary(saved)}.`; });
-  el('reset').addEventListener('click', () => { closePicker(false); tasks = [structuredClone(initial)]; el('scope').value = 'session'; el('chat-draft').value = 'Continue investigating the sweep failure.'; document.querySelector('.tc-advanced').open = false; renderList(); beginEdit(tasks[0]); status.textContent = 'The main session uses Astra. The scheduled task uses Luna with Low effort.'; });
-  el('theme').addEventListener('click', event => { const dark = document.body.dataset.demoTheme !== 'dark'; document.body.dataset.demoTheme = dark ? 'dark' : 'light'; event.currentTarget.textContent = dark ? 'Light theme' : 'Dark theme'; });
-  el('theme').textContent = document.body.dataset.demoTheme === 'dark' ? 'Light theme' : 'Dark theme';
-  renderList(); fillForm();
-  console.log('Task configuration mockup ready: panel, independent task model/effort, provider search, schedules, workspace, enabled state, Save/Cancel, new-task drafts and preview-only Run now. All data stays in memory; no API, provider or training calls.');
+  field('model').addEventListener('click',() => { if (!picker.hidden) { closePicker(); return; } pickerCategory = draft.provider; field('model-search').value = ''; picker.hidden = false; field('model').setAttribute('aria-expanded','true'); renderModels(); placePicker(); field('model-search').focus(); });
+  field('model-search').addEventListener('input',renderModels);
+  picker.addEventListener('keydown',event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closePicker(); return; } if (!['ArrowUp','ArrowDown','Home','End'].includes(event.key) || ['Home','End'].includes(event.key) && event.target === field('model-search')) return; const buttons = [...field('model-options').querySelectorAll('button')]; if (!buttons.length) return; const index = buttons.indexOf(document.activeElement), next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : event.key === 'ArrowDown' ? Math.min(index + 1,buttons.length - 1) : index - 1; event.preventDefault(); if (next < 0) field('model-search').focus(); else buttons[next]?.focus(); });
+  document.addEventListener('pointerdown',event => { if (!picker.hidden && !picker.contains(event.target) && !field('model').contains(event.target)) closePicker(false); });
+  window.addEventListener('resize',placePicker); document.querySelector('.tc-form-body').addEventListener('scroll',() => closePicker(false));
+  field('cancel').addEventListener('click',() => returnToRoot(false)); el('back').addEventListener('click',() => returnToRoot(true));
+  form.addEventListener('submit',event => { event.preventDefault(); validate(); if (field('save').disabled) return; const index = tasks.findIndex(task => task.id === draft.id), saved = structuredClone(draft); saved.resultSessionId = saved.target === 'new' ? null : saved.resultSessionId ?? saved.ownerSessionId ?? activeSession; if (index < 0) tasks.push(saved); else tasks[index] = {...saved,runs:tasks[index].runs}; returnToRoot(false,false); status.textContent = `Saved in preview. Back to ${tab === 'tasks' ? 'Project tasks' : 'Sessions'}. Future runs use ${modelSummary(saved)}.`; });
+  document.querySelectorAll('[data-schedule]').forEach(button => button.addEventListener('click',() => { draft.schedule = button.dataset.schedule; updateSections(); validate(); }));
+  ['name','prompt','interval','time','target','workspace','checkout','enabled','effort'].forEach(id => field(id).addEventListener('input',() => { const key = {name:'title',interval:'minutes'}[id] ?? id; draft[key] = id === 'enabled' ? field(id).checked : id === 'interval' ? Number(field(id).value) : field(id).value; if (id === 'workspace') { draft.checkout = draft.workspace === 'existing_worktree' ? '/workspaces/cvafa' : 'main'; updateSections(); } validate(); }));
+  for (const next of ['sessions','tasks']) el(`${next}-tab`).addEventListener('click',() => setTab(next));
+  document.querySelector('.tn-tabs').addEventListener('keydown',event => { if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return; event.preventDefault(); setTab(event.key === 'Home' ? 'sessions' : event.key === 'End' ? 'tasks' : tab === 'sessions' ? 'tasks' : 'sessions',true); });
+  el('search').addEventListener('input',() => { queries[tab] = el('search').value; renderRoot(); });
+  el('new').addEventListener('click',() => { if (tab === 'tasks') beginNew(null); else status.textContent = 'New-session control is illustrative; this preview focuses on task navigation.'; });
+  el('chat-draft').addEventListener('input',() => chatDrafts.set(activeSession,el('chat-draft').value));
+  el('chat-tasks').addEventListener('click',() => setChatTasks(!chatTasksOpen)); el('session-close').addEventListener('click',() => { setChatTasks(false); el('chat-tasks').focus(); }); el('session-new').addEventListener('click',() => beginNew(activeSession));
+  el('demo-sessions').addEventListener('click',() => { showSidebar(); setTab('sessions'); status.textContent = 'Expand a session, then expand Subagents or Scheduled tasks independently.'; });
+  el('demo-project').addEventListener('click',() => { showSidebar(); setTab('tasks'); status.textContent = 'Project Tasks includes this project’s tasks across sessions, plus unlinked project tasks.'; });
+  el('demo-editor').addEventListener('click',() => { showSidebar(); beginEdit(projectTasks()[0]); });
+  el('demo-chat').addEventListener('click',() => { if (draft) returnToRoot(true,false); el('workbench').classList.add('tn-show-chat'); setChatTasks(true); status.textContent = 'The chat drawer contains tasks created by this session only. Click one to open its sidebar editor.'; });
+  el('reset').addEventListener('click',() => { closePicker(false); content.replaceChildren(); tasks = structuredClone(initialTasks); nextId = 1; pendingDrafts.clear(); expanded.clear(); expanded.add('training'); groupOpen.clear(); groupOpen.set('training:subagents',true); groupOpen.set('training:tasks',true); queries.sessions = ''; queries.tasks = ''; scrolls.sessions = 0; scrolls.tasks = 0; draft = null; baseline = null; draftKey = null; root.hidden = false; editor.hidden = true; el('new').hidden = false; chatDrafts.clear(); chatDrafts.set('training','Continue investigating the sweep failure.'); activeSession = 'training'; el('chat-draft').value = chatDrafts.get('training'); showSidebar(); setChatTasks(false); setTab('sessions'); selectSession('training'); status.textContent = 'Preview reset. Sessions and project Tasks are separate; editing opens a sidebar page.'; });
+  el('theme').addEventListener('click',event => { const dark = document.body.dataset.demoTheme !== 'dark'; document.body.dataset.demoTheme = dark ? 'dark' : 'light'; event.currentTarget.textContent = dark ? 'Light theme' : 'Dark theme'; }); el('theme').textContent = document.body.dataset.demoTheme === 'dark' ? 'Light theme' : 'Dark theme';
+  setTab('sessions'); renderChatTasks();
+  console.log('Task navigation mockup ready: session-only chat tasks, independent subagent/scheduled groups, project Tasks tab, shared sidebar editor and return navigation. Sample data only; no network, provider or T3 calls.');
 })();
+
 </script>
 </body>
 </html>
