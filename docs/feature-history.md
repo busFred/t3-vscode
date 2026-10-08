@@ -1159,11 +1159,12 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 ### v0.1.16 — task management rebuild verification
 
 - Keep the manifest at v0.1.16; commit session activity (`f7d9789`), model drag ordering (`3837930`), task management (`978b807`) and task navigation recovery (`dc9ac0e`) separately with their feature documentation.
-- Pass all 192 deterministic tests, TypeScript checking, complete extension/webview/Mermaid/math builds and all 49 linked feature-history anchors.
+- Pass all 193 deterministic tests, TypeScript checking, complete extension/webview/Mermaid/math builds and all 49 linked feature-history anchors.
 - Pass both complete browser regression suites, including pointer/touch/keyboard model ordering, task project/session scope, independent creation, 280 px editing, Save/Back/Cancel, failure retention, same-environment reconnect, native navigation events and preserved conversation model/draft.
 - Pass real isolated T3 task list/subscription/create/edit checks, including disabled saves, persisted model/Low effort and one completed GPT-6 Luna Low scheduled dispatch with server attribution and saved run model selection.
 - Pass real VS Code checks in disposable user-data, extension and shared-data directories, including task creation/editing from chat, independent disabled tasks, Sessions/Account & Usage commands, retained task drafts and unchanged text/image chat drafts; stop the disposable T3 server afterward.
-- Resolve the independent review's two P2 findings—lost task drafts during reconnect and hidden Sessions/Usage navigation—before packaging; final signoff and installer checksum are recorded below when available.
+- Resolve the independent review's three P2 findings: task drafts lost during reconnect, hidden Sessions/Usage navigation, and prompt-driven effort choices incorrectly saved as model options (`193d371`); rerun the full unit suite and task UI fixture after the final effort fix.
+- Obtain final fresh-context regression signoff for runtime `193d371` against `f6af7cb`, with all three findings resolved and no remaining blockers; the reviewer independently passes the final six task tests, focused browser suite and diff checks before local packaging.
 
 ## Maintenance
 
