@@ -4,7 +4,7 @@
 - Before creating any VSIX, launch a separate regression-review agent with fresh context (`fork_turns: "none"`). Give it the repository, comparison revision, scope and existing feature requirements; ask it to check for accidental regressions independently.
 - Resolve blocking review findings, run relevant verification, and obtain the agent's review of the final changes before packaging. Record the review and validation outcome in the release notes or feature history.
 - Build installers under `target-installer/`; packaging does not authorize installation into the user's normal VS Code profile.
-- Build VSIX installers for completed implementation work, but never publish them. Keep the manifest version unchanged until the owner explicitly requests a version change.
+- Build VSIX installers for completed implementation work. Publish only when the owner explicitly authorizes the specific version and channel; packaging is not authorization. Keep the manifest version unchanged until the owner explicitly requests a version change.
 - Keep implementation changes in this extension repository; do not modify the T3 Code application.
 - All native VS Code tests must isolate user data, extensions and shared data. All T3 verification must use an explicitly isolated home; never mutate the user's normal T3 state or VS Code extension catalogs.
 - Use an inexpensive advertised model for live provider tests, currently GPT-6 Luna with low effort. Test scripts accept `T3_VSCODE_TEST_MODEL` for an explicit alternative and must fail rather than silently falling back to a premium model; deterministic fixtures do not call a model.

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.16 — Task management rebuild, unpublished
+## 0.1.16 — Alpha, release channel
 
 - Add separate Sessions and Tasks managers with their own new-item buttons, independent project tasks and session groups for subagents and scheduled tasks.
 - Remove the repeated project name above Tasks in a single-project workspace; retain project selection when multiple projects are available.
@@ -10,7 +10,7 @@
 - Match queued-message editing to the main composer's prompt font size and line spacing while retaining compact previews and the current draft.
 - Preserve task drafts across reconnect and native sidebar navigation, and reject newly selected prompt-driven effort values that cannot be applied as saved task options.
 - Pass 193 deterministic tests, TypeScript checking, full builds, browser suites and isolated native/task checks, including one GPT-6 Luna Low scheduled run; obtain independent regression signoff before packaging.
-- Keep version 0.1.16, build the installer locally and leave it unpublished and uninstalled.
+- Publish the reviewed v0.1.16 VSIX to the stable release channel by owner request, with manifest `preview: false` and no version bump; public Marketplace metadata now lists it with the uploaded package checksum.
 
 ## 0.1.16 — Initial local installer, unpublished
 

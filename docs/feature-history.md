@@ -2,7 +2,7 @@
 
 This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
-The v0.1.16 local revision includes selected-text image descriptions, local model management with drag ordering, compact session activity, scheduled-task navigation/configuration and readable queued-message editing; it removes manual T3 Web import. The Git release baseline is `f6af7cb` (manifest v0.1.15). The manifest remains v0.1.16 and publication is prohibited. See the release verification entries below for the earlier installer and this same-version rebuild.
+The v0.1.16 revision includes selected-text image descriptions, local model management with drag ordering, compact session activity, scheduled-task navigation/configuration and readable queued-message editing; it removes manual T3 Web import. The Git release baseline is `f6af7cb` (manifest v0.1.15). Keep the manifest at v0.1.16; the owner has specifically authorized its stable-channel publication, without granting standing authorization for other versions or channels. See the release verification entries below for the earlier installer and same-version rebuilds.
 
 ## Overview
 
@@ -51,7 +51,7 @@ The v0.1.16 local revision includes selected-text image descriptions, local mode
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.12 |
 | [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.1.15 |
-| [Release versioning](#release-versioning) | Keeps the owner-selected version for local installers; publication is prohibited. | v0.1.10 | v0.1.16 |
+| [Release versioning](#release-versioning) | Keeps the owner-selected version and publishes only a specifically authorized version/channel. | v0.1.10 | v0.1.16 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.13 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
@@ -971,8 +971,8 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 
 #### v0.1.16 — local packaging policy
 
-- Keep the existing manifest version for local installer revisions until the owner explicitly requests a version change; never publish the packages.
-- Hold the next VSIX until task configuration is implemented, independently reviewed and verified; keep application changes inside the extension repository.
+- Keep the manifest version unchanged until the owner explicitly requests a version change; publish only the specific version/channel the owner authorizes.
+- Complete task configuration, independent regression review and relevant verification before packaging; keep application changes inside the extension repository.
 
 ### Feature tracking and regression review
 
@@ -1182,6 +1182,15 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Use deterministic fixtures and an explicitly isolated T3 home without provider calls or normal VS Code/T3 state changes; keep the rebuilt installer local, unpublished and uninstalled.
 - Verify the 41-file v0.1.16 VSIX (2,632,978 bytes) against the reviewed bundles, unchanged host/Mermaid/math assets and manifest, current README/changelog, licenses, 20 math fonts and three screenshots.
 - Record SHA-256 `b5951a6737e5b7da80f6db3d068d00eb73641cd987a7014a2e784b5ec856e672` in the installer sidecar without publication or installation.
+
+### v0.1.16 — stable Marketplace upload
+
+- On October 8, 2026, publish the exact reviewed `target-installer/t3-vscode-0.1.16.vsix` by explicit owner request to the stable release channel; keep version 0.1.16, omit the prerelease flag and use package SHA-256 `b5951a6737e5b7da80f6db3d068d00eb73641cd987a7014a2e784b5ec856e672`.
+- Confirm `vsce` reports publication completed and the VSIX has `preview: false`; no version bump or tag was made.
+- Read back Marketplace metadata after upload; at 22:55 UTC it still listed stable 0.1.15 and prerelease 0.1.14, so public validation/listing refresh for 0.1.16 remains pending and Marketplace installation is not yet verified.
+- Recheck at 23:02 UTC; public Marketplace metadata now lists 0.1.16 as stable (`preview: false`) with the exact uploaded SHA-256 above, followed by stable 0.1.15 and prerelease 0.1.14.
+- The uploaded VSIX's bundled changelog still says “unpublished,” reflecting its pre-authorization packaging state; the repository changelog is corrected, but replacing this immutable uploaded version would require a new version.
+- Keep this exact-version/channel approval scoped to v0.1.16; future uploads still require explicit owner authorization.
 
 ## Maintenance
 

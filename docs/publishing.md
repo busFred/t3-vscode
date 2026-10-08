@@ -1,8 +1,8 @@
 # Local VSIX packaging and publication history
 
-Current owner policy: build local installers after implementation and review, **never publish them**, and **do not change the version unless the owner explicitly requests it**. The manifest remains **0.1.16**. Earlier publication approvals recorded below are historical and do not authorize another upload.
+Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner specifically authorized the stable release upload of **0.1.16** on October 8, 2026; this does not authorize a future upload.
 
-Current packaging checkpoint: wait until task configuration has been implemented. The session activity and model drag layouts are design mockups; no installer containing those proposed features has been built yet.
+Current release checkpoint: v0.1.16 includes task configuration, compact session activity and model drag ordering. The Marketplace accepted its stable-channel upload; public validation/listing refresh is pending.
 
 ## Version policy
 
@@ -15,7 +15,7 @@ Read the version directly from `package.json`; use the same value in release not
 3. Start a regression reviewer with fresh context, resolve blockers, obtain final signoff and record the outcome in the feature history.
 4. Run `pnpm package` and verify the VSIX version, publisher, channel metadata and bundled assets. Store the installer and checksum under `target-installer/`.
 
-The packaging script reads the existing manifest and derives the prerelease flag from `preview: true`. Do not run publishing, version-bump, tagging or release-upload commands. Packaging does not authorize installation into the normal VS Code profile. T3 Code and providers remain separately installed applications.
+The packaging script reads the existing manifest and derives the prerelease flag from `preview: true`. Keep packaging separate from publication, do not bump or tag without the owner's specific request, and publish only the specifically authorized version/channel. Packaging does not authorize installation into the normal VS Code profile. T3 Code and providers remain separately installed applications.
 
 ## First public release
 
@@ -56,3 +56,11 @@ At 04:22 UTC on October 7, the Marketplace reported version 0.1.12 with the prer
 - Downloaded the published release and confirmed SHA-256 `b2a4f9ef7b0058161f91b29ed8e5ccb288a2cc08fa7af3fec45caacc58b0ed72` matches `target-installer/t3-vscode-0.1.15.vsix` exactly.
 - Confirmed existing 0.1.14 preview and 0.1.13 release packages retain their channels, properties, update times and exact checksums.
 - At 08:34 UTC, Marketplace has accepted 0.1.15 as a normal release but validation is pending; the public validated catalog still lists 0.1.14 preview and 0.1.13 release, so Marketplace installation of 0.1.15 is not yet claimed verified.
+
+## 0.1.16 release-channel publication
+
+- Published the reviewed 0.1.16 VSIX to the stable release channel on October 8, 2026, following the owner's explicit request; left the version unchanged and omitted the prerelease flag.
+- Confirmed the local package has `preview: false` and SHA-256 `b5951a6737e5b7da80f6db3d068d00eb73641cd987a7014a2e784b5ec856e672`; `vsce` reported successful publication.
+- The metadata read at 22:55 UTC still showed stable 0.1.15 and prerelease 0.1.14; a 23:02 UTC read lists stable 0.1.16 with the exact uploaded SHA-256, followed by stable 0.1.15 and prerelease 0.1.14. Marketplace installation was not tested.
+- The uploaded VSIX retains its pre-publication changelog wording (“unpublished”); the repository changelog is corrected after upload, but the uploaded version cannot be replaced without a new version.
+- Scope this authorization to this exact 0.1.16 stable release; future publication still requires the owner's explicit version/channel request.
