@@ -46,7 +46,7 @@ export function SidebarView({ state, onAppearance, usageRequest, taskRequest, na
       </div>
       <div id="sessions-manager" className="sidebar-manager" role="tabpanel" aria-labelledby="sessions-tab" style={{ display: tab === "sessions" ? "flex" : "none" }}><ThreadList state={state} onAppearance={onAppearance} /></div>
       <div id="tasks-manager" className="sidebar-manager" role="tabpanel" aria-labelledby="tasks-tab" style={{ display: tab === "tasks" ? "flex" : "none" }}>
-        {state.projects.length > 1 ? <label className="task-project-select">Project<select aria-label="Task project" value={projectId} onChange={(event) => setProject(event.target.value)}>{state.projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label> : <p className="task-scope-note">{state.projects.find((project) => project.id === projectId)?.title ?? "No project"}</p>}
+        {state.projects.length > 1 ? <label className="task-project-select">Project<select aria-label="Task project" value={projectId} onChange={(event) => setProject(event.target.value)}>{state.projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label> : null}
         {projectId ? <ScheduledTaskList key={projectId} state={state} projectId={projectId} /> : <p className="empty-list">Open a project to manage its scheduled tasks.</p>}
       </div>
     </div>

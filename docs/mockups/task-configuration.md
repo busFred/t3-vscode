@@ -55,6 +55,7 @@ The earlier model/schedule mockup checks remain recorded in Git at `6f50203`; th
 ## Implementation notes
 
 - The project header has no add button. Sessions has **New session**, Tasks has **New task**; the latter creates independent work by default. The chat drawer also allows a task tied to its current session.
+- A single-project Tasks manager starts at its **TASKS** heading without a repeated project label; only multi-project workspaces need the project selector above the list.
 - Local origin associations are durable in VS Code and scoped by environment/project/task. A server's explicit origin ID is accepted only for a session in the same project; result bindings are never inferred as ownership. Unknown historical tasks remain accessible through the project list.
 - Full edits support interval/fixed schedules. The extension's vendored wire adapter retains newer task fields and opaque schedules; newer unsupported schedules remain visible and can be enabled/disabled without a full overwrite.
 - Workspace strategies and permissions are retained for existing tasks. Changing providers must preserve the saved permission mode; unsupported changes require a compatible provider.

@@ -9,7 +9,7 @@ The v0.1.16 local revision includes selected-text image descriptions, local mode
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
 | [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.1.16 |
-| [Scheduled task management](#scheduled-task-management) | Project/session task lists and an independent model/effort editor in the sidebar. | v0.1.16 | v0.1.16 |
+| [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and an independent model/effort editor in the sidebar. | v0.1.16 | v0.1.16 |
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.13 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
@@ -130,6 +130,12 @@ The v0.1.16 local revision includes selected-text image descriptions, local mode
 - Offer only effort choices that can be stored as model settings for scheduled tasks; prompt-driven choices such as Claude Ultrathink remain available through the task prompt.
 - Reject newly introduced prompt-driven option values at the host boundary and remove them when switching task models, while retaining preexisting saved options and prompt text on unrelated edits.
 - Cover the Claude descriptor case with a dedicated host regression and task-editor browser assertion after independent review identified the mismatch.
+
+#### v0.1.16 — compact task manager heading
+
+- Remove the repeated project-name row above Tasks when the workspace exposes one project, so the heading, count and New task action begin the list directly.
+- Retain the project selector when multiple projects are available, without changing task scope, session ownership or independent creation.
+- Verify the single-project layout in the existing scheduled-task browser fixture; record final review and local installer verification below before packaging.
 
 ### Workspace scope
 

@@ -3,6 +3,7 @@
 ## 0.1.16 — Task management rebuild, unpublished
 
 - Add separate Sessions and Tasks managers with their own new-item buttons, independent project tasks and session groups for subagents and scheduled tasks.
+- Remove the repeated project name above Tasks in a single-project workspace; retain project selection when multiple projects are available.
 - Edit task prompts, models, ordinary advertised effort, schedules and result destinations on a sidebar page; preserve chat drafts and keep task saving separate from running.
 - Show compact session activity ages and support model ordering with drag handles or Alt+Up/Down.
 - Remove the T3 Web import button, Command Palette command and JSON import path; keep existing saved favorites, visibility and ordering.

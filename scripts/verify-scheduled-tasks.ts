@@ -27,6 +27,8 @@ export async function verifyScheduledTasks(sidebar: Page, chat: Page, other: Pag
   await drawer.getByRole("button", { name: "Edit task Monitor this session" }).waitFor();
   assert.equal(await drawer.locator(".scheduled-task-row").count(), 1, "Current session never shows other or unlinked tasks");
   await sidebar.getByRole("tab", { name: /^Tasks/ }).click();
+  assert.equal(await sidebar.locator("#tasks-manager > .task-scope-note").count(), 0, "A single-project manager starts directly with Tasks, without a duplicate project label");
+  assert.equal(await sidebar.getByRole("combobox", { name: "Task project", exact: true }).count(), 0, "A single-project workspace needs no project selector");
   const list = sidebar.getByRole("region", { name: "Project scheduled tasks" });
   assert.equal(await list.locator(".scheduled-task-row").count(), 3, "Only this project's tasks");
   await sidebar.getByRole("textbox", { name: "Search tasks", exact: true }).fill("Other session");
