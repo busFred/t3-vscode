@@ -1,14 +1,17 @@
 # Changelog
 
-## 0.1.16 — Source revision, installer pending
+## 0.1.16 — Task management rebuild, unpublished
 
+- Add separate Sessions and Tasks managers with their own new-item buttons, independent project tasks and session groups for subagents and scheduled tasks.
+- Edit task prompts, models, ordinary advertised effort, schedules and result destinations on a sidebar page; preserve chat drafts and keep task saving separate from running.
+- Show compact session activity ages and support model ordering with drag handles or Alt+Up/Down.
 - Remove the T3 Web import button, Command Palette command and JSON import path; keep existing saved favorites, visibility and ordering.
 - Match queued-message editing to the main composer's prompt font size and line spacing while retaining compact previews and the current draft.
-- Keep version 0.1.16 and hold packaging until task configuration is implemented. Installers remain local and must not be published.
-- Pass 182 deterministic tests, TypeScript checking, the full build and the multi-view browser suite after import removal.
-- Recheck TypeScript, the webview build and the multi-view browser suite for matched queued-editor fonts and preserved previews/drafts.
+- Preserve task drafts across reconnect and native sidebar navigation, and reject newly selected prompt-driven effort values that cannot be applied as saved task options.
+- Pass 193 deterministic tests, TypeScript checking, full builds, browser suites and isolated native/task checks, including one GPT-6 Luna Low scheduled run; obtain independent regression signoff before packaging.
+- Keep version 0.1.16, build the installer locally and leave it unpublished and uninstalled.
 
-## 0.1.16 — Local installer, unpublished
+## 0.1.16 — Initial local installer, unpublished
 
 - Use selected composer text as a pasted image's description, preserving the filename when no text is selected and retaining attachment ownership and inline positions.
 - Add model visibility and ordering controls, accurate visible-model counts and an explicit import of T3 Web's device-local favorites and model preferences.
