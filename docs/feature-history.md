@@ -314,6 +314,8 @@ The existing v0.1.16 installer is unpublished and includes model-preference impo
 - Show provider commands and skills for `/`, and workspace file/thread suggestions for `@`.
 - Support keyboard selection and provider-specific model/usage command actions.
 
+The [read-only file-reference investigation](file-reference-investigation.md) explains current directory-search limits and the proposed Tab/Enter split; those proposals are not implemented.
+
 ### Queue and steer
 
 #### v0.0.6
