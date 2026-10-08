@@ -8,6 +8,7 @@ import { ThreadActionsMenu } from "./ThreadActionsMenu";
 import { ProviderIcon } from "./ProviderIcon";
 import { providerBrand } from "../../shared/usage";
 import { sessionTree, type SessionTreeNode } from "../../shared/sessionTree";
+import { sessionActivityLabel } from "../../shared/sessionActivity";
 
 const working = (thread: ThreadSummary) => ["preparing", "running", "starting", "waiting"].includes(thread.status);
 function elapsedLabel(start: string | null | undefined, now: number): string {
@@ -27,13 +28,12 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [menu, setMenu] = useState<{ threadId: string; x: number; y: number } | null>(null);
   const [now, setNow] = useState(Date.now);
-  const hasWorking = state.threads.some(working);
   useEffect(() => {
-    if (!hasWorking) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(timer);
-  }, [hasWorking]);
+    const refresh = () => setNow(Date.now());
+    const timer = setInterval(refresh, 60_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
+  }, []);
   const closeMenu = useCallback(() => setMenu(null), []);
   const menuThread = state.threads.find((thread) => thread.id === menu?.threadId);
   const run = useActions();
@@ -49,12 +49,14 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   const row = (thread: ThreadSummary, context = false) => {
     const match = hits.data?.find((hit) => hit.threadId === thread.id);
     const provider = state.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId);
+    const activity = sessionActivityLabel(thread.lastActiveAt, now);
+    const exactActivity = activity ? new Date(thread.lastActiveAt!).toLocaleString() : "";
     return <button key={thread.id} data-thread-id={thread.id} data-shelf-context={context || undefined} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={() => { if (onSelect) onSelect(thread.id); else void run("selectThread", { threadId: thread.id }).then((ok) => { if (ok) void run("openInTab"); }); }} onContextMenu={compact ? undefined : (event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
       if (!compact && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }
     }} aria-label={thread.title || "Untitled"} aria-description={thread.pendingRuntimeRequest ? "Input needed" : working(thread) ? "Working" : undefined} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>
       {thread.pinned ? <PinIcon size={12} /> : thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : <MessageSquareIcon size={12} />}
       <span className="thread-text"><span className="thread-title-line"><span className="thread-title">{thread.title || "Untitled"}</span>{thread.pendingRuntimeRequest ? <span className="thread-input" title={thread.pendingRuntimeRequest.kind === "user_input" ? "Input needed" : "Approval needed"} aria-label="Input needed"><MessageCircleQuestionIcon size={13} /><span>{thread.pendingRuntimeRequest.kind === "user_input" ? "Input" : "Approval"}</span></span> : working(thread) ? <span className="thread-working" aria-label="Working"><CircleDashedIcon size={13} /><span>Working</span><time title={thread.workingStartedAt ?? undefined}>{elapsedLabel(thread.workingStartedAt, now)}</time></span> : null}</span>
-      <span className="thread-meta">{match ? <small className="thread-match">{match.source === "user" ? "You" : "Assistant"}: {match.snippet}</small> : <small className="thread-branch">{context ? "Parent session" : thread.branch}</small>}<ProviderIcon brand={providerBrand(provider?.driver ?? "", provider?.displayName)} /></span></span>
+      <span className="thread-meta">{match ? <small className="thread-match">{match.source === "user" ? "You" : "Assistant"}: {match.snippet}</small> : <small className="thread-branch">{context ? "Parent session" : thread.branch}</small>}{activity ? <time className="thread-age" dateTime={thread.lastActiveAt!} title={`Last active: ${exactActivity}`} aria-label={`Last active: ${exactActivity}`}>{activity}</time> : null}<ProviderIcon brand={providerBrand(provider?.driver ?? "", provider?.displayName)} /></span></span>
     </button>;
   };
   const treeRow = (node: SessionTreeNode, members: ReadonlyArray<ThreadSummary>, section: string, depth = 0): ReactNode => {

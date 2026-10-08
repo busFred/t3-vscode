@@ -58,6 +58,7 @@ export interface ThreadSummary {
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode; readonly interactionMode: ProviderInteractionMode;
   readonly updatedAt: string; readonly archived: boolean; readonly pinned: boolean;
+  readonly lastActiveAt?: string | null;
   readonly activeRunId: string | null;
   readonly workingStartedAt?: string | null;
   readonly settled?: boolean;

@@ -8,7 +8,7 @@ The existing v0.1.16 installer is unpublished and includes model-preference impo
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with chat in editor tabs. | v0.0.7 | v0.1.13 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.1.16 |
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.13 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
@@ -100,6 +100,12 @@ The existing v0.1.16 installer is unpublished and includes model-preference impo
 #### v0.1.13 — onboarding revision
 
 - Show Sessions immediately after connection, with provider setup guidance above the list when no models are available, while retaining access to existing conversations.
+
+#### v0.1.16 — session activity
+
+- Show last-active time beside the provider on the existing metadata line, including nested, settled and archived sessions. Branch names and snippets yield space before the time.
+- Use message/run timestamps, excluding visits and metadata changes; empty sessions use creation and unknown historical activity stays blank. Refresh every minute and on visibility changes.
+- Show minutes, hours and days through 7 days, then a local date (with year when needed); expose exact local time to hover and assistive technology. Boundary and timestamp-source tests cover metadata changes, unknown/future dates and older years.
 
 ### Workspace scope
 

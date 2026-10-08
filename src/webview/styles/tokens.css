@@ -298,6 +298,9 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .thread-title-line, .thread-meta { display: flex; align-items: center; min-width: 0; gap: 6px; }
 .thread-title-line .thread-title, .thread-meta > small { flex: 1; min-width: 0; }
 .thread-meta { margin-top: 2px; }
+.thread-branch { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-age { flex: none; color: var(--muted-foreground); font-size: .625rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.thread.active .thread-age { color: inherit; opacity: .85; }
 .thread-working, .thread-input { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: .625rem; color: var(--primary); }
 .thread.active .thread-working { color: inherit; }
 @media (max-width: 240px) { .thread-working > span, .thread-input > span { display: none; } }

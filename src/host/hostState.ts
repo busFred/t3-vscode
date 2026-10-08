@@ -30,6 +30,7 @@ import { hasCompleteProviderWorkspaceSnapshot } from "@t3tools/client-runtime/pr
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import { turnCheckpointRange, turnDiffFiles, turnDiffFileRequest, type TurnDiff, type TurnDiffFile } from "./turnDiff.js";
 import { conversationActivity } from "./conversationActivity.js";
+import { sessionActivityAt } from "./sessionActivity.js";
 import { pairWithServer, PairingError } from "./pairing.js";
 import { connectionSetup, discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
 import type { ConnectionProblem, ConnectionSetup } from "../shared/connectionSetup.js";
@@ -1059,6 +1060,7 @@ export class HostState {
         id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
         modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
         updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
+        lastActiveAt: sessionActivityAt(thread),
         activeRunId: thread.activeRunId,
         workingStartedAt: thread.activityRunStartedAt !== undefined
           ? (thread.activityRunStartedAt ? DateTime.formatIso(thread.activityRunStartedAt) : null)
