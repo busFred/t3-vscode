@@ -48,6 +48,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const meters = new UsageStatusBar(() => hostState!.snapshot(registry.focusedViewId));
   const bridge = new BridgeHandler(hostState, registry, showSettings, undefined, registerNativeDiff(context), {
     openInTab: (id, draft) => provider.createPanel(id, draft),
+    newChatTab: (id) => provider.createNewPanel(id),
     showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(),
   });
   provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState);
@@ -70,10 +71,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerWebviewViewProvider("t3.webview", provider, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
-    vscode.commands.registerCommand("t3-vscode.openInTab", () => provider.requestEditorHandoff()),
+    vscode.commands.registerCommand("t3-vscode.openInTab", () => provider.createNewPanel()),
+    vscode.commands.registerCommand("t3-vscode.openExistingChatInTab", (viewId?: string) => provider.createPanel(viewId ?? registry.focusedViewId)),
     vscode.commands.registerCommand("t3-vscode.pair", () => hostState?.pairNow()),
     vscode.commands.registerCommand("t3-vscode.reconnect", () => hostState?.reconnect()),
-    vscode.commands.registerCommand("t3-vscode.newThread", async () => { await hostState?.newThread(); await provider.createPanel(SIDEBAR_VIEW_ID); }),
+    vscode.commands.registerCommand("t3-vscode.newThread", () => provider.createNewPanel()),
     vscode.commands.registerCommand("t3-vscode.showThreads", () => provider.showThreads()),
     vscode.commands.registerCommand("t3-vscode.showUsage", (accountKey?: string) => provider.showUsage(accountKey)),
     vscode.commands.registerCommand("t3-vscode.configureUsage", () => meters.configure()),
@@ -204,8 +206,21 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
     await vscode.commands.executeCommand("t3.webview.focus");
     this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key);
   }
-  async requestEditorHandoff(): Promise<void> {
-    await this.createPanel(this.registry.focusedViewId);
+  async createNewPanel(sourceViewId?: string): Promise<string> {
+    // Capture the invoking group before project selection or server I/O can move focus.
+    const column = (sourceViewId ? this.panels.get(sourceViewId)?.viewColumn : undefined) ?? vscode.window.tabGroups.activeTabGroup.viewColumn;
+    const id = `panel_${crypto.randomUUID()}`;
+    // Inherit project/model choices, but never the source chat's attachment ownership.
+    this.host.registerView(id, sourceViewId ?? this.registry.focusedViewId, false);
+    try {
+      const threadId = await this.host.newThread(undefined, id);
+      await this.host.composerState(threadId, true, false, id);
+      this.mountPanel(id, column);
+      return id;
+    } catch (cause) {
+      await this.host.removeView(id);
+      throw cause;
+    }
   }
   async openSession(threadId: string): Promise<string> {
     for (const [id, panel] of this.panels) if (this.host.snapshot(id).activeThreadId === threadId) {
@@ -231,7 +246,12 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
     }
     const id = `panel_${crypto.randomUUID()}`;
     this.host.registerView(id, sourceViewId);
-    const panel = vscode.window.createWebviewPanel("t3Panel", "T3 VSCode", vscode.ViewColumn.Active, {
+    this.mountPanel(id, vscode.ViewColumn.Active, transfer);
+    return id;
+  }
+
+  private mountPanel(id: string, column: vscode.ViewColumn, transfer?: DraftTransfer): void {
+    const panel = vscode.window.createWebviewPanel("t3Panel", "T3 VSCode", column, {
       ...this.webviewOptions(),
       retainContextWhenHidden: true,
     });
@@ -248,7 +268,6 @@ class T3WebviewProvider implements vscode.WebviewViewProvider {
       this.registry.remove(id); this.panels.delete(id);
       void this.host.removeView(id).catch((cause) => vscode.window.showErrorMessage(String(cause)));
     });
-    return id;
   }
 
   private webviewOptions(): vscode.WebviewOptions {

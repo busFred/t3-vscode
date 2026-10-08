@@ -61,7 +61,7 @@ export function ThreadList({ state, onAppearance }: { readonly state: HostStateS
     </div>;
   };
   return <aside className="projects-sidebar dedicated-sessions" aria-label="Sessions">
-    <div className="history-heading"><strong>SESSIONS</strong><button className="icon-button" aria-label="New thread" title="New thread" onClick={() => { void run("newThread").then((ok) => { if (ok) void run("openInTab"); }); }}><PlusIcon size={15} /></button></div>
+    <div className="history-heading"><strong>SESSIONS</strong><button className="icon-button" aria-label="New thread" title="Open New Chat in Editor Tab" onClick={() => { void run("newChatTab"); }}><PlusIcon size={15} /></button></div>
     <label className="thread-search"><SearchIcon size={14} /><input placeholder="Search conversations…" aria-label="Search threads" value={search} onChange={(event) => setSearch(event.target.value)} />{search ? <button className="icon-button" aria-label="Clear search" onClick={() => setSearch("")}><XIcon size={13} /></button> : null}</label>
     {hits.pending ? <p className="search-status" role="status">Searching messages…</p> : hits.error ? <p className="search-status turn-error" role="status">{hits.error}</p> : null}
     <nav className="session-list" aria-label="Active conversations">

@@ -6,7 +6,7 @@ This document tracks features by release, including how later versions changed t
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with chat in editor tabs. | v0.0.7 | v0.0.9 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with chat in editor tabs. | v0.0.7 | v0.1.13 |
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
 | [Independent chat views](#independent-chat-views) | Editor tabs keep independent conversations and drafts. | v0.0.2 | v0.0.9 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
@@ -50,8 +50,17 @@ This document tracks features by release, including how later versions changed t
 | [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces prerelease VSIX installers. | v0.0.1 | v0.1.13 |
 | [Release versioning](#release-versioning) | Uses one three-number version everywhere with Alpha as a stage description. | v0.1.10 | v0.1.11 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
+| [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
 
 ## Sessions and navigation
+### New chat editor actions
+
+#### v0.1.13
+
+- Make **Open New Chat in Editor Tab**, the chat-header plus and the sidebar New button create separate conversations and tabs.
+- Create Command Palette chats in the active editor group and header-triggered chats in their originating group.
+- Preserve existing tabs, drafts, attachment ownership and current-conversation links while removing untouched new chats when closed.
+
 
 ### Sessions sidebar
 
@@ -69,6 +78,11 @@ This document tracks features by release, including how later versions changed t
 
 - Make the sidebar a session manager and remove its Chat/Sessions switch and embedded chat.
 - Remove redundant History, New, Open in Editor and Usage title actions while keeping the browser shortcut and one New control above search.
+
+#### v0.1.13
+
+- Route the sidebar New button through the dedicated new-editor action without replacing the sidebar selection.
+
 
 ### Workspace scope
 

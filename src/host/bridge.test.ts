@@ -5,6 +5,34 @@ import { SIDEBAR_VIEW_ID } from "./hostState.js";
 import { viewsHarness, publishText } from "./testing/fakeTransport.js";
 import { FakeWebview } from "./testing/fakeWebview.js";
 import { Events, type HostStateSnapshot } from "../shared/bridge.js";
+
+test("New chat tab action uses its originating view and preserves existing selections", async (t) => {
+  const { host } = await viewsHarness(); t.after(() => host.dispose());
+  const registry = new WebviewRegistry(), sources: string[] = [];
+  const bridge = new BridgeHandler(host, registry, undefined, undefined, undefined, { newChatTab: async source => {
+    sources.push(source); const id = `new-${sources.length}`;
+    host.registerView(id, source, false);
+    const threadId = await host.newThread(undefined, id);
+    await host.composerState(threadId, true, false, id);
+  } });
+  const first = new FakeWebview(), other = new FakeWebview();
+  host.registerView("first-editor"); host.registerView("other-editor");
+  await host.selectThread("first", "first-editor"); await host.selectThread("second", "other-editor");
+  for (const [id, view] of [["first-editor", first], ["other-editor", other]] as const) { registry.add(id, view.webview); bridge.attach(view.webview, id); }
+  registry.focus("other-editor");
+  await first.request("newChatTab", { viewId: "other-editor" });
+  await first.request("newChatTab");
+  assert.deepEqual(sources, ["first-editor", "first-editor"]);
+  assert.equal(host.snapshot("first-editor").activeThreadId, "first");
+  assert.equal(host.snapshot("other-editor").activeThreadId, "second");
+  assert.notEqual(host.snapshot("new-1").activeThreadId, host.snapshot("new-2").activeThreadId);
+  const untouched = host.snapshot("new-1").activeThreadId!;
+  await host.removeView("new-1");
+  assert.equal(host.snapshot().threads.some(thread => thread.id === untouched), false);
+  await host.removeView("first-editor");
+  await assert.rejects(first.request("newChatTab"), /closed/);
+});
+
 test("Search preview and preference bridge validates input and cannot borrow another view's search", async (t) => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose());
   const registry = new WebviewRegistry(), bridge = new BridgeHandler(host, registry), first = new FakeWebview(), other = new FakeWebview();

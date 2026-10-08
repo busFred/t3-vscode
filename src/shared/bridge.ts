@@ -19,7 +19,7 @@ export const Methods = {
   sessionSearchPreviews: "sessionSearchPreviews", setSearchPreferences: "setSearchPreferences",
   chatAsset: "chatAsset", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
-  newThread: "newThread", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
+  newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
   setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt",
   respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",

@@ -40,9 +40,9 @@
     "commands": [
       {
         "command": "t3-vscode.openInTab",
-        "title": "Open Chat in Editor Tab",
+        "title": "Open New Chat in Editor Tab",
         "category": "T3 VSCode",
-        "icon": "$(link-external)"
+        "icon": "$(add)"
       },
       {
         "command": "t3-vscode.newThread",
@@ -118,6 +118,12 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "t3-vscode.newThread",
+          "when": "false"
+        }
+      ],
       "editor/context": [
         {
           "command": "t3-vscode.insertReference",

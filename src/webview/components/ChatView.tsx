@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDownIcon, GlobeIcon, BotIcon, ArrowLeftIcon, SearchIcon } from "lucide-react";
+import { ChevronDownIcon, GlobeIcon, BotIcon, ArrowLeftIcon, SearchIcon, PlusIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { Composer } from "./Composer";
@@ -19,6 +19,7 @@ import { useSearchPreferences } from "../searchPreferences";
 export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
   const [searchPreferences, setSearchPreferences] = useSearchPreferences(state);
   const [findOpen, setFindOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
   const closeFind = useCallback(() => { setFindOpen(false); setSearchTarget(null); }, []);
   useEffect(() => { setFindOpen(false); setSearchTarget(null); }, [state.activeThreadId]);
@@ -53,6 +54,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
           void run("threadAction", { threadId: thread.id, action: "rename" });
         } : undefined}>{thread?.title || "New conversation"}</strong></div>
         {thread ? <button className="icon-button" aria-label="Find in session" title="Find in this session (Ctrl/Cmd+F)" onClick={() => setFindOpen(!findOpen)}><SearchIcon size={15} /></button> : null}
+        <button className="icon-button" aria-label="Open New Chat in Editor Tab" title="Open New Chat in Editor Tab" disabled={creating} onClick={() => { setCreating(true); void run("newChatTab").finally(() => setCreating(false)); }}><PlusIcon size={15} /></button>
         <button className="icon-button" aria-label="Open Web UI" title="Open current conversation in your default browser" onClick={() => { void run("openWebUi"); }}><GlobeIcon size={15} /></button>
         {thread ? <button className="icon-button" aria-label="Thread actions" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); setThreadMenu(threadMenu ? null : { x: box.right - 190, y: box.bottom + 5 }); }}><ChevronDownIcon size={14} /></button> : null}
       </header>

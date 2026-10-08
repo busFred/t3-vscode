@@ -46,7 +46,7 @@ export class BridgeHandler {
   private readonly showSettings: () => PromiseLike<unknown>;
   private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean> };
   private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
-  private readonly viewActions: { openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
+  private readonly viewActions: { openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:hungtienhuang.t3-vscode"),
     prompts = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
@@ -54,6 +54,7 @@ export class BridgeHandler {
     }, openDiff: BridgeHandler["openDiff"] = async () => { throw new Error("Native diff editor is unavailable."); },
     viewActions: {
       openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown;
+      newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown;
       showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown;
       configureUsage?: () => PromiseLike<unknown>;
     } = {}) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; this.prompts = prompts; this.openDiff = openDiff; this.viewActions = viewActions; }
@@ -149,6 +150,10 @@ export class BridgeHandler {
         case "loadArchive": await this.hostState.loadArchive(); break;
         case "selectThread": await this.hostState.selectThread(id(), viewId); break;
         case "newThread": await this.hostState.newThread(params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
+        case "newChatTab": {
+          if (!this.viewActions.newChatTab) throw new Error("New chat tabs are unavailable in this view.");
+          await this.viewActions.newChatTab(viewId); break;
+        }
         case "chooseProject": await this.hostState.chooseProject(params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
         case "sendMessage": {
           if (params.attachmentIds !== undefined && (!Array.isArray(params.attachmentIds) || params.attachmentIds.length > 100 || !params.attachmentIds.every((id) => typeof id === "string"))) throw new Error("Invalid message attachments.");
@@ -187,7 +192,7 @@ export class BridgeHandler {
         case "openInTab": {
           const transfer = parseDraftTransfer(params, this.hostState.snapshot(viewId).activeThreadId ?? "new");
           if (this.viewActions.openInTab) await this.viewActions.openInTab(viewId, transfer);
-          else await (await import("vscode")).commands.executeCommand("t3-vscode.openInTab", viewId);
+          else await (await import("vscode")).commands.executeCommand("t3-vscode.openExistingChatInTab", viewId);
           break;
         }
         case "configureUsage":
