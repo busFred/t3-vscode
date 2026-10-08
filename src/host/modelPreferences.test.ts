@@ -54,3 +54,14 @@ test("Failed preference persistence preserves the prior display settings and fav
   assert.deepEqual(host.snapshot().favoriteModels, initial.favoriteModels);
   assert.deepEqual(host.snapshot().providerModelPreferences, initial.providerModelPreferences);
 });
+
+test("Providers named constructor can update visibility and ordering without inherited preferences", async (t) => {
+  const { client, options } = fixture();
+  client.config = { providers: [...client.config.providers, { ...client.config.providers[0]!, instanceId: ProviderInstanceId.make("constructor") }] };
+  const { host } = await harness(options, client); t.after(() => host.dispose());
+  await host.setModelVisibility("constructor", "terra", true);
+  await host.moveModel("constructor", "terra", "up");
+  const own = host.snapshot().providerModelPreferences!;
+  assert.equal(Object.hasOwn(own, "constructor"), true);
+  assert.deepEqual(own.constructor, { hiddenModels: [], modelOrder: [provider.models[0]!.slug, "terra", "luna"] });
+});

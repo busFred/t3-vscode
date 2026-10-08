@@ -5,7 +5,7 @@ import type { HostStateSnapshot, ModelSelection } from "../../shared/bridge";
 import { selectionForModel } from "../../shared/modelOptions";
 import { useActions } from "../actions";
 import { scoreModelPickerSearch } from "./t3/modelPickerSearch";
-import { orderedProviderModels, visibleProviderModels } from "../../shared/modelPreferences";
+import { getProviderModelPreference, orderedProviderModels, visibleProviderModels } from "../../shared/modelPreferences";
 
 export function ModelPicker({ state, selection, anchor, onClose }: {
   readonly state: HostStateSnapshot;
@@ -26,8 +26,8 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
   const input = useRef<HTMLInputElement>(null);
   const providers = state.providers.filter((provider) => provider.enabled);
   const preferences = state.providerModelPreferences;
-  const entries = useMemo(() => providers.flatMap((provider) => (managing ? orderedProviderModels(provider, preferences?.[provider.instanceId])
-    : visibleProviderModels(provider, preferences?.[provider.instanceId], showLegacy)).map((model) => {
+  const entries = useMemo(() => providers.flatMap((provider) => (managing ? orderedProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId))
+    : visibleProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId), showLegacy)).map((model) => {
     const favorite = favorites.some((item) => item.instanceId === provider.instanceId && item.model === model.slug);
     const score = scoreModelPickerSearch({ driverKind: provider.driver, providerDisplayName: provider.displayName ?? provider.instanceId,
       name: `${model.name} ${model.slug} ${(model.aliases ?? []).join(" ")}`, ...(model.shortName ? { shortName: model.shortName } : {}), ...(model.subProvider ? { subProvider: model.subProvider } : {}), isFavorite: favorite }, search);
@@ -68,14 +68,14 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
       <button aria-pressed={!search.trim() && providerId === "favorites"} onClick={() => { setSearch(""); setProviderId("favorites"); }}><StarIcon size={13} /><span>Favorites</span></button>
       <button aria-pressed={!search.trim() && providerId === "all"} onClick={() => { setSearch(""); setProviderId("all"); }}>All providers</button>
       {providers.map((provider) => <button key={provider.instanceId} aria-pressed={!search.trim() && providerId === provider.instanceId} title={provider.displayName ?? provider.instanceId} onClick={() => { setSearch(""); setProviderId(provider.instanceId); }}>
-        <span>{provider.displayName ?? provider.instanceId}</span><small>{visibleProviderModels(provider, preferences?.[provider.instanceId], !managing && showLegacy).length}</small>
+        <span>{provider.displayName ?? provider.instanceId}</span><small>{visibleProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId), !managing && showLegacy).length}</small>
       </button>)}
     </nav><div className="model-options">{providers.map((provider) => {
       const models = entries.filter((entry) => entry.provider.instanceId === provider.instanceId);
       if (!models.length) return null;
       const unavailable = !provider.installed || provider.availability === "unavailable";
-      const ordered = orderedProviderModels(provider, preferences?.[provider.instanceId]);
-      const visibleSlugs = new Set(visibleProviderModels(provider, preferences?.[provider.instanceId], !managing && showLegacy).map((model) => model.slug));
+      const ordered = orderedProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId));
+      const visibleSlugs = new Set(visibleProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId), !managing && showLegacy).map((model) => model.slug));
       return <section key={provider.instanceId}><header>{provider.displayName ?? provider.instanceId}{!provider.installed ? " · Not installed" : provider.availability === "unavailable" ? " · Unavailable" : ""}</header>
         {models.map(({ model, favorite }) => {
           const visible = pendingVisibility?.instanceId === provider.instanceId && pendingVisibility.model === model.slug
@@ -108,7 +108,7 @@ export function ModelPicker({ state, selection, anchor, onClose }: {
       </section>;
     })}{!entries.length ? <div className="model-empty">{search.trim() ? "No matching models." : providerId === "favorites" ? "Star a visible model to add it to Favorites." : providers.some((provider) => provider.models.length) ? "No visible models. Use Manage models to show them." : "No models available. Configure a provider in T3 Code."}</div> : null}</div></div>
     <div className="model-picker-footer">
-      {!managing && providers.some((provider) => !preferences?.[provider.instanceId] && provider.models.some((model) => model.isLegacy)) ? <label className="model-legacy"><input type="checkbox" checked={showLegacy} onChange={(event) => setShowLegacy(event.target.checked)} />Show legacy models</label> : null}
+      {!managing && providers.some((provider) => !getProviderModelPreference(preferences, provider.instanceId) && provider.models.some((model) => model.isLegacy)) ? <label className="model-legacy"><input type="checkbox" checked={showLegacy} onChange={(event) => setShowLegacy(event.target.checked)} />Show legacy models</label> : null}
       <button className="text-button" aria-pressed={managing} onClick={() => {
         if (!managing) { setSearch(""); if (providerId === "favorites") setProviderId(selection?.instanceId ?? "all"); }
         setManaging(!managing);

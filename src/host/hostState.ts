@@ -45,7 +45,7 @@ import { attachmentMessageContext, attachmentUploadInput, type AttachmentReferen
 import { SessionSearchJob } from "./sessionSearch.js";
 import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
-import { defaultProviderModelPreference, orderedProviderModels, parseModelPreferencesImport, type ModelPickerPreferences } from "../shared/modelPreferences.js";
+import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, parseModelPreferencesImport, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
 export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
@@ -723,7 +723,7 @@ export class HostState {
       const provider = this.client.config?.providers.find((provider) => provider.instanceId === instanceId);
       if (!provider?.models.some((entry) => entry.slug === model)) throw new Error("Model not found.");
       const current = this.modelPreferences();
-      const previous = current.providerModelPreferences[instanceId] ?? defaultProviderModelPreference(provider);
+      const previous = getProviderModelPreference(current.providerModelPreferences, instanceId) ?? defaultProviderModelPreference(provider);
       const hiddenModels = previous.hiddenModels.filter((slug) => slug !== model);
       if (!visible) hiddenModels.push(model);
       await this.saveModelPreferences({ ...current, providerModelPreferences: { ...current.providerModelPreferences,
@@ -736,7 +736,7 @@ export class HostState {
       const provider = this.client.config?.providers.find((provider) => provider.instanceId === instanceId);
       if (!provider?.models.some((entry) => entry.slug === model)) throw new Error("Model not found.");
       const current = this.modelPreferences();
-      const previous = current.providerModelPreferences[instanceId] ?? defaultProviderModelPreference(provider);
+      const previous = getProviderModelPreference(current.providerModelPreferences, instanceId) ?? defaultProviderModelPreference(provider);
       const order = orderedProviderModels(provider, previous).map((entry) => entry.slug);
       const from = order.indexOf(model), to = from + (direction === "up" ? -1 : 1);
       if (to < 0 || to >= order.length) return;

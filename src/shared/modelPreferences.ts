@@ -7,6 +7,9 @@ export interface ProviderModelPreference {
   readonly modelOrder: ReadonlyArray<string>;
 }
 export type ProviderModelPreferences = Readonly<Record<string, ProviderModelPreference>>;
+export function getProviderModelPreference(preferences: ProviderModelPreferences | undefined, instanceId: string): ProviderModelPreference | undefined {
+  return preferences && Object.hasOwn(preferences, instanceId) ? preferences[instanceId] : undefined;
+}
 export interface ModelPickerPreferences {
   readonly favoriteModels: ReadonlyArray<FavoriteModel>;
   readonly providerModelPreferences: ProviderModelPreferences;

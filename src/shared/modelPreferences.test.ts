@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { orderedProviderModels, parseModelPreferencesImport, visibleProviderModels } from "./modelPreferences.js";
+import { getProviderModelPreference, orderedProviderModels, parseModelPreferencesImport, visibleProviderModels } from "./modelPreferences.js";
 
 const provider = { models: [
   { slug: "sol", name: "Sol", isCustom: false },
@@ -32,4 +32,13 @@ test("Browser model preference import accepts only its display fields and preser
     '{"providerModelPreferences":{"codex":{"hiddenModels":[1]}}}', '{"favorites":[]}' + " ".repeat(200_000)]) {
     assert.throws(() => parseModelPreferencesImport(input), /Paste valid T3 Web JSON/);
   }
+});
+
+test("Valid provider IDs matching Object property names require an own preference entry", () => {
+  for (const instanceId of ["constructor", "toString", "hasOwnProperty"]) {
+    assert.equal(getProviderModelPreference({}, instanceId), undefined);
+    assert.equal(visibleProviderModels(provider, getProviderModelPreference({}, instanceId)).length, 4);
+  }
+  const imported = parseModelPreferencesImport('{"providerModelPreferences":{"constructor":{"hiddenModels":["sol"],"modelOrder":["luna"]}}}');
+  assert.deepEqual(visibleProviderModels(provider, getProviderModelPreference(imported.providerModelPreferences, "constructor")).map((model) => model.slug), ["luna", "astra", "terra", "custom"]);
 });

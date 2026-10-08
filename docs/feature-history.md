@@ -2,6 +2,8 @@
 
 This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
+Version v0.1.16 is an unpublished local installer with model-preference import and management plus selected-text descriptions for pasted images; the Git release baseline is `f6af7cb` (manifest v0.1.15).
+
 ## Overview
 
 | Feature name | Description | Introduced in | Last changed in |
@@ -527,6 +529,7 @@ This document tracks features by release, including how later versions changed t
 
 - Add per-instance show/hide and reorder controls to the picker, with counts based on visible models and explicitly enabled legacy models in their saved order.
 - Import T3 Web's browser-local visibility and ordering explicitly, retaining server-advertised custom models, existing selections and independent drafts.
+- Keep valid custom provider IDs such as `constructor` independent of inherited JavaScript object properties when looking up or editing preferences.
 
 ### Model search and favorites
 
