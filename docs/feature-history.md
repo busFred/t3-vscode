@@ -1165,6 +1165,8 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Pass real VS Code checks in disposable user-data, extension and shared-data directories, including task creation/editing from chat, independent disabled tasks, Sessions/Account & Usage commands, retained task drafts and unchanged text/image chat drafts; stop the disposable T3 server afterward.
 - Resolve the independent review's three P2 findings: task drafts lost during reconnect, hidden Sessions/Usage navigation, and prompt-driven effort choices incorrectly saved as model options (`193d371`); rerun the full unit suite and task UI fixture after the final effort fix.
 - Obtain final fresh-context regression signoff for runtime `193d371` against `f6af7cb`, with all three findings resolved and no remaining blockers; the reviewer independently passes the final six task tests, focused browser suite and diff checks before local packaging.
+- Build the 41-file `target-installer/t3-vscode-0.1.16.vsix` (2,632,898 bytes) and verify its unchanged release manifest, exact reviewed runtime/assets, current README/changelog, licenses, 20 math fonts and three screenshots.
+- Record SHA-256 `57dab245b00b29992b092c56b34a8294c63b3553b76cee8dd2e9935600970730` in the installer sidecar; leave the rebuilt installer unpublished and uninstalled.
 
 ## Maintenance
 
