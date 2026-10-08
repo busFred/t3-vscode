@@ -33,7 +33,7 @@ This document tracks features by release, including how later versions changed t
 | [Models and provider instances](#models-and-provider-instances) | Uses server-advertised providers and models, including ACP instances. | v0.0.1 | v0.0.7 |
 | [Model search and favorites](#model-search-and-favorites) | Searches model/provider names and saves favorite models. | v0.0.4 | v0.0.7 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.1.13 |
-| [Account usage](#account-usage) | Collapsed sidebar limits, reset times, notices and refresh. | v0.0.6 | v0.0.9 |
+| [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.1.13 |
 | [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection. | v0.0.7 | v0.0.9 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.0.5 |
 | [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.12 |
@@ -568,6 +568,10 @@ This document tracks features by release, including how later versions changed t
 - Remove the separate Usage editor and its header shortcut and consolidate additional quota windows, notices and provider links in the sidebar.
 - Remove the Remaining label from the Account & Usage summary.
 - Open the selected account’s expanded sidebar section from its status meter or the Account & Usage command.
+
+#### v0.1.13
+
+- Label the existing configuration action **Status meters** without an ellipsis, preserving refresh and last-update information.
 
 ### Status bar meters
 

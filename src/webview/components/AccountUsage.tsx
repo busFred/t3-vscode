@@ -42,7 +42,7 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
       </> : <p className="subtle">No provider accounts reported yet.</p>}
       {notices.map((notice) => <p className="usage-notice" key={notice}>{notice}</p>)}
       {links.map((link) => <button key={link.url} className="text-button provider-usage-link" onClick={() => { void run("openLink", { href: link.url }); }}>{link.label}</button>)}
-      <div className="account-usage-actions"><button className="text-button" onClick={() => { void run("configureUsage"); }}>Status meters…</button></div>
+      <div className="account-usage-actions"><button className="text-button" onClick={() => { void run("configureUsage"); }}>Status meters</button></div>
     </div>
   </details>;
 }
