@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drag to reorder models — design preview</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--foreground, #252525); background: var(--background, #fff); font: 13px/1.5 var(--font-sans, system-ui, sans-serif); }
+.mr { width: 100%; max-width: 480px; }
+.mr h2 { margin: 0; font-size: 14px; font-weight: 650; }
+.mr-description { margin: 3px 0 12px; font-size: 12px; color: var(--muted-foreground, #666); }
+.mr-shell { --mr-bg: #f4f4f4; --mr-text: #202020; --mr-subtle: #626262; --mr-line: #ccc; --mr-hover: #e4e4e4; --mr-accent: #0067c0; --mr-drop: #007acc; display: flex; flex-direction: column; height: 556px; min-width: 0; border: 1px solid var(--mr-line); border-radius: 12px; overflow: hidden; padding: 6px; color: var(--mr-text); background: var(--mr-bg); font: 12px/1.45 system-ui, sans-serif; }
+body[data-demo-theme="dark"] .mr-shell { --mr-bg: #252526; --mr-text: #ddd; --mr-subtle: #aaa; --mr-line: #454545; --mr-hover: #37373d; --mr-accent: #75beff; --mr-drop: #3794ff; }
+.mr button, .mr input { font: inherit; color: inherit; }
+.mr button { cursor: pointer; }
+.mr button:focus-visible, .mr input:focus-visible { outline: 2px solid var(--mr-drop); outline-offset: -2px; }
+.mr button:disabled { cursor: default; opacity: .4; }
+.mr-icon { width: 13px; height: 13px; flex: 0 0 13px; }
+.mr-search { border: 0; border-bottom: 1px solid var(--mr-line); background: none; padding: 9px 7px; outline: none; width: 100%; min-width: 0; }
+.mr-search::placeholder { color: var(--mr-subtle); }
+.mr-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.mr-nav { display: flex; flex-direction: column; flex: 0 0 110px; gap: 3px; padding: 5px 5px 5px 0; border-right: 1px solid var(--mr-line); }
+.mr-nav button { display: flex; align-items: center; gap: 5px; border: 0; background: none; padding: 8px 6px; border-radius: 4px; text-align: left; font-size: 11px; }
+.mr-nav button:hover { background: var(--mr-hover); }
+.mr-nav button[aria-pressed="true"] { background: var(--mr-hover); color: var(--mr-accent); }
+.mr-nav button span { min-width: 0; flex: 1; }
+.mr-nav small { font-size: 10px; color: var(--mr-subtle); }
+.mr-options { flex: 1; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding: 5px 0 0 5px; scrollbar-width: thin; scrollbar-color: var(--mr-line) transparent; }
+.mr-group header { color: var(--mr-subtle); font-weight: 650; font-size: 10px; padding: 8px 7px 4px; }
+.mr-row { position: relative; display: flex; align-items: center; min-height: 36px; border-radius: 5px; }
+.mr-row:hover { background: var(--mr-hover); }
+.mr-row.mr-source { opacity: .3; }
+.mr-grip { flex: 0 0 21px; align-self: stretch; padding: 0; border: 0; background: none; color: var(--mr-subtle) !important; cursor: grab !important; touch-action: none; display: flex; align-items: center; justify-content: center; }
+.mr-grip:active { cursor: grabbing !important; }
+.mr-grip:disabled { cursor: default !important; }
+.mr-grip svg { width: 10px; height: 16px; }
+.mr-name { flex: 1; min-width: 0; padding: 7px 4px; overflow: hidden; }
+.mr-name > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mr-name small { display: block; margin-top: 1px; font-size: 9px; color: var(--mr-subtle); }
+.mr-hidden .mr-name { color: var(--mr-subtle); }
+.mr-choice { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; border: 0; background: none; text-align: left; padding: 8px 7px; }
+.mr-choice > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mr-choice[aria-pressed="true"] { color: var(--mr-accent); }
+.mr-star { flex: 0 0 25px; width: 25px; height: 28px; border: 0; background: none; padding: 5px; color: var(--mr-subtle) !important; display: flex; align-items: center; justify-content: center; }
+.mr-star[aria-pressed="true"] { color: var(--mr-accent) !important; }
+.mr-visible { width: 13px; height: 13px; margin: 0 6px 0 5px; flex: 0 0 13px; accent-color: var(--mr-drop); }
+.mr-empty { font-size: 12px; color: var(--mr-subtle); margin: 14px 7px; }
+.mr-footer { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 10px; border-top: 1px solid var(--mr-line); margin-top: 5px; padding: 7px 5px 2px; font-size: 10px; }
+.mr-text-button { border: 0; background: none; padding: 2px 0; color: var(--mr-accent) !important; }
+.mr-footer-hint { flex: 1; color: var(--mr-subtle); }
+.mr-saved { color: var(--mr-subtle); font-size: 10px; padding: 5px; margin: 0; }
+.mr-demo-tools { display: flex; align-items: center; gap: 8px; margin-top: 9px; font-size: 11px; }
+.mr-demo-tools button { padding: 3px 7px; border: 1px solid var(--border, #ccc); border-radius: 4px; background: var(--secondary, #f5f5f5); }
+.mr-demo-tools .mr-theme { margin-left: auto; }
+.mr-status { display: block; min-height: 18px; margin-top: 8px; font-size: 11px; color: var(--muted-foreground, #666); }
+.mr-note { margin: 4px 0 0; font-size: 11px; color: var(--muted-foreground, #666); }
+.mr-drop-before::before, .mr-drop-after::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: var(--mr-drop); z-index: 20; pointer-events: none; }
+.mr-drop-before::before { top: -1px; }
+.mr-drop-after::after { bottom: -1px; }
+.mr-drag-ghost { position: fixed; z-index: 10; pointer-events: none; background: var(--mr-bg); border: 1px solid var(--mr-drop); box-shadow: 0 4px 14px #0003; opacity: .95; }
+@media (max-width: 370px) { .mr-nav { flex-basis: 95px; } .mr-nav button { padding-left: 4px; padding-right: 4px; } .mr-name { font-size: 11px; } }
+</style>
+</head>
+<body>
+<section class="mr" aria-label="Model reordering mockup">
+  <h2>Drag to reorder</h2>
+  <p class="mr-description">Drag the grip. Blue line shows the drop position.</p>
+  <section class="mr-shell" aria-label="Model picker design preview">
+    <input id="mr-search" class="mr-search" type="search" aria-label="Search demo models" placeholder="Search all models…">
+    <div class="mr-body"><nav class="mr-nav" id="mr-nav" aria-label="Model providers"></nav><div class="mr-options" id="mr-options" aria-label="Models"></div></div>
+    <footer class="mr-footer"><span class="mr-footer-hint" id="mr-hint">Drag to reorder</span><button type="button" class="mr-text-button" id="mr-mode">Done</button><span class="mr-text-button" id="mr-import">Import from T3 Web</span></footer>
+    <p class="mr-saved" id="mr-saved">Saved in VS Code. Import to copy T3 Web’s device preferences.</p>
+  </section>
+  <div class="mr-demo-tools"><button type="button" id="mr-reset">Reset demo</button><button type="button" class="mr-theme" id="mr-theme">Dark theme</button></div>
+  <output class="mr-status" id="mr-status" aria-live="polite">Keyboard: focus a grip, then Alt + ↑ / ↓.</output>
+  <p class="mr-note">Design preview only. Changes stay in this mockup.</p>
+</section>
+<script>
+(() => {
+  const initial = [
+    { id: 'codex', name: 'Codex', models: ['GPT-6-Luna', 'GPT-5.6-Terra', 'GPT-6.1-Sol', 'GPT-6-Astra', 'GPT-6-Sol', 'GPT-5.6-Sol', 'GPT-5.6-Luna'].map((name, index) => ({ name, visible: index < 4, legacy: false })) },
+    { id: 'claude', name: 'Claude', models: ['Claude Haiku 5.5', 'Claude Sonnet 5.5', 'Claude Opus 5.5', 'Claude Fable 5.1', 'Claude Fable 5', 'Claude Opus 5', 'Claude Opus 4.8', 'Claude Opus 4.7', 'Claude Opus 4.6', 'Claude Opus 4.5', 'Claude Sonnet 5', 'Claude Sonnet 4.6', 'Claude Haiku 4.5'].map((name, index) => ({ name, visible: index < 4, legacy: index >= 4 })) },
+    { id: 'kimi', name: 'Kimi CLI', models: [{ name: 'Kimi for Coding', visible: true, legacy: false }] }
+  ].map(provider => ({ ...provider, models: provider.models.map(model => ({ ...model, id: model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), favorite: false })) }));
+  let providers = structuredClone(initial), category = 'claude', managing = true, selected = 'claude:claude-sonnet-5-5', drag = null;
+  const options = document.querySelector('#mr-options'), search = document.querySelector('#mr-search'), status = document.querySelector('#mr-status');
+  const star = filled => `<svg class="mr-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+  const grip = '<svg viewBox="0 0 10 16" aria-hidden="true" fill="currentColor"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="7" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="7" cy="13" r="1.2"/></svg>';
+  const check = '<svg class="mr-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+  const canReorder = () => managing && !search.value.trim() && category !== 'favorites';
+  const focusGrip = key => options.querySelector(`[data-key="${CSS.escape(key)}"] .mr-grip`)?.focus();
+  function renderNav() {
+    const nav = document.querySelector('#mr-nav'); nav.replaceChildren();
+    [{ id: 'favorites', name: 'Favorites' }, { id: 'all', name: 'All providers' }, ...providers].forEach(provider => {
+      const button = document.createElement('button'); button.type = 'button'; button.dataset.provider = provider.id;
+      button.setAttribute('aria-pressed', String(category === provider.id && !search.value.trim()));
+      if (provider.id === 'favorites') button.innerHTML = star(false);
+      const label = document.createElement('span'); label.textContent = provider.name; button.append(label);
+      if (provider.models) { const count = document.createElement('small'); count.textContent = provider.models.filter(model => model.visible).length; button.append(count); }
+      button.addEventListener('click', () => { category = provider.id; search.value = ''; render(); }); nav.append(button);
+    });
+  }
+  function render() {
+    renderNav(); options.replaceChildren();
+    const query = search.value.trim().toLowerCase();
+    providers.forEach(provider => {
+      if (!query && !['all', 'favorites', provider.id].includes(category)) return;
+      const models = provider.models.filter(model => (managing || model.visible) && (query ? `${provider.name} ${model.name}`.toLowerCase().includes(query) : category !== 'favorites' || model.favorite));
+      if (!models.length) return;
+      const group = document.createElement('section'); group.className = 'mr-group'; group.dataset.provider = provider.id;
+      const header = document.createElement('header'); header.textContent = provider.name; group.append(header);
+      models.forEach(model => {
+        const key = `${provider.id}:${model.id}`, row = document.createElement('div'); row.className = `mr-row${managing && !model.visible ? ' mr-hidden' : ''}`; row.dataset.key = key;
+        if (managing) {
+          const handle = document.createElement('button'); handle.type = 'button'; handle.className = 'mr-grip'; handle.innerHTML = grip; handle.disabled = !canReorder();
+          handle.setAttribute('aria-label', `Reorder ${model.name}`); handle.title = canReorder() ? 'Drag to reorder · Alt + ↑ / ↓' : query ? 'Clear search to reorder' : 'Select a provider or All providers to reorder';
+          handle.addEventListener('pointerdown', event => startDrag(event, handle, row, provider, model));
+          handle.addEventListener('pointermove', moveDrag); handle.addEventListener('pointerup', finishDrag); handle.addEventListener('pointercancel', cancelDrag); handle.addEventListener('lostpointercapture', cancelDrag);
+          handle.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && drag) { event.preventDefault(); cancelDrag(); return; }
+            if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+            event.preventDefault(); const index = provider.models.indexOf(model), next = index + (event.key === 'ArrowUp' ? -1 : 1);
+            if (next < 0 || next >= provider.models.length) return;
+            provider.models.splice(index, 1); provider.models.splice(next, 0, model); render(); focusGrip(key);
+            status.textContent = `${model.name}: position ${next + 1} of ${provider.models.length}.`;
+          }); row.append(handle);
+          const name = document.createElement('span'); name.className = 'mr-name'; name.title = model.name;
+          const label = document.createElement('span'); label.textContent = model.name; name.append(label);
+          if (model.legacy) { const legacy = document.createElement('small'); legacy.textContent = 'Legacy'; name.append(legacy); } row.append(name);
+        } else {
+          const choice = document.createElement('button'); choice.type = 'button'; choice.className = 'mr-choice'; choice.setAttribute('aria-pressed', String(selected === key));
+          const name = document.createElement('span'); name.textContent = model.name; choice.append(name); if (selected === key) choice.insertAdjacentHTML('beforeend', check);
+          choice.addEventListener('click', () => { selected = key; render(); status.textContent = `${model.name} selected in the preview.`; }); row.append(choice);
+        }
+        const favorite = document.createElement('button'); favorite.type = 'button'; favorite.className = 'mr-star'; favorite.innerHTML = star(model.favorite);
+        favorite.setAttribute('aria-label', `${model.favorite ? 'Unfavorite' : 'Favorite'} ${model.name}`); favorite.setAttribute('aria-pressed', String(model.favorite));
+        favorite.addEventListener('click', () => { model.favorite = !model.favorite; render(); }); row.append(favorite);
+        if (managing) {
+          const visible = document.createElement('input'); visible.type = 'checkbox'; visible.className = 'mr-visible'; visible.checked = model.visible; visible.setAttribute('aria-label', `Show ${model.name}`);
+          visible.addEventListener('change', () => { model.visible = visible.checked; render(); }); row.append(visible);
+        }
+        group.append(row);
+      }); options.append(group);
+    });
+    if (!options.children.length) { const empty = document.createElement('p'); empty.className = 'mr-empty'; empty.textContent = category === 'favorites' && !query ? 'Star a model to add it to Favorites.' : 'No matching models.'; options.append(empty); }
+    document.querySelector('#mr-mode').textContent = managing ? 'Done' : 'Manage models';
+    document.querySelector('#mr-hint').textContent = managing ? query ? 'Clear search to reorder' : category === 'favorites' ? 'Select a provider to reorder' : 'Drag to reorder' : '';
+    document.querySelector('#mr-import').hidden = !managing; document.querySelector('#mr-saved').hidden = !managing;
+  }
+  const clearMarkers = () => options.querySelectorAll('.mr-drop-before, .mr-drop-after').forEach(row => row.classList.remove('mr-drop-before', 'mr-drop-after'));
+  function startDrag(event, handle, row, provider, model) {
+    if (event.button !== 0 || !canReorder()) return;
+    event.preventDefault(); handle.focus();
+    drag = { pointer: event.pointerId, handle, row, provider, model, startX: event.clientX, startY: event.clientY, moved: false, valid: false, destination: provider.models.indexOf(model), ghost: null };
+    handle.setPointerCapture(event.pointerId);
+  }
+  function moveDrag(event) {
+    if (!drag || event.pointerId !== drag.pointer) return;
+    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
+    event.preventDefault();
+    if (!drag.moved) {
+      drag.moved = true; drag.row.classList.add('mr-source');
+      drag.ghost = drag.row.cloneNode(true); drag.ghost.className = 'mr-row mr-drag-ghost'; drag.ghost.removeAttribute('data-key'); drag.ghost.inert = true; drag.ghost.setAttribute('aria-hidden', 'true');
+      const rect = drag.row.getBoundingClientRect(); drag.ghost.style.width = `${rect.width - 14}px`; drag.ghost.style.left = `${rect.left + 10}px`; document.querySelector('.mr-shell').append(drag.ghost);
+    }
+    drag.ghost.style.top = `${event.clientY - drag.row.offsetHeight - 8}px`;
+    const viewport = options.getBoundingClientRect();
+    if (event.clientY < viewport.top + 25) options.scrollTop -= 16;
+    if (event.clientY > viewport.bottom - 25) options.scrollTop += 16;
+    const group = drag.row.closest('.mr-group'), bounds = group.getBoundingClientRect();
+    clearMarkers();
+    drag.valid = event.clientX >= viewport.left && event.clientX <= viewport.right && event.clientY >= Math.max(viewport.top, group.querySelector('header').getBoundingClientRect().bottom) && event.clientY <= Math.min(viewport.bottom, bounds.bottom);
+    if (!drag.valid) return;
+    const rows = [...group.querySelectorAll('.mr-row')].filter(row => row !== drag.row);
+    drag.destination = rows.findIndex(row => event.clientY < row.getBoundingClientRect().top + row.offsetHeight / 2);
+    if (drag.destination < 0) drag.destination = rows.length;
+    if (drag.destination < rows.length) rows[drag.destination].classList.add('mr-drop-before'); else rows.at(-1)?.classList.add('mr-drop-after');
+  }
+  function cancelDrag() {
+    if (!drag) return;
+    const previous = drag; drag = null; previous.ghost?.remove(); previous.row.classList.remove('mr-source'); clearMarkers();
+    if (previous.handle.hasPointerCapture(previous.pointer)) previous.handle.releasePointerCapture(previous.pointer);
+  }
+  function finishDrag(event) {
+    if (!drag || event.pointerId !== drag.pointer) return;
+    const previous = drag, commit = previous.moved && previous.valid; cancelDrag();
+    if (!commit) return;
+    const { provider, model, destination } = previous; provider.models.splice(provider.models.indexOf(model), 1); provider.models.splice(destination, 0, model);
+    render(); focusGrip(`${provider.id}:${model.id}`); status.textContent = `${model.name}: position ${destination + 1} of ${provider.models.length}.`;
+  }
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && drag) { event.preventDefault(); cancelDrag(); status.textContent = 'Reorder cancelled.'; } });
+  search.addEventListener('input', () => { cancelDrag(); render(); });
+  document.querySelector('#mr-mode').addEventListener('click', () => { cancelDrag(); managing = !managing; render(); });
+  document.querySelector('#mr-reset').addEventListener('click', () => { cancelDrag(); providers = structuredClone(initial); category = 'claude'; managing = true; selected = 'claude:claude-sonnet-5-5'; search.value = ''; options.scrollTop = 0; render(); status.textContent = 'Keyboard: focus a grip, then Alt + ↑ / ↓.'; });
+  document.querySelector('#mr-theme').addEventListener('click', () => {
+    const dark = document.body.dataset.demoTheme !== 'dark'; document.body.dataset.demoTheme = dark ? 'dark' : 'light';
+    document.querySelectorAll('.sa-theme, .mr-theme').forEach(button => { button.textContent = dark ? 'Light theme' : 'Dark theme'; });
+  });
+  render();
+  console.log('Model mockup ready: six-dot grips, pointer/touch and Alt+arrow reordering within a provider, drop lines, Escape cancellation, manage/picker modes, favorites, visibility and reset. Sample catalog only; no persisted preferences.');
+})();
+</script>
+</body>
+</html>
