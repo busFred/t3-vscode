@@ -6,3 +6,14 @@
 - Build installers under `target-installer/`; packaging does not authorize installation into the user's normal VS Code profile.
 - All native VS Code tests must isolate user data, extensions and shared data. All T3 verification must use an explicitly isolated home; never mutate the user's normal T3 state or VS Code extension catalogs.
 - Use an inexpensive advertised model for live provider tests, currently GPT-6 Luna with low effort. Test scripts accept `T3_VSCODE_TEST_MODEL` for an explicit alternative and must fail rather than silently falling back to a premium model; deterministic fixtures do not call a model.
+
+## Response style
+
+Follow the below guidelines when responding in chat:
+* Be direct and concise.
+* Prefer bullets over paragraphs.
+* Use tables when they improve clarity or comparison.
+* Keep unavoidable paragraphs brief.
+* Do not restate the request or add unnecessary background.
+* Include only information needed to act or decide.
+* Optimize for low cognitive load and minimal context-window usage.
