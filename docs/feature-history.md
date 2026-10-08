@@ -1180,6 +1180,8 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Pass TypeScript checking, the complete extension/webview/Mermaid/math build, all 49 overview links and the isolated task browser fixture, including task scope, independent creation, editor navigation/recovery, draft preservation and 280 px layout.
 - Obtain fresh-context independent regression approval for runtime `3b171ef` against `0a256a3`, with no blocking findings; the reviewer checks the complete diff, fixture log, feature links, manifest and diff cleanliness before local packaging.
 - Use deterministic fixtures and an explicitly isolated T3 home without provider calls or normal VS Code/T3 state changes; keep the rebuilt installer local, unpublished and uninstalled.
+- Verify the 41-file v0.1.16 VSIX (2,632,978 bytes) against the reviewed bundles, unchanged host/Mermaid/math assets and manifest, current README/changelog, licenses, 20 math fonts and three screenshots.
+- Record SHA-256 `b5951a6737e5b7da80f6db3d068d00eb73641cd987a7014a2e784b5ec856e672` in the installer sidecar without publication or installation.
 
 ## Maintenance
 
