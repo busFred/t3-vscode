@@ -545,6 +545,7 @@ Version v0.1.16 is an unpublished local installer with model-preference import a
 
 - Apply saved visibility and ordering to provider lists, search and Favorites without altering the server catalog or current conversation.
 - Import browser favorites by provider-instance identity and persist all model preferences together, preserving earlier extension favorites during migration.
+- Retain the last confirmed preference snapshot during native storage writes and restore the optimistic VS Code cache on failure, including failed recovery writes.
 
 ### Effort and permission controls
 

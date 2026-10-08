@@ -14,7 +14,7 @@ import { resolveT3Home } from "./host/serverDiscovery.js";
 import { SecretCredentialStore } from "./host/sessionStore.js";
 import { T3Client } from "./host/t3Client.js";
 import { getWorkspaceContext } from "./host/workspaceContext.js";
-import { Events, type ProjectSelection, type ProjectSummary, type FavoriteModel } from "./shared/bridge.js";
+import { Events, type ProjectSelection, type ProjectSummary } from "./shared/bridge.js";
 import { resolveMessageNavigation } from "./shared/messageNavigation.js";
 import { FONT_SIZE_KEYS, resolveAppearance, type AppearanceSettings } from "./shared/appearance.js";
 import { editorReference } from "./host/editorReference.js";
@@ -24,7 +24,8 @@ import { UsageStatusBar } from "./host/usageStatusBar.js";
 import { InputNotificationTracker } from "./host/inputNotifications.js";
 import type { DraftTransfer } from "./shared/viewDraft.js";
 import { usageAccounts } from "./shared/usage.js";
-import { parseModelPreferencesImport, type ModelPickerPreferences } from "./shared/modelPreferences.js";
+import { parseModelPreferencesImport } from "./shared/modelPreferences.js";
+import { ModelPreferenceStore } from "./host/modelPreferenceStore.js";
 
 let hostState: HostState | null = null;
 
@@ -37,14 +38,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     : undefined;
 
   const client = new T3Client();
+  const modelPreferences = new ModelPreferenceStore(context.globalState);
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
     workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject,
     appearance: readAppearance, messageNavigation: () => resolveMessageNavigation(vscode.workspace.getConfiguration("t3-vscode").get("messageNavigation")),
-    modelPreferences: () => context.globalState.get<ModelPickerPreferences>("modelPickerPreferences")
-      ?? { favoriteModels: context.globalState.get<ReadonlyArray<FavoriteModel>>("favoriteModels", []), providerModelPreferences: {} },
+    modelPreferences: () => modelPreferences.read(),
     searchPreferences: context.workspaceState.get("sessionSearchPreferences", {}),
     saveSearchPreferences: (preferences) => context.workspaceState.update("sessionSearchPreferences", preferences),
-    saveModelPreferences: (preferences) => context.globalState.update("modelPickerPreferences", preferences) }, client);
+    saveModelPreferences: (preferences) => modelPreferences.save(preferences) }, client);
 
   const importModelPreferences = async () => {
     const json = await vscode.window.showInputBox({ title: "Import T3 Web Model Preferences",
