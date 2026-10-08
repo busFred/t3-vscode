@@ -1181,6 +1181,7 @@ export class HostState {
       for (const option of selection.options ?? []) {
         if (!changedModel && previous.modelSelection.options?.some((saved) => saved.id === option.id && saved.value === option.value)) continue;
         const descriptor = model.capabilities?.optionDescriptors?.find((entry) => entry.id === option.id);
+        if (descriptor?.type === "select" && typeof option.value === "string" && descriptor.promptInjectedValues?.includes(option.value)) throw new Error("This effort is controlled by prompt text. Choose a supported task effort instead.");
         if (!(descriptor?.type === "boolean" ? typeof option.value === "boolean" : descriptor?.type === "select" && descriptor.options.some((entry) => entry.id === option.value))) throw new Error("Choose an advertised model option.");
       }
       const target = input.threadId;

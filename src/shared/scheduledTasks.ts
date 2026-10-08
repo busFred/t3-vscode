@@ -31,7 +31,7 @@ export function newTaskModel(providers: ReadonlyArray<ServerProvider>): ModelSel
     const model = provider.models.find((model) => model.slug === "gpt-6-luna");
     if (!model) continue;
     const effort = effortDescriptor(model, null);
-    if (!effort?.options.some((option) => option.id === "low")) continue;
+    if (!effort?.options.some((option) => option.id === "low") || effort.promptInjectedValues?.includes("low")) continue;
     return { instanceId: provider.instanceId, model: model.slug, options: [{ id: effort.id, value: "low" }] };
   }
   return null;

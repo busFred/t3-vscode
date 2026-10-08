@@ -125,6 +125,12 @@ The v0.1.16 local revision includes selected-text image descriptions, local mode
 - Route the existing Sessions command to the Sessions front page and Account & Usage to the visible front page, keeping any task draft for reopening.
 - Cover reconnect and both native navigation events in the deterministic multi-view task fixture. Independent regression review identified these cases before packaging.
 
+#### v0.1.16 — scheduled effort validation
+
+- Offer only effort choices that can be stored as model settings for scheduled tasks; prompt-driven choices such as Claude Ultrathink remain available through the task prompt.
+- Reject newly introduced prompt-driven option values at the host boundary and remove them when switching task models, while retaining preexisting saved options and prompt text on unrelated edits.
+- Cover the Claude descriptor case with a dedicated host regression and task-editor browser assertion after independent review identified the mismatch.
+
 ### Workspace scope
 
 #### v0.0.2

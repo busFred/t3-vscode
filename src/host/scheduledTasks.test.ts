@@ -70,3 +70,21 @@ test("New task model defaults never fall back to expensive or unavailable models
   assert.equal(newTaskModel([provider]), null);
   assert.equal(newTaskModel(client.config.providers.map((provider) => ({ ...provider, enabled: false }))), null);
 });
+
+test("Task efforts reject new prompt-injected choices while preserving already saved options", async (t) => {
+  const { client, options } = fixture();
+  const selection = { instanceId: provider.instanceId, model: "claude-task", options: [{ id: "effort", value: "high" }] };
+  client.config = { providers: [{ ...provider, models: [{ slug: "claude-task", name: "Claude task", isCustom: false, capabilities: {
+    optionDescriptors: [{ id: "effort", type: "select", label: "Effort", promptInjectedValues: ["ultrathink"], options: [{ id: "high", label: "High", isDefault: true }, { id: "ultrathink", label: "Ultrathink" }] }],
+  } }] }] };
+  const task = scheduledTaskFixture({ modelSelection: selection }); client.scheduledTasks = [task];
+  const { host } = await harness(options, client); t.after(() => host.dispose());
+  await assert.rejects(host.saveScheduledTask({ ...task, existing: true, editVersion: taskEditVersion(task),
+    modelSelection: { ...selection, options: [{ id: "effort", value: "ultrathink" }] } }), /controlled by prompt text/);
+  assert.equal(client.taskSaves.length, 0);
+  const legacy = { ...task, prompt: "ultrathink\nRead the training log.", modelSelection: { ...selection, options: [{ id: "effort", value: "ultrathink" }] } };
+  client.scheduledTasks = [legacy];
+  await host.saveScheduledTask({ ...legacy, existing: true, editVersion: taskEditVersion(legacy), title: "Rename only" });
+  assert.deepEqual(client.scheduledTasks[0]!.modelSelection, legacy.modelSelection);
+  assert.equal(client.scheduledTasks[0]!.prompt, legacy.prompt);
+});

@@ -39,7 +39,8 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
   const model = provider?.models.find((model) => model.slug === draft.modelSelection?.model);
   const unavailable = !provider?.enabled || !provider.installed || provider.availability === "unavailable" || !model;
   const effort = effortDescriptor(model, draft.modelSelection);
-  const effortValue = draft.modelSelection?.options?.find((option) => option.id === effort?.id)?.value ?? effort?.currentValue ?? effort?.options.find((option) => option.isDefault)?.id ?? effort?.options[0]?.id ?? "";
+  const effortChoices = effort?.options.filter((option) => !effort.promptInjectedValues?.includes(option.id)) ?? [];
+  const effortValue = draft.modelSelection?.options?.find((option) => option.id === effort?.id)?.value ?? (effortChoices.some((option) => option.id === effort?.currentValue) ? effort?.currentValue : undefined) ?? effortChoices.find((option) => option.isDefault)?.id ?? effortChoices[0]?.id ?? "";
   const origin = draft.originThreadId ? state.threads.find((thread) => thread.id === draft.originThreadId)?.title ?? "Origin session unavailable" : draft.base && !draft.base.originKnown ? "Origin unknown" : "Independent task";
   const interval = Number(draft.minutes) * 60_000;
   const scheduleValid = draft.scheduleType === "interval" ? Number.isSafeInteger(interval) && interval >= 60_000 : draft.scheduleType === "fixed_time" && /^([01]?\d|2[0-3]):[0-5]\d$/.test(draft.timeOfDay);
@@ -67,8 +68,8 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
       {provider ? <small>{provider.displayName ?? provider.instanceId}</small> : null}
       {unavailable ? <small className="turn-error">Choose an available model before saving.</small> : null}</div>
       {effort && draft.modelSelection ? <label>{effort.label}<select aria-label="Task effort" value={String(effortValue)} onChange={(event) => patch({ modelSelection: { ...draft.modelSelection!, options: [...(draft.modelSelection?.options ?? []).filter((option) => option.id !== effort.id), { id: effort.id, value: event.target.value }] } })}>
-        {!effort.options.some((option) => option.id === effortValue) ? <option value={String(effortValue)}>Saved: {String(effortValue)}</option> : null}
-        {effort.options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+        {!effortChoices.some((option) => option.id === effortValue) ? <option value={String(effortValue)}>Saved: {String(effortValue)}</option> : null}
+        {effortChoices.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
       </select></label> : null}
       <label>Schedule<select aria-label="Task schedule" value={draft.scheduleType} disabled={draft.scheduleType === "unsupported"} onChange={(event) => patch({ scheduleType: event.target.value as "interval" | "fixed_time" })}>
         <option value="interval">Every interval</option><option value="fixed_time">At a time</option>{draft.scheduleType === "unsupported" ? <option value="unsupported">Newer schedule — edit in T3 Web</option> : null}
@@ -93,6 +94,13 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
       </fieldset>
     </div>
     <footer><button type="button" disabled={saving} onClick={() => onReturn(true)}>Cancel</button><button type="submit" className="primary" disabled={!valid || saving || draft.scheduleType === "fixed_time" && draft.weekdays?.length === 0}>{saving ? "Saving…" : "Save task"}</button></footer>
-    {pickerOpen && anchor.current ? <ModelPicker state={state} selection={draft.modelSelection} anchor={anchor.current} onClose={closePicker} onSelect={(modelSelection) => patch({ modelSelection })} /> : null}
+    {pickerOpen && anchor.current ? <ModelPicker state={state} selection={draft.modelSelection} anchor={anchor.current} onClose={closePicker} onSelect={(modelSelection) => {
+      if (modelSelection.instanceId === draft.modelSelection?.instanceId && modelSelection.model === draft.modelSelection.model) { patch({ modelSelection }); return; }
+      const descriptors = state.providers.find((provider) => provider.instanceId === modelSelection.instanceId)?.models.find((model) => model.slug === modelSelection.model)?.capabilities?.optionDescriptors ?? [];
+      patch({ modelSelection: { ...modelSelection, ...(modelSelection.options ? { options: modelSelection.options.filter((option) => {
+        const descriptor = descriptors.find((descriptor) => descriptor.id === option.id);
+        return !(descriptor?.type === "select" && typeof option.value === "string" && descriptor.promptInjectedValues?.includes(option.value));
+      }) } : {}) } });
+    }} /> : null}
   </form>;
 }

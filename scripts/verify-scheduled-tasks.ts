@@ -57,9 +57,13 @@ export async function verifyScheduledTasks(sidebar: Page, chat: Page, other: Pag
   await sidebar.getByRole("button", { name: "Edit task Other session task" }).click();
   assert.equal(await sidebar.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Other session task");
   await sidebar.getByRole("button", { name: "Choose task model", exact: true }).click();
+  await sidebar.getByRole("textbox", { name: "Search models", exact: true }).fill("Claude Sonnet");
+  await sidebar.getByRole("button", { name: "Claude Sonnet", exact: true }).click();
+  assert.deepEqual(await sidebar.locator('select[aria-label="Task effort"] option').evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value)), ["high"], "Prompt-injected efforts are not saved model options");
+  await sidebar.getByRole("button", { name: "Choose task model", exact: true }).click();
   await sidebar.getByRole("textbox", { name: "Search models", exact: true }).fill("Luna");
   await sidebar.getByRole("button", { name: "GPT-6 Luna", exact: true }).click();
-  assert.equal(await sidebar.getByRole("combobox", { name: "Task effort" }).inputValue(), "high");
+  assert.equal(await sidebar.getByRole("combobox", { name: "Task effort" }).inputValue(), "low", "Switching providers resets incompatible options");
   await sidebar.getByRole("combobox", { name: "Task effort" }).selectOption("low");
   await sidebar.setViewportSize({ width: 280, height: 700 });
   assert.equal(await sidebar.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
