@@ -40,6 +40,7 @@ import { attachmentMessageContext, attachmentUploadInput, type AttachmentReferen
 
 import { SessionSearchJob } from "./sessionSearch.js";
 import type { SessionSearchOptions } from "../shared/sessionSearch.js";
+import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 
 export type HostTransport = Pick<T3Client, "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
@@ -52,6 +53,8 @@ export interface HostStateOptions {
   readonly messageNavigation?: () => MessageNavigationPlacement;
   readonly favoriteModels?: () => ReadonlyArray<FavoriteModel>;
   readonly saveFavoriteModels?: (favorites: ReadonlyArray<FavoriteModel>) => PromiseLike<void>;
+  readonly searchPreferences?: Partial<SearchPreferences>;
+  readonly saveSearchPreferences?: (preferences: SearchPreferences) => PromiseLike<void>;
   readonly pickProject?: (projects: ReadonlyArray<ProjectSummary>, supportsNoProject: boolean, workspaceRoots: ReadonlyArray<string>) => Promise<ProjectSelection | null>;
   readonly discover?: typeof discoverServer;
   readonly pair?: typeof pairWithServer;
@@ -89,6 +92,7 @@ function authFailure(cause: unknown): boolean {
 
 export class HostState {
   private readonly sessionSearches = new Map<string, SessionSearchJob>();
+  private searchPreferences: SearchPreferences;
   private phase: HostPhase = "discovering";
   private notice: string | undefined;
   private server: DiscoveredServer | null = null;
@@ -114,6 +118,7 @@ export class HostState {
   private readonly client: HostTransport;
   constructor(options: HostStateOptions, client: HostTransport) {
     this.options = options; this.client = client;
+    this.searchPreferences = resolveSearchPreferences(options.searchPreferences);
     client.onClose = () => {
       void this.enqueue(() => this.recoverConnection()).catch((cause) => {
         if (!this.disposed) this.setPhase("error", describeError(cause));
@@ -719,6 +724,16 @@ export class HostState {
     this.sessionSearches.get(viewId)?.cancel();
     this.sessionSearches.delete(viewId);
   }
+  async setSearchPreferences(patch: Partial<SearchPreferences>): Promise<void> {
+    this.searchPreferences = resolveSearchPreferences({ ...this.searchPreferences, ...patch });
+    this.emit();
+    await this.options.saveSearchPreferences?.(this.searchPreferences);
+  }
+  sessionSearchPreviews(threadId: string, query: string, ids: readonly string[], viewId = SIDEBAR_VIEW_ID): SessionSearchPreview[] {
+    const job = this.sessionSearches.get(viewId);
+    if (!job || job.threadId !== threadId || job.options.query !== query || this.requireView(viewId).activeThreadId !== threadId) throw new Error("Search this conversation again.");
+    return job.previews(ids);
+  }
   searchSession(id: string, options: SessionSearchOptions, viewId = SIDEBAR_VIEW_ID): void {
     this.requireThread(id);
     if (this.requireView(viewId).activeThreadId !== id) throw new Error("Open this conversation before searching it.");
@@ -865,6 +880,7 @@ export class HostState {
     const visibleThreadIds = new Set(threads.map((thread) => thread.id));
     return {
       revision: this.revision, phase: this.phase, home: this.options.home,
+      searchPreferences: this.searchPreferences,
       ...(this.sessionSearches.get(viewId) ? { sessionSearch: this.sessionSearches.get(viewId)!.state } : {}),
       workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()),
       appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),

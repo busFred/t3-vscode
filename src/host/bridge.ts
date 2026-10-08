@@ -1,3 +1,4 @@
+import { parseSearchFilters } from "../shared/sessionSearch.js";
 /** VS Code adapter for typed UI intents. Never exposes a generic T3 RPC tunnel. */
 import type * as vscode from "vscode";
 import { Events, isObject, paramsObject, stringParam, validateRpcMessage, type BridgeEvent, type HostStateSnapshot, type RpcResult } from "../shared/bridge.js";
@@ -9,6 +10,7 @@ import { parseDraftTransfer, type DraftTransfer } from "../shared/viewDraft.js";
 import { readFile, stat } from "node:fs/promises";
 import { basename } from "node:path";
 import { PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
+import { searchPreferencePatch } from "../shared/sessionSearchPresentation.js";
 
 export class WebviewRegistry {
   private readonly webviews = new Map<string, vscode.Webview>();
@@ -86,9 +88,14 @@ export class BridgeHandler {
       switch (message.method) {
         case "searchSession": {
           if (typeof params.query !== "string" || typeof params.caseSensitive !== "boolean" || typeof params.wholeWord !== "boolean" || !["all", "messages"].includes(String(params.scope))) throw new Error("Invalid session search options.");
-          this.hostState.searchSession(id(), { query: params.query, caseSensitive: params.caseSensitive, wholeWord: params.wholeWord, scope: params.scope as "all" | "messages" }, viewId); break;
+          this.hostState.searchSession(id(), { query: params.query, caseSensitive: params.caseSensitive, wholeWord: params.wholeWord, scope: params.scope as "all" | "messages", ...parseSearchFilters(params) }, viewId); break;
         }
         case "cancelSessionSearch": this.hostState.cancelSessionSearch(viewId); break;
+        case "setSearchPreferences": await this.hostState.setSearchPreferences(searchPreferencePatch(params)); break;
+        case "sessionSearchPreviews": {
+          if (!Array.isArray(params.matchIds) || params.matchIds.length > 50 || !params.matchIds.every((value) => typeof value === "string" && value.length <= 2048)) throw new Error("Invalid search preview request.");
+          return { id: message.id, result: this.hostState.sessionSearchPreviews(id(), stringParam(params, "query"), params.matchIds, viewId) };
+        }
         case "revealSessionMatch": this.hostState.revealSessionMatch(stringParam(params, "matchId"), viewId); break;
         case "getState": break;
         case "searchThreads": {

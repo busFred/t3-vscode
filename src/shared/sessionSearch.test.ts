@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findSessionMatches, type SessionSearchOptions } from "./sessionSearch.js";
+import { parseSearchFilters, findSessionMatches, type SessionSearchOptions } from "./sessionSearch.js";
 import type { TranscriptItem, WireTurnItem } from "./bridge.js";
 const options: SessionSearchOptions = { query: "rate", caseSensitive: false, wholeWord: false, scope: "all" };
 const row = (fields: unknown, output: string | null = null): TranscriptItem => ({ key: "thread:item", sourceThreadId: "thread", item: fields as WireTurnItem, needsDetail: false, output, toolLabel: null });
@@ -22,4 +22,17 @@ test("Message-only find excludes activity while all-text includes command input,
   assert.equal(findSessionMatches(attached, { ...options, scope: "messages" }).matches[0]!.field, "attachment:0");
   const bounded = findSessionMatches(row({ type: "assistant_message", text: "rate ".repeat(50) }), options, 3);
   assert.equal(bounded.total, 50); assert.equal(bounded.matches.length, 3);
+});
+
+
+test("Source/content filters intersect, while multiple content kinds use OR", () => {
+  const message = row({ type: "user_message", text: "rate $x$", attachments: [{ name: "plot.png", mimeType: "image/png" }] });
+  assert.equal(findSessionMatches(message, { ...options, sources: ["assistant"] }).total, 0);
+  assert.equal(findSessionMatches(message, { ...options, sources: [] }).total, 0);
+  assert.equal(findSessionMatches(message, { ...options, sources: ["user"], content: ["figures", "code"] }).total, 1);
+  assert.equal(findSessionMatches(message, { ...options, content: ["equations"] }).total, 1);
+  assert.equal(findSessionMatches(message, { ...options, content: ["code"] }).total, 0);
+  assert.equal(findSessionMatches(row({ type: "reasoning", text: "rate" }), { ...options, sources: ["thought"] }).total, 1);
+  assert.throws(() => parseSearchFilters({ sources: ["arbitrary"] }), /Invalid search/);
+  assert.throws(() => parseSearchFilters({ content: "figures" }), /Invalid search/);
 });

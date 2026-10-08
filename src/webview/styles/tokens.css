@@ -65,7 +65,7 @@ select, input { color: inherit; background: var(--card); }
 *::-webkit-scrollbar { width: 6px; height: 6px; }
 *::-webkit-scrollbar-thumb { background: var(--input); border-radius: 6px; }
 .app { height: 100%; display: flex; flex-direction: column; min-width: 0; }
-.chat-view { flex: 1; min-height: 0; display: flex; container-type: inline-size; }
+.chat-view { flex: 1; min-height: 0; display: flex; container-type: inline-size; container-name: chat-view; }
 .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 27px; height: 27px; color: var(--muted-foreground); background: transparent; border: 0; border-radius: 6px; }
 .icon-button:hover, .icon-button.selected { color: var(--foreground); background: var(--muted); }
@@ -443,18 +443,52 @@ body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vsc
 .inline-attachment { display: inline-flex; align-items: center; gap: 4px; font-size: .85em; line-height: 1.5; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--message-surface); color: var(--foreground); vertical-align: baseline; cursor: pointer; }
 .chat-image .image-preview-button { display: block; border: 0; background: transparent; padding: 0; max-width: 100%; cursor: zoom-in; }
 
-/* Session find inherits the active VS Code theme. */
-.session-find input, .find-options select { color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, #8886); padding: 5px 7px; border-radius: 3px; min-width: 0; }
-.session-find { flex: none; padding: 6px 12px; border-bottom: 1px solid var(--vscode-panel-border, #8885); color: var(--vscode-foreground); background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); font-size: .85em; }
-.session-find-toolbar, .find-options { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.session-find-toolbar input { flex: 1; min-width: 120px; }
-.find-count { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .9em; }
-.find-options { margin-top: 6px; font-size: .9em; }
-.find-options small { margin-left: auto; color: var(--vscode-descriptionForeground); }
-.find-results { max-height: 145px; overflow: auto; margin-top: 6px; }
+/* Search controls are workspace preferences, entirely inside the panel. */
+.chat-reading { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.chat-conversation { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; container-type: inline-size; }
+.session-find { container-type: inline-size; flex: 0 1 auto; min-width: 0; min-height: 0; max-height: calc(100% - 150px); display: flex; flex-direction: column; color: var(--vscode-editor-foreground, var(--foreground)); background: var(--vscode-editorWidget-background, var(--card)); border-bottom: 1px solid var(--border); font-size: .75rem; }
+.find-controls, .find-feedback { flex: none; }
+.find-controls { padding: 4px; }
+.session-find-toolbar { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.find-input { display: flex; align-items: center; min-width: 44px; flex: 1; padding-left: 4px; color: var(--vscode-input-foreground, var(--foreground)); background: var(--vscode-input-background, var(--card)); border: 1px solid var(--vscode-input-border, var(--input)); }
+.find-input:focus-within { outline: 1px solid var(--ring); }
+.find-input input { flex: 1; width: 0; min-width: 0; color: inherit; background: transparent; border: 0; outline: none; padding: 3px; font-size: inherit; }
+.session-find .icon-button { flex: none; width: 23px; height: 25px; color: inherit; border-radius: 2px; }
+.session-find .icon-button[aria-pressed="true"], .session-find .icon-button[aria-expanded="true"] { color: var(--vscode-inputOption-activeForeground, var(--primary)); background: var(--vscode-inputOption-activeBackground, var(--muted)); outline: 1px solid var(--vscode-inputOption-activeBorder, var(--ring)); outline-offset: -1px; }
+.find-count { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .625rem; text-align: center; padding: 0 2px; }
+.find-filter { position: relative; }.find-filter i { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: currentColor; bottom: 3px; right: 3px; }
+.find-disclosure { display: flex; align-items: center; gap: 5px; width: 100%; flex: none; min-height: 23px; text-align: left; padding: 2px 6px; font-size: .6875rem; border-top: 1px solid var(--border); }
+.find-disclosure:hover { background: var(--muted); }
+.find-feedback { padding: 0 6px; font-size: .6875rem; }.find-feedback p { margin: 3px 0; }
+.find-results { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-top: 1px solid var(--border); }
+.find-group-rows { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; }
+.find-entry { border-left: 2px solid transparent; border-bottom: 1px solid var(--border); }
+.find-entry.selected { border-left-color: var(--ring); background: var(--vscode-list-inactiveSelectionBackground, var(--muted)); }
+.find-entry:hover { background: var(--vscode-list-hoverBackground, var(--muted)); }
 .find-result { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; padding: 5px 7px; cursor: pointer; }
-.find-result small { display: block; color: var(--vscode-descriptionForeground); }
-.find-result span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.find-result:hover, .session-find .selected { background: var(--vscode-list-inactiveSelectionBackground, #8883); }
+.find-result-meta { display: flex; align-items: center; gap: 8px; font-size: .625rem; color: var(--muted-foreground); margin-bottom: 2px; }
+.find-result-meta time { margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.find-preview-text { display: block; overflow: hidden; font-size: .875rem; line-height: 1.65; overflow-wrap: anywhere; }
+.find-context-line { display: block; white-space: pre; overflow: hidden; min-height: 1.65em; }
+.find-preview-text mark { color: inherit; background: var(--vscode-editor-findMatchHighlightBackground, #e6b33b66); outline: 1px solid var(--vscode-editor-findMatchHighlightBorder, transparent); padding: 0; border-radius: 2px; }
+.find-pagination { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .6875rem; padding: 5px; flex: none; }
+.find-resize { display: flex; justify-content: center; align-items: center; gap: 8px; height: 14px; flex: none; cursor: row-resize; touch-action: none; user-select: none; border-top: 1px solid var(--border); color: var(--muted-foreground); background: var(--background); font-size: .5625rem; }
+.find-resize:hover, .find-resize:focus-visible { color: var(--foreground); background: var(--muted); outline: 1px solid var(--ring); outline-offset: -1px; }
+.find-grip { width: 26px; height: 4px; border-top: 1px solid currentColor; border-bottom: 1px solid currentColor; }
+.find-context-popover { position: fixed; width: min(280px, calc(100vw - 8px)); max-height: calc(100vh - 8px); overflow: auto; z-index: 70; padding: 10px; border: 1px solid var(--input); border-radius: 4px; background: var(--vscode-editorWidget-background, var(--card)); color: var(--foreground); box-shadow: 0 5px 18px #0003; font-size: .75rem; }
+.find-context-popover fieldset { margin: 0 0 8px; padding: 0 0 8px; border-bottom: 1px solid var(--border); }.find-context-popover legend { font-weight: 600; margin-bottom: 5px; }
+.find-context-popover p { font-size: .625rem; color: var(--muted-foreground); margin: 5px 0 0; }
+.find-filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }.find-filter-grid label { display: flex; align-items: center; gap: 4px; }.find-filter-grid input { accent-color: var(--primary); }
+.find-filter-option { display: flex; justify-content: space-between; align-items: center; gap: 5px; margin-top: 8px; }.find-filter-option select { color: inherit; background: var(--card); border: 1px solid var(--input); padding: 3px; font-size: inherit; max-width: 65%; }
+.find-filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+@container chat-view (min-width: 640px) {
+  .chat-reading[data-find-layout="side"]:has(.session-find[data-expanded="true"]) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 36%); }
+  .chat-reading[data-find-layout="side"] > .session-find[data-expanded="true"] { grid-column: 2; grid-row: 1; max-height: none; border-left: 1px solid var(--border); border-bottom: 0; }
+  .chat-reading[data-find-layout="side"]:has(.session-find[data-expanded="true"]) > .chat-conversation { grid-column: 1; grid-row: 1; }
+  .chat-reading[data-find-layout="side"] .find-results { flex: 1; height: auto !important; }
+  .chat-reading[data-find-layout="side"] .find-resize { display: none; }
+}
+.session-find[data-expanded="false"] { position: absolute; top: 4px; right: 5px; z-index: 30; width: min(620px, calc(100% - 10px)); max-height: none; border: 1px solid var(--input); border-radius: 3px; box-shadow: 0 3px 8px #0003; }
+@container (max-width: 440px) { .session-find-toolbar .find-case { display: none; } }
 .session-match-row { outline: 1px solid var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder)); outline-offset: 2px; }
 ::highlight(t3-session-match) { background-color: var(--vscode-editor-findMatchBackground, #ea9e3288); color: var(--vscode-editor-foreground); }

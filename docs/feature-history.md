@@ -12,7 +12,7 @@ This document tracks features by release, including how later versions changed t
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.0.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.0.6 |
-| [Find in session](#find-in-session) | Search all recorded text in the current conversation, including older history. | v0.1.13 | v0.1.13 |
+| [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.13 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Shows static Working/Input badges and notifies when input is needed. | v0.0.1 | v0.0.9 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.0.8 |
@@ -45,7 +45,7 @@ This document tracks features by release, including how later versions changed t
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers a running local T3 server and stores credentials in SecretStorage. | v0.0.1 | v0.0.8 |
 | [Missing-server setup](#missing-server-setup) | Offers installation, service/manual startup links and Retry connection. | v0.0.1 | v0.0.7 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage and Connection. | v0.0.9 | v0.1.10 |
-| [Native themes and fonts](#native-themes-and-fonts) | Follows VS Code theme colors and exposes native font-size settings. | v0.0.1 | v0.0.9 |
+| [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.12 |
 | [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces prerelease VSIX installers. | v0.0.1 | v0.1.13 |
 | [Release versioning](#release-versioning) | Uses one three-number version everywhere with Alpha as a stage description. | v0.1.10 | v0.1.11 |
@@ -153,12 +153,16 @@ This document tracks features by release, including how later versions changed t
 
 #### v0.1.13
 
-- Open conversation search with the header icon or Ctrl/Cmd+F and navigate occurrences with Enter, F3 or the arrow buttons.
-- Search literal text with Match case, Whole word and Messages only or All text filters.
-- Scan older history and lazy command details with progress, cancellation and explicit incomplete-result errors.
-- Reveal and highlight selected matches without replacing the composer draft or another tab’s selection.
-- Search recorded Markdown, LaTeX and attachment filenames, with a source snippet when rendered text differs.
-- Update matches as the conversation streams and cap the navigable result list at 20,000 occurrences.
+- Open search with the header icon or Ctrl/Cmd+F and navigate every occurrence with Enter, F3 or arrow buttons.
+- Show one row per occurrence at chat font size and line height, removing grouped-hit navigation and standalone truncation ellipses.
+- Keep query, clear, case, whole-word, count, navigation, filters, placement and close controls in one compact row.
+- Keep Filters open while adjusting message/activity sources, figures/code/equations/files, context lines, order or refresh; content selections combine with OR and intersect sources.
+- Scan older history and lazy command details with progress, cancellation and explicit incomplete-result errors; no image OCR or embedded-page content search.
+- Reveal and highlight matches without replacing the draft or another tab’s selection, including source snippets for Markdown and LaTeX.
+- Update streamed matches and retain up to 20,000 navigable occurrences with bounded context previews and pagination.
+- Collapse to a floating search bar plus results disclosure without reserved pane height; the disclosure restores the last placement.
+- Use the layout icon to switch Above/Side or expand directly to Side from collapse, with automatic Above fallback below 640px.
+- Preserve pointer/keyboard resizing and workspace-local layout, context, order and height, without sharing queries between tabs.
 
 ### Conversation status and notifications
 
@@ -660,6 +664,10 @@ This document tracks features by release, including how later versions changed t
 #### v0.0.9
 
 - Keep the native settings shortcut in the session manager after removing the editor History page.
+#### v0.1.13
+
+- Match search-result text to chat font size and line height.
+
 
 ### T3 VSCode branding
 

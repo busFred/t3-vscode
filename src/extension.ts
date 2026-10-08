@@ -38,6 +38,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject,
     appearance: readAppearance, messageNavigation: () => resolveMessageNavigation(vscode.workspace.getConfiguration("t3-vscode").get("messageNavigation")),
     favoriteModels: () => context.globalState.get<ReadonlyArray<FavoriteModel>>("favoriteModels", []),
+    searchPreferences: context.workspaceState.get("sessionSearchPreferences", {}),
+    saveSearchPreferences: (preferences) => context.workspaceState.update("sessionSearchPreferences", preferences),
     saveFavoriteModels: (favorites) => context.globalState.update("favoriteModels", favorites) }, client);
 
   const registry = new WebviewRegistry();

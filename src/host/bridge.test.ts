@@ -5,6 +5,22 @@ import { SIDEBAR_VIEW_ID } from "./hostState.js";
 import { viewsHarness, publishText } from "./testing/fakeTransport.js";
 import { FakeWebview } from "./testing/fakeWebview.js";
 import { Events, type HostStateSnapshot } from "../shared/bridge.js";
+test("Search preview and preference bridge validates input and cannot borrow another view's search", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  const registry = new WebviewRegistry(), bridge = new BridgeHandler(host, registry), first = new FakeWebview(), other = new FakeWebview();
+  host.registerView("other"); await host.selectThread("second", "other");
+  for (const [id, view] of [[SIDEBAR_VIEW_ID, first], ["other", other]] as const) { registry.add(id, view.webview); bridge.attach(view.webview, id); }
+  await assert.rejects(first.request("setSearchPreferences", { contextLines: 20 }), /Invalid/);
+  await assert.rejects(first.request("sessionSearchPreviews", { threadId: "first", query: "rate", matchIds: Array(51).fill("x") }), /Invalid/);
+  publishText(client, "first", "rate", 1);
+  await first.request("searchSession", { threadId: "first", query: "rate", caseSensitive: false, wholeWord: false, scope: "all" });
+  for (let n = 0; n < 100 && host.snapshot().sessionSearch?.scanning; n++) await new Promise(resolve => setTimeout(resolve, 5));
+  const matchId = host.snapshot().sessionSearch!.matches[0]!.id;
+  await assert.rejects(other.request("sessionSearchPreviews", { threadId: "first", query: "rate", matchIds: [matchId], viewId: SIDEBAR_VIEW_ID }), /again/);
+  await first.request("setSearchPreferences", { layout: "side", contextLines: 0 });
+  assert.equal(host.snapshot().searchPreferences?.contextLines, 0);
+  assert.equal(host.snapshot().searchPreferences?.layout, "side");
+});
 
 test("Editor handoff and account usage actions retain their originating view despite a different focused tab", async (t) => {
   const { host } = await viewsHarness(); t.after(() => host.dispose());

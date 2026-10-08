@@ -12,9 +12,11 @@ import type { AppearanceSettings } from "./appearance.js";
 import type { MessageNavigationPlacement } from "./messageNavigation.js";
 
 import type { SessionSearchState } from "./sessionSearch.js";
+import type { SearchPreferences } from "./sessionSearchPresentation.js";
 
 export const Methods = {
   searchSession: "searchSession", cancelSessionSearch: "cancelSessionSearch", revealSessionMatch: "revealSessionMatch",
+  sessionSearchPreviews: "sessionSearchPreviews", setSearchPreferences: "setSearchPreferences",
   chatAsset: "chatAsset", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
   newThread: "newThread", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
@@ -95,6 +97,7 @@ export interface TranscriptItem {
 }
 export interface HostStateSnapshot {
   readonly sessionSearch?: SessionSearchState;
+  readonly searchPreferences?: SearchPreferences;
   readonly queue?: ConversationQueue | null;
   readonly tasks?: ConversationTasks | null;
   /** Monotonic within a host instance; prevents slow RPC responses replacing a newer push. */

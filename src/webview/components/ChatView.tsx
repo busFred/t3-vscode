@@ -14,8 +14,10 @@ import { CitationCommentEditor } from "./CitationCommentEditor";
 import type { AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 import { ThreadActionsMenu } from "./ThreadActionsMenu";
 import { SessionFind, type SearchTarget } from "./SessionFind";
+import { useSearchPreferences } from "../searchPreferences";
 
 export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
+  const [searchPreferences, setSearchPreferences] = useSearchPreferences(state);
   const [findOpen, setFindOpen] = useState(false);
   const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
   const closeFind = useCallback(() => { setFindOpen(false); setSearchTarget(null); }, []);
@@ -55,7 +57,9 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
         {thread ? <button className="icon-button" aria-label="Thread actions" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); setThreadMenu(threadMenu ? null : { x: box.right - 190, y: box.bottom + 5 }); }}><ChevronDownIcon size={14} /></button> : null}
       </header>
       {threadMenu && thread ? <ThreadActionsMenu thread={thread} position={threadMenu} onClose={closeThreadMenu} /> : null}
-      {findOpen && thread ? <SessionFind key={`find:${thread.id}`} state={state} onClose={closeFind} onSelect={(target) => { setSearchTarget(target); if (target) setCitationTarget(null); }} /> : null}
+      <div className="chat-reading" data-find-layout={findOpen && thread ? searchPreferences.layout : undefined}>
+      {findOpen && thread ? <SessionFind key={`find:${thread.id}`} state={state} preferences={searchPreferences} onPreferences={setSearchPreferences} onClose={closeFind} onSelect={(target) => { setSearchTarget(target); if (target) setCitationTarget(null); }} /> : null}
+      <div className="chat-conversation" key="conversation">
       {thread?.relationshipToParent === "subagent" ? <div className="subagent-parent-bar">{parent ? <button className="subagent-parent-link" onClick={() => { void run("selectThread", { threadId: parent.id }); }}><ArrowLeftIcon size={12} /><BotIcon size={12} /><span>Subagent of · {parent.title || "Untitled"}</span></button> : <span>Subagent conversation · parent unavailable in this workspace</span>}</div> : null}
       <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} searchTarget={findOpen ? searchTarget : null} onNavigate={() => { setCitationTarget(null); setSearchTarget(null); }} />
       <AssistantSelectionToolbar viewport={viewport} onCite={(citation, anchor) => {
@@ -77,6 +81,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
         } else updateDraft(commentTarget.draftKey, (draft) => ({ ...draft, contexts: draft.contexts.map((item, index) => index === commentTarget.index ? { ...item, ...context } : item) }));
         setCommentTarget(null); window.dispatchEvent(new CustomEvent("t3-focus-composer", { detail: { draftKey: commentTarget.draftKey, cursor } }));
       }} /> : null}
+      </div></div>
     </main>
   </div>;
 }

@@ -1,6 +1,7 @@
 import type { OrchestrationV2ThreadProjection, OrchestrationV2ThreadHistoryPage } from "@t3tools/contracts";
 import type { TranscriptItem } from "../shared/bridge.js";
-import { findSessionMatches, type SessionSearchOptions, type SessionSearchState } from "../shared/sessionSearch.js";
+import { findSessionMatches, searchableFields, type SessionSearchOptions, type SessionSearchState } from "../shared/sessionSearch.js";
+import { sessionSearchPreview, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 
 export type SearchRow = OrchestrationV2ThreadProjection["visibleTurnItems"][number];
 const key = (row: SearchRow) => `${row.sourceThreadId}:${row.sourceItemId}`;
@@ -28,6 +29,15 @@ export class SessionSearchJob {
     this.state = { ...options, threadId, matches: [], total: 0, scanning: true, scannedItems: 0 };
   }
   cancel(): void { this.cancelled = true; if (this.timer) clearTimeout(this.timer); this.pending.clear(); }
+  previews(ids: readonly string[]): SessionSearchPreview[] {
+    if (this.cancelled || !this.sources) throw new Error("Search this conversation again.");
+    const wanted = new Set(ids), matches = this.state.matches.filter((match) => wanted.has(match.id));
+    return matches.flatMap((match) => {
+      const row = this.rows.get(match.rowKey);
+      const source = row && searchableFields(this.sources!.present(row), this.options.scope).find((entry) => entry.field === match.field);
+      return source ? [sessionSearchPreview(source.text, match)] : [];
+    });
+  }
   private async index(original: SearchRow): Promise<void> {
     const rowKey = key(original);
     this.originals.set(rowKey, original);
@@ -47,7 +57,7 @@ export class SessionSearchJob {
       total += found.total;
       if (matches.length < 20_000) matches.push(...found.matches.slice(0, 20_000 - matches.length));
     }
-    this.state = { ...this.state, matches, total, scannedItems: this.rows.size };
+    this.state = { ...this.state, matches, total, scannedItems: this.rows.size, revision: (this.state.revision ?? 0) + 1 };
     this.update();
   }
   /** Coalesce streaming changes; historical pages already searched stay cached. */

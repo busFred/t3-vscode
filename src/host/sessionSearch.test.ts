@@ -23,6 +23,10 @@ test("Full-session search scans older pages, keeps other views independent and r
   assert.equal(search.total, 3); assert.equal(host.snapshot("other").sessionSearch, undefined);
   assert.equal(host.snapshot().transcript.length, 1, "Scanning does not flood the visible transcript");
   const match = search.matches.find((entry) => entry.rowKey.endsWith(":older"))!;
+  assert.equal(host.sessionSearchPreviews("first", options.query, [match.id])[0]?.text, "Older rate");
+  assert.equal(host.snapshot().transcript.length, 1, "Previewing cached search context does not reveal or fetch transcript history");
+  assert.throws(() => host.sessionSearchPreviews("first", options.query, [match.id], "other"), /again/);
+  assert.throws(() => host.sessionSearchPreviews("first", "different", [match.id]), /again/);
   host.revealSessionMatch(match.id);
   assert.equal(host.snapshot().transcript.length, 2); assert.ok(host.snapshot().transcript.some((entry) => entry.key === match.rowKey));
   assert.equal(host.snapshot("other").activeThreadId, "second");
@@ -30,6 +34,29 @@ test("Full-session search scans older pages, keeps other views independent and r
   publishText(client, "first", "Latest rate rate rate", 3);
   await until(() => host.snapshot().sessionSearch?.total === 4);
   assert.equal(host.snapshot().sessionSearch!.matches[0]!.rowKey, match.rowKey, "Streaming updates preserve earlier search results");
+  const updated = host.snapshot().sessionSearch!;
+  const latestMatch = updated.matches.find(entry => entry.rowKey !== match.rowKey)!;
+  assert.match(host.sessionSearchPreviews("first", options.query, [latestMatch.id])[0]!.text, /rate rate rate/);
+  assert.ok(updated.revision! > search.revision!);
+});
+
+test("Search display preferences are persisted per host workspace without changing per-view search jobs", async (t) => {
+  const saved: unknown[] = [];
+  const { host, client } = await viewsHarness({ searchPreferences: { layout: "side", contextLines: 2 }, saveSearchPreferences: async value => { saved.push(value); } });
+  t.after(() => host.dispose());
+  host.registerView("other"); await host.selectThread("second", "other");
+  publishText(client, "first", "rate", 1); host.searchSession("first", options);
+  await until(() => host.snapshot().sessionSearch?.scanning === false);
+  const original = host.snapshot().sessionSearch;
+  await host.setSearchPreferences({ resultsHeight: 380, order: "newest" });
+  assert.equal(host.snapshot().sessionSearch, original);
+  assert.equal(host.snapshot("other").sessionSearch, undefined);
+  assert.equal(host.snapshot("other").activeThreadId, "second");
+  assert.deepEqual(host.snapshot("other").searchPreferences, { layout: "side", contextLines: 2, order: "newest", resultsHeight: 380 });
+  const restarted = await viewsHarness({ searchPreferences: host.snapshot().searchPreferences! }); t.after(() => restarted.host.dispose());
+  assert.deepEqual(restarted.host.snapshot().searchPreferences, saved[0]);
+  const independent = await viewsHarness(); t.after(() => independent.host.dispose());
+  assert.equal(independent.host.snapshot().searchPreferences?.layout, "above");
 });
 test("Missing history cursors report incomplete counts", async (t) => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose());
