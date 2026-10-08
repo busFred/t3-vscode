@@ -10,14 +10,17 @@ import { viewsHarness, publishText } from "../src/host/testing/fakeTransport.js"
 import { Events, type RpcMessage } from "../src/shared/bridge.js";
 import { DEFAULT_APPEARANCE, type AppearanceSettings } from "../src/shared/appearance.js";
 import type { FavoriteModel } from "../src/shared/bridge.js";
-import { ProviderInstanceId, ProviderDriverKind, RunId, ThreadId, ProjectId, RuntimeRequestId, TurnItemId } from "@t3tools/contracts";
+import { ProviderInstanceId, ProviderDriverKind, MessageId, RunId, ThreadId, ProjectId, RuntimeRequestId, TurnItemId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import { v2Now } from "../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 import { collectAssistantCitations, serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
 import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
-import { publishTurn, turnPatch } from "../src/host/testing/turnFixture.js";
+import { turnFixture, publishTurn, turnPatch } from "../src/host/testing/turnFixture.js";
 import { publishActivity } from "../src/host/testing/activityFixture.js";
 import type { TurnDiff } from "../src/host/turnDiff.js";
+import { verifySearchPanel } from "./verify-session-find.js";
+import { verifyResponseLayout } from "./verify-response-layout.js";
+import { verifyComposerEditing } from "./verify-composer-editing.js";
 
 const evidence = process.env.T3_VSCODE_UI_EVIDENCE ?? "/tmp/t3-vscode-views-ui";
 await mkdir(evidence, { recursive: true });
@@ -126,21 +129,23 @@ async function checkSessionFind(second: Page, third: Page, selectInView: (page: 
   client.threadHandlers.get("first")!({ kind: "snapshot", snapshotSequence: 61, projection: searchProjection, hasMoreHistory: true, historyCursor: "older-search" });
   await second.getByRole("button", { name: "Find in session", exact: true }).click();
   await second.getByRole("textbox", { name: "Find in this session", exact: true }).fill("rate");
-  await second.getByText("Entire session searched", { exact: true }).waitFor();
+  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1/4");
   assert.equal(await second.locator(".session-find").count(), 1, "Search and composer must retain distinct React identities across host updates");
-  assert.equal(await second.locator(".find-count").textContent(), "1 / 4");
+  assert.equal(await second.locator(".find-count").textContent(), "1/4");
   assert.equal(await third.locator(".session-find").count(), 0);
   await second.getByRole("button", { name: "Next match", exact: true }).click();
   await second.locator(".session-match-row .tool-output").filter({ hasText: "rate 0.01" }).waitFor();
   await second.waitForFunction(() => CSS.highlights.has("t3-session-match"));
   await second.getByRole("button", { name: "Whole word", exact: true }).click();
-  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1 / 3");
+  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1/3");
   await second.getByRole("button", { name: "Match case", exact: true }).click();
-  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1 / 2");
-  await second.getByRole("combobox", { name: "Search content", exact: true }).selectOption("messages");
-  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1 / 1");
+  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1/2");
+  await second.getByRole("button", { name: "Search filters", exact: true }).click();
+  for (const label of ["Commands / tools", "Thought process", "Files / diffs", "Other activity"]) await second.getByRole("checkbox", { name: label, exact: true }).uncheck();
+  await second.getByRole("button", { name: "Done", exact: true }).click();
+  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1/1");
   await second.getByRole("textbox", { name: "Find in this session", exact: true }).fill("\\eta");
-  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1 / 1");
+  await second.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1/1");
   await second.getByRole("button", { name: "Next match", exact: true }).click();
   await second.locator(".session-match-row .assistant-message").waitFor();
   await second.getByRole("button", { name: "Close session search", exact: true }).click();
@@ -157,6 +162,7 @@ async function checkSessionFind(second: Page, third: Page, selectInView: (page: 
   assert.equal(host.snapshot("tab-three").activeThreadId, "second");
   assert.equal(await second.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Keep my search draft");
   await second.screenshot({ path: `${evidence}/session-search-preserved-draft.png` });
+  await verifySearchPanel(second, third, host, client, evidence);
   console.log("PASS: full-session search, case/word/content filters, older command reveal and highlight, math source lookup, keyboard find and double-click renaming preserve per-tab state and drafts.");
 }
 try {
@@ -200,6 +206,7 @@ try {
     await pages[index]!.getByRole("textbox", { name: "Message", exact: true }).fill(`Draft in ${name} tab`);
   }
   const [first, second, third] = pages; assert.ok(first && second && third);
+  await verifyComposerEditing(first, second, host, evidence);
   await selectInView(first, "third");
   await first.locator(".chat-heading strong").filter({ hasText: "third conversation" }).waitFor();
   assert.equal(await first.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "");
@@ -252,7 +259,7 @@ try {
   assert.equal(await narrowChat.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
   preferences = DEFAULT_APPEARANCE; host.refreshAppearance();
   await Promise.all([...pages, narrowChat].map((page) => expectFonts(page, preferences)));
-  assert.equal(await narrowChat.locator(".composer-box select, .composer-box .model-trigger").count(), 0, "Plain selectors must live below the input");
+  assert.equal(await narrowChat.locator(".composer-box .composer-controls select, .composer-box .composer-controls .model-trigger").count(), 3, "Model, effort and mode belong inside the composer");
   assert.equal(await narrowChat.locator(".composer-box").evaluate((node) => getComputedStyle(node).borderRadius), "3px");
   assert.equal(await narrowChat.locator(".model-trigger svg").count(), 1, "Model only needs its dropdown arrow");
   await narrowChat.setViewportSize({ width: 170, height: 820 });
@@ -275,7 +282,7 @@ try {
   await narrowChat.setViewportSize({ width: 360, height: 820 });
   await narrowChat.waitForFunction(() => !document.querySelector(".composer-options-overflow"));
   assert.equal(await narrowChat.getByRole("combobox", { name: "Effort level" }).inputValue(), "high");
-  console.log("PASS: footer selectors remain outside the compact input, narrow overflow retains model/effort/permission settings and closes outside; light and dark layouts fit.");
+  console.log("PASS: footer selectors remain inside the compact input, narrow overflow retains model/effort/permission settings and closes outside; light and dark layouts fit.");
   await narrowChat.close();
   // The quote spans bold and plain DOM nodes; native mouse selection captures rendered positions.
   const quoteInput = second.getByRole("textbox", { name: "Message", exact: true });
@@ -374,6 +381,8 @@ try {
   for (const [index, page] of pages.entries()) await page.screenshot({ path: `${evidence}/tab-${index + 1}.png` });
   await manager.getByRole("button", { name: "Refresh connection", exact: true }).click();
   await manager.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some((entry) => entry.method === "reconnect"));
+  await manager.getByRole("complementary", { name: "Sessions", exact: true }).waitFor();
+  assert.equal(await manager.locator(".server-setup").count(), 0, "The ready connection returns directly to Sessions.");
   await second.getByRole("textbox", { name: "Message", exact: true }).waitFor();
   assert.equal(await second.locator(".chat-heading strong").textContent(), "second conversation");
   assert.equal(await second.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft after sending references");
@@ -531,15 +540,22 @@ try {
   publishTurn(client, "second");
   await second.waitForFunction(() => document.querySelector('textarea[aria-label="Message"]')?.getAttribute("title")?.startsWith("Enter to send"));
   await submitFollowUp(second, "Idle Enter sends immediately", "Enter", "auto");
+  const lastSent = client.commands.findLast(command => command.type === "message.dispatch")!;
+  const finished = turnFixture("second", 1);
+  client.threadHandlers.get("second")!({ kind: "snapshot", snapshotSequence: 100, projection: { ...finished, runs: [{ ...finished.runs[0]!, userMessageId: MessageId.make(lastSent.messageId) }] } });
+  await second.waitForFunction(() => document.querySelector('textarea')?.title.startsWith("Enter to send"));
   await submitFollowUp(second, "Idle Ctrl+Enter sends immediately", "Control+Enter", "auto");
   console.log("PASS: Enter queues and Ctrl/Cmd+Enter steers in wide/narrow editor chat, unsupported steering queues, idle shortcuts send normally; queued-message editing, reordering and promotion/cancellation preserve independent drafts.");
   }
   await checkSessionFind(pages[1]!, pages[2]!, selectInView);
+  await verifyResponseLayout(pages[1]!, host, client, evidence);
   assert.deepEqual(errors, []);
   console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
   console.log(`Screenshots: ${evidence}`);
 } catch (error) {
   console.error("Browser errors:", errors);
+  console.error("Search state:", ["tab-two", "tab-three"].map(id => { const state = host.snapshot(id); return { id, thread: state.activeThreadId, query: state.sessionSearch?.query, total: state.sessionSearch?.total, scanning: state.sessionSearch?.scanning, error: state.sessionSearch?.error }; }));
+  if (debugPages[1]) await debugPages[1].screenshot({ path: `${evidence}/search-failure.png` });
   if (debugPages[2]) {
     console.error(await debugPages[2].evaluate(() => ({ thread: document.querySelector(".chat-main")?.getAttribute("data-thread-id"), notice: document.querySelector(".citation-source-notice")?.textContent,
       sources: [...document.querySelectorAll<HTMLElement>("[data-assistant-citation-source]")].map((source) => ({ data: { ...source.dataset }, text: source.textContent, visible: source.getBoundingClientRect().height })), highlights: [...CSS.highlights.keys()] })));

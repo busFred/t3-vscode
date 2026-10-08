@@ -20,6 +20,7 @@ const requestsOnly = process.argv.includes('--requests-only');
 const referencesOnly = process.argv.includes('--references-only');
 const visualsOnly = process.argv.includes('--visuals-only');
 const cleanupOnly = process.argv.includes('--cleanup-only');
+const editorControlsOnly = process.argv.includes('--editor-controls-only');
 const screenshotsOnly = process.argv.includes('--screenshots-only');
 const testModel = process.env.T3_VSCODE_TEST_MODEL || 'gpt-6-luna';
 if (!setupOnly) {
@@ -169,7 +170,8 @@ async function chooseLiveTestModel(view, favorite = false) {
   }
 }
 async function runCommand(label) {
-  await workbench.keyboard.press('F1');
+  await workbench.bringToFront();
+  await workbench.keyboard.press('Control+Shift+P');
   await workbench.locator('.quick-input-widget input').filter({ visible: true }).fill(`>${label}`);
   await workbench.locator('.quick-input-list .monaco-list-row').filter({ hasText: label }).first().waitFor();
   await workbench.keyboard.press('Enter');
@@ -188,8 +190,10 @@ try {
   const sidebar = await findWebview("sidebar");
   if (setupOnly) {
     await sidebar.wait('document.querySelector(".server-setup")');
-    assert.equal(await sidebar.evaluate('document.querySelector(".server-setup h1").textContent'), 'T3 VSCode');
+    assert.equal(await sidebar.evaluate('document.querySelector(".server-setup h1").textContent'), 'Connect to T3 Code');
     assert.equal(await sidebar.evaluate('document.querySelectorAll(".setup-command").length'), 2);
+    assert.equal(await sidebar.evaluate('document.querySelectorAll(".setup-service").length'), 0);
+    assert.ok((await sidebar.evaluate('document.querySelector(".setup-command code").textContent')).includes(home));
     assert.ok((await sidebar.evaluate('document.querySelector(".server-setup").textContent')).includes('Remote servers aren’t supported'));
     await workbench.screenshot({ path: join(evidence, 'edh-server-setup.png') });
     await sidebar.evaluate(`new Promise((resolve, reject) => {
@@ -202,7 +206,7 @@ try {
     await sidebar.evaluate(`document.querySelector('.setup-actions button:last-child').click()`);
     await workbench.locator('.settings-editor').waitFor();
     assert.equal(await workbench.getByText('Unable to write to User Settings', { exact: false }).count(), 0);
-    console.log('PASS: missing-server setup has install/service/manual guidance, Retry and native extension Settings');
+    console.log('PASS: native onboarding preserves the isolated home, manual startup, Retry and extension Settings');
   } else if (referencesOnly) {
     const { verifyNativeReferences } = await import('./verify-native-references.mjs');
     await verifyNativeReferences({ home, evidence, workbench, sidebar, findWebview, runCommand });
@@ -252,6 +256,11 @@ try {
   } else if (screenshotsOnly) {
     const { captureReadme } = await import('./capture-readme.mjs');
     await captureReadme({ home, workbench, sidebar, findWebview, runCommand });
+  } else if (editorControlsOnly) {
+    const { verifyNativeEditorControls } = await import('./verify-native-editor-controls.mjs');
+    await verifyNativeEditorControls({ evidence, workbench, sidebar, findWebview, chooseLiveTestModel, runCommand });
+    const { verifyEmptyChat } = await import('./verify-rich-chat.mjs');
+    await verifyEmptyChat({ workbench, sidebar, findWebview });
   } else if (cleanupOnly) {
     const { verifyEmptyChat } = await import('./verify-rich-chat.mjs');
     await verifyEmptyChat({ workbench, sidebar, findWebview });

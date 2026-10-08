@@ -1,6 +1,6 @@
 # T3 VSCode feature history
 
-This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is a local preview containing double-click renaming and session search.
+This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is a local preview whose same-version revisions include double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically.
 
 ## Overview
 
@@ -918,12 +918,57 @@ This document tracks features by release, including how later versions changed t
 
 ### v0.1.13
 
-- Limit this local release to double-click conversation renaming and full-session search, with worktree development kept separately and unversioned.
+- The initial v0.1.13 release commits contain double-click conversation renaming and full-session search; later same-version revisions are recorded below, with worktree development kept separately and unversioned.
 - Pass 127 unit tests, TypeScript checks and both extension/webview builds against the separated release source.
 - Pass both deterministic browser suites, including keyboard search, older activity matches, math source, double-click renaming and preservation of independent drafts.
 - Recheck existing graphics, attachments, subagents, queue/steer, references, themes and transcript navigation using the feature overview as the regression checklist.
 - Verify all 44 linked feature rows and their introduction/latest-change version entries without provider calls.
 - Obtain fresh-context regression signoff against `8b66b1b` with no blocking findings or worktree implementation in the release.
+
+#### Search panel revision — same v0.1.13
+
+- Keep the manifest and dependency versions unchanged while improving search readability and adding the approved panel controls.
+- Pass 135 unit tests, TypeScript checks and the extension, webview, Mermaid and math builds.
+- Pass both deterministic browser suites, including Above/Side geometry, context lines, ordering, pagination, pointer/keyboard resizing and split-match highlights.
+- Verify light/dark themes, narrow fallback, workspace preference persistence, unchanged search jobs and preserved composer DOM nodes and drafts.
+- Verify all 44 linked feature entries and obtain fresh-context regression signoff against `76be0b3` with no blocking findings.
+- Use disposable browser profiles and fixture data without provider calls, publication or installation into the normal VS Code profile.
+
+#### Editor controls and dense spacing revision — same v0.1.13
+
+- Keep version 0.1.13 and preserve the pre-existing search-panel changes while adding tab History, new-chat actions and Markdown tools.
+- Pass 143 unit tests, TypeScript checks and the extension, webview, Mermaid and math builds.
+- Pass deterministic browser regression checks for native undo, keyboard editing, independent drafts, queue/steer, search, graphics, references, attachments, themes and virtualization.
+- Verify Command Palette and header actions in separate native editor groups, local History selection, title changes and empty-chat cleanup in disposable VS Code/T3 storage.
+- Verify all 48 linked feature entries and retain normal VS Code profiles and T3 data without sending provider messages.
+- Obtain final fresh-context regression signoff against `76be0b3` and the saved working-tree baseline, with no blocking findings.
+- Inspect the local preview VSIX's v0.1.13 prerelease identity, exact bundles, unchanged settings, three screenshots and 20 math fonts without installing or publishing it.
+- Correct the stale canonical installer by copying the identical reviewed preview to `target-installer/t3-vscode-0.1.13.vsix` and preserving the superseded build under `archive/`.
+- Verify that a forced same-version reinstall in disposable VS Code storage replaces both runtime bundles with the reviewed build without touching normal profiles or T3 state.
+
+#### Composer, recovery and response refinement — same v0.1.13
+
+- Keep version 0.1.13 and preserve the existing rename, History, new-chat and search work from `76be0b3` plus the saved pre-iteration working-tree baseline.
+- Pass 157 unit tests, TypeScript checks and the extension/webview, Mermaid and math builds.
+- Pass both deterministic browser suites for composer undo/numbering/wrapping, IME, references, attachments, queue/steer, occurrence filters, collapsed/Side search, matched fonts, graphics and 1,000-item virtualization.
+- Verify early answers remain visible around steers, typed activity folds independently, late completions keep their original group, accepted sends show Working/Stop before output, Send stays fixed and pinned status carries no message actions.
+- Verify native Command Palette/header routing in two editor groups, History, double-click renaming, untouched-chat cleanup and text/image recovery after close/reopen using disposable VS Code storage and the explicitly isolated T3 home.
+- Cover process-restart recovery, failed first sends, concurrent draft leases, uploads after closure, removal during recovery and offline edits through host tests.
+- Use the 48 linked feature-history entries as the regression checklist and verify their version headings against the unchanged Git release identity.
+- Obtain fresh-context GPT-6 Luna regression review against `76be0b3` and the saved working-tree baseline; resolve draft/reconnect/first-send findings and receive final review with no blocking findings.
+- Use deterministic fixtures for provider turns; native verification selects advertised GPT-6 Luna with low effort but sends no provider messages, and does not modify normal T3 state or VS Code profiles.
+- Verify the canonical `target-installer/t3-vscode-0.1.13.vsix` against the exact built bundles, prerelease identity, 20 math fonts and three screenshots; write its SHA-256 sidecar and archive the superseded same-version previews without installing or publishing.
+
+#### Onboarding revision — same v0.1.13
+
+- Verify the current version from Git (`76be0b3`) and preserve the pre-existing working-tree changes using a saved baseline.
+- Pass 163 deterministic unit tests, TypeScript checks and the extension/webview, Mermaid and math builds.
+- Pass both browser regression suites, including failure-specific guidance, scoped copy commands, automatic Sessions, provider guidance, light/dark layouts and preserved chat drafts across reconnects.
+- Confirm all 48 overview links resolve and review the connection changes against the saved baseline without changing pairing credentials, server lifecycle or editor selection behavior.
+- Obtain final fresh-context regression review against `76be0b3` and the saved pre-onboarding working tree, with no blocking or actionable findings and approval for same-version packaging.
+- Attempt native setup verification with isolated user, extension, shared and T3 storage; the environment has no display server and Electron’s headless mode could not expose the extension view.
+- Keep version 0.1.13 for the requested local installer and retain normal VS Code profiles and T3 state without installation or publication.
+- Verify the rebuilt canonical `target-installer/t3-vscode-0.1.13.vsix` contains the exact compiled bundles, unchanged manifest, prerelease marker, notices, 20 math fonts and three screenshots; retain its SHA-256 sidecar and archive the preceding same-version build.
 
 ## Maintenance
 

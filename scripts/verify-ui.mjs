@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, mkdir } from "node:fs/promises";
 import { createServer } from "node:http";
 import { chromium } from "playwright-core";
+import { verifyOnboarding } from "./verify-onboarding.mjs";
 
 const evidence = process.env.T3_VSCODE_UI_EVIDENCE ?? "/tmp/t3-vscode-ui";
 await mkdir(evidence, { recursive: true });
@@ -29,12 +30,14 @@ const initial = {
   reader: { mode: "off", sensitivity: 5 }, activeThreadId: "thread-one", transcript: [user, assistant, command, diff], pending: { approvals: [], userInputs: [] }, history: { hasMore: false, loading: false, error: null }, threadLoading: false, sending: false,
 };
 function mockBridge() {
-  window.__requests = [];
+  window.__requests = []; window.__drafts = {};
   window.__initialForWide = window.__state;
   window.__replace = (patch) => { window.__state = { ...window.__state, ...patch, revision: window.__state.revision + 1 }; window.postMessage({ event: "stateChanged", data: window.__state }, "*"); };
   window.acquireVsCodeApi = () => ({ getState: () => null, setState: () => {}, postMessage: (request) => {
     window.__requests.push(request);
     const params = request.params ?? {};
+    if (request.method === "restoreComposerDraft") { window.postMessage({ id: request.id, result: { draft: window.__drafts[params.draftKey]?.draft ?? { text: "", contexts: [] }, selection: window.__drafts[params.draftKey]?.selection } }, '*'); return; }
+    if (request.method === "saveComposerDraft") { window.__drafts[params.draftKey] = params; window.postMessage({ id: request.id, result: true }, '*'); return; }
     if (request.method === "uploadAttachment") { const image = { key: 'pasted-upload', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length, previewUrl: `data:${params.mimeType};base64,${params.base64}`, environmentId: 'fixture', attachment: { type: 'image', id: 'pending-pasted', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length } }; setTimeout(() => window.postMessage({ id: request.id, result: image }, '*'), 50); return; }
     if (request.method === "pickAttachments") { const file = { key: 'picked-upload', name: 'outside-workspace.txt', mimeType: 'text/plain', sizeBytes: 3, environmentId: 'fixture', attachment: { type: 'file', id: 'pending-picked', name: 'outside-workspace.txt', mimeType: 'text/plain', sizeBytes: 3 } }; window.postMessage({ id: request.id, result: { attachments: [file], errors: [] } }, '*'); return; }
     if (request.method === "chatAsset") { setTimeout(() => window.postMessage({ id: request.id, result: { url: `${location.origin}/${params.reference.kind === "media" || params.reference.kind === "attachment" ? "image.svg" : "visual.html"}`, expiresAt: Date.now() + 60_000 } }, "*"), 0); return; }
@@ -93,7 +96,7 @@ const server = createServer((request, response) => {
   }
   if (request.url === "/webview.js") { response.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" }); response.end(js); return; }
   if (request.url === "/native-host") {
-    response.writeHead(200, { "Content-Type": "text/html" }); response.end('<!doctype html><iframe title="Native host" src="/native-content" style="width:100%;height:900px"></iframe><script>addEventListener("message",event=>{const frame=document.querySelector("iframe");if(event.source===frame.contentWindow&&event.data?.id)frame.contentWindow.postMessage({id:event.data.id,result:' + json(initial) + '},location.origin)})</script>'); return;
+    response.writeHead(200, { "Content-Type": "text/html" }); response.end('<!doctype html><iframe title="Native host" src="/native-content" style="width:100%;height:900px"></iframe><script>addEventListener("message",event=>{const frame=document.querySelector("iframe");if(event.source===frame.contentWindow&&event.data?.id)frame.contentWindow.postMessage({id:event.data.id,result:event.data.method==="restoreComposerDraft"?{draft:{text:"",contexts:[]}}:' + json(initial) + '},location.origin)})</script>'); return;
   }
   if (request.url === "/native-content") {
     response.writeHead(200, { "Content-Type": "text/html" }); response.end('<!doctype html><body data-surface="panel"><div id="root"></div><script>const nativeParent=window.parent;window.parent=window;window.acquireVsCodeApi=()=>({getState:()=>null,setState:()=>{},postMessage:message=>nativeParent.postMessage(message,location.origin)})</script><script src="/webview.js"></script>'); return;
@@ -391,18 +394,7 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.getByText("No models available. Configure a provider in T3 Code.", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Send message", exact: true }).isDisabled(), true);
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("Draft survives server setup");
-  await page.evaluate(() => window.__replace({ phase: "no-server", notice: "No server-runtime.json in the configured home." }));
-  await page.getByRole("heading", { name: "T3 VSCode", exact: true }).waitFor();
-  assert.equal(await page.locator('.setup-command').count(), 2);
-  await page.getByRole("button", { name: "Installation guide", exact: true }).click();
-  await page.waitForFunction(() => window.__requests.some(request => request.method === 'openLink' && request.params.href.endsWith('/docs/user/install.md')));
-  await page.getByRole("button", { name: "Copy t3 service install", exact: true }).click();
-  await page.waitForFunction(() => window.__requests.some(request => request.method === 'copyText' && request.params.text === 't3 service install'));
-  await page.getByRole("button", { name: "Retry connection", exact: true }).click();
-  await page.waitForFunction(() => window.__requests.some(request => request.method === 'reconnect'));
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
-  await page.screenshot({ path: `${evidence}/missing-server-setup.png` });
-  await page.evaluate(() => window.__replace({ phase: "ready" }));
+  await verifyOnboarding(page, evidence);
   assert.equal(await page.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft survives server setup");
   // Subagent cards stay live after their parent transcript is already mounted.
   await page.setViewportSize({ width: 1100, height: 900 });

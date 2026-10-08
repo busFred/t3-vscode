@@ -25,7 +25,7 @@ The launch configuration passes `--profile=Default` and points `--user-data-dir`
 
 `launch.json` sets `T3CODE_HOME` to `/tmp/t3-vscode-dev-${workspaceFolderBasename}`, and workspace settings leave `t3-vscode.t3Home` empty so that environment value takes effect. The server's data must be outside a Git checkout: T3 disables its Scratch folder (the web UI's **No project** conversations) inside a checkout. Start the server task before F5; the extension discovers the existing server. The previous `.t3/vscode-dev` data is preserved but no longer used by this launch configuration.
 
-If the development window says **T3 server unavailable**, run **T3 VSCode: start isolated server** in the original repository window, keep its terminal open, then choose **Retry connection**. A running background service under `~/.t3` does not satisfy this isolated development configuration. Pairing happens after the development server is available.
+If the development window shows **Connect to T3 Code**, follow **Start your development server** and run **T3 VSCode: start isolated server** in the original repository window, keep its terminal open, then choose **Retry connection**. A running background service under `~/.t3` does not satisfy this isolated development configuration. Pairing happens after the development server is available, and the sidebar then opens Sessions directly.
 
 The repository's gitignored `.t3` directory holds the isolated VS Code profile and any previous development-server data. The current debug server uses `/tmp` instead. Normal extension use discovers the shared T3 home (`~/.t3` by default); it does not create `.t3` in each project.
 
@@ -84,6 +84,8 @@ pnpm run package
 
 This rebuilds both bundles, marks the package as a prerelease, and produces `target-installer/t3-vscode-0.1.13.vsix`. All packaged VSIX installers go into `target-installer/`, which is excluded from Git. The archive includes compiled code, icons, the lazy Mermaid renderer, KaTeX CSS/fonts and license notices; development profiles, server data, source maps and `node_modules` are excluded.
 
+For a revision that keeps the same version, update that canonical installer path too; keep superseded artifacts under `target-installer/archive/` with descriptive names. A preview in a subdirectory must not leave the documented installer pointing at an older build. Compare bundled files or SHA-256 hashes when diagnosing a same-version install, then reinstall the corrected VSIX in the intended profile and run **Developer: Reload Window**; CLI reinstalls can use `--force` with the same isolated storage arguments.
+
 ## Where things live
 
 | Path | Purpose |
@@ -108,6 +110,7 @@ This rebuilds both bundles, marks the package as a prerelease, and produces `tar
 | `src/webview/components/MessageNavigator.tsx` | Configurable prompt/response rail and instant history jumps |
 | `src/webview/components/ChatMedia.tsx`, `HtmlVisual.tsx`, `MermaidVisual.tsx` | Authenticated inline media, sandboxed HTML and lazy local diagrams |
 | `src/webview/components/MathContextMenu.tsx`, `scripts/build-math.mjs` | Native copy formats for equations and bundled math CSS/fonts |
+| `src/host/composerDraftStore.ts` | Atomic extension-owned draft records, local attachment backups and cross-window leases |
 | `src/webview/composerAttachments.ts`, `src/shared/composerAttachments.ts` | Clipboard/file upload drafts, cursor-positioned references and ownership validation |
 | `src/shared/appearance.ts` | T3 font defaults and bounds for native VS Code settings |
 | `src/host/editorReference.ts`, `src/shared/composerContext.ts` | Capture precise editor ranges and format file/assistant references for messages |
@@ -132,6 +135,16 @@ The [feature history](feature-history.md) records introduction and change versio
 See [the architecture](t3-vscode-architecture.md) for the host/webview boundary and milestones. The [feature comparison](kilo-kimi-t3-feature-matrix.md) remains reference material.
 
 
+## Editor controls verification
+
+`verify-views.ts` also runs `verify-composer-editing.ts` for tab-local History, independent drafts, raw Markdown formatting, native undo/redo, list continuation, automatic numbering with undo, selection wrapping, indentation, IME handling, focus traversal and dense spacing at desktop and narrow widths.
+
+For native editor groups and Command Palette routing, run `node scripts/verify-edh.mjs --base-dir <fresh-isolated-home> --editor-controls-only` against an explicitly isolated server with an available provider. This uses disposable VS Code user data, extensions and shared data; it checks new tabs in two editor groups, local History selection, title changes empty-chat cleanup, and close/reopen recovery of typed text and a pasted image without sending provider messages.
+
 ## Session-search verification
 
 Use the [feature-history overview](feature-history.md#overview) as the regression checklist before packaging. `scripts/verify-views.ts` covers full-history search, case/word/content filters, older command reveal, math source, independent tabs and draft preservation against deterministic fixtures. Unit tests cover source occurrences, incremental updates, cancellation and incomplete history; these checks do not call a provider.
+
+The same suite calls `verify-session-find.ts` to check flat occurrences, matching chat fonts, persistent filters, floating collapse, Side-from-collapse, context lines, ordering, pagination, pointer/keyboard resizing, saved preferences and narrow/theme layouts. It verifies that display changes retain the search job and composer DOM node; all host data and browser profiles are disposable fixtures.
+
+`verify-response-layout.ts` runs from the same fixture suite and checks accepted-send status before output, visible early answers, independent activity groups around steers, late command completion, status-only sticky headers and settled-run forks. Host tests cover restart recovery, offline edits, rejected first sends, upload completion after close, concurrent draft leases and slot-removal races.

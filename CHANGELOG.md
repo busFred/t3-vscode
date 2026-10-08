@@ -2,9 +2,18 @@
 
 ## 0.1.13 — Local alpha preview
 
-- Rename conversations by double-clicking the chat title.
-- Search complete session history with occurrence navigation, case/word filters and matching activity expansion.
-- Keep session search independent across tabs and preserve composer drafts.
+- Guide first connection through T3’s web/provider setup, keep the background service optional and enter Sessions automatically after connecting.
+- Show accurate discovery/pairing diagnostics and copy startup commands for the configured T3 directory, preserving isolated development setup.
+- Rename conversations by double-clicking the title; browse tab-local History and create fresh editor chats from the header, sidebar or Command Palette.
+- Keep a permanent grouped Markdown toolbar, high-contrast input, model/effort/mode controls inside the composer, and a stationary Send button beside the existing Stop style.
+- Add selection wrapping, automatic list numbering with undo, list continuation and indentation while preserving literal Markdown, paste, IME, autocomplete and send/queue/steer shortcuts.
+- Recover text, references, cursor position and attachments after closing tabs or restarting; concurrent tab drafts and web UI drafts stay separate.
+- Search complete history with one row per occurrence, matching chat fonts, persistent source/content filters and compact controls.
+- Collapse search to a floating bar without blank pane space; switch Above/Side, expand directly to Side, and stack automatically in narrow editors.
+- Show Working as soon as dispatch succeeds, keep all assistant prose visible, and fold only thought/tool groups separated by messages and steers.
+- Use one assistant header per run, a status-only pinned Working header, dense message gaps and one capability-gated fork at the end of a settled run.
+- Keep the account refresh/update time and shorten its settings link to **Status meters**.
+- Keep the version at 0.1.13; this revision is a local VSIX only.
 
 ## 0.1.12 — Alpha prerelease
 
