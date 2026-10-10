@@ -237,7 +237,7 @@
             "default": 300,
             "minimum": 0,
             "scope": "window",
-            "markdownDescription": "How often, in seconds, to refresh provider usage for the status bar meters while connected. Usage is also refreshed once when T3 VSCode connects. A refresh that falls due while a message is being sent or a response is running waits for the session to go idle, so it is far less likely to delay your messages; one is forced through once the meters are five intervals stale. Values from 1 to 14 are raised to 15; `0` disables periodic refresh. Changes apply immediately.",
+            "markdownDescription": "How often, in seconds, to refresh provider usage for the status bar meters while connected. Each wait adds up to 20% random jitter, so the default 300 means 300 to 360 seconds. Usage is also refreshed once when T3 VSCode connects. A refresh that falls due while a message is being sent or a response is running waits for the session to go idle, so it is far less likely to delay your messages; one is forced through once the meters are five intervals stale. Automatic refreshes also pause while no meter is displayed, and the waiting refresh runs as soon as one appears. Values from 1 to 14 are raised to 15; `0` disables periodic refresh. Changes apply immediately.",
             "order": 3
           }
         }
