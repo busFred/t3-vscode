@@ -149,7 +149,7 @@ Use the [feature-history overview](feature-history.md#overview) as the regressio
 
 The same suite calls `verify-session-find.ts` to check flat occurrences, matching chat fonts, persistent filters, floating collapse, Side-from-collapse, context lines, ordering, pagination, pointer/keyboard resizing, saved preferences and narrow/theme layouts. It verifies that display changes retain the search job and composer DOM node; all host data and browser profiles are disposable fixtures.
 
-`verify-response-layout.ts` runs from the same fixture suite and checks accepted-send status before output, visible early answers, independent activity groups around steers, late command completion, status-only sticky headers and settled-run forks. Host tests cover restart recovery, offline edits, rejected first sends, upload completion after close, concurrent draft leases and slot-removal races.
+`verify-response-layout.ts` runs from the same fixture suite and checks accepted-send status before output, visible early answers, independent activity groups around steers, late command completion, status-only sticky headers and settled-run forks. `verify-streaming-layout.ts` follows it: it streams a new run below a response with late workspace media and a late change card, and fails if rendered rows overlap after settling or for more than two consecutive frames; `--streaming-only` runs it alone. Host tests cover restart recovery, offline edits, rejected first sends, upload completion after close, concurrent draft leases and slot-removal races.
 
 ## Scheduled tasks verification
 

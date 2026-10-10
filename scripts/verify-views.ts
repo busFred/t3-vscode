@@ -20,6 +20,7 @@ import { publishActivity } from "../src/host/testing/activityFixture.js";
 import type { TurnDiff } from "../src/host/turnDiff.js";
 import { verifySearchPanel } from "./verify-session-find.js";
 import { verifyResponseLayout } from "./verify-response-layout.js";
+import { verifyStreamingLayout } from "./verify-streaming-layout.js";
 import { verifyScheduledTasks } from "./verify-scheduled-tasks.js";
 import type { TaskOrigin } from "../src/shared/scheduledTasks.js";
 import { verifyModelReordering } from "./verify-model-reordering.js";
@@ -188,8 +189,11 @@ try {
     return page;
   }));
   debugPages = pages;
-  if (process.argv.includes("--responses-only")) {
+  if (process.argv.includes("--streaming-only")) {
+    await verifyStreamingLayout(pages[1]!, host, client, evidence);
+  } else if (process.argv.includes("--responses-only")) {
     await verifyResponseLayout(pages[1]!, host, client, evidence);
+    await verifyStreamingLayout(pages[1]!, host, client, evidence);
   } else {
   const manager = await browser.newPage({ viewport: { width: 360, height: 820 } });
   manager.on("pageerror", (error) => errors.push(error.message));
@@ -635,11 +639,12 @@ try {
   if (!process.argv.includes("--tasks-only")) {
     await checkSessionFind(pages[1]!, pages[2]!, selectInView);
     await verifyResponseLayout(pages[1]!, host, client, evidence);
+    await verifyStreamingLayout(pages[1]!, host, client, evidence);
   }
   await verifyScheduledTasks(manager, pages[1]!, pages[2]!, host, client, taskOrigins, evidence);
   }
   assert.deepEqual(errors, []);
-  if (!process.argv.includes("--responses-only")) console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
+  if (!process.argv.includes("--responses-only") && !process.argv.includes("--streaming-only")) console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
   console.log(`Screenshots: ${evidence}`);
 } catch (error) {
   console.error("Browser errors:", errors);

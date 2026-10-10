@@ -26,7 +26,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.13 |
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.1.16 |
-| [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and clears temporary spacing after reflow. | v0.0.1 | v0.1.16 |
+| [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.1.18 |
 | [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.1.13 |
 | [Collapsed activity](#collapsed-activity) | Timed thought/tool groups separated by visible assistant messages and steers. | v0.0.1 | v0.1.13 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
@@ -470,6 +470,11 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 
 - Clear temporary scroll-adjustment padding after width changes by comparing the browser-serialized CSS value, preventing persistent blank space below the last response.
 - Pin the fix as a local LegendList 3.3.5 patch for both React module formats; preserve virtualization, history reading, expanded work and Latest navigation.
+
+#### v0.1.18 — streaming row overlap fix
+
+- Keep transcript rows from drawing over each other while replies stream; earlier responses with images, media or diagrams no longer overlap the next change card, question or response header.
+- Keep Markdown element renderers stable so host updates no longer remount media into a loading placeholder that the virtualized list measured as the row's height; the local LegendList patch is unchanged.
 
 ### Markdown and media
 
@@ -1234,3 +1239,11 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Obtain final fresh-context regression approval with no blocking findings; confirm the release candidate excludes the later resize changes.
 - Pass 200 deterministic tests, TypeScript checking, full builds and the browser suite. Package and inspect the 41-file VSIX with `preview: true` and the Marketplace prerelease property.
 - Record VSIX SHA-256 `4bcca3233309c4e6d395e044f61270c49fde2ef8a1f0fa0739fc2d3b83fef06f`. `vsce` reported successful publication. At 01:13 UTC on October 10, Marketplace metadata still listed stable 0.1.16 and preview 0.1.14; public listing refresh and validation remain pending.
+
+### v0.1.18 — streaming row overlap fix verification
+
+- Reproduce a persistent 382 px row overlap on `3c6116e` with a deterministic streaming fixture, both with and without the local LegendList patch; the resize-padding fix `5f0b1ba` did not cause it, and the remounting Markdown renderers date from rich chat rendering (`72d60c8`).
+- Add `verify-streaming-layout.ts`, which fails on the baseline and passes after the fix in five consecutive focused runs; only a one-frame transient remains when a new image first loads.
+- Pass all 200 deterministic tests, TypeScript checking, the full extension/webview/Mermaid/math build, `verify-views.ts` (13 PASS checks) and `verify-ui.mjs` (3 PASS checks) without a live provider or normal T3/VS Code state.
+- Intermittent failures in the composer paste-caret check and the resize-while-reading-history check also reproduce on the unmodified baseline; neither involves the changed renderer.
+- Fresh-context regression review and packaging are still pending; no VSIX was built, published or installed.
