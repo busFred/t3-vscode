@@ -53,7 +53,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const registry = new WebviewRegistry();
   const showSettings = () => vscode.commands.executeCommand("workbench.action.openSettings", `@ext:${context.extension.id}`);
   let provider: T3WebviewProvider;
-  const meters = new UsageStatusBar(() => hostState!.snapshot(registry.focusedViewId), async () => { await hostState?.refreshUsage(); });
+  const meters = new UsageStatusBar(() => hostState!.snapshot(registry.focusedViewId), async (instanceId) => { await hostState?.refreshUsage(instanceId); }, () => hostState?.busy ?? false);
   const bridge = new BridgeHandler(hostState, registry, showSettings, undefined, registerNativeDiff(context), {
     openInTab: (id, draft) => provider.createPanel(id, draft),
     newChatTab: (id) => provider.createNewPanel(id),

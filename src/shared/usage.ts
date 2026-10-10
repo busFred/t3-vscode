@@ -63,3 +63,18 @@ export function selectedUsageAccounts(accounts: ReadonlyArray<UsageAccount>, pre
   const keys = new Set([...(active ? [active.key] : []), ...preferences.pinnedAccounts]);
   return [...keys].flatMap((key) => { const account = accounts.find((account) => account.key === key); return account ? [account] : []; });
 }
+
+/**
+ * Provider instance a background usage refresh should target, or `undefined` to refresh every instance.
+ *
+ * A targeted refresh only updates the instance it names, so it is safe only while a single meter is displayed.
+ * With several meters shown, pinned accounts for other providers would otherwise never advance, so sweep instead.
+ */
+export function usageRefreshTarget(selected: ReadonlyArray<UsageAccount>, providers: ReadonlyArray<ServerProvider>, instanceId?: string): string | undefined {
+  if (selected.length !== 1) return undefined;
+  const account = selected[0]!;
+  if (instanceId && account.instanceIds.includes(instanceId)) return instanceId;
+  // A disabled or uninstalled instance never reports a fresh read, which would leave the meter pinned to an older one.
+  const live = account.instanceIds.find((id) => providers.some((provider) => provider.instanceId === id && provider.enabled && provider.installed));
+  return live ?? account.instanceIds[0];
+}

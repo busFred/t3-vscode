@@ -1,29 +1,36 @@
 import * as vscode from "vscode";
 import { formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
 import type { HostStateSnapshot } from "../shared/bridge.js";
-import { UsageRefreshScheduler } from "../shared/usageRefresh.js";
-import { accountWindows, meterLabels, meterText, selectedUsageAccounts, usageAccounts, type UsageAccount } from "../shared/usage.js";
+import { DEFAULT_USAGE_REFRESH_SECONDS, UsageRefreshScheduler } from "../shared/usageRefresh.js";
+import { accountWindows, meterLabels, meterText, selectedUsageAccounts, usageAccounts, usageRefreshTarget, type UsageAccount } from "../shared/usage.js";
 
 export class UsageStatusBar implements vscode.Disposable {
   private readonly items = new Map<string, vscode.StatusBarItem>();
   private readonly state: () => HostStateSnapshot;
+  private readonly busy: () => boolean;
   private readonly timer: ReturnType<typeof setInterval>;
   private readonly refresher: UsageRefreshScheduler;
-  constructor(state: () => HostStateSnapshot, refresh: () => Promise<void>) {
+  /** Provider instance a background refresh should target, or undefined to sweep every instance. */
+  private target: string | undefined;
+  constructor(state: () => HostStateSnapshot, refresh: (instanceId?: string) => Promise<void>, busy: () => boolean = () => false) {
     this.state = state;
+    this.busy = busy;
     this.timer = setInterval(() => this.update(), 60_000);
-    this.refresher = new UsageRefreshScheduler(refresh);
+    this.refresher = new UsageRefreshScheduler(() => refresh(this.target));
   }
   update(): void {
     const state = this.state();
     const config = vscode.workspace.getConfiguration("t3-vscode");
-    this.refresher.configure(config.get<number>("usage.refreshIntervalSeconds", 60));
-    this.refresher.setReady(state.phase === "ready");
+    this.refresher.configure(config.get<number>("usage.refreshIntervalSeconds", DEFAULT_USAGE_REFRESH_SECONDS));
     const accounts = usageAccounts(state);
     const instanceId = state.threads.find((thread) => thread.id === state.activeThreadId)?.modelSelection.instanceId ?? state.draft.modelSelection?.instanceId;
     const selected = state.phase === "ready" ? selectedUsageAccounts(accounts, {
       followActive: config.get<boolean>("usage.followActiveConversation", true), pinnedAccounts: config.get<ReadonlyArray<string>>("usage.pinnedAccounts", []),
     }, instanceId) : [];
+    this.target = usageRefreshTarget(selected, state.providers, instanceId);
+    this.refresher.setDisplayed(selected.length > 0);
+    this.refresher.setBusy(this.busy());
+    this.refresher.setReady(state.phase === "ready");
     const keys = new Set(selected.map((account) => account.key));
     for (const [key, item] of this.items) if (!keys.has(key)) { item.dispose(); this.items.delete(key); }
     selected.forEach((account, index) => {

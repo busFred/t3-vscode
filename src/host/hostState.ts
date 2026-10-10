@@ -985,7 +985,13 @@ export class HostState {
     const items = slashSuggestions(provider, cwd, kind === "skill" ? `skill:${query}` : query, atPromptStart);
     return kind === "skill" ? items.filter((item) => item.kind === "skill") : items;
   }
-  async refreshUsage(): Promise<void> { await this.client.refreshProviders(); this.emit(); }
+  async refreshUsage(instanceId?: string): Promise<void> { await this.client.refreshProviders(instanceId); this.emit(); }
+  /** True while any view is sending or any live thread is running, so background work can stay out of the way. */
+  get busy(): boolean {
+    // Archived threads are visible but cannot run, and a stale activeRunId on one would pin this on forever.
+    return [...this.views.values()].some((view) => view.sending)
+      || this.visibleThreads().some((thread) => !thread.archivedAt && Boolean(thread.activeRunId));
+  }
   queueAction(id: string, action: string, runId: string | undefined, text: string | undefined, beforeRunId: string | null | undefined, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     return this.enqueue(async () => {
       this.requireView(viewId); this.requireThread(id);
