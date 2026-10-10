@@ -4,7 +4,7 @@
 
 - Fix chat rows occasionally drawing over each other while a reply streams, such as a new question or response header covering the end of an earlier response with images.
 - Include the earlier unpublished resize fix: clear leftover blank space below the last response after resizing a session.
-- Pass 200 deterministic tests, TypeScript checking, full builds and the deterministic browser suites, including a new streaming-overlap check that fails before the fix. Fresh-context regression review and packaging are pending.
+- Pass 200 deterministic tests, TypeScript checking, full builds and the deterministic browser suites, including a new streaming-overlap check that fails before the fix. Fresh-context regression review against `3c6116e` found no blocking regressions; packaged locally, not published.
 
 ## 0.1.17 — Alpha prerelease
 

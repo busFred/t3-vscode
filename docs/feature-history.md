@@ -27,7 +27,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.13 |
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.1.16 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.1.18 |
-| [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.1.13 |
+| [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.1.18 |
 | [Collapsed activity](#collapsed-activity) | Timed thought/tool groups separated by visible assistant messages and steers. | v0.0.1 | v0.1.13 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
@@ -466,7 +466,7 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 
 - Use the virtualized transcript at every editor size and remove the column reflow observers and positioning work.
 
-#### v0.1.16 — local resize fix
+#### v0.1.18 — local resize fix
 
 - Clear temporary scroll-adjustment padding after width changes by comparing the browser-serialized CSS value, preventing persistent blank space below the last response.
 - Pin the fix as a local LegendList 3.3.5 patch for both React module formats; preserve virtualization, history reading, expanded work and Latest navigation.
@@ -494,6 +494,10 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 #### v0.1.13
 
 - Render the composer’s explicit `<u>...</u>` source as sanitized underline markup.
+
+#### v0.1.18
+
+- Keep Markdown element renderers stable across host updates so images, video and diagrams no longer remount into loading placeholders; rendered output is unchanged.
 
 ### Collapsed activity
 
@@ -1246,4 +1250,7 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Add `verify-streaming-layout.ts`, which fails on the baseline and passes after the fix in five consecutive focused runs; only a one-frame transient remains when a new image first loads.
 - Pass all 200 deterministic tests, TypeScript checking, the full extension/webview/Mermaid/math build, `verify-views.ts` (13 PASS checks) and `verify-ui.mjs` (3 PASS checks) without a live provider or normal T3/VS Code state.
 - Intermittent failures in the composer paste-caret check and the resize-while-reading-history check also reproduce on the unmodified baseline; neither involves the changed renderer.
-- Fresh-context regression review and packaging are still pending; no VSIX was built, published or installed.
+- Obtain fresh-context independent regression approval against `3c6116e` with no blocking findings; the reviewer independently passes 200 tests, TypeScript checking and the full build, sees the streaming check pass 3/3 on HEAD and fail 3/3 on the baseline, and confirms the two intermittent failures also occur on the baseline.
+- Apply the reviewer's non-blocking notes: label the resize fix as v0.1.18 and record the internal Markdown renderer change under Markdown and media.
+- Build the 41-file `target-installer/t3-vscode-0.1.18.vsix` (2,635,047 bytes) with `preview: true` and the prerelease property; verify its manifest version, publisher, exact host/webview/Mermaid/math bundles, notices, 20 math fonts and three screenshots.
+- Record SHA-256 `72d8c71fc7eba97893f13bd921ddd6ae014f87c4d9a658e07c1d8e9345d59156` in its sidecar; the installer is local, unpublished and uninstalled.
