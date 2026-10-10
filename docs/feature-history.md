@@ -2,7 +2,7 @@
 
 This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
-The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The current local v0.1.17 adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly requested the v0.1.17 version bump; publication of this new version has not been authorized. See the release verification entries below for earlier installers and publication history.
+The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The v0.1.17 prerelease adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly authorized publication of v0.1.17 to the Marketplace prerelease channel. See the release verification entries below for earlier installers and publication history.
 
 ## Overview
 
@@ -51,7 +51,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, listing metadata and screenshots of the native UI. | v0.0.7 | v0.1.12 |
 | [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.1.15 |
-| [Release versioning](#release-versioning) | Keeps the owner-selected version and publishes only a specifically authorized version/channel. | v0.1.10 | v0.1.16 |
+| [Release versioning](#release-versioning) | Keeps the owner-selected version and publishes only a specifically authorized version/channel. | v0.1.10 | v0.1.17 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.13 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
@@ -766,14 +766,14 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Show an attribution-unavailable message with retry when no reliable start snapshot exists (including older, queued, steered or externally started responses), instead of presenting checkpoint totals as agent edits. Edits made while a response is running cannot be distinguished by these snapshots.
 - Pass all 198 deterministic tests, TypeScript checking, complete production builds and the full browser fixture, including separated manual edits, empty response diffs, missing baselines and retry. Fresh-context independent regression review against `b71e129` approves the final changes with no blocking findings before local packaging. No live provider or normal VS Code/T3 state was used.
 
-#### v0.1.17 — Local installer, unpublished
+#### v0.1.17 — Marketplace prerelease
 
 - Hide the changes box when the response has no agent changes; do not show manual-edit lists/counts, loading boxes or attribution-unavailable placeholders. Retry transient/readiness failures silently with a bounded retry.
 - Render only the final checkpoint per source thread/run, keeping separate conversation rounds independent; its baseline-to-end diff covers the complete response in one expandable file list.
 - Stop requesting the intervening manual-edit patch. Continue excluding pre-response edits, preserving immutable native diffs and the user's Git index.
-- Bump the manifest from the Git-verified published v0.1.16 (`b71e129`, manifest change `9e85bbc`) to v0.1.17 by explicit owner request; keep the installer unpublished.
+- Use manifest version 0.1.17 with `preview: true` for the owner-authorized prerelease channel; preserve the Git-verified stable v0.1.16 baseline (`b71e129`, manifest change `9e85bbc`).
 - Pass 200 deterministic tests, TypeScript checking, full production builds, all 49 feature-history links and the complete browser suite. Cover no manual/empty/loading box, one multi-file box for duplicate checkpoints, and run-only completion without changing checkpoint metadata; preserve navigation, forks and Queue/Steer behavior.
-- Obtain final fresh-context regression approval against `b71e129` with no blocking findings before packaging; resolve the reviewer's checkpoint-readiness finding and update the current-version documentation. Keep the v0.1.17 installer local, unpublished and uninstalled.
+- Fresh-context independent regression review against `b71e129` found no blocking regressions; see [the prerelease publication record](publishing.md#0117-prerelease-channel-publication).
 
 ### Conversation tab titles
 
@@ -1227,3 +1227,10 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 Update the overview's introduction/latest-change versions and the affected feature's version section in the same change. Add an entry only for an actual feature change; documentation-only edits do not change the feature's introduction version. Record removed behavior explicitly and keep historical sections intact. Keep each bullet to one sentence where possible, and at most two sentences.
 
 The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructions remain in [README.md](../README.md); source setup and checks are in [Development and testing](development.md), and host/webview boundaries are in [the architecture](t3-vscode-architecture.md).
+
+### v0.1.17 — Marketplace prerelease publication
+
+- Publish the clean source from `1666397`, compared with stable baseline `b71e129`, to the Marketplace prerelease channel on October 9, 2026, by explicit owner authorization.
+- Obtain final fresh-context regression approval with no blocking findings; confirm the release candidate excludes the later resize changes.
+- Pass 200 deterministic tests, TypeScript checking, full builds and the browser suite. Package and inspect the 41-file VSIX with `preview: true` and the Marketplace prerelease property.
+- Record VSIX SHA-256 `4bcca3233309c4e6d395e044f61270c49fde2ef8a1f0fa0739fc2d3b83fef06f`. `vsce` reported successful publication. At 01:13 UTC on October 10, Marketplace metadata still listed stable 0.1.16 and preview 0.1.14; public listing refresh and validation remain pending.

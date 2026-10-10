@@ -1,8 +1,8 @@
 # Local VSIX packaging and publication history
 
-Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner specifically authorized the stable release upload of **0.1.16** on October 8, 2026; this does not authorize a future upload.
+Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner authorized the stable release upload of **0.1.16** on October 8, 2026, and explicitly authorized prerelease **0.1.17** on October 9, 2026.
 
-Current release checkpoint: v0.1.16 includes task configuration, compact session activity and model drag ordering. The Marketplace accepted its stable-channel upload; public validation/listing refresh is pending.
+Current release checkpoint: v0.1.17 adds agent-only response diffs and has been accepted for Marketplace prerelease publication; public listing refresh and validation are pending.
 
 ## Version policy
 
@@ -64,3 +64,11 @@ At 04:22 UTC on October 7, the Marketplace reported version 0.1.12 with the prer
 - The metadata read at 22:55 UTC still showed stable 0.1.15 and prerelease 0.1.14; a 23:02 UTC read lists stable 0.1.16 with the exact uploaded SHA-256, followed by stable 0.1.15 and prerelease 0.1.14. Marketplace installation was not tested.
 - The uploaded VSIX retains its pre-publication changelog wording (“unpublished”); the repository changelog is corrected after upload, but the uploaded version cannot be replaced without a new version.
 - Scope this authorization to this exact 0.1.16 stable release; future publication still requires the owner's explicit version/channel request.
+
+## 0.1.17 prerelease-channel publication
+
+- Published `hungtienhuang.t3-vscode` v0.1.17 to the Marketplace prerelease channel on October 9, 2026, from clean source commit `1666397`, compared with published stable baseline `b71e129`.
+- The fresh-context regression reviewer approved the final candidate with no blocking findings. The candidate contains the reviewed response-diff feature, prerelease metadata and release documentation only; later resize changes were excluded.
+- Passed 200 deterministic tests, TypeScript checking, full builds and browser regression suite. Verified a 41-file VSIX with version 0.1.17, publisher `hungtienhuang`, `preview: true` and `Microsoft.VisualStudio.Code.PreRelease=true`.
+- VSIX: `target-installer/t3-vscode-0.1.17-prerelease.vsix`; SHA-256: `4bcca3233309c4e6d395e044f61270c49fde2ef8a1f0fa0739fc2d3b83fef06f`. `vsce` reported successful publication.
+- At 01:13 UTC on October 10, Marketplace metadata still listed stable 0.1.16 and prerelease 0.1.14; public listing propagation and validation remain pending. No Marketplace installation was attempted.

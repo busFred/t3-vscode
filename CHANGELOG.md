@@ -1,12 +1,11 @@
 # Changelog
 
-## 0.1.17 — Local installer, unpublished
+## 0.1.17 — Alpha prerelease
 
 - Show one changes box per response only when the agent made file changes; hide empty, loading and unavailable diff placeholders.
 - Remove all manual-edit lists and counts from chat while continuing to exclude pre-response edits from agent diffs.
 - Compare the final response checkpoint against its saved start snapshot so the single box includes the response's complete file changes.
-- Bump from published 0.1.16 at the owner's request.
-- Pass 200 deterministic tests, TypeScript checking, full builds and browser regressions, including delayed completion and a single combined changes box. Obtain final independent regression approval before packaging.
+- Pass 200 deterministic tests, TypeScript checking, full builds and browser regressions, including delayed completion and a single combined changes box. Fresh-context regression review against `b71e129` found no blocking regressions.
 
 ## 0.1.16 — Local response diff fix, unpublished
 
