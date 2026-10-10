@@ -2,7 +2,7 @@
 
 This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
-The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The v0.1.17 prerelease adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly authorized publication of v0.1.17 to the Marketplace prerelease channel. The manifest is now v0.1.18, an unpublished local candidate with the transcript resize-padding and streaming row-overlap fixes. See the release verification entries below for earlier installers and publication history.
+The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The v0.1.17 prerelease adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly authorized publication of v0.1.17 to the Marketplace prerelease channel. v0.1.18 is published to the Marketplace release channel from `251cfec`, with the transcript resize-padding, streaming row-overlap and automatic usage-refresh changes. See the release verification entries below for earlier installers and publication history.
 
 ## Overview
 
@@ -37,7 +37,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.1.13 |
 | [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.1.13 |
-| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | Unreleased (after v0.1.18) |
+| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.1.18 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.0.5 |
 | [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.12 |
 | [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.11 |
@@ -686,7 +686,7 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Show only reported month/week/session percentages, name a single reported window in full and explain missing data on hover.
 - Remove the status-bar ellipsis and point to Configure Status Meters in the Command Palette.
 
-#### Unreleased (after v0.1.18)
+#### v0.1.18
 
 - Refresh provider usage automatically once the extension connects, so meters no longer show `Usage unavailable` until a manual refresh, and again on reconnect.
 - Add `t3-vscode.usage.refreshIntervalSeconds` (default 60, minimum 15; `0` disables periodic refresh) under Usage settings. Changes restart the timer immediately and the timer is disposed with the extension.
@@ -1260,7 +1260,13 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Build the 41-file `target-installer/t3-vscode-0.1.18.vsix` (2,635,047 bytes) with `preview: true` and the prerelease property; verify its manifest version, publisher, exact host/webview/Mermaid/math bundles, notices, 20 math fonts and three screenshots.
 - Record SHA-256 `72d8c71fc7eba97893f13bd921ddd6ae014f87c4d9a658e07c1d8e9345d59156` in its sidecar; the installer is local, unpublished and uninstalled.
 
-### Unreleased — automatic usage refresh verification
+### v0.1.18 — release-channel publication
+
+- Publish the reviewed 0.1.18 VSIX (`251cfec`) to the Marketplace release channel on October 10, 2026, with `preview: false` and no prerelease property; the manifest version stayed 0.1.18.
+- Pass TypeScript checking and all 204 deterministic tests before packaging; SHA-256 `6745637546405b2f84330a080df0428ae907529c4d311c8252cc551938078de5`.
+- Post-publish Marketplace readback showed 0.1.17 prerelease as the latest public entry, so 0.1.18 listing propagation and validation remain pending; Marketplace installation is not claimed verified.
+
+### v0.1.18 — automatic usage refresh verification
 
 - Add automatic usage-meter refresh (`f48d263`) on top of the reviewed 0.1.18 candidate `5600ec6`; the manifest stays v0.1.18 and nothing is published or installed.
 - Obtain fresh-context independent regression approval comparing `f48d263` with `5600ec6`, with no blocking findings.

@@ -1,6 +1,6 @@
 # T3 VSCode
 
-**0.1.18 (Alpha) — local candidate, unpublished.** This build keeps chat rows from overlapping while replies stream and clears leftover space after resizing. Version 0.1.16 is published on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) release channel and 0.1.17 on its prerelease channel.
+**0.1.18 is published on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) release channel.** This build keeps chat rows from overlapping while replies stream, clears leftover space after resizing and refreshes usage meters automatically. Version 0.1.17 remains on the prerelease channel.
 
 A VS Code client for a separately running [T3 Code](https://github.com/pingdotgg/t3code) server. T3 VSCode adds a workspace session manager and chat in editor tabs. Colors follow your VS Code theme; the extension host owns connection, authentication and shared conversation state.
 

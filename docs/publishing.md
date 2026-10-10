@@ -1,8 +1,8 @@
 # Local VSIX packaging and publication history
 
-Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner authorized the stable release upload of **0.1.16** on October 8, 2026, and explicitly authorized prerelease **0.1.17** on October 9, 2026.
+Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner authorized the stable release upload of **0.1.16** on October 8, 2026, explicitly authorized prerelease **0.1.17** on October 9, 2026, and explicitly authorized stable release-channel publication of **0.1.18** on October 10, 2026.
 
-Current release checkpoint: v0.1.17 adds agent-only response diffs and has been accepted for Marketplace prerelease publication; public listing refresh and validation are pending. The manifest was raised to 0.1.18 on request for the later transcript resize and streaming-overlap fixes; its fresh-context review approved the changes against `3c6116e` with no blocking findings, and the local installer `target-installer/t3-vscode-0.1.18.vsix` (SHA-256 `72d8c71fc7eba97893f13bd921ddd6ae014f87c4d9a658e07c1d8e9345d59156`) is built but not authorized for publication.
+Current release checkpoint: v0.1.18 was published to the Marketplace stable release channel from `251cfec` on October 10, 2026; public listing refresh and validation are pending. Prerelease 0.1.17 remains on the prerelease channel.
 
 ## Version policy
 
@@ -72,3 +72,12 @@ At 04:22 UTC on October 7, the Marketplace reported version 0.1.12 with the prer
 - Passed 200 deterministic tests, TypeScript checking, full builds and browser regression suite. Verified a 41-file VSIX with version 0.1.17, publisher `hungtienhuang`, `preview: true` and `Microsoft.VisualStudio.Code.PreRelease=true`.
 - VSIX: `target-installer/t3-vscode-0.1.17-prerelease.vsix`; SHA-256: `4bcca3233309c4e6d395e044f61270c49fde2ef8a1f0fa0739fc2d3b83fef06f`. `vsce` reported successful publication.
 - At 01:13 UTC on October 10, Marketplace metadata still listed stable 0.1.16 and prerelease 0.1.14; public listing propagation and validation remain pending. No Marketplace installation was attempted.
+
+## 0.1.18 release-channel publication
+
+- Published `hungtienhuang.t3-vscode` **0.1.18** to the stable release channel on **October 10, 2026**, from source commit `251cfec`, after the owner explicitly authorized that exact version and channel.
+- Set `preview: false` (no `--pre-release`) and kept the manifest version at 0.1.18; updated the changelog and README wording so the release no longer says "unpublished".
+- Passed TypeScript checking and all 204 deterministic tests; `pnpm package` produced the 41-file VSIX at `target-installer/t3-vscode-0.1.18.vsix` with version 0.1.18, publisher `hungtienhuang`, `preview: false`, no `Microsoft.VisualStudio.Code.PreRelease` property and `t3-vscode.usage.refreshIntervalSeconds` in `extension/package.json`.
+- Published with `vsce publish --packagePath target-installer/t3-vscode-0.1.18.vsix`; vsce reported success.
+- VSIX SHA-256: `6745637546405b2f84330a080df0428ae907529c4d311c8252cc551938078de5`, recorded in `target-installer/t3-vscode-0.1.18.vsix.sha256`.
+- Post-publish Marketplace readback (`vsce show --json`) still listed prerelease 0.1.17 as the latest entry, with 0.1.16 and 0.1.15 stable; the 0.1.18 listing is not yet visible, so its listed checksum, channel and validation are not yet confirmed. Marketplace installation was not tested.

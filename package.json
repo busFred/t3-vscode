@@ -339,7 +339,7 @@
     "vite-plugin-css-injected-by-js": "^3.5.2"
   },
   "icon": "resources/t3-extension.png",
-  "preview": true,
+  "preview": false,
   "license": "MIT",
   "homepage": "https://github.com/busFred/t3-vscode#readme",
   "bugs": {

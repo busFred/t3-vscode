@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.1.18 — Alpha, unpublished
+## 0.1.18 — Release
 
 - Fix chat rows occasionally drawing over each other while a reply streams, such as a new question or response header covering the end of an earlier response with images.
-- Include the earlier unpublished resize fix: clear leftover blank space below the last response after resizing a session.
-- Pass 200 deterministic tests, TypeScript checking, full builds and the deterministic browser suites, including a new streaming-overlap check that fails before the fix. Fresh-context regression review against `3c6116e` found no blocking regressions; packaged locally, not published.
+- Clear leftover blank space below the last response after resizing a session.
+- Refresh provider usage meters automatically once the extension connects and on an interval; add `t3-vscode.usage.refreshIntervalSeconds` (default 60, minimum 15; `0` disables periodic refresh).
+- Pass 204 deterministic tests and TypeScript checking. Fresh-context regression review found no blocking regressions; published to the Marketplace release channel from `251cfec`.
 
 ## 0.1.17 — Alpha prerelease
 
