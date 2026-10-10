@@ -1,3 +1,4 @@
+import { captureTurnBaseline, findTurnBaseline } from "./turnBaseline.js";
 /** Transport adapter over T3's vendored contracts and Effect RPC client. */
 import { randomUUID } from "node:crypto";
 import {
@@ -190,6 +191,8 @@ export class T3Client {
   getDiffFileContents(input: ReviewDiffFileContentsInput) {
     return readCheckpointFiles(input);
   }
+  captureTurnBaseline = captureTurnBaseline;
+  findTurnBaseline = findTurnBaseline;
   getSavedTurnDiff(input: Parameters<typeof readCheckpointDiff>[0]) {
     return readCheckpointDiff(input);
   }

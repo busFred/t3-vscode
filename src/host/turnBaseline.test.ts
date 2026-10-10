@@ -1,0 +1,64 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { captureTurnBaseline, findTurnBaseline, turnBaselineRef } from "./turnBaseline.js";
+import { readCheckpointDiff, readCheckpointFiles } from "./checkpointFiles.js";
+import { turnDiffFiles } from "./turnDiff.js";
+
+async function repository(t: test.TestContext) {
+  const cwd = await mkdtemp(join(tmpdir(), "t3-baseline-test-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+  const run = promisify(execFile);
+  const git = async (...args: string[]) => (await run("git", ["-C", cwd, ...args])).stdout.trim();
+  await git("init", "-q"); await git("config", "user.name", "Test"); await git("config", "user.email", "test@example.invalid");
+  return { cwd, git, write: (path: string, text: string) => writeFile(join(cwd, path), text) };
+}
+test("Manual edits between responses are excluded even in the same file; snapshots survive reload and later edits", async (t) => {
+  const { cwd, git, write } = await repository(t);
+  await write("same.txt", "original\n"); await write("manual-only.txt", "original\n");
+  await git("add", "."); await git("commit", "-qm", "Previous response");
+  await git("update-ref", "refs/t3/test/previous", "HEAD");
+  await write("same.txt", "manual\n"); await write("manual-only.txt", "manual only\n");
+  await git("add", "manual-only.txt");
+  await write("untracked.txt", "manual untracked\n");
+  await write(".gitignore", "ignored.txt\n"); await write("ignored.txt", "secret\n");
+  const indexBefore = await readFile(join(cwd, ".git/index"));
+  const statusBefore = await git("status", "--porcelain");
+  await captureTurnBaseline(cwd, "thread", "message");
+  assert.deepEqual(await readFile(join(cwd, ".git/index")), indexBefore);
+  assert.equal(await git("status", "--porcelain"), statusBefore);
+  assert.equal(await git("show", "HEAD:same.txt"), "original");
+  const baseRef = await findTurnBaseline(cwd, "thread", "message");
+  assert.equal(baseRef, turnBaselineRef("thread", "message"));
+  assert.equal(await findTurnBaseline(cwd, "thread", "other"), null);
+  assert.doesNotMatch(await git("ls-tree", "-r", "--name-only", baseRef!), /^ignored.txt$/m);
+  await write("same.txt", "agent\n"); await write("agent-only.txt", "added by agent\n");
+  await git("add", "."); await git("commit", "-qm", "Response"); await git("update-ref", "refs/t3/test/end", "HEAD");
+  await write("same.txt", "later manual edit\n");
+  const range = { cwd, baseRef: baseRef!, headRef: "refs/t3/test/end" };
+  const files = turnDiffFiles(await readCheckpointDiff(range));
+  assert.deepEqual(files.map((file) => file.newPath), ["agent-only.txt", "same.txt"]);
+  assert.deepEqual(await readCheckpointFiles({ ...range, sourceKind: "branch-range", changeType: "change", oldPath: "same.txt", newPath: "same.txt" }), { oldContents: "manual\n", newContents: "agent\n" });
+  const manual = turnDiffFiles(await readCheckpointDiff({ cwd, baseRef: "refs/t3/test/previous", headRef: baseRef! }));
+  assert.ok(manual.some((file) => file.newPath === "manual-only.txt"));
+  assert.ok(manual.some((file) => file.newPath === "same.txt"));
+  assert.ok(manual.some((file) => file.newPath === "untracked.txt"));
+  await assert.rejects(captureTurnBaseline(cwd, "thread", "message"));
+  assert.equal(await git("show", `${baseRef}:same.txt`), "manual");
+});
+test("Unborn repositories and subdirectories snapshot the whole worktree with adds/deletes/renames", async (t) => {
+  const { cwd, git, write } = await repository(t);
+  await mkdir(join(cwd, "nested")); await write("old.txt", "rename me\n"); await write("delete.txt", "delete me\n");
+  await captureTurnBaseline(join(cwd, "nested"), "thread", "first");
+  const baseRef = turnBaselineRef("thread", "first");
+  assert.equal(await git("show", `${baseRef}:old.txt`), "rename me");
+  await assert.rejects(readFile(join(cwd, ".git/index")));
+  await rm(join(cwd, "old.txt")); await write("renamed.txt", "rename me\n"); await rm(join(cwd, "delete.txt"));
+  await captureTurnBaseline(cwd, "thread", "second");
+  const files = turnDiffFiles(await readCheckpointDiff({ cwd, baseRef, headRef: turnBaselineRef("thread", "second") }));
+  assert.deepEqual(files.map((file) => file.changeType).sort(), ["deleted", "rename-pure"]);
+});

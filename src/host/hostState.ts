@@ -49,7 +49,7 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
+export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
   readonly taskOrigins?: () => ReadonlyArray<TaskOrigin>;
   readonly saveTaskOrigin?: (origin: TaskOrigin) => PromiseLike<void>;
@@ -653,6 +653,11 @@ export class HostState {
       view.sending = true; this.emit();
       try {
         const messageId = randomUUID(), alreadyWorking = !!thread.activeRunId || !!(this.threads.get(id)?.projection && deriveThreadQueueWorkflowState(this.threads.get(id)!.projection!).activeRun) || this.acceptedMessages.has(id);
+        const cwd = this.workspaceForThread(id);
+        // Queued/steered runs have no reliable pre-execution boundary on the client.
+        // Failure to capture must never prevent sending a message.
+        if (!alreadyWorking && mode === "auto" && cwd)
+          await this.client.captureTurnBaseline(cwd, id, messageId).catch(() => undefined);
         await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id,
           createdBy: "user", creationSource: "web", messageId, text, attachments, ...(context ? { context } : {}),
           titleSeed: deriveThreadTitleSeed({ text, attachments }), ...(mode !== "queue" ? { deliveryIntent: mode } : {}), dispatchMode: { type: mode === "queue" ? "queue_after_active" : "start_immediately" } });
@@ -1014,11 +1019,15 @@ export class HostState {
     if (row?.item.type !== "checkpoint") throw new Error("The selected item is not a saved turn checkpoint.");
     const projection = await this.client.getThreadProjection(sourceId);
     const range = turnCheckpointRange(projection, row.item.checkpointId);
-    const patch = await this.client.getSavedTurnDiff(range);
+    const checkpointId = row.item.checkpointId;
+    const checkpoint = projection.checkpoints.find((entry) => entry.id === checkpointId);
+    const run = projection.runs.find((entry) => entry.id === checkpoint?.runId);
+    const baseline = run?.userMessageId ? await this.client.findTurnBaseline(range.cwd, sourceId, run.userMessageId) : null;
+    if (!baseline) throw new Error("Agent-only diff unavailable: no snapshot was saved before this response. Older, queued, steered, and externally started responses may include manual edits in their checkpoint totals.");
+    const patch = await this.client.getSavedTurnDiff({ ...range, baseRef: baseline });
     this.requireView(viewId); this.requireThread(id); this.requireThread(sourceId);
     const files = turnDiffFiles(patch);
-    if (!files.length) throw new Error("This turn has no saved file changes.");
-    return { ...range, files };
+    return { ...range, baseRef: baseline, files };
   }
   async loadTurnDiffFile(diff: TurnDiff, file: TurnDiffFile, viewId = SIDEBAR_VIEW_ID) {
     this.requireView(viewId); this.requireThread(diff.threadId);
@@ -1119,10 +1128,14 @@ export class HostState {
       draft: this.conversationDraft(view),
       ...(activeThreadId ? { activeThreadId } : {}),
       ...conversationActivity(projection),
-      transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => ({
-        key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId,
-        ...this.presentItem(row.item), canFork: visibleThreadIds.has(row.sourceThreadId) && this.canForkRow(projection, row),
-      })) : [],
+      transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => {
+        const source = this.threads.get(row.sourceThreadId)?.projection ?? projection;
+        const status = row.item.type === "checkpoint" ? source.runs.find(run => run.id === row.item.runId)?.status : undefined;
+        return { key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId,
+          ...this.presentItem(row.item), canFork: visibleThreadIds.has(row.sourceThreadId) && this.canForkRow(projection, row),
+          ...(status ? { checkpointRunStatus: status } : {}),
+        };
+      }) : [],
       pending: projection ? derivePendingThreadRequests(projection) : { approvals: [], userInputs: [] },
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
       threadLoading: state?.loading ?? false, sending: view.sending,

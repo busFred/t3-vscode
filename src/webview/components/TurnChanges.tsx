@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRightIcon, FileDiffIcon, FileIcon, FolderIcon } from "lucide-react";
-import type { TranscriptItem, WireTurnItem } from "../../shared/bridge";
+import type { TranscriptItem, WireTurnItem, TurnDiffSummary } from "../../shared/bridge";
+import { bridge } from "../bridge-client";
 import { useActions } from "../actions";
 import { buildTurnDiffTree, summarizeTurnDiffStats, type TurnDiffTreeNode, type TurnDiffStat } from "./t3/turnDiffTree";
 
@@ -14,9 +15,31 @@ function ChangeNode({ node, open }: { readonly node: TurnDiffTreeNode; readonly 
 export function TurnChanges({ row, threadId }: { readonly row: TranscriptItem; readonly threadId: string }) {
   const item = row.item as Extract<WireTurnItem, { type: "checkpoint" }>;
   const run = useActions();
-  const tree = useMemo(() => buildTurnDiffTree(item.files), [item.files]);
-  const total = useMemo(() => summarizeTurnDiffStats(item.files), [item.files]);
-  if (!item.files.length) return null;
-  const open = (path?: string) => { void run("openTurnDiff", { threadId, sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? item.id, ...(path === undefined ? {} : { path }) }); };
-  return <div className="turn-changes" data-checkpoint-id={item.checkpointId}><details><summary><ChevronRightIcon size={13} /><span>{item.files.length} changed {item.files.length === 1 ? "file" : "files"}</span><Counts stat={total} /></summary><div className="change-tree">{tree.map((node) => <ChangeNode key={node.path} node={node} open={open} />)}</div></details><button className="open-turn-diff" title="Open a file diff from this turn in VS Code" onClick={() => open()}><FileDiffIcon size={13} /><span>Open diff</span></button></div>;
+  const itemId = row.sourceItemId ?? item.id;
+  const key = JSON.stringify([threadId, row.sourceThreadId, itemId, item.checkpointId, item.updatedAt, row.checkpointRunStatus]);
+  const [result, setResult] = useState<{ key: string; summary?: TurnDiffSummary }>();
+  useEffect(() => {
+    if (row.checkpointRunStatus && row.checkpointRunStatus !== "completed") return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = (attempt: number) => {
+      void bridge.request<TurnDiffSummary>("turnDiffSummary", { threadId, sourceThreadId: row.sourceThreadId, itemId }).then(
+        (summary) => { if (!cancelled) setResult({ key, summary }); },
+        () => { if (!cancelled && attempt < 2) timer = setTimeout(() => load(attempt + 1), 1000); },
+      );
+    };
+    load(0);
+    return () => { cancelled = true; clearTimeout(timer); };
+
+  }, [key, threadId, row.sourceThreadId, itemId, row.checkpointRunStatus]);
+  const current = result?.key === key ? result : undefined;
+  const files = current?.summary?.files ?? [];
+  const tree = useMemo(() => buildTurnDiffTree(files), [files]);
+  const total = useMemo(() => summarizeTurnDiffStats(files), [files]);
+  const open = (path?: string) => { void run("openTurnDiff", { threadId, sourceThreadId: row.sourceThreadId, itemId, ...(path === undefined ? {} : { path }) }); };
+  if (!files.length) return null;
+  return <div className="turn-changes" data-checkpoint-id={item.checkpointId}>
+    <details><summary><ChevronRightIcon size={13} /><span>{files.length} changed {files.length === 1 ? "file" : "files"}</span><Counts stat={total} /></summary><div className="change-tree">{tree.map((node) => <ChangeNode key={node.path} node={node} open={open} />)}</div></details>
+    <button className="open-turn-diff" title="Open a file diff from this response in VS Code" onClick={() => open()}><FileDiffIcon size={13} /><span>Open diff</span></button>
+  </div>;
 }

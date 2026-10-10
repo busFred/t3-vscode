@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { TranscriptItem, WireTurnItem } from "./bridge.js";
 import { messageExchanges, exchangeAtRow, exchangeAtPointer, resolveMessageNavigation } from "./messageNavigation.js";
-import { transcriptRows, workSummary } from "./transcriptRows.js";
+import { finalResponseCheckpoints, transcriptRows, workSummary } from "./transcriptRows.js";
 const row = (key: string, type: string, text = key): TranscriptItem => ({ key, sourceThreadId: "thread", toolLabel: null, output: null, needsDetail: false,
   item: { id: key, type, status: "completed", text, attachments: [] } as unknown as WireTurnItem });
 
@@ -25,4 +25,14 @@ test("Activity groups preserve message/checkpoint boundaries and keep thought an
   assert.equal(workSummary(display[1]!.rows), "Ran 2 commands · Thought process");
   const updated = transcriptRows([...rows.slice(0, 4), row("cmd4", "command_execution"), ...rows.slice(4)]);
   assert.equal(updated[1]!.key, display[1]!.key, "Streaming activity preserves the user's disclosure state");
+});
+
+
+test("One final changes row per response preserves separate runs and source threads", () => {
+  const checkpoint = (key: string, runId: string, sourceThreadId = "thread"): TranscriptItem => {
+    const entry = row(key, "checkpoint");
+    return { ...entry, sourceThreadId, item: { ...entry.item, runId } as WireTurnItem };
+  };
+  const items = [row("prompt", "user_message"), checkpoint("partial", "run1"), row("answer", "assistant_message"), checkpoint("final", "run1"), checkpoint("next", "run2"), checkpoint("inherited", "run1", "parent")];
+  assert.deepEqual(finalResponseCheckpoints(items).map(row => row.key), ["prompt", "answer", "final", "next", "inherited"]);
 });

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.17 — Local installer, unpublished
+
+- Show one changes box per response only when the agent made file changes; hide empty, loading and unavailable diff placeholders.
+- Remove all manual-edit lists and counts from chat while continuing to exclude pre-response edits from agent diffs.
+- Compare the final response checkpoint against its saved start snapshot so the single box includes the response's complete file changes.
+- Bump from published 0.1.16 at the owner's request.
+- Pass 200 deterministic tests, TypeScript checking, full builds and browser regressions, including delayed completion and a single combined changes box. Obtain final independent regression approval before packaging.
+
+## 0.1.16 — Local response diff fix, unpublished
+
+- Exclude saved manual edits made between responses from new response diffs, including edits within the same file; list pre-existing edits separately.
+- Retain immutable native diffs across reloads. Mark attribution unavailable for responses without a pre-message snapshot, including older, queued, steered and externally started responses.
+- Pass 198 deterministic tests, TypeScript, full builds and browser regression checks; obtain independent final regression approval before local packaging.
+
 ## 0.1.16 — Alpha, release channel
 
 - Add separate Sessions and Tasks managers with their own new-item buttons, independent project tasks and session groups for subagents and scheduled tasks.

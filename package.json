@@ -2,7 +2,7 @@
   "name": "t3-vscode",
   "displayName": "T3 VSCode",
   "description": "Alpha client for local T3 Code servers: workspace sessions, editor chat, rich messages and account usage.",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "publisher": "hungtienhuang",
   "repository": {
     "type": "git",

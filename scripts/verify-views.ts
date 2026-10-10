@@ -503,8 +503,8 @@ try {
   assert.equal(await accountSidebar.locator('.session-list [data-thread-id="first"], .session-list [data-thread-id="third"]').count(), 0);
   await accountSidebar.screenshot({ path: `${evidence}/history-separate-shelves.png` });
   assert.equal(await input.inputValue(), "Draft survives navigation");
-  publishTurn(client, "second");
   client.getSavedTurnDiff = async (range) => { client.savedDiffRequests.push(range); return turnPatch; };
+  publishTurn(client, "second");
   await second.getByText("1 changed file", { exact: true }).click();
   await second.locator('.change-directory > summary').click();
   await second.getByRole("button", { name: "Open turn diff: src/example.ts" }).click();
@@ -514,6 +514,49 @@ try {
   assert.equal(await second.locator('.chat-header').evaluate((element) => element.getBoundingClientRect().height), 36);
   assert.equal(await second.locator('.chat-heading strong').evaluate((element) => getComputedStyle(element).fontSize), "14px");
   await second.screenshot({ path: `${evidence}/compact-header-turn-changes.png` });
+  assert.equal(await second.locator('.turn-changes').count(), 1);
+  assert.equal(await second.getByText(/edited before this response|Manual or other external edits/).count(), 0);
+  const completedSummaries = () => second.evaluate(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.filter(entry => entry.method === "turnDiffSummary").length);
+  const summaryCount = await completedSummaries();
+  client.getSavedTurnDiff = async () => "";
+  publishTurn(client, "second", 3);
+  await second.waitForFunction((count) => (window as unknown as { __completed: Array<{ method: string }> }).__completed.filter(entry => entry.method === "turnDiffSummary").length > count, summaryCount);
+  await second.locator('.turn-changes').waitFor({ state: "hidden" });
+  assert.equal(await second.getByText(/No file changes|edited before this response/).count(), 0);
+  client.findTurnBaseline = async () => null;
+  const missingCount = await completedSummaries();
+  publishTurn(client, "second", 4);
+  await second.waitForFunction((count) => (window as unknown as { __completed: Array<{ method: string }> }).__completed.filter(entry => entry.method === "turnDiffSummary").length > count, missingCount);
+  assert.equal(await second.locator('.turn-changes').count(), 0);
+  client.findTurnBaseline = async () => "refs/t3/test/baseline";
+  client.getSavedTurnDiff = async () => turnPatch;
+  await second.getByText("1 changed file", { exact: true }).waitFor();
+  assert.equal(await second.locator('.turn-changes').count(), 1);
+
+
+  const repeated = turnFixture("second", 5);
+  const finalCheckpointRow = repeated.visibleTurnItems[0]!;
+  if (finalCheckpointRow.item.type !== "checkpoint") throw new Error("Expected checkpoint fixture");
+  const intermediate = { ...finalCheckpointRow.item, id: TurnItemId.make("intermediate-changes"), checkpointId: repeated.checkpoints[4]!.id };
+  client.getSavedTurnDiff = async () => turnPatch + turnPatch.replaceAll("src/example.ts", "src/other.ts");
+  const repeatedProjection = {
+    ...repeated, turnItems: [intermediate, finalCheckpointRow.item], visibleTurnItems: [
+      { ...finalCheckpointRow, sourceItemId: intermediate.id, item: intermediate },
+      { ...finalCheckpointRow, position: 1 },
+    ],
+  };
+  client.threadHandlers.get("second")?.({ kind: "snapshot", snapshotSequence: 11, projection: {
+    ...repeatedProjection, runs: repeatedProjection.runs.map(run => ({ ...run, status: "running" as const })),
+  } });
+  await second.locator('.turn-changes').waitFor({ state: "hidden" });
+  // Completion changes only the run, not the checkpoint item's timestamp.
+  client.threadHandlers.get("second")?.({ kind: "snapshot", snapshotSequence: 12, projection: repeatedProjection });
+  await second.getByText("2 changed files", { exact: true }).click();
+  assert.equal(await second.locator('.turn-changes').count(), 1);
+  await second.locator('.change-directory > summary').click();
+  await second.getByRole("button", { name: "Open turn diff: src/example.ts", exact: true }).waitFor();
+  await second.getByRole("button", { name: "Open turn diff: src/other.ts", exact: true }).waitFor();
+
   await third.setViewportSize({ width: 300, height: 700 });
   await third.getByRole("textbox", { name: "Message", exact: true }).fill("/");
   await third.getByRole("option").filter({ hasText: "/skill:Review" }).waitFor();

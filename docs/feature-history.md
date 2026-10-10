@@ -2,7 +2,7 @@
 
 This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
-The v0.1.16 revision includes selected-text image descriptions, local model management with drag ordering, compact session activity, scheduled-task navigation/configuration and readable queued-message editing; it removes manual T3 Web import. The Git release baseline is `f6af7cb` (manifest v0.1.15). Keep the manifest at v0.1.16; the owner has specifically authorized its stable-channel publication, without granting standing authorization for other versions or channels. See the release verification entries below for the earlier installer and same-version rebuilds.
+The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The current local v0.1.17 adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly requested the v0.1.17 version bump; publication of this new version has not been authorized. See the release verification entries below for earlier installers and publication history.
 
 ## Overview
 
@@ -42,7 +42,7 @@ The v0.1.16 revision includes selected-text image descriptions, local model mana
 | [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.12 |
 | [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.11 |
 | [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.13 |
-| [Saved turn diffs](#saved-turn-diffs) | Opens the preceding turn's saved changes in native diff editors. | v0.0.6 | v0.0.9 |
+| [Saved turn diffs](#saved-turn-diffs) | Shows one nonempty agent-only response diff; hides manual edits. | v0.0.6 | v0.1.17 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.1.15 |
@@ -752,6 +752,23 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 
 - Compare immutable checkpoint Git refs directly instead of looking up a numbered turn pair on the server.
 - Follow the saved parent checkpoint through cancelled turns, including ready baselines without a completed run.
+
+#### v0.1.16 — Local fix, unpublished
+
+- Save an immutable Git tree before an idle message is sent from the extension; compare the completed response against that tree, excluding manual edits made between messages even within the same file.
+- List intervening manual/external edits separately from response files and line counts; show an empty response diff when only pre-existing edits were present.
+- Preserve the user's index, branch and working files; retain per-message snapshots through reloads without changing the manifest version.
+- Show an attribution-unavailable message with retry when no reliable start snapshot exists (including older, queued, steered or externally started responses), instead of presenting checkpoint totals as agent edits. Edits made while a response is running cannot be distinguished by these snapshots.
+- Pass all 198 deterministic tests, TypeScript checking, complete production builds and the full browser fixture, including separated manual edits, empty response diffs, missing baselines and retry. Fresh-context independent regression review against `b71e129` approves the final changes with no blocking findings before local packaging. No live provider or normal VS Code/T3 state was used.
+
+#### v0.1.17 — Local installer, unpublished
+
+- Hide the changes box when the response has no agent changes; do not show manual-edit lists/counts, loading boxes or attribution-unavailable placeholders. Retry transient/readiness failures silently with a bounded retry.
+- Render only the final checkpoint per source thread/run, keeping separate conversation rounds independent; its baseline-to-end diff covers the complete response in one expandable file list.
+- Stop requesting the intervening manual-edit patch. Continue excluding pre-response edits, preserving immutable native diffs and the user's Git index.
+- Bump the manifest from the Git-verified published v0.1.16 (`b71e129`, manifest change `9e85bbc`) to v0.1.17 by explicit owner request; keep the installer unpublished.
+- Pass 200 deterministic tests, TypeScript checking, full production builds, all 49 feature-history links and the complete browser suite. Cover no manual/empty/loading box, one multi-file box for duplicate checkpoints, and run-only completion without changing checkpoint metadata; preserve navigation, forks and Queue/Steer behavior.
+- Obtain final fresh-context regression approval against `b71e129` with no blocking findings before packaging; resolve the reviewer's checkpoint-readiness finding and update the current-version documentation. Keep the v0.1.17 installer local, unpublished and uninstalled.
 
 ### Conversation tab titles
 

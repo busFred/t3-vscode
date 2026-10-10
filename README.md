@@ -1,6 +1,6 @@
 # T3 VSCode
 
-**0.1.16 (Alpha) — local installer, unpublished.** This build adds model-preference import and management, plus selected-text descriptions for pasted images. The [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) release remains 0.1.15, including the Windows pairing fix from preview 0.1.14.
+**0.1.17 (Alpha) — local installer, unpublished.** This build shows one agent-only changes box per response, hides empty/manual-edit diffs. Version 0.1.16 was published to the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode).
 
 A VS Code client for a separately running [T3 Code](https://github.com/pingdotgg/t3code) server. T3 VSCode adds a workspace session manager and chat in editor tabs. Colors follow your VS Code theme; the extension host owns connection, authentication and shared conversation state.
 
@@ -74,7 +74,7 @@ Type `/` for the current provider's commands and skills, or `@` to find files in
 
 While an agent is responding, **Enter** or the send button queues a follow-up after its turn. **Ctrl+Enter** (Cmd+Enter on macOS) steers the running turn when supported; otherwise the message queues. When the agent is idle, Enter sends normally. **Shift+Enter** inserts a new line. Queued messages and the current turn's task plan appear above the input. You can edit or cancel queued messages, reorder them by dragging or using the handle's arrow keys, and promote one to Steer. The inline queued-message editor uses the same prompt font size and line spacing as the main message box; previews stay compact and your current draft stays in place. Stopping generation pauses the queue; **Resume queue** continues it.
 
-Expand a turn's changed-file summary to browse folders and additions/deletions. Clicking a file opens VS Code's read-only diff editor for that turn's saved before/after snapshots. Earlier turn diffs remain unchanged by later edits or commits. This uses checkpoint files in the local T3 workspace; binary files cannot be expanded as text.
+A response with file changes shows one expandable changed-file summary with folders and additions/deletions. Saved manual edits made before the response are excluded and are not listed. Responses with no agent changes, or without a reliable pre-message snapshot, show no changes box. Clicking a file opens VS Code's read-only diff editor for that turn's saved before/after snapshots. Earlier turn diffs remain unchanged by later edits or commits. This uses checkpoint files in the local T3 workspace; binary files cannot be expanded as text.
 
 ## Find in the current session
 
@@ -89,7 +89,7 @@ For building from source, see [Development and testing](docs/development.md#buil
 In the VS Code window/profile where you want to use it, open **Extensions → ⋯ → Install from VSIX…**, choose that file, then reload the window if prompted. For an isolated preview installation, the CLI example uses separate user, extension and shared storage:
 
 ```sh
-code --user-data-dir /tmp/t3-vscode-preview/user-data --extensions-dir /tmp/t3-vscode-preview/extensions --shared-data-dir /tmp/t3-vscode-preview/shared-data --install-extension ./target-installer/t3-vscode-0.1.16.vsix
+code --user-data-dir /tmp/t3-vscode-preview/user-data --extensions-dir /tmp/t3-vscode-preview/extensions --shared-data-dir /tmp/t3-vscode-preview/shared-data --install-extension ./target-installer/t3-vscode-0.1.17.vsix
 ```
 
 The installed extension normally discovers your already-running T3 service under `~/.t3`. Leave **T3 VSCode: T3 Home** empty to use that default; an explicit setting or `T3CODE_HOME` overrides it. Packaging does not install the extension or start a server.

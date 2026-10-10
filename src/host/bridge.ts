@@ -162,6 +162,11 @@ export class BridgeHandler {
           return { id: message.id, result: await this.hostState.chatAsset(id(), { sourceThreadId: stringParam(params, "sourceThreadId"), itemId: stringParam(params, "itemId") }, assetReference, viewId) };
         }
         case "refreshUsage": await this.hostState.refreshUsage(); break;
+        case "turnDiffSummary": {
+          const diff = await this.hostState.prepareTurnDiff(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId"), viewId);
+          const summarize = (files: typeof diff.files) => files.map((file) => ({ path: file.newPath, additions: file.additions, deletions: file.deletions }));
+          return { id: message.id, result: { files: summarize(diff.files) } };
+        }
         case "openTurnDiff": {
           if (params.path !== undefined && typeof params.path !== "string") throw new Error("Invalid diff path.");
           const diff = await this.hostState.prepareTurnDiff(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId"), viewId);

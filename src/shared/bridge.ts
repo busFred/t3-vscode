@@ -29,7 +29,7 @@ export const Methods = {
   respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
   threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab",
-  searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", refreshUsage: "refreshUsage",
+  searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", turnDiffSummary: "turnDiffSummary", refreshUsage: "refreshUsage",
   queueAction: "queueAction",
   openWebUi: "openWebUi", configureUsage: "configureUsage", showUsage: "showUsage",
 } as const;
@@ -100,6 +100,7 @@ export interface TranscriptItem {
   readonly output: string | null;
   readonly needsDetail: boolean;
   readonly canFork?: boolean;
+  readonly checkpointRunStatus?: string;
 }
 export interface HostStateSnapshot {
   readonly scheduledTasks?: ScheduledTasksState;
@@ -153,4 +154,8 @@ export function stringParam(raw: Record<string, unknown>, key: string): string {
   const value = raw[key];
   if (typeof value !== "string" || !value.trim()) throw new Error(`Missing ${key}.`);
   return value;
+}
+
+export interface TurnDiffSummary {
+  readonly files: ReadonlyArray<{ path: string; additions: number; deletions: number }>;
 }

@@ -21,7 +21,7 @@ test("Saved diff files read exact checkpoint blobs even when HEAD and the workin
   assert.deepEqual(await readCheckpointFiles(input), { oldContents: "first\n", newContents: "second\n" });
   const patch = await readCheckpointDiff(input);
   assert.match(patch, /-first\n\+second/); assert.doesNotMatch(patch, /third on disk/);
-  assert.deepEqual(turnDiffFiles(patch), [{ oldPath: path, newPath: path, changeType: "change" }]);
+  assert.deepEqual(turnDiffFiles(patch), [{ additions: 1, deletions: 1, oldPath: path, newPath: path, changeType: "change" }]);
   assert.deepEqual(await readCheckpointFiles({ ...input, changeType: "new", baseRef: null }), { oldContents: "", newContents: "second\n" });
   assert.deepEqual(await readCheckpointFiles({ ...input, changeType: "deleted", headRef: null }), { oldContents: "first\n", newContents: "" });
   await assert.rejects(readCheckpointFiles({ ...input, headRef: "HEAD" }), /Invalid saved checkpoint/);

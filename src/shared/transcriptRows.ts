@@ -1,6 +1,14 @@
 import type { TranscriptItem } from "./bridge.js";
 import { htmlVisual } from "./chatVisuals.js";
 
+/** A run's final checkpoint already covers its complete baseline-to-end range. */
+export function finalResponseCheckpoints(items: ReadonlyArray<TranscriptItem>): ReadonlyArray<TranscriptItem> {
+  const latest = new Map<string, TranscriptItem>();
+  const key = (row: TranscriptItem) => JSON.stringify([row.sourceThreadId, row.item.runId]);
+  for (const row of items) if (row.item.type === "checkpoint" && row.item.runId) latest.set(key(row), row);
+  return items.filter(row => row.item.type !== "checkpoint" || !row.item.runId || latest.get(key(row)) === row);
+}
+
 export interface DisplayRow { readonly key: string; readonly rows: ReadonlyArray<TranscriptItem>; readonly firstIndex: number }
 export function isWorkItem(row: TranscriptItem): boolean {
   switch (row.item.type) {

@@ -72,6 +72,8 @@ export class FakeTransport implements HostTransport {
   async searchPaths(cwd: string, query: string) { this.pathSearches.push({ cwd, query }); return this.pathEntries; }
   async refreshProviders(instanceId?: string, cwd?: string) { this.providerRefreshes.push({ instanceId, cwd }); return { providers: this.config.providers }; }
   async getTurnDiff(id: string, from: number, to: number) { this.diffRequests.push({ id, from, to }); return { threadId: ThreadId.make(id), fromTurnCount: from, toTurnCount: to, diff: "" }; }
+  captureTurnBaseline: HostTransport["captureTurnBaseline"] = async () => {};
+  findTurnBaseline: HostTransport["findTurnBaseline"] = async () => "refs/t3/test/baseline";
   getSavedTurnDiff: HostTransport["getSavedTurnDiff"] = async (input) => { this.savedDiffRequests.push(input); return ""; };
   getDiffFileContents: HostTransport["getDiffFileContents"] = async (input) => { this.diffFileRequests.push(input); return { oldContents: "before\n", newContents: "after\n" }; };
   async connect() { this.connected = true; this.connections += 1; }

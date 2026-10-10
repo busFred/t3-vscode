@@ -4,6 +4,8 @@ import { parsePatchFiles } from "@pierre/diffs";
 import { unquoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
 
 export interface TurnDiffFile {
+  readonly additions: number;
+  readonly deletions: number;
   readonly oldPath: string;
   readonly newPath: string;
   readonly changeType: ReviewDiffFileContentsInput["changeType"];
@@ -32,10 +34,12 @@ export function turnCheckpointRange(projection: OrchestrationV2ThreadProjection,
 }
 export function turnDiffFiles(patch: string): TurnDiffFile[] {
   return parsePatchFiles(patch).flatMap((patch) => patch.files).map((file) => ({
+    additions: file.hunks.reduce((sum, hunk) => sum + hunk.additionLines, 0),
+    deletions: file.hunks.reduce((sum, hunk) => sum + hunk.deletionLines, 0),
     oldPath: unquoteGitPatchPath(file.prevName ?? file.name), newPath: unquoteGitPatchPath(file.name), changeType: file.type,
   }));
 }
 export function turnDiffFileRequest(diff: TurnDiff, file: TurnDiffFile): ReviewDiffFileContentsInput {
   if (!diff.files.includes(file)) throw new Error("This file is not in the selected turn's diff.");
-  return { cwd: diff.cwd, sourceKind: "branch-range", baseRef: diff.baseRef, headRef: diff.headRef, ...file };
+  return { cwd: diff.cwd, sourceKind: "branch-range", baseRef: diff.baseRef, headRef: diff.headRef, oldPath: file.oldPath, newPath: file.newPath, changeType: file.changeType };
 }
