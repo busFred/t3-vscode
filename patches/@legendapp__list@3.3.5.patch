@@ -1,0 +1,30 @@
+diff --git a/react.js b/react.js
+index 914d2dafaafa001c9ab6791a0a0581659295e333..aed7640d524f9bd463d1857f887fd5e4ea137e61 100644
+--- a/react.js
++++ b/react.js
+@@ -6446,8 +6446,9 @@ function ScrollAdjust() {
+               window.getComputedStyle(contentNode)[axis.paddingEndProp]
+             );
+             const temporaryPaddingEnd = `${(currentPaddingEnd || 0) + pad}px`;
+-            temporaryPaddingRef.current = { baseline: baselinePaddingEnd, value: temporaryPaddingEnd };
+             contentNode.style[axis.paddingEndProp] = temporaryPaddingEnd;
++            // CSSOM can round fractional pixels; compare against its serialized value.
++            temporaryPaddingRef.current = { baseline: baselinePaddingEnd, value: contentNode.style[axis.paddingEndProp] };
+             void contentNode.offsetHeight;
+             scrollBy();
+             if (resetPaddingRafRef.current !== void 0) {
+diff --git a/react.mjs b/react.mjs
+index 95465f2ab89ce41a10553f58af83618f7310e83c..855743d0692caa43d7879535dd41e341f00ee6eb 100644
+--- a/react.mjs
++++ b/react.mjs
+@@ -6425,8 +6425,9 @@ function ScrollAdjust() {
+               window.getComputedStyle(contentNode)[axis.paddingEndProp]
+             );
+             const temporaryPaddingEnd = `${(currentPaddingEnd || 0) + pad}px`;
+-            temporaryPaddingRef.current = { baseline: baselinePaddingEnd, value: temporaryPaddingEnd };
+             contentNode.style[axis.paddingEndProp] = temporaryPaddingEnd;
++            // CSSOM can round fractional pixels; compare against its serialized value.
++            temporaryPaddingRef.current = { baseline: baselinePaddingEnd, value: contentNode.style[axis.paddingEndProp] };
+             void contentNode.offsetHeight;
+             scrollBy();
+             if (resetPaddingRafRef.current !== void 0) {

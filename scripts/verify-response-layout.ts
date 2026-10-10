@@ -61,5 +61,41 @@ export async function verifyResponseLayout(page: Page, host: HostState, client: 
   assert.equal((await page.locator('.send-button').boundingBox())?.x, sendBefore, 'Send stays in place when Stop appears/disappears');
   assert.equal(host.snapshot('tab-two').transcript.filter(row => row.canFork).length, 1);
   assert.equal(await page.locator('.working-label').count(), 0);
+  const originalViewport = page.viewportSize()!;
+  // Fractional line heights exercise CSSOM rounding in the virtualizer's temporary
+  // scroll-adjustment padding. It must be removed after reflow, not accumulate.
+  const expectNoTrailingSpace = async () => {
+    await page.waitForFunction(() => {
+      const viewport = document.querySelector('.transcript-list')!;
+      const content = viewport.firstElementChild as HTMLElement;
+      const footer = viewport.querySelector('.timeline-footer')!;
+      const footerBottom = footer.getBoundingClientRect().bottom - viewport.getBoundingClientRect().top + viewport.scrollTop;
+      return parseFloat(getComputedStyle(content).paddingBottom) === 0 && Math.abs(viewport.scrollHeight - footerBottom) <= 2;
+    }, undefined, { timeout: 3000 });
+  };
+  for (const width of [380, 1000, 420, 1280, 380, 760]) {
+    await page.setViewportSize({ width, height: 1100 });
+    await expectNoTrailingSpace();
+  }
+  // Also cover continuous editor-divider dragging, with no settling between steps.
+  for (let width = 360; width <= 1000; width += 20) await page.setViewportSize({ width, height: 1100 });
+  for (let width = 1000; width >= 360; width -= 20) await page.setViewportSize({ width, height: 1100 });
+  await expectNoTrailingSpace();
+  await page.locator('.transcript-list').evaluate(element => { element.scrollTop = 0; });
+  await page.locator('.work-group-toggle').first().click();
+  await page.getByText('cat config.json', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 760, height: 1100 });
+  await expectNoTrailingSpace();
+  await page.getByText('cat config.json', { exact: true }).waitFor();
+  assert.ok(await page.locator('.transcript-list').evaluate(element => element.scrollHeight - element.scrollTop - element.clientHeight > 100), 'Resizing while reading history does not force a jump to the end');
+  await page.getByRole('button', { name: 'Jump to latest message', exact: true }).click();
+  await page.waitForFunction(() => {
+    const viewport = document.querySelector('.transcript-list')!;
+    return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 2;
+  });
+  await expectNoTrailingSpace();
+  await page.screenshot({ path: `${evidence}/resized-transcript-end.png` });
+  await page.setViewportSize(originalViewport);
+  console.log('PASS: repeated and continuous width changes clear temporary padding; history reading and expanded work survive resizing; Latest reaches the real end.');
   console.log('PASS: accepted-send Working and Stop before output; all early answers visible; three independent thought/tool folds around answers and a steer; late completion stays in its original group; status-only sticky header; stationary Send and one settled-run fork.');
 }

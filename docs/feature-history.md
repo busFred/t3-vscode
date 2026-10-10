@@ -26,7 +26,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.13 |
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.1.16 |
-| [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies through a virtualized timeline and loads older history. | v0.0.1 | v0.1.10 |
+| [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and clears temporary spacing after reflow. | v0.0.1 | v0.1.16 |
 | [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.1.13 |
 | [Collapsed activity](#collapsed-activity) | Timed thought/tool groups separated by visible assistant messages and steers. | v0.0.1 | v0.1.13 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
@@ -465,6 +465,11 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 #### v0.1.10
 
 - Use the virtualized transcript at every editor size and remove the column reflow observers and positioning work.
+
+#### v0.1.16 — local resize fix
+
+- Clear temporary scroll-adjustment padding after width changes by comparing the browser-serialized CSS value, preventing persistent blank space below the last response.
+- Pin the fix as a local LegendList 3.3.5 patch for both React module formats; preserve virtualization, history reading, expanded work and Latest navigation.
 
 ### Markdown and media
 
@@ -1208,6 +1213,14 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Recheck at 23:02 UTC; public Marketplace metadata now lists 0.1.16 as stable (`preview: false`) with the exact uploaded SHA-256 above, followed by stable 0.1.15 and prerelease 0.1.14.
 - The uploaded VSIX's bundled changelog still says “unpublished,” reflecting its pre-authorization packaging state; the repository changelog is corrected, but replacing this immutable uploaded version would require a new version.
 - Keep this exact-version/channel approval scoped to v0.1.16; future uploads still require explicit owner authorization.
+
+### v0.1.16 — local transcript resize fix verification
+
+- Reproduce persistent fractional bottom padding on baseline `b71e129`; add deterministic browser checks for repeated width changes, continuous divider dragging, expanded work, history reading and Latest navigation.
+- Pass all 193 deterministic tests, TypeScript checking, the complete extension/webview/Mermaid/math build and the full isolated browser suite, including search/citations, streaming, independent drafts and scheduled tasks; no live provider or normal T3/VS Code state is used.
+- Obtain fresh-context independent regression approval against `b71e129` after final source/test changes and successful validation, with no blocking findings; correct the focused test runner's overly broad success summary during review.
+- Keep manifest v0.1.16 unchanged; this rebuild is local and does not authorize another Marketplace upload or installation.
+- Build and verify the 41-file local VSIX against the reviewed bundles and changelog; record SHA-256 `3d45e2ba1010b002a88166f638a7dc0b0044015b827da68c4acef052e18239e7` in its sidecar and retain the previous installer in `target-installer/archive/`.
 
 ## Maintenance
 

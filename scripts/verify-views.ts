@@ -188,6 +188,9 @@ try {
     return page;
   }));
   debugPages = pages;
+  if (process.argv.includes("--responses-only")) {
+    await verifyResponseLayout(pages[1]!, host, client, evidence);
+  } else {
   const manager = await browser.newPage({ viewport: { width: 360, height: 820 } });
   manager.on("pageerror", (error) => errors.push(error.message));
   await manager.goto(`http://127.0.0.1:${address.port}/?view=${SIDEBAR_VIEW_ID}`);
@@ -634,8 +637,9 @@ try {
     await verifyResponseLayout(pages[1]!, host, client, evidence);
   }
   await verifyScheduledTasks(manager, pages[1]!, pages[2]!, host, client, taskOrigins, evidence);
+  }
   assert.deepEqual(errors, []);
-  console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
+  if (!process.argv.includes("--responses-only")) console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
   console.log(`Screenshots: ${evidence}`);
 } catch (error) {
   console.error("Browser errors:", errors);

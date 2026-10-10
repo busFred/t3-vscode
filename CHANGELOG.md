@@ -14,6 +14,10 @@
 - Retain immutable native diffs across reloads. Mark attribution unavailable for responses without a pre-message snapshot, including older, queued, steered and externally started responses.
 - Pass 198 deterministic tests, TypeScript, full builds and browser regression checks; obtain independent final regression approval before local packaging.
 
+## 0.1.16 — Local resize fix, unpublished
+
+- Fix persistent blank space below the last chat response after resizing a session by clearing temporary scroll-adjustment padding reliably.
+
 ## 0.1.16 — Alpha, release channel
 
 - Add separate Sessions and Tasks managers with their own new-item buttons, independent project tasks and session groups for subagents and scheduled tasks.

@@ -7,13 +7,16 @@ settings:
 overrides:
   effect: 4.0.0-rc.115
 
+patchedDependencies:
+  '@legendapp/list@3.3.5': 5de1e981072a37b59dfa8d4fe241f9c802257d1ab21d44e809cbc73b8c0bbfe9
+
 importers:
 
   .:
     dependencies:
       '@legendapp/list':
         specifier: 3.3.5
-        version: 3.3.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        version: 3.3.5(patch_hash=5de1e981072a37b59dfa8d4fe241f9c802257d1ab21d44e809cbc73b8c0bbfe9)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@pierre/diffs':
         specifier: 1.3.0-beta.10
         version: 1.3.0-beta.10(@shikijs/themes@4.5.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -3159,7 +3162,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@legendapp/list@3.3.5(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@legendapp/list@3.3.5(patch_hash=5de1e981072a37b59dfa8d4fe241f9c802257d1ab21d44e809cbc73b8c0bbfe9)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       react: 19.3.0
       use-sync-external-store: 1.7.0(react@19.3.0)
