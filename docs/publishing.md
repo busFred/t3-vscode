@@ -1,8 +1,8 @@
 # Local VSIX packaging and publication history
 
-Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner authorized the stable release upload of **0.1.16** on October 8, 2026, explicitly authorized prerelease **0.1.17** on October 9, 2026, and explicitly authorized stable release-channel publication of **0.1.18** on October 10, 2026.
+Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner authorized the stable release upload of **0.1.16** on October 8, 2026, explicitly authorized prerelease **0.1.17** on October 9, 2026, explicitly authorized stable release-channel publication of **0.1.18** on October 10, 2026, and explicitly authorized prerelease-channel publication of **0.1.19** on October 10, 2026 (“bump version to 0.1.19 and publish to pre-release”). That authorization covers 0.1.19 on the prerelease channel only.
 
-Current release checkpoint: v0.1.18 was published to the Marketplace stable release channel from `251cfec` on October 10, 2026; public listing refresh and validation are pending. Prerelease 0.1.17 remains on the prerelease channel.
+Current release checkpoint: v0.1.19 is the authorized prerelease candidate, bumped to `preview: true` for the prerelease channel; see the 0.1.19 section below for its packaging and publication record. v0.1.18 remains on the Marketplace stable release channel from `251cfec`, and prerelease 0.1.17 preceded 0.1.19 on the prerelease channel.
 
 ## Version policy
 
@@ -81,3 +81,10 @@ At 04:22 UTC on October 7, the Marketplace reported version 0.1.12 with the prer
 - Published with `vsce publish --packagePath target-installer/t3-vscode-0.1.18.vsix`; vsce reported success.
 - VSIX SHA-256: `6745637546405b2f84330a080df0428ae907529c4d311c8252cc551938078de5`, recorded in `target-installer/t3-vscode-0.1.18.vsix.sha256`.
 - Post-publish Marketplace readback (`vsce show --json`) still listed prerelease 0.1.17 as the latest entry, with 0.1.16 and 0.1.15 stable; the 0.1.18 listing is not yet visible, so its listed checksum, channel and validation are not yet confirmed. Marketplace installation was not tested.
+
+## 0.1.19 prerelease-channel publication
+
+- The owner explicitly authorized publication of **0.1.19** to the Marketplace prerelease channel on **October 10, 2026**; the authorization does not extend to the stable release channel or to any other version.
+- A third round of fresh-context regression review compared the final usage-refresh change set with published baseline `7e19b2d` and returned no blocking findings, so the candidate was cleared for packaging. Its remaining notes are non-blocking: an account whose instance list is empty still triggers an untargeted sweep, an active-but-uninstalled instance is still preferred as the refresh target, and the setting description does not mention the display pause. These are recorded here rather than changed in this candidate.
+- Bumped the manifest to 0.1.19 and set `preview: true`, which is what makes `scripts/package-vsix.mjs` pass `--pre-release`.
+- Packaging and publication details are recorded below once the candidate is built and uploaded.

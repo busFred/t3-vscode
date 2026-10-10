@@ -2,7 +2,7 @@
   "name": "t3-vscode",
   "displayName": "T3 VSCode",
   "description": "Alpha client for local T3 Code servers: workspace sessions, editor chat, rich messages and account usage.",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "publisher": "hungtienhuang",
   "repository": {
     "type": "git",
@@ -234,10 +234,10 @@
           },
           "t3-vscode.usage.refreshIntervalSeconds": {
             "type": "number",
-            "default": 60,
+            "default": 300,
             "minimum": 0,
             "scope": "window",
-            "markdownDescription": "How often, in seconds, to refresh provider usage for the status bar meters while connected. Usage is also refreshed once when T3 VSCode connects. Values from 1 to 14 are raised to 15; `0` disables periodic refresh. Changes apply immediately.",
+            "markdownDescription": "How often, in seconds, to refresh provider usage for the status bar meters while connected. Usage is also refreshed once when T3 VSCode connects. A refresh that falls due while a message is being sent or a response is running waits for the session to go idle, so it is far less likely to delay your messages; one is forced through once the meters are five intervals stale. Values from 1 to 14 are raised to 15; `0` disables periodic refresh. Changes apply immediately.",
             "order": 3
           }
         }
@@ -339,7 +339,7 @@
     "vite-plugin-css-injected-by-js": "^3.5.2"
   },
   "icon": "resources/t3-extension.png",
-  "preview": false,
+  "preview": true,
   "license": "MIT",
   "homepage": "https://github.com/busFred/t3-vscode#readme",
   "bugs": {
