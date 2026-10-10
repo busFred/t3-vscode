@@ -37,7 +37,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.1.13 |
 | [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.1.13 |
-| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection. | v0.0.7 | v0.0.9 |
+| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | Unreleased (after v0.1.18) |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.0.5 |
 | [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.12 |
 | [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.11 |
@@ -685,6 +685,11 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Open sidebar Account & Usage for the clicked meter’s account.
 - Show only reported month/week/session percentages, name a single reported window in full and explain missing data on hover.
 - Remove the status-bar ellipsis and point to Configure Status Meters in the Command Palette.
+
+#### Unreleased (after v0.1.18)
+
+- Refresh provider usage automatically once the extension connects, so meters no longer show `Usage unavailable` until a manual refresh, and again on reconnect.
+- Add `t3-vscode.usage.refreshIntervalSeconds` (default 60, minimum 15; `0` disables periodic refresh) under Usage settings. Changes restart the timer immediately and the timer is disposed with the extension.
 
 ## VS Code integration
 

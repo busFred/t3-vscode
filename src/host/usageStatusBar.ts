@@ -1,19 +1,24 @@
 import * as vscode from "vscode";
 import { formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
 import type { HostStateSnapshot } from "../shared/bridge.js";
+import { UsageRefreshScheduler } from "../shared/usageRefresh.js";
 import { accountWindows, meterLabels, meterText, selectedUsageAccounts, usageAccounts, type UsageAccount } from "../shared/usage.js";
 
 export class UsageStatusBar implements vscode.Disposable {
   private readonly items = new Map<string, vscode.StatusBarItem>();
   private readonly state: () => HostStateSnapshot;
   private readonly timer: ReturnType<typeof setInterval>;
-  constructor(state: () => HostStateSnapshot) {
+  private readonly refresher: UsageRefreshScheduler;
+  constructor(state: () => HostStateSnapshot, refresh: () => Promise<void>) {
     this.state = state;
     this.timer = setInterval(() => this.update(), 60_000);
+    this.refresher = new UsageRefreshScheduler(refresh);
   }
   update(): void {
     const state = this.state();
     const config = vscode.workspace.getConfiguration("t3-vscode");
+    this.refresher.configure(config.get<number>("usage.refreshIntervalSeconds", 60));
+    this.refresher.setReady(state.phase === "ready");
     const accounts = usageAccounts(state);
     const instanceId = state.threads.find((thread) => thread.id === state.activeThreadId)?.modelSelection.instanceId ?? state.draft.modelSelection?.instanceId;
     const selected = state.phase === "ready" ? selectedUsageAccounts(accounts, {
@@ -60,5 +65,5 @@ export class UsageStatusBar implements vscode.Disposable {
     await config.update("usage.pinnedAccounts", selected.filter((item) => item.key !== "follow").map((item) => item.key), vscode.ConfigurationTarget.Global);
     this.update();
   }
-  dispose(): void { clearInterval(this.timer); for (const item of this.items.values()) item.dispose(); this.items.clear(); }
+  dispose(): void { clearInterval(this.timer); this.refresher.dispose(); for (const item of this.items.values()) item.dispose(); this.items.clear(); }
 }

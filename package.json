@@ -231,6 +231,14 @@
             "scope": "window",
             "markdownDescription": "Accounts to keep in the status bar alongside the active conversation. Use [Configure Status Meters](command:t3-vscode.configureUsage) to choose accounts. Each account has its own meter; only reported quota windows are shown.",
             "order": 2
+          },
+          "t3-vscode.usage.refreshIntervalSeconds": {
+            "type": "number",
+            "default": 60,
+            "minimum": 0,
+            "scope": "window",
+            "markdownDescription": "How often, in seconds, to refresh provider usage for the status bar meters while connected. Usage is also refreshed once when T3 VSCode connects. Values from 1 to 14 are raised to 15; `0` disables periodic refresh. Changes apply immediately.",
+            "order": 3
           }
         }
       },
