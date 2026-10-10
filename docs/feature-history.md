@@ -1259,3 +1259,11 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Apply the reviewer's non-blocking notes: label the resize fix as v0.1.18 and record the internal Markdown renderer change under Markdown and media.
 - Build the 41-file `target-installer/t3-vscode-0.1.18.vsix` (2,635,047 bytes) with `preview: true` and the prerelease property; verify its manifest version, publisher, exact host/webview/Mermaid/math bundles, notices, 20 math fonts and three screenshots.
 - Record SHA-256 `72d8c71fc7eba97893f13bd921ddd6ae014f87c4d9a658e07c1d8e9345d59156` in its sidecar; the installer is local, unpublished and uninstalled.
+
+### Unreleased — automatic usage refresh verification
+
+- Add automatic usage-meter refresh (`f48d263`) on top of the reviewed 0.1.18 candidate `5600ec6`; the manifest stays v0.1.18 and nothing is published or installed.
+- Obtain fresh-context independent regression approval comparing `f48d263` with `5600ec6`, with no blocking findings.
+- Pass TypeScript checking and all 204 deterministic tests.
+- Build the 41-file `target-installer/t3-vscode-0.1.18-usage-refresh.vsix` (2,635,894 bytes) under a distinguishable name so the reviewed `t3-vscode-0.1.18.vsix` is not overwritten.
+- Record SHA-256 `50b8b73c9c67f9cb6eabd30b6d9c55075c18f5ed46d4313c34bdd97312194316` in its sidecar; the installer is local, unreleased and uninstalled.
