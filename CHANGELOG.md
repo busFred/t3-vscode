@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.18 — Alpha, unpublished
+
+- Fix chat rows occasionally drawing over each other while a reply streams, such as a new question or response header covering the end of an earlier response with images.
+- Include the earlier unpublished resize fix: clear leftover blank space below the last response after resizing a session.
+- Pass 200 deterministic tests, TypeScript checking, full builds and the deterministic browser suites, including a new streaming-overlap check that fails before the fix. Fresh-context regression review and packaging are pending.
+
 ## 0.1.17 — Alpha prerelease
 
 - Show one changes box per response only when the agent made file changes; hide empty, loading and unavailable diff placeholders.

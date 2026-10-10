@@ -2,7 +2,7 @@
 
 Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner authorized the stable release upload of **0.1.16** on October 8, 2026, and explicitly authorized prerelease **0.1.17** on October 9, 2026.
 
-Current release checkpoint: v0.1.17 adds agent-only response diffs and has been accepted for Marketplace prerelease publication; public listing refresh and validation are pending.
+Current release checkpoint: v0.1.17 adds agent-only response diffs and has been accepted for Marketplace prerelease publication; public listing refresh and validation are pending. The manifest was raised to 0.1.18 on request for the later transcript resize and streaming-overlap fixes; it is unpackaged and not authorized for publication.
 
 ## Version policy
 

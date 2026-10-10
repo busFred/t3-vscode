@@ -1,6 +1,6 @@
 # T3 VSCode
 
-**0.1.17 (Alpha) — local installer, unpublished.** This build shows one agent-only changes box per response, hides empty/manual-edit diffs. Version 0.1.16 was published to the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode).
+**0.1.18 (Alpha) — local candidate, unpublished.** This build keeps chat rows from overlapping while replies stream and clears leftover space after resizing. Version 0.1.16 is published on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) release channel and 0.1.17 on its prerelease channel.
 
 A VS Code client for a separately running [T3 Code](https://github.com/pingdotgg/t3code) server. T3 VSCode adds a workspace session manager and chat in editor tabs. Colors follow your VS Code theme; the extension host owns connection, authentication and shared conversation state.
 
@@ -89,7 +89,7 @@ For building from source, see [Development and testing](docs/development.md#buil
 In the VS Code window/profile where you want to use it, open **Extensions → ⋯ → Install from VSIX…**, choose that file, then reload the window if prompted. For an isolated preview installation, the CLI example uses separate user, extension and shared storage:
 
 ```sh
-code --user-data-dir /tmp/t3-vscode-preview/user-data --extensions-dir /tmp/t3-vscode-preview/extensions --shared-data-dir /tmp/t3-vscode-preview/shared-data --install-extension ./target-installer/t3-vscode-0.1.17.vsix
+code --user-data-dir /tmp/t3-vscode-preview/user-data --extensions-dir /tmp/t3-vscode-preview/extensions --shared-data-dir /tmp/t3-vscode-preview/shared-data --install-extension ./target-installer/t3-vscode-0.1.18.vsix
 ```
 
 The installed extension normally discovers your already-running T3 service under `~/.t3`. Leave **T3 VSCode: T3 Home** empty to use that default; an explicit setting or `T3CODE_HOME` overrides it. Packaging does not install the extension or start a server.
