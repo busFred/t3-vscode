@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.19 — Alpha prerelease
+
+- Stop the periodic usage refresh from delaying sent messages. A refresh that falls due while a message is being sent or a response is running now waits for the session to go idle instead of competing with it, and is forced through only once the meters are five intervals stale.
+- Refresh just the provider behind a single displayed meter instead of every configured provider; keep sweeping every provider when several meters are shown, so pinned accounts still advance.
+- Pause automatic refreshes while no meter is displayed, and run the waiting refresh as soon as one appears instead of an interval later. Account & Usage then updates only when you refresh it.
+- Spread each refresh with up to 20% random jitter, and raise the `t3-vscode.usage.refreshIntervalSeconds` default from 60 to 300 seconds. An interval you have already set is unchanged.
+- Pass 222 deterministic tests, TypeScript checking and full builds. Fresh-context regression review found nothing blocking across three rounds. The first round's two behaviour findings (a swallowed connect refresh and starved pinned meters) are resolved above, and its optional suggestions are applied: a reconnect or a reappearing meter during a hung refresh is no longer swallowed by that refresh completing, and the archived-session and disabled-instance cases are now covered by tests. The third round reviewed that final state against `7e19b2d` and approved it; its remaining notes are non-blocking. Published to the Marketplace prerelease channel.
+
 ## 0.1.18 — Release
 
 - Fix chat rows occasionally drawing over each other while a reply streams, such as a new question or response header covering the end of an earlier response with images.

@@ -2,7 +2,7 @@
 
 This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
-The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The v0.1.17 prerelease adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly authorized publication of v0.1.17 to the Marketplace prerelease channel. v0.1.18 is published to the Marketplace release channel from `251cfec`, with the transcript resize-padding, streaming row-overlap and automatic usage-refresh changes. See the release verification entries below for earlier installers and publication history.
+The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The v0.1.17 prerelease adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly authorized publication of v0.1.17 to the Marketplace prerelease channel. v0.1.18 is published to the Marketplace release channel from `251cfec`, with the transcript resize-padding, streaming row-overlap and automatic usage-refresh changes. v0.1.19 is the newest state: the owner explicitly authorized its publication to the Marketplace prerelease channel, and it keeps that background usage refresh from delaying sent messages. See the release verification entries below for earlier installers and publication history.
 
 ## Overview
 
@@ -37,7 +37,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.1.13 |
 | [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.1.13 |
-| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.1.18 |
+| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.1.19 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.0.5 |
 | [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.12 |
 | [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.11 |
@@ -690,6 +690,17 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 
 - Refresh provider usage automatically once the extension connects, so meters no longer show `Usage unavailable` until a manual refresh, and again on reconnect.
 - Add `t3-vscode.usage.refreshIntervalSeconds` (default 60, minimum 15; `0` disables periodic refresh) under Usage settings. Changes restart the timer immediately and the timer is disposed with the extension.
+
+#### v0.1.19
+
+- Keep a background refresh from delaying a message: defer any refresh that falls due while a view is sending or a live session is running, release it as soon as the host goes idle, and force one through once the meters are five intervals stale — five to six in practice, because the next tick carries jitter. Continuous work therefore never defers a refresh indefinitely. Busy never defers the first refresh after connecting, because empty meters are worth more than the wait, and a refresh already under way cannot be called back.
+- Raise the `t3-vscode.usage.refreshIntervalSeconds` default from 60 to 300 seconds; an interval already set in settings is unchanged. The default was 60 when the setting was introduced in v0.1.18.
+- Spread each delay with up to 20% random jitter so a fixed cadence cannot keep landing on the same keystrokes. The effective wait is therefore one to 1.2 intervals.
+- Refresh only the provider instance behind a single displayed meter, preferring an installed and enabled instance of that account; sweep every instance whenever several meters are shown, because a targeted refresh advances only the instance it names. Explicit refreshes — the Account & Usage button and the provider setup check — always rediscover every instance.
+- Pause automatic refreshes while no meter is displayed and hold the due refresh rather than consuming it, so the connect refresh still runs the moment a meter appears. Account & Usage, which lists every account, then updates only on its own refresh action.
+- Scope the busy signal to unarchived threads, so a stale `activeRunId` on an archived session cannot defer refreshes indefinitely.
+- Treat a reconnect, or a meter reappearing, as a request a completing refresh cannot satisfy, so a hung refresh never swallows the next one. An ordinary interval tick that arrives mid-refresh is still satisfied by it and never runs back to back.
+- Verified against `7e19b2d` by three rounds of fresh-context regression review, which found nothing blocking; the third round reviewed the final state, including the reconnect and reappearing-meter handling, and its remaining notes are non-blocking. 222 deterministic tests, TypeScript checking and full builds pass.
 
 ## VS Code integration
 
