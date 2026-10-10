@@ -5,3 +5,4 @@ dist-spike/
 /target-installer/
 .t3/
 .plans/
+.claude/
