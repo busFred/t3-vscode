@@ -21,7 +21,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.1.21 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched new chats and rejected first-send threads. | v0.0.8 | v0.1.13 |
 | [Compact composer](#compact-composer) | Permanent toolbar and compact controls inside the message box. | v0.0.1 | v0.1.22 |
-| [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.1.20 |
+| [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.1.22 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.21 |
@@ -386,6 +386,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 - Insert a chosen `@` path as the same plain `@path` token the editor uses, with a removable chip, instead of a Markdown link with no reference behind it.
 - Open the chosen file from its draft token, its chip or the sent message. Directories reveal in the Explorer; see [Native file links](#native-file-links).
+
+#### v0.1.22
+
+- Open a draft token with Ctrl/Cmd+click rather than a plain click, so a chosen path can be retyped by hand to reach a file the suggestions cannot offer. The chip and the sent message are unchanged. See [Compact composer](#compact-composer).
 - Label the token with the workspace-relative path, so files that share a name stay distinguishable.
 
 The [read-only file-reference investigation](file-reference-investigation.md) explains current directory-search limits and the proposed Tab/Enter split; those proposals are not implemented.

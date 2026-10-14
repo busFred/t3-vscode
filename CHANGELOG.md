@@ -3,6 +3,8 @@
 ## 0.1.22 — Unpublished
 
 - Open a reference in the message box with Ctrl+click (Cmd on macOS) rather than a plain click, and hold Ctrl to see the caret turn into a pointer. A plain click now only moves the caret, so a path can be retyped by hand — a file the suggestion list will never offer, such as one that is gitignored. This applies to file references, image references and quote tokens alike.
+- Pass 256 deterministic tests, TypeScript checking, full builds and both headless browser suites. Fresh-context regression review verified every gesture in a real browser — plain, Ctrl, Cmd, middle, right, drag-select and double-click across all three reference kinds — and confirmed the new assertions fail against the previous behaviour. Its one blocking finding was documentation: the user guide still told readers to click an inline reference, which this release made inert. Also fixed from its notes: the accessible description named Ctrl on macOS, and the pointer cursor appeared on a disabled message box.
+- Known behaviour change: a plain click inside an `@path` token leaves the caret in the token, so the suggestion menu opens for that partial path. That is useful when retyping a path, but it is new — the click used to navigate away instead.
 
 ## 0.1.21 — Alpha prerelease
 

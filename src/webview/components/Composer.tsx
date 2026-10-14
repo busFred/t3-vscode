@@ -28,6 +28,7 @@ import { ComposerFormatting } from "./ComposerFormatting";
 
 const runtimeLabels: Record<string, string> = { "approval-required": "Ask permission", "auto-accept-edits": "Auto-accept edits", auto: "Auto", "full-access": "Full access" };
 const steerShortcut = navigator.userAgent.includes("Mac") ? "Cmd+Enter" : "Ctrl+Enter";
+const openModifier = navigator.userAgent.includes("Mac") ? "Cmd" : "Ctrl";
 /** Native editing commands keep a programmatic change in the focused input's own undo stack; `setRangeText` is the last resort and does not. */
 function insertNatively(input: HTMLTextAreaElement, start: number, end: number, value: string): void {
   const before = input.value; input.setSelectionRange(start, end);
@@ -318,7 +319,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         </div>)}
       </div> : null}
       {attachmentError ? <div className="composer-attachment-error" role="alert">{attachmentError}</div> : null}
-      <textarea ref={textarea} data-opening={opening || undefined} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description="Ctrl+click a file reference to open its source, an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor. A plain click only moves the caret, so a reference can be edited by hand." disabled={disabled || picking} rows={2}
+      <textarea ref={textarea} data-opening={opening || undefined} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description={`${openModifier}+click a file reference to open its source, an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor. A plain click only moves the caret, so a reference can be edited by hand.`} disabled={disabled || picking} rows={2}
         onBlur={(event) => onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })}
         onClick={(event) => {
           // Opening a reference moves the focus away, so the caret it was opened from is remembered here rather than on blur.
