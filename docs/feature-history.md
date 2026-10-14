@@ -20,7 +20,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.1.21 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched new chats and rejected first-send threads. | v0.0.8 | v0.1.13 |
-| [Compact composer](#compact-composer) | Permanent toolbar and compact controls inside the message box. | v0.0.1 | v0.1.21 |
+| [Compact composer](#compact-composer) | Permanent toolbar and compact controls inside the message box. | v0.0.1 | v0.1.22 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.1.20 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
@@ -354,6 +354,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 #### v0.1.21
 
 - Keep native undo and redo working across programmatic edits. Pasting an image, inserting a quote, editing a quote's comment, picking a suggestion and adding an editor reference all replaced the whole message box, which destroyed its history; each is now replayed as a single edit the browser can undo.
+
+#### v0.1.22
+
+- Require Ctrl/Cmd+click to open a reference in the message box, and show a pointer cursor while that modifier is held. A plain click only places the caret, so a path can be edited by hand to reach a file the suggestion list cannot offer, such as a gitignored one. Previously any click jumped away, and v0.1.20 extended that to paths chosen from the `@` menu, which made it harder rather than easier.
 
 ### Markdown composer tools
 

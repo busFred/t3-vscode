@@ -347,7 +347,11 @@ try {
   assert.equal(await second.locator(".context-chip").count(), 0);
   await selectInView(second, "second");
   assert.equal(await quoteInput.inputValue(), inlineText);
+  // A plain click inside a reference must only move the caret, so the path or label can be retyped by hand.
   await quoteInput.evaluate((input, position) => { (input as HTMLTextAreaElement).setSelectionRange(position, position); input.dispatchEvent(new MouseEvent("click", { bubbles: true })); }, quoteReference.start + 3);
+  assert.equal(await second.getByRole("textbox", { name: "Comment on selected text" }).count(), 0, "A plain click must not open the reference");
+  assert.equal(await quoteInput.evaluate((input) => (input as HTMLTextAreaElement).selectionStart), quoteReference.start + 3);
+  await quoteInput.evaluate((input, position) => { (input as HTMLTextAreaElement).setSelectionRange(position, position); input.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true })); }, quoteReference.start + 3);
   await second.getByRole("textbox", { name: "Comment on selected text" }).fill("Changed comment");
   await second.getByRole("button", { name: "Cancel", exact: true }).click();
   assert.ok((await second.locator(".context-label").getAttribute("title"))?.includes("Explain why"));

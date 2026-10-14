@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.22 — Unpublished
+
+- Open a reference in the message box with Ctrl+click (Cmd on macOS) rather than a plain click, and hold Ctrl to see the caret turn into a pointer. A plain click now only moves the caret, so a path can be retyped by hand — a file the suggestion list will never offer, such as one that is gitignored. This applies to file references, image references and quote tokens alike.
+
 ## 0.1.21 — Alpha prerelease
 
 - Render fenced code with a line-number gutter, optional soft wrap and a copy button. A wrapped line keeps its single number and the next line starts below the whole wrapped block, as a text editor does; wrap is per block, defaults on, and survives scrolling the block out of view. The header names the language in full — Python, TypeScript, LaTeX — or says Plain text for an unnamed fence.

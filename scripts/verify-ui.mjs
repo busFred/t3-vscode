@@ -354,7 +354,10 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.getByRole('button', { name: 'Preview clipboard.png', exact: true }).waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('.composer-attachment img')].some(image => image.complete && image.naturalWidth > 0));
   assert.match(await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue(), /^Compare here!\[clipboard\.png\]\(t3-context:\/\/v1\/image\/image_[a-z0-9_-]+\) then explain\.$/);
+  // A plain click only moves the caret, so an image reference can be retyped by hand; Ctrl+click previews it.
   await page.getByRole('textbox', { name: 'Message', exact: true }).evaluate(element => { element.setSelectionRange(30, 30); element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  assert.equal(await page.getByRole('dialog', { name: 'clipboard.png', exact: true }).count(), 0, 'A plain click must not open the image preview');
+  await page.getByRole('textbox', { name: 'Message', exact: true }).evaluate(element => { element.setSelectionRange(30, 30); element.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true })); });
   await page.getByRole('dialog', { name: 'clipboard.png', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Close preview', exact: true }).click();
   await page.getByRole('button', { name: 'Attach files', exact: true }).click();

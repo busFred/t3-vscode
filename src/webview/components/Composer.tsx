@@ -67,6 +67,14 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const controls = useRef<HTMLDivElement>(null);
   const overflow = useRef<HTMLDetailsElement>(null);
   const [compactControls, setCompactControls] = useState(false);
+  // Holding Ctrl/Cmd turns the caret into a pointer, so it is visible that a click will open rather than edit.
+  const [opening, setOpening] = useState(false);
+  useEffect(() => {
+    const track = (event: KeyboardEvent) => setOpening(event.ctrlKey || event.metaKey);
+    const clear = () => setOpening(false);
+    window.addEventListener("keydown", track); window.addEventListener("keyup", track); window.addEventListener("blur", clear);
+    return () => { window.removeEventListener("keydown", track); window.removeEventListener("keyup", track); window.removeEventListener("blur", clear); };
+  }, []);
   const run = useActions();
   const thread = state.threads.find((item) => item.id === state.activeThreadId);
   const selection = thread?.modelSelection ?? state.draft.modelSelection;
@@ -310,13 +318,15 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         </div>)}
       </div> : null}
       {attachmentError ? <div className="composer-attachment-error" role="alert">{attachmentError}</div> : null}
-      <textarea ref={textarea} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description="Click a file reference to open its source, an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor." disabled={disabled || picking} rows={2}
+      <textarea ref={textarea} data-opening={opening || undefined} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description="Ctrl+click a file reference to open its source, an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor. A plain click only moves the caret, so a reference can be edited by hand." disabled={disabled || picking} rows={2}
         onBlur={(event) => onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })}
         onClick={(event) => {
           // Opening a reference moves the focus away, so the caret it was opened from is remembered here rather than on blur.
           onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd });
           if (event.currentTarget.selectionStart !== event.currentTarget.selectionEnd) return;
-          activateInlineReference(event.currentTarget.selectionStart);
+          // A plain click only places the caret, so a path can be retyped by hand — a file the suggestion
+          // list will never offer, such as one that is gitignored. Ctrl/Cmd+click opens it instead.
+          if (event.ctrlKey || event.metaKey) activateInlineReference(event.currentTarget.selectionStart);
         }}
         onPaste={(event) => {
           const files = event.clipboardData.files.length ? [...event.clipboardData.files] : [...event.clipboardData.items].map((item) => item.kind === "file" ? item.getAsFile() : null).filter((file): file is File => file !== null);
