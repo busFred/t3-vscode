@@ -118,7 +118,8 @@ async function selectAssistantText(page: Page, text: string) {
   })()`) as { start: { x: number; y: number }; end: { x: number; y: number } };
   await page.mouse.move(points.start.x, points.start.y); await page.mouse.down();
   await page.mouse.move(points.end.x, points.end.y, { steps: 8 }); await page.mouse.up();
-  await page.getByRole("button", { name: "Cite selection in composer" }).waitFor();
+  await page.getByRole("button", { name: "Quote selection in composer" }).waitFor();
+  return points;
 }
 async function checkSessionFind(second: Page, third: Page, selectInView: (page: Page, id: string) => Promise<void>) {
   // Search pages older history separately and reveals one result without replacing the draft.
@@ -331,7 +332,10 @@ try {
   for (let index = 0; index < 7; index++) await quoteInput.press("ArrowRight");
   for (let index = 0; index < 7; index++) await quoteInput.press("Shift+ArrowRight");
   await selectAssistantText(second, "reply in second conversation");
-  await second.getByRole("button", { name: "Cite selection in composer" }).click();
+  await second.getByRole("button", { name: "Quote selection in composer" }).click();
+  // Quote never prompts, wherever it is invoked from; the comment is added afterwards from the chip.
+  assert.equal(await second.getByRole("textbox", { name: "Comment on selected text" }).count(), 0, "Quote must not open the comment editor");
+  await second.getByRole("button", { name: "❝1 “reply in second conversation”", exact: true }).click();
   await second.getByRole("textbox", { name: "Comment on selected text" }).fill("Explain why this stays in the second tab.");
   await second.getByRole("button", { name: "Save", exact: true }).click();
   await second.getByRole("button", { name: "❝1 Explain why this stays in the second tab.", exact: true }).waitFor();
@@ -383,6 +387,30 @@ try {
   assert.ok(!message.text.includes("t3-context://v1/assistant-quote"));
   assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in third tab");
   await second.getByRole("textbox", { name: "Message", exact: true }).fill("Draft after sending references");
+  // A stray click dismisses the floating button while leaving the selection: the context menu is how that quote comes back.
+  const stillSelected = await selectAssistantText(second, "reply in second conversation");
+  await second.getByRole("button", { name: "Copy message", exact: true }).click();
+  await second.waitForFunction(() => !document.querySelector(".citation-selection-button"));
+  assert.equal(await second.evaluate(() => window.getSelection()?.toString()), "reply in second conversation", "A click on a transcript control keeps the selection the dismissed button could have quoted");
+  await second.mouse.click(stillSelected.start.x + 2, stillSelected.start.y, { button: "right" });
+  await second.getByRole("menu", { name: "Selected text", exact: true }).waitFor();
+  assert.deepEqual(await second.getByRole("menuitem").allTextContents(), ["Copy", "Quote", "Quote with comment"], "Copy leads, then quoting with and without a comment");
+  await second.screenshot({ path: `${evidence}/selection-context-menu.png` });
+  await second.keyboard.press("Escape");
+  await second.waitForFunction(() => !document.querySelector(".selection-context-menu"));
+  // Shift+F10 reaches the same menu, and its Quote inserts straight into the draft rather than opening the comment editor.
+  await second.keyboard.press("Shift+F10");
+  await second.getByRole("menuitem", { name: "Quote", exact: true }).click();
+  await second.getByRole("button", { name: "\u275d1 \u201creply in second conversation\u201d", exact: true }).waitFor();
+  assert.equal(await second.getByRole("textbox", { name: "Comment on selected text" }).count(), 0, "Quote must insert without a dialog");
+  const menuQuoted = await second.getByRole("textbox", { name: "Message", exact: true }).inputValue();
+  const menuReference = collectComposerContextReferences(menuQuoted).find((reference) => reference.kind === "assistant-quote");
+  assert.ok(menuReference, menuQuoted);
+  assert.equal(menuQuoted.slice(0, menuReference.start).trimEnd(), "Draft after sending references");
+  await second.waitForFunction(cursor => (document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.selectionStart === cursor, menuReference.end);
+  await second.getByRole("button", { name: "Remove reference 1", exact: true }).click();
+  await second.getByRole("textbox", { name: "Message", exact: true }).fill("Draft after sending references");
+  await second.waitForFunction(() => !document.querySelector(".context-chip"));
   // Global search crosses provider instances, while effort changes stay with this conversation.
   await second.getByRole("button", { name: "Choose model", exact: true }).click();
   await second.getByRole("textbox", { name: "Search models" }).fill("personal asra");

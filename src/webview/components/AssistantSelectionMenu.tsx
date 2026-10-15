@@ -1,0 +1,88 @@
+import { EnvironmentId, MessageId, ThreadId, type AssistantCitation } from "@t3tools/contracts";
+import { CopyIcon, MessageSquareQuoteIcon, QuoteIcon } from "lucide-react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useActions } from "../actions";
+import { assistantQuoteMenuItems, clampMenuPosition, QUOTE_TOO_LONG_LABEL, type AssistantQuoteMenuAction } from "../../shared/assistantQuoteMenu";
+import { captureAssistantTextSelection, type AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
+
+/** The citation a live selection stands for, read the same way for both entry points so they cannot capture different spans. */
+export function captureSelectedCitation(viewport: HTMLElement, selection: Selection | null): { citation: AssistantCitation; anchor: AssistantCitationSourceAnchor; range: Range } | null {
+  const captured = captureAssistantTextSelection(viewport, selection);
+  const dataset = captured?.source.dataset;
+  if (!captured || !dataset?.assistantCitationSource || !dataset.assistantCitationEnvironment || !dataset.assistantCitationThread) return null;
+  return { citation: { version: 1, environmentId: EnvironmentId.make(dataset.assistantCitationEnvironment), threadId: ThreadId.make(dataset.assistantCitationThread), messageId: MessageId.make(dataset.assistantCitationSource), ...captured.selector },
+    anchor: { source: captured.source, range: captured.range, viewport }, range: captured.range };
+}
+
+const ICONS = { copy: CopyIcon, quote: QuoteIcon, comment: MessageSquareQuoteIcon } as const;
+
+/**
+ * Quoting from the transcript's own context menu, so a stray click that dismissed the floating button does not
+ * cost the selection. Reads the selection when the menu opens rather than tracking it: `observeSelectionActions`
+ * deliberately cancels on right-click, and this surface has no reason to keep that state alive.
+ */
+export function AssistantSelectionMenu({ viewport, onQuote, onComment }: { readonly viewport: HTMLElement | null; readonly onQuote: (citation: AssistantCitation) => void; readonly onComment: (citation: AssistantCitation, anchor: AssistantCitationSourceAnchor) => void }) {
+  const run = useActions(); const menu = useRef<HTMLDivElement>(null);
+  const [target, setTarget] = useState<{ citation: AssistantCitation; anchor: AssistantCitationSourceAnchor; x: number; y: number } | null>(null);
+  const [location, setLocation] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!viewport) return;
+    const show = (event: MouseEvent) => {
+      // Equations keep the math menu, whose handler shares this document and capture phase: yielding by target
+      // and by defaultPrevented fixes that precedence here rather than leaving it to listener registration order.
+      if (event.defaultPrevented || !(event.target instanceof Node) || !viewport.contains(event.target)) return;
+      if (event.target instanceof Element && event.target.closest(".katex")) return;
+      const captured = captureSelectedCitation(viewport, window.getSelection());
+      // Without a citable selection the native menu stays: suppressing it would take the platform's copy with it.
+      if (!captured) return;
+      event.preventDefault();
+      setTarget({ citation: captured.citation, anchor: captured.anchor, x: event.clientX, y: event.clientY });
+    };
+    const keys = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+      const captured = captureSelectedCitation(viewport, window.getSelection());
+      if (!captured) return;
+      event.preventDefault(); event.stopPropagation();
+      const rect = captured.range.getBoundingClientRect();
+      setTarget({ citation: captured.citation, anchor: captured.anchor, x: rect.left, y: rect.bottom + 4 });
+    };
+    document.addEventListener("contextmenu", show, true); document.addEventListener("keydown", keys, true);
+    return () => { document.removeEventListener("contextmenu", show, true); document.removeEventListener("keydown", keys, true); };
+  }, [viewport]);
+  useLayoutEffect(() => {
+    const element = menu.current;
+    if (!target || !element) { setLocation(null); return; }
+    const previous = document.activeElement;
+    const box = element.getBoundingClientRect();
+    setLocation(clampMenuPosition(target, { width: box.width, height: box.height }, { width: window.innerWidth, height: window.innerHeight }));
+    element.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus({ preventScroll: true });
+    return () => { if ((document.activeElement === document.body || element.contains(document.activeElement)) && previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true }); };
+  }, [target]);
+  useEffect(() => {
+    if (!target) return;
+    const close = (event: PointerEvent) => { if (event.target instanceof Node && !menu.current?.contains(event.target)) setTarget(null); };
+    const dismiss = () => setTarget(null);
+    document.addEventListener("pointerdown", close); window.addEventListener("blur", dismiss); window.addEventListener("resize", dismiss);
+    viewport?.addEventListener("scroll", dismiss, true);
+    return () => { document.removeEventListener("pointerdown", close); window.removeEventListener("blur", dismiss); window.removeEventListener("resize", dismiss); viewport?.removeEventListener("scroll", dismiss, true); };
+  }, [target, viewport]);
+  if (!target) return null;
+  const items = assistantQuoteMenuItems(target.citation.text.length);
+  const choose = (action: AssistantQuoteMenuAction) => {
+    if (action === "copy") void run("copyText", { text: target.citation.text });
+    else if (action === "quote") onQuote(target.citation);
+    else onComment(target.citation, target.anchor);
+    setTarget(null);
+  };
+  return createPortal(<div ref={menu} className="selection-context-menu" role="menu" aria-label="Selected text" style={{ left: (location ?? target).x, top: (location ?? target).y }} onKeyDown={(event) => {
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setTarget(null); return; }
+    const buttons = [...(menu.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === "ArrowDown" ? (current + 1) % buttons.length : event.key === "ArrowUp" ? (current - 1 + buttons.length) % buttons.length : event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : -1;
+    if (next >= 0) { event.preventDefault(); buttons[next]?.focus(); }
+  }}>{items.map((item) => { const Icon = ICONS[item.action]; return <Fragment key={item.action}>{item.separated ? <hr /> : null}
+    <button role="menuitem" disabled={item.disabled} onClick={() => choose(item.action)}><Icon size={13} />{item.label}</button></Fragment>; })}
+    {items.some((item) => item.disabled) ? <small>{QUOTE_TOO_LONG_LABEL}</small> : null}
+  </div>, document.body);
+}

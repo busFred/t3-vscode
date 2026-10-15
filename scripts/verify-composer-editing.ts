@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Page } from "playwright-core";
 import type { HostState } from "../src/host/hostState.js";
 
-export async function verifyComposerEditing(page: Page, other: Page, host: HostState, evidence: string, selectAssistantText: (page: Page, text: string) => Promise<void>) {
+export async function verifyComposerEditing(page: Page, other: Page, host: HostState, evidence: string, selectAssistantText: (page: Page, text: string) => Promise<unknown>) {
   const message = page.getByRole("textbox", { name: "Message", exact: true });
   const original = await message.inputValue(), otherDraft = await other.getByRole("textbox", { name: "Message", exact: true }).inputValue();
   const sidebarSelection = host.snapshot().activeThreadId;
@@ -95,17 +95,21 @@ export async function verifyComposerEditing(page: Page, other: Page, host: HostS
   await message.fill("Before replace after."); await message.focus();
   await message.evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(7, 14));
   await selectAssistantText(page, "reply in first conversation");
-  await page.getByRole("button", { name: "Cite selection in composer" }).click();
-  await page.getByRole("textbox", { name: "Comment on selected text" }).fill("Explain this");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await page.getByRole("button", { name: "\u275d1 Explain this", exact: true }).waitFor();
-  const quoted = await message.inputValue();
-  assert.ok(quoted.startsWith("Before ") && quoted.endsWith(" after."), quoted);
-  await focused(); await caretAt(quoted.indexOf(")") + 1);
+  await page.getByRole("button", { name: "Quote selection in composer" }).click();
+  // Quote never prompts, so the insertion is an undo step on its own, before any comment exists.
+  const inserted = await message.inputValue();
+  assert.ok(inserted.startsWith("Before ") && inserted.endsWith(" after."), inserted);
+  await focused(); await caretAt(inserted.indexOf(")") + 1);
   await message.press("Control+z"); await expected("Before replace after.");
   assert.equal(await page.locator(".composer-chip.context-chip").count(), 0, "a chip follows its token out of the draft");
-  await message.press("Control+y"); await expected(quoted);
-  await page.getByRole("button", { name: "\u275d1 Explain this", exact: true }).click();
+  await message.press("Control+y"); await expected(inserted);
+  await page.getByRole("button", { name: "❝1 “reply in first conversation”", exact: true }).click();
+  await page.getByRole("textbox", { name: "Comment on selected text" }).fill("Explain this");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "❝1 Explain this", exact: true }).waitFor();
+  const quoted = await message.inputValue();
+  assert.equal(quoted, inserted.replace("❝1 “reply in first conversation”", "❝1 Explain this"));
+  await page.getByRole("button", { name: "❝1 Explain this", exact: true }).click();
   await page.getByRole("textbox", { name: "Comment on selected text" }).fill("Updated comment");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: "\u275d1 Updated comment", exact: true }).waitFor();
@@ -114,7 +118,9 @@ export async function verifyComposerEditing(page: Page, other: Page, host: HostS
   await focused(); await caretAt(relabelled.indexOf(")") + 1);
   // The label sync leaves undone text alone, so history reaches the insertion rather than rewriting the label forever.
   await message.press("Control+z"); await expected(quoted);
+  await message.press("Control+z"); await expected(inserted);
   await message.press("Control+z"); await expected("Before replace after.");
+  await message.press("Control+y"); await expected(inserted);
   await message.press("Control+y"); await expected(quoted);
   await message.press("Control+y"); await expected(relabelled);
   await page.getByRole("button", { name: "Remove reference 1", exact: true }).click();

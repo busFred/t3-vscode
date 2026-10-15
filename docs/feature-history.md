@@ -40,7 +40,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.1.21 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.1.21 |
 | [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.20 |
-| [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.21 |
+| [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.22 |
 | [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.13 |
 | [Saved turn diffs](#saved-turn-diffs) | Shows one nonempty agent-only response diff; hides manual edits. | v0.0.6 | v0.1.17 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
@@ -851,6 +851,12 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 #### v0.1.21
 
 - Expand a quote automatically when a session-search result inside it is opened, and preview a message in the navigation rail as the transcript renders it rather than as the stored text.
+
+#### v0.1.22
+
+- Offer Copy, Quote and Quote with comment when selected response text is right-clicked, or Shift+F10 / the Menu key is pressed, so a stray click that dismissed the floating button no longer costs the selection. Equations keep the math menu, and a selection that cannot be quoted keeps the platform's own menu.
+- Insert a quote immediately from the menu's Quote, without the comment editor; the comment is still added later from the chip or the draft token. Quote with comment keeps the editor, which is what the floating button opens.
+- Rename the floating button from Cite to Quote, so the two entry points share one name.
 
 ### Response forks
 

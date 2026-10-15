@@ -10,6 +10,7 @@ import { readDraft, updateDraft } from "../composerDrafts";
 import { insertAssistantQuote, syncAssistantQuoteLabels, type ComposerContext } from "../../shared/composerContext";
 import type { TextSelection } from "../../shared/composerAttachments";
 import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
+import { AssistantSelectionMenu } from "./AssistantSelectionMenu";
 import { CitationCommentEditor } from "./CitationCommentEditor";
 import type { AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 import { ThreadActionsMenu } from "./ThreadActionsMenu";
@@ -48,6 +49,28 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
   const [citationTarget, setCitationTarget] = useState<AssistantCitation | null>(null);
   useEffect(() => { setCommentTarget(null); setThreadMenu(null); composerSelection.current = undefined; }, [state.activeThreadId]);
   const run = useActions();
+  /** Where a new quote lands: the caret the composer last reported, or the end of that conversation's draft. */
+  const quoteTarget = useCallback(() => {
+    const draftKey = state.activeThreadId ?? "new"; const end = readDraft(draftKey).text.length;
+    return { draftKey, selection: composerSelection.current ?? { start: end, end } };
+  }, [state.activeThreadId]);
+  /** Returns the caret the insertion left, so the caller focuses the composer once the editor it may have opened is gone. */
+  const insertQuote = useCallback((citation: AssistantCitation, draftKey: string, selection?: TextSelection) => {
+    let cursor: number | undefined;
+    updateDraft(draftKey, (draft) => {
+      const context = { type: "assistant" as const, citation, contextId: quoteContextId(draft.contexts) };
+      const inserted = insertAssistantQuote(draft.text, context, selection ?? { start: draft.text.length, end: draft.text.length });
+      cursor = inserted.cursor;
+      return { ...draft, text: inserted.text, contexts: [...draft.contexts, context] };
+    }, "take-focus");
+    return cursor;
+  }, []);
+  const openComment = useCallback((citation: AssistantCitation, anchor: AssistantCitationSourceAnchor) => setCommentTarget({ citation, anchor, ...quoteTarget() }), [quoteTarget]);
+  const quote = useCallback((citation: AssistantCitation) => {
+    const { draftKey, selection } = quoteTarget();
+    const cursor = insertQuote(citation, draftKey, selection);
+    window.dispatchEvent(new CustomEvent("t3-focus-composer", { detail: { draftKey, cursor } }));
+  }, [quoteTarget, insertQuote]);
   useEffect(() => {
     const open = (event: Event) => {
       const citation = (event as CustomEvent<AssistantCitation>).detail;
@@ -84,24 +107,16 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
       <div className="chat-conversation" key="conversation">
       {thread?.relationshipToParent === "subagent" ? <div className="subagent-parent-bar">{parent ? <button className="subagent-parent-link" onClick={() => { void run("selectThread", { threadId: parent.id }); }}><ArrowLeftIcon size={12} /><BotIcon size={12} /><span>Subagent of · {parent.title || "Untitled"}</span></button> : <span>Subagent conversation · parent unavailable in this workspace</span>}</div> : null}
       <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} searchTarget={findOpen ? searchTarget : null} onNavigate={() => { setCitationTarget(null); setSearchTarget(null); }} />
-      <AssistantSelectionToolbar viewport={viewport} onCite={(citation, anchor) => {
-        const draftKey = state.activeThreadId ?? "new";
-        const end = readDraft(draftKey).text.length;
-        setCommentTarget({ citation, anchor, draftKey, selection: composerSelection.current ?? { start: end, end } });
-      }} />
+      {/* Quote inserts straight away wherever it appears; the comment stays editable from the chip or the draft token. */}
+      <AssistantSelectionToolbar viewport={viewport} onCite={quote} />
+      <AssistantSelectionMenu viewport={viewport} onComment={openComment} onQuote={quote} />
       <Composer key={state.activeThreadId ?? "draft"} state={state} onSelectionChange={rememberSelection} onUsage={() => { void run("showUsage"); }} onEditCitation={(citation, index) => setCommentTarget({ citation, index, draftKey: state.activeThreadId ?? "new" })} />
       {commentTarget ? <CitationCommentEditor key={`${commentTarget.citation.messageId}:${commentTarget.citation.start}:${commentTarget.index ?? "new"}`} citation={commentTarget.citation} anchor={commentTarget.anchor} onClose={() => setCommentTarget(null)} onSave={(comment) => {
         const context = { type: "assistant" as const, citation: withAssistantCitationComment(commentTarget.citation, comment) };
         let cursor: number | undefined;
         // Both branches hand the composer the focus the edit needs to stay in the textarea's undo history.
-        if (commentTarget.index === undefined) {
-          updateDraft(commentTarget.draftKey, (draft) => {
-            const inlineContext = { ...context, contextId: quoteContextId(draft.contexts) };
-            const inserted = insertAssistantQuote(draft.text, inlineContext, commentTarget.selection ?? { start: draft.text.length, end: draft.text.length });
-            cursor = inserted.cursor;
-            return { ...draft, text: inserted.text, contexts: [...draft.contexts, inlineContext] };
-          }, "take-focus");
-        } else updateDraft(commentTarget.draftKey, (draft) => {
+        if (commentTarget.index === undefined) cursor = insertQuote(context.citation, commentTarget.draftKey, commentTarget.selection);
+        else updateDraft(commentTarget.draftKey, (draft) => {
           // The edited comment is part of its token's label, so this rewrites it here rather than leaving it to the composer,
           // which would reach the textarea once the comment editor had already taken the focus a native edit needs.
           const contexts = draft.contexts.map((item, index) => index === commentTarget.index ? { ...item, ...context } : item);
