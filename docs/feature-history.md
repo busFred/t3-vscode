@@ -1473,3 +1473,11 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Pass TypeScript, webview builds and both complete isolated browser suites, including 12/16/20px band equality, header icon dimensions, scoped drawer behavior and narrow layouts. Earlier subagent validation passed all 262 deterministic tests and full builds.
 - Obtain fresh-context independent final approval against `fd1163a` with no blocking findings; the earlier subagent fix was independently approved against `21fff34`.
 - Rebuild the owner-requested v0.1.22 canonical VSIX after approval, retaining the previous installer in `target-installer/archive/`. Preserve existing prerelease metadata; no publishing or normal-profile installation.
+
+### v0.1.22 — stable Marketplace release
+
+- By explicit owner authorization, prepare and publish v0.1.22 to the stable Marketplace release channel; keep the version unchanged, set `preview: false` and omit the prerelease property.
+- Preserve the previously reviewed implementation and installer before preparing the stable package; only the channel metadata and release notes change.
+- Fresh-context review of the exact metadata delta against `43a2d5d` approved with no blocking findings; final package review also approved the 45-file VSIX and verified runtime assets are byte-identical to the archived preview package.
+- Pass package verification: embedded version `0.1.22`, publisher `hungtienhuang`, `preview: false`, no prerelease property and stable `Public` gallery flag. VSIX SHA-256 is `a69e70b331308c8197a3d3e2323ef1fa343d002b7b8f0e5e5c2ec887e06ee54e`; archived the prior prerelease artifact at `target-installer/archive/t3-vscode-0.1.22-prerelease.vsix`.
+- Publish successfully on October 17 with `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.1.22.vsix` after retrying outside the restricted network sandbox. The CLI confirms `Published hungtienhuang.t3-vscode v0.1.22`. The immediate public gallery query does not yet list 0.1.22, so Marketplace validation/propagation is still pending; the uploaded package is stable.

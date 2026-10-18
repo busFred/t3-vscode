@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.22 — Unpublished
+## 0.1.22 — Release
 
 - Use the standard icon-only Scheduled tasks header button, retaining its count in the tooltip. Match the Settled, Archive and settings row heights to the Sessions/Tasks tab strip at every interface font size.
 
