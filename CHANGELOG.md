@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.23 — Unpublished
+## 0.1.23 — Release
 
 - Quote selected user or assistant message text through the recoverable right-click menu. Quote opens the optional-comment editor; remove the floating Quote button and redundant Quote with comment action. Preserve user authorship in saved and sent quotes.
 
@@ -12,6 +12,7 @@
 - Fit the selected-text context menu to its content and use the editor foreground for menu and composer text, retaining theme placeholder and selection colors.
 
 - Same-version rebuild validation: 270 deterministic tests, TypeScript/build, both browser suites, isolated native VS Code preview/restoration checks and final independent regression review passed.
+- Published the verified `target-installer/t3-vscode-0.1.23.vsix` to the stable Marketplace channel on 2026-10-18. SHA-256: `6faaa1b5d1acda97075d96ec024a7a64041c26ebe2669bf1a3aded18fc41755a`. Upload succeeded; the immediate public listing readback still showed 0.1.22, so Marketplace indexing remains pending.
 
 ## 0.1.22 — Release
 
