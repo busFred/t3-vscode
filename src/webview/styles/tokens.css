@@ -607,7 +607,8 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .session-find[data-expanded="false"] { position: absolute; top: 4px; right: 5px; z-index: 30; width: min(620px, calc(100% - 10px)); max-height: none; border: 1px solid var(--input); border-radius: 3px; box-shadow: 0 3px 8px #0003; }
 @container (max-width: 440px) { .session-find-toolbar .find-case { display: none; } }
 .session-match-row { outline: 1px solid var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder)); outline-offset: 2px; }
-::highlight(t3-session-match) { background-color: var(--vscode-editor-findMatchBackground, #ea9e3288); color: var(--vscode-editor-foreground); }
+::highlight(t3-session-matches) { background-color: var(--vscode-editor-findMatchHighlightBackground, #e6b33b66); color: var(--vscode-editor-foreground); }
+::highlight(t3-session-match) { text-decoration: underline solid var(--vscode-editor-findMatchBorder, var(--ring)); background-color: var(--vscode-editor-findMatchBackground, #ea9e3288); color: var(--vscode-editor-foreground); }
 
 /* The same session rows serve the sidebar and each editor's local History picker. */
 .thread-sections { display: flex; flex-direction: column; flex: 1; min-height: 0; }

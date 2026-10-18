@@ -39,7 +39,7 @@ function SearchPreview({ preview, match, options, context, fontKey }: { preview?
   return <span className="find-preview-text" ref={element}>{lines ? lines.lines.map((line) => <span className="find-context-line" key={line.start}>{highlightLine(line)}</span>) : match.snippet}</span>;
 }
 
-export function SessionFind({ state, preferences, onPreferences, onClose, onSelect }: { state: HostStateSnapshot; preferences: SearchPreferences; onPreferences: (patch: Partial<SearchPreferences>) => void; onClose: () => void; onSelect: (target: SearchTarget | null) => void }) {
+export function SessionFind({ state, preferences, onPreferences, onClose, onSelect, onSearch }: { state: HostStateSnapshot; preferences: SearchPreferences; onPreferences: (patch: Partial<SearchPreferences>) => void; onClose: () => void; onSelect: (target: SearchTarget | null) => void; onSearch: (options: SessionSearchOptions | null) => void }) {
   const [query, setQuery] = useState(""), [caseSensitive, setCase] = useState(false), [wholeWord, setWord] = useState(false), [refresh, setRefresh] = useState(0);
   const [selected, setSelected] = useState<string | null>(null), [results, setResults] = useState(true);
   const [page, setPage] = useState(0);
@@ -72,6 +72,7 @@ export function SessionFind({ state, preferences, onPreferences, onClose, onSele
     return () => cancelAnimationFrame(frame);
   }, [selected, previews, preferences.contextLines, results]);
   useEffect(() => { input.current?.focus(); }, []);
+  useEffect(() => { onSearch(query ? options : null); }, [query, caseSensitive, wholeWord, sources, content, id, onSearch]);
   useEffect(() => {
     generation.current += 1; selecting.current += 1;
     setSelected(null); onSelect(null); setPage(0); setPreviews([]);

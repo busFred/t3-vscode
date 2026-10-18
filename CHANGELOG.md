@@ -2,6 +2,8 @@
 
 ## 0.1.22 — Unpublished
 
+- Highlight all rendered search matches inside messages and code, with a stronger active match, while preserving the existing search layout and refreshing highlights through scrolling and streaming.
+
 - Recover the last valid selected passage by right-clicking its source again after dismissal, even when the native selection has cleared. Copy as plain text and Copy as Markdown join the quote options; no permanent quote button is added.
 
 - Add a floating sort menu beside the Sessions + button for last-activity date or title, ascending or descending; remember the choice while preserving pinned sessions and the existing tree and shelves.

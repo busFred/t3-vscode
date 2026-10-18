@@ -26,6 +26,7 @@ export async function verifySearchPanel(page: Page, other: Page, host: HostState
   await page.getByRole("button", { name: "Find in session", exact: true }).click();
   await page.getByRole("textbox", { name: "Find in this session", exact: true }).fill("needle");
   await page.waitForFunction(() => document.querySelector(".find-count")?.textContent === "1/58");
+  await page.waitForFunction(() => [...(CSS.highlights.get('t3-session-matches') ?? [])].filter(range => range.toString() === 'needle').length >= 2);
   const job = host.snapshot("tab-two").sessionSearch;
   assert.equal(await page.locator('.find-group-heading, .find-entry-matches, .find-ellipsis').count(), 0);
   await page.getByRole("button", { name: "Search filters", exact: true }).click();
@@ -36,6 +37,7 @@ export async function verifySearchPanel(page: Page, other: Page, host: HostState
   await page.locator(".find-result").first().filter({ hasText: "LATER needle" }).waitFor();
   await page.locator(".find-result").nth(1).filter({ hasText: "needle CURRENT" }).click();
   await page.waitForFunction(() => document.querySelectorAll('.find-result[aria-current="true"] .find-context-line').length === 1);
+  await page.waitForFunction(() => [...(CSS.highlights.get('t3-session-match') ?? [])].some(range => range.toString() === 'needle'));
   await page.getByRole("button", { name: "Search filters", exact: true }).click();
   await filters.getByRole("combobox", { name: "Context lines", exact: true }).selectOption("2");
   await page.waitForFunction(() => document.querySelectorAll('.find-result[aria-current="true"] .find-context-line').length === 5);
@@ -109,6 +111,7 @@ export async function verifySearchPanel(page: Page, other: Page, host: HostState
   assert.equal(host.snapshot("tab-three").activeThreadId, "second");
   assert.equal(await other.getByRole("textbox", { name: "Message", exact: true }).inputValue(), otherDraft);
   await page.getByRole("button", { name: "Close session search", exact: true }).click();
+  await page.waitForFunction(() => !CSS.highlights.has('t3-session-matches') && !CSS.highlights.has('t3-session-match'));
   await host.setSearchPreferences({ layout: "above", contextLines: 1, order: "oldest", resultsHeight: 280 });
   await page.evaluate(() => { document.body.className = 'vscode-light'; for (const key of [...document.documentElement.style]) if (key.startsWith('--vscode-')) document.documentElement.style.removeProperty(key); });
   console.log("PASS: one row per occurrence, matching chat fonts, persistent filters, floating collapse, Side toggle from collapse, 728/340px layouts, chronology/pagination and unchanged drafts.");

@@ -1,3 +1,4 @@
+import type { SessionSearchOptions } from "../../shared/sessionSearch";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, GlobeIcon, BotIcon, ArrowLeftIcon, SearchIcon, HistoryIcon, PlusIcon, CalendarClockIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
@@ -37,9 +38,10 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
   const [creating, setCreating] = useState(false);
   const historyAnchor = useRef<HTMLButtonElement>(null);
   const closeHistory = useCallback(() => setHistoryOpen(false), []);
+  const [searchOptions, setSearchOptions] = useState<SessionSearchOptions | null>(null);
   const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
-  const closeFind = useCallback(() => { setFindOpen(false); setSearchTarget(null); }, []);
-  useEffect(() => { setFindOpen(false); setSearchTarget(null); setHistoryOpen(false); setScheduledOpen(false); }, [state.activeThreadId]);
+  const closeFind = useCallback(() => { setFindOpen(false); setSearchTarget(null); setSearchOptions(null); }, []);
+  useEffect(() => { setFindOpen(false); setSearchTarget(null); setSearchOptions(null); setHistoryOpen(false); setScheduledOpen(false); }, [state.activeThreadId]);
   const [threadMenu, setThreadMenu] = useState<{ x: number; y: number } | null>(null);
   const closeThreadMenu = useCallback(() => setThreadMenu(null), []);
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
@@ -103,10 +105,10 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
       {historyOpen && historyAnchor.current ? <SessionHistory state={state} anchor={historyAnchor.current} onClose={closeHistory} /> : null}
       {threadMenu && thread ? <ThreadActionsMenu thread={thread} position={threadMenu} onClose={closeThreadMenu} /> : null}
       <div className="chat-reading" data-find-layout={findOpen && thread ? searchPreferences.layout : undefined}>
-      {findOpen && thread ? <SessionFind key={`find:${thread.id}`} state={state} preferences={searchPreferences} onPreferences={setSearchPreferences} onClose={closeFind} onSelect={(target) => { setSearchTarget(target); if (target) setCitationTarget(null); }} /> : null}
+      {findOpen && thread ? <SessionFind key={`find:${thread.id}`} state={state} preferences={searchPreferences} onPreferences={setSearchPreferences} onClose={closeFind} onSearch={setSearchOptions} onSelect={(target) => { setSearchTarget(target); if (target) setCitationTarget(null); }} /> : null}
       <div className="chat-conversation" key="conversation">
       {thread?.relationshipToParent === "subagent" ? <div className="subagent-parent-bar">{parent ? <button className="subagent-parent-link" onClick={() => { void run("selectThread", { threadId: parent.id }); }}><ArrowLeftIcon size={12} /><BotIcon size={12} /><span>Subagent of · {parent.title || "Untitled"}</span></button> : <span>Subagent conversation · parent unavailable in this workspace</span>}</div> : null}
-      <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} searchTarget={findOpen ? searchTarget : null} onNavigate={() => { setCitationTarget(null); setSearchTarget(null); }} />
+      <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} searchTarget={findOpen ? searchTarget : null} searchOptions={findOpen ? searchOptions : null} onNavigate={() => { setCitationTarget(null); setSearchTarget(null); }} />
       {/* Quote inserts straight away wherever it appears; the comment stays editable from the chip or the draft token. */}
       <AssistantSelectionToolbar viewport={viewport} onCite={quote} />
       <AssistantSelectionMenu key={`${state.environment?.environmentId}:${state.activeThreadId}`} viewport={viewport} onComment={openComment} onQuote={quote} />

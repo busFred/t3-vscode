@@ -15,7 +15,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.0.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.0.6 |
-| [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.20 |
+| [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.1.13 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.1.21 |
@@ -259,6 +259,11 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 - Search a quoted message as the transcript renders it: the readable quote block is excluded and each citation reads as its quote and comment, so results, previews and occurrence order match what is on screen instead of the stored wire text.
 - Expand a quote automatically when a result inside it is opened, so the match is visible rather than hidden behind the collapsed card.
 - Copy a message as it reads, with quotes in readable form instead of their citation URLs.
+
+#### v0.1.22
+
+- Highlight all rendered matches while search is open, including message prose and code, with a stronger current occurrence; maintain highlights as virtualized rows mount and streamed text changes.
+- Clear highlights when the query is cleared or search closes, honor source/content/case/word filters, and retain the existing Above/Side search panel, source-only fallback and draft state.
 
 ### Conversation status and notifications
 

@@ -25,7 +25,8 @@ import { SubagentCard, SubagentState } from "./SubagentCard";
 import { useContext } from "react";
 import { SearchTargetContext, type SearchTarget } from "./SessionFind";
 import { MessageTimestamp } from "./MessageTimestamp";
-import { highlightSearchResult } from "../searchHighlight";
+import type { SessionSearchOptions } from "../../shared/sessionSearch";
+import { highlightSearchResult, observeSearchHighlights } from "../searchHighlight";
 
 function CopyButton({ text }: { text: string }) {
   const run = useActions(); const [copied, setCopied] = useState(false);
@@ -140,7 +141,7 @@ function AssistantHeader({ working = false, headerKey }: { working?: boolean; he
   return <div className="message-author response-header" data-run-header={headerKey}><T3Wordmark className="size-5" /><span>Assistant</span>{working ? <span className="working-label" role="status">· Working</span> : null}</div>;
 }
 
-export function TranscriptView({ state, onViewport, citationTarget, searchTarget, onNavigate }: { readonly state: HostStateSnapshot; readonly onViewport?: (element: HTMLDivElement | null) => void; readonly citationTarget?: AssistantCitation | null; readonly searchTarget?: SearchTarget | null; readonly onNavigate?: () => void }) {
+export function TranscriptView({ state, onViewport, citationTarget, searchTarget, searchOptions, onNavigate }: { readonly state: HostStateSnapshot; readonly onViewport?: (element: HTMLDivElement | null) => void; readonly citationTarget?: AssistantCitation | null; readonly searchTarget?: SearchTarget | null; readonly searchOptions?: SessionSearchOptions | null; readonly onNavigate?: () => void }) {
   const run = useActions();
   const id = state.activeThreadId;
   const list = useRef<LegendListRef>(null);
@@ -206,6 +207,10 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     frame = requestAnimationFrame(show);
     return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-session-match"); };
   }, [searchTarget, id, matchIndex]);
+  useEffect(() => {
+    if (!searchOptions?.query || !container.current) return;
+    return observeSearchHighlights(container.current, transcript, searchOptions, searchTarget ?? null);
+  }, [searchOptions, searchTarget, transcript, id]);
   useEffect(() => {
     if (!citationTarget || citationTarget.threadId !== id) return;
     if (attempts.current.target !== citationTarget) { attempts.current = { target: citationTarget, pages: 0 }; setCitationNotice(null); }
