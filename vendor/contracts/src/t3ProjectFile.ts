@@ -43,6 +43,9 @@ export const T3ProjectFileScript = Schema.Struct({
         "When true, the script runs automatically after a worktree is created for a new thread.",
     }),
   ),
+  runOnSettle: Schema.optionalKey(
+    Schema.Boolean.annotate({ description: "Run in the thread worktree when the thread settles." }),
+  ),
   async: Schema.optionalKey(
     Schema.Boolean.annotate({
       description:

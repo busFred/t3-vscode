@@ -217,15 +217,21 @@ export function resolveWorktreeCleanup(
   projectId: ProjectId | null,
 ): WorktreeCleanupRules {
   const policy = resolveProjectSettings(settings, projectId).settings.worktreeCleanup;
-  if (policy?.mode === "custom") return policy.rules;
+  if (policy?.mode === "custom") return {
+    ...policy.rules,
+    worktreeKeepWhen: policy.rules.worktreeKeepWhen ?? "uncommitted-changes",
+    worktreeSettledAfterDays: policy.rules.worktreeSettledAfterDays ?? null,
+  };
   if (policy?.mode === "off")
     return {
+      worktreeKeepWhen: "uncommitted-changes",
+      worktreeSettledAfterDays: null,
       worktreeAfterDays: null,
       worktreeOnMerge: false,
       worktreeOnDelete: false,
       worktreeUnchanged: false,
     };
-  const { worktreeAfterDays, worktreeOnMerge, worktreeOnDelete, worktreeUnchanged } =
+  const { worktreeKeepWhen, worktreeSettledAfterDays, worktreeAfterDays, worktreeOnMerge, worktreeOnDelete, worktreeUnchanged } =
     settings.storageCleanup;
-  return { worktreeAfterDays, worktreeOnMerge, worktreeOnDelete, worktreeUnchanged };
+  return { worktreeKeepWhen: worktreeKeepWhen ?? "uncommitted-changes", worktreeSettledAfterDays: worktreeSettledAfterDays ?? null, worktreeAfterDays, worktreeOnMerge, worktreeOnDelete, worktreeUnchanged };
 }

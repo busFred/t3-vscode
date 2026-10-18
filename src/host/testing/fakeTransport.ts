@@ -118,7 +118,7 @@ export class FakeTransport implements HostTransport {
         this.threadHandlers.get(command.threadId)?.({ ...snapshot, snapshotSequence: snapshot.snapshotSequence + 1, projection });
       }
     }
-    if (command.type === "thread.create") this.shell = { ...this.shell, threads: [...this.shell.threads, { ...v2ThreadShell, id: command.threadId, projectId: command.projectId, title: command.title, modelSelection: command.modelSelection, runtimeMode: command.runtimeMode, interactionMode: command.interactionMode }] };
+    if (command.type === "thread.create") this.shell = { ...this.shell, threads: [...this.shell.threads, { ...v2ThreadShell, id: command.threadId, projectId: command.projectId, title: command.title, modelSelection: command.modelSelection, runtimeMode: command.runtimeMode, interactionMode: command.interactionMode, itemCount: 0, branch: command.branch, worktreePath: command.worktreePath }] };
     if (command.type === "thread.model-selection.set") {
       this.shell = { ...this.shell, snapshotSequence: this.shell.snapshotSequence + 1, threads: this.shell.threads.map((thread) => thread.id === command.threadId ? { ...thread, modelSelection: command.modelSelection } : thread) };
       this.shellHandler?.({ kind: "snapshot", snapshot: this.shell });
@@ -140,7 +140,8 @@ export class FakeTransport implements HostTransport {
     }
     if (command.type === "thread.metadata.update" || command.type === "thread.pin" || command.type === "thread.unpin") {
       const update = (thread: typeof v2ThreadShell) => thread.id !== command.threadId ? thread : {
-        ...thread, ...(command.type === "thread.metadata.update" ? { title: command.title ?? thread.title } : { pinnedAt: command.type === "thread.pin" ? v2Now : null }),
+        ...thread, ...(command.type === "thread.metadata.update" ? { title: command.title ?? thread.title,
+          ...(command.worktreePath !== undefined ? { worktreePath: command.worktreePath } : {}), ...(command.branch !== undefined ? { branch: command.branch } : {}) } : { pinnedAt: command.type === "thread.pin" ? v2Now : null }),
       };
       this.shell = { ...this.shell, threads: this.shell.threads.map(update) };
       this.archive = { ...this.archive, threads: this.archive.threads.map(update) };

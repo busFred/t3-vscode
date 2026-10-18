@@ -125,14 +125,16 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
     await vscode.commands.executeCommand("t3.webview.focus");
     this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key);
   }
-  async createNewPanel(sourceViewId?: string): Promise<string> {
+  async createNewPanel(sourceViewId?: string, projectId?: string, choice?: unknown): Promise<string> {
     // Capture the invoking group before project selection or server I/O can move focus.
     const column = (sourceViewId ? this.panels.get(sourceViewId)?.viewColumn : undefined) ?? vscode.window.tabGroups.activeTabGroup.viewColumn;
     const id = `panel_${crypto.randomUUID()}`;
     // Inherit project/model choices, but never the source chat's attachment ownership.
     this.host.registerView(id, sourceViewId ?? this.registry.focusedViewId, false);
     try {
-      const threadId = await this.host.newThread(undefined, id);
+      this.host.beginNewChat(id);
+      if (choice !== undefined) await this.host.configureWorktree(choice, projectId, id);
+      const threadId = await this.host.newThread(projectId, id);
       await this.host.composerState(threadId, true, false, id);
       this.mountPanel(id, column);
       return id;
@@ -156,7 +158,7 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
     const id = this.panels.has(focusedId) ? focusedId : await this.createPanel(SIDEBAR_VIEW_ID);
     const threadId = this.host.snapshot(id).activeThreadId;
     if (threadId) await this.host.composerState(threadId, undefined, true, id);
-    this.registry.postWhenReady(id, Events.insertReference, { draftKey: this.host.snapshot(id).activeThreadId ?? "new", reference });
+    this.registry.postWhenReady(id, Events.insertReference, { draftKey: this.host.snapshot(id).activeThreadId ?? "new", reference: this.host.referenceForView(reference, id) });
     const panel = this.panels.get(id);
     if (panel) panel.reveal(panel.viewColumn);
   }

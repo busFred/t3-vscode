@@ -20,6 +20,7 @@ import type { ProviderModelPreferences } from "./modelPreferences.js";
 import type { ScheduledTasksState } from "./scheduledTasks.js";
 
 export const Methods = {
+  refreshWorktrees: "refreshWorktrees", configureWorktree: "configureWorktree", newWorktreeChat: "newWorktreeChat", worktreeAction: "worktreeAction", saveWorktreeSettings: "saveWorktreeSettings", worktreeReview: "worktreeReview",
   refreshScheduledTasks: "refreshScheduledTasks", saveScheduledTask: "saveScheduledTask", setScheduledTaskEnabled: "setScheduledTaskEnabled", runScheduledTask: "runScheduledTask", editScheduledTask: "editScheduledTask",
   searchSession: "searchSession", cancelSessionSearch: "cancelSessionSearch", revealSessionMatch: "revealSessionMatch",
   sessionSearchPreviews: "sessionSearchPreviews", setSearchPreferences: "setSearchPreferences",
@@ -50,6 +51,7 @@ export type HostPhase = "discovering" | "no-server" | "pairing" | "connecting" |
 export interface ProjectSummary { readonly id: string; readonly title: string; readonly workspaceRoot: string }
 export type ProjectSelection = { readonly projectId: string } | { readonly workspaceRoot: string } | { readonly noProject: true };
 export interface ConversationDraft {
+  readonly workspace?: import("./worktrees.js").WorktreeChoice;
   readonly projectId: string | null;
   readonly workspaceRoot: string | null;
   readonly supportsNoProject: boolean;
@@ -58,6 +60,8 @@ export interface ConversationDraft {
   readonly interactionMode: ProviderInteractionMode;
 }
 export interface ThreadSummary {
+  readonly canChooseWorkspace?: boolean;
+  readonly worktreePath?: string | null;
   readonly id: string; readonly projectId: string; readonly title: string; readonly status: string;
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode; readonly interactionMode: ProviderInteractionMode;
@@ -106,6 +110,7 @@ export interface TranscriptItem {
   readonly checkpointRunStatus?: string;
 }
 export interface HostStateSnapshot {
+  readonly worktrees?: import("./worktrees.js").WorktreesState;
   readonly scheduledTasks?: ScheduledTasksState;
   readonly acknowledgedWorking?: { readonly messageId: string; readonly startedAt: string };
   readonly sessionSearch?: SessionSearchState;

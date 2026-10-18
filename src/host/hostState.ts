@@ -1,3 +1,7 @@
+import { WorktreeCoordinator, parseWorktreeChoice, type WorktreeTransport, type WorktreeHandoff } from "./worktrees.js";
+import { repositoryIdentity, worktreeChanges, applyWorktreeFiles } from "./worktreeGit.js";
+import type { WorktreeChoice } from "../shared/worktrees.js";
+import type { FileReference } from "../shared/composerContext.js";
 import { resolveDateFormat, resolveTimeFormat, type DateFormat, type TimeFormat } from "../shared/timeFormat.js";
 import { ComposerDraftStore, type StoredComposerDraft } from "./composerDraftStore.js";
 import type { ViewDraft } from "../shared/viewDraft.js";
@@ -5,7 +9,7 @@ import type { TextSelection } from "../shared/composerAttachments.js";
 /** Shared T3 connection and projections, with navigation and drafts owned by each webview. */
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { basename, isAbsolute, resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   ScheduledTaskUpsertInput, type ScheduledTask, OrchestrationV2TurnItemJson, ModelSelection as ModelSelectionSchema, type ChatAttachment, getProviderAttachmentLimitError,
@@ -51,8 +55,10 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
+export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
+  readonly worktreeStorageRoot?: string;
+  readonly assertTrustedWorkspace?: () => Promise<void>;
   readonly taskOrigins?: () => ReadonlyArray<TaskOrigin>;
   readonly saveTaskOrigin?: (origin: TaskOrigin) => PromiseLike<void>;
   readonly draftStore?: ComposerDraftStore;
@@ -87,6 +93,7 @@ const threadActiveRun = (projection: OrchestrationV2ThreadProjection | null | un
 const blankThread = (): ThreadState => ({ projection: null, sequence: -1, history: EMPTY_THREAD_HISTORY_META, loading: true, subscription: null });
 export const SIDEBAR_VIEW_ID = "sidebar";
 interface ViewState {
+  workspaceChoice?: WorktreeChoice;
   activeThreadId: string | undefined;
   draftProjectId: string | undefined;
   draftWorkspaceRoot: string | null | undefined;
@@ -108,6 +115,8 @@ function authFailure(cause: unknown): boolean {
 }
 
 export class HostState {
+  readonly worktrees: WorktreeCoordinator | null;
+  private readonly repositoryIdentities = new Map<string, string>();
   private readonly acceptedMessages = new Map<string, { messageId: string; startedAt: string }>();
   private readonly composerDrafts: ComposerDraftStore;
   private readonly draftUploads = new Set<string>();
@@ -143,11 +152,20 @@ export class HostState {
   private readonly projectQuestionHistory = createQuestionHistoryProjector();
   private readonly pathIdentities = new Map<string, string>();
   private readonly workspaceRefreshes = new Map<string, Promise<unknown>>();
+  private worktreeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private worktreePoll: ReturnType<typeof setInterval> | null = null;
 
   private readonly options: HostStateOptions;
   private readonly client: HostTransport;
   constructor(options: HostStateOptions, client: HostTransport) {
     this.options = options; this.client = client; this.composerDrafts = options.draftStore ?? new ComposerDraftStore();
+    this.worktrees = options.worktreeStorageRoot ? new WorktreeCoordinator({ storageRoot: options.worktreeStorageRoot, client,
+      scope: () => this.draftScope(), projects: () => this.visibleProjects().map(p => ({ id: p.id, title: p.title, workspaceRoot: p.workspaceRoot, scripts: p.scripts })),
+      threads: () => this.visibleThreads().map(t => ({ id: t.id, projectId: t.projectId, title: t.title, status: t.status,
+        modelSelection: t.modelSelection, runtimeMode: t.runtimeMode, interactionMode: t.interactionMode,
+        branch: t.branch, worktreePath: t.worktreePath, activeRunId: t.activeRunId ?? (this.acceptedMessages.has(t.id) ? "pending" : null),
+        updatedAt: DateTime.formatIso(t.updatedAt), archived: t.archivedAt !== null, pinned: t.pinnedAt != null, settled: t.settledOverride === "settled" })),
+      windowRoots: () => this.workspaceRoots(), changed: () => this.scheduleEmit(), assertTrusted: options.assertTrustedWorkspace ?? (async () => {}) }) : null;
     this.setup = connectionSetup(options.home, options.serverStartupHint);
     this.searchPreferences = resolveSearchPreferences(options.searchPreferences);
     client.onClose = () => {
@@ -155,7 +173,15 @@ export class HostState {
         if (!this.disposed) this.setPhase("error", describeError(cause));
       });
     };
-    client.onConfig = () => this.scheduleEmit();
+    client.onConfig = () => { this.scheduleEmit(); this.scheduleWorktreeRefresh(); };
+    if (this.worktrees) { this.worktreePoll = setInterval(() => this.scheduleWorktreeRefresh(), 30_000); this.worktreePoll.unref(); }
+  }
+  private scheduleWorktreeRefresh(): void {
+    if (!this.worktrees || !this.client.connected || this.disposed || this.worktreeRefreshTimer) return;
+    this.worktreeRefreshTimer = setTimeout(() => {
+      this.worktreeRefreshTimer = null;
+      if (this.client.connected && !this.disposed) void this.refreshRepositoryIdentities().then(() => this.worktrees?.refresh()).catch(() => {});
+    }, 150);
   }
   onDidChangeState(listener: (state: HostStateSnapshot) => void, viewId = SIDEBAR_VIEW_ID): () => void {
     this.requireView(viewId);
@@ -169,6 +195,17 @@ export class HostState {
     const source = sourceViewId ? this.requireView(sourceViewId) : blankView();
     if (chat && sourceViewId) for (const upload of this.uploads.values()) if (upload.owners.has(sourceViewId)) upload.owners.add(viewId);
     this.views.set(viewId, { ...source, sending: false, chatActive: chat, chatThreadId: chat ? source.activeThreadId : undefined }); this.emit();
+  }
+  /** A new editor inherits defaults, never the source conversation's binding guard. */
+  beginNewChat(viewId: string): void {
+    const view = this.requireView(viewId);
+    if (view.chatActive || view.sending) throw new Error("Create a new editor before choosing its checkout.");
+    const draft = this.conversationDraft(view);
+    view.draftProjectId = draft.projectId ?? undefined;
+    view.draftWorkspaceRoot = draft.workspaceRoot;
+    view.draftModelSelection = draft.modelSelection ?? undefined;
+    if (draft.workspace) view.workspaceChoice = draft.workspace;
+    view.activeThreadId = undefined; view.chatThreadId = undefined;
   }
   removeView(viewId: string): Promise<void> {
     this.cancelSessionSearch(viewId);
@@ -193,14 +230,14 @@ export class HostState {
     else if (active === false && view.chatThreadId === id) { view.chatActive = false; view.chatThreadId = undefined; }
     return active === false ? this.enqueue(() => this.cleanupEmptyThread(id)) : Promise.resolve();
   }
-  private async cleanupEmptyThread(id: string): Promise<void> {
+  private async cleanupEmptyThread(id: string, untouchedTitle = "New thread"): Promise<void> {
     if (!this.emptyThreads.has(id) || !this.client.connected || [...this.views.values()].some((view) => view.chatThreadId === id)) return;
     const thread = this.findThread(id);
-    if (!thread || thread.activeRunId || thread.archivedAt || thread.deletedAt || thread.title !== "New thread" || thread.pinnedAt || thread.settledOverride) return;
+    if (!thread || thread.worktreePath || thread.activeRunId || thread.archivedAt || thread.deletedAt || thread.title !== untouchedTitle || thread.pinnedAt || thread.settledOverride) return;
     // Check durable server data, rather than assuming an unloaded transcript is empty.
     const projection = await this.client.getThreadProjection(id).catch(() => null);
     if (!projection || projection.messages.length || projection.runs.length || projection.visibleTurnItems.some((row) => row.item.type === "user_message" || row.item.type === "assistant_message")
-      || projection.thread.title !== "New thread" || projection.thread.pinnedAt || projection.thread.settledOverride
+      || projection.thread.title !== untouchedTitle || projection.thread.worktreePath || projection.thread.archivedAt || projection.thread.pinnedAt || projection.thread.settledOverride
       || !this.emptyThreads.has(id) || [...this.views.values()].some((view) => view.chatThreadId === id)) return;
     await this.client.dispatch({ type: "thread.delete", commandId: randomUUID(), threadId: id });
     this.emptyThreads.delete(id); this.shell = await this.client.snapshotShell();
@@ -348,7 +385,8 @@ export class HostState {
     if (!discovered.ok) { this.setPhase("no-server", discovered.reason, discovered.problem); return; }
     if (this.server?.descriptor.environmentId !== discovered.server.descriptor.environmentId) {
       this.shell = null; this.archive = null;
-      for (const view of this.views.values()) Object.assign(view, blankView());
+      this.repositoryIdentities.clear();
+      for (const view of this.views.values()) { delete view.workspaceChoice; Object.assign(view, blankView()); }
     }
     this.server = discovered.server;
     try {
@@ -371,9 +409,11 @@ export class HostState {
       }
       if (this.disposed) { await this.client.disconnect(); return; }
       this.shell = await this.client.snapshotShell();
+      await this.refreshRepositoryIdentities();
       this.shellSubscription = await this.client.subscribeShell((item) => this.handleShell(item));
       await this.reconcileViews(true);
       this.setPhase("ready");
+      void this.worktrees?.refresh().catch(() => {});
       void this.loadArchive().catch(() => {}); // Archive failures must not block chat startup.
       await this.loadScheduledTasks();
     } catch (cause) {
@@ -400,6 +440,7 @@ export class HostState {
     }
     this.reconcileRemovedThreads();
     this.scheduleEmit();
+    if (item.kind === "snapshot" || item.kind === "project.updated" || item.kind === "thread.updated") this.scheduleWorktreeRefresh();
   }
   loadArchive(): Promise<void> { return this.subscribeArchive(); }
   private subscribeArchive(): Promise<void> {
@@ -458,7 +499,17 @@ export class HostState {
     const roots = this.workspaceRoots();
     return !roots.length || roots.some((root) => this.pathIdentity(root) === this.pathIdentity(path));
   }
-  private visibleProjects() { return this.shell?.projects.filter((project) => this.pathInWorkspace(project.workspaceRoot)) ?? []; }
+  private async refreshRepositoryIdentities(): Promise<void> {
+    const paths = [...new Set([...this.workspaceRoots(), ...(this.shell?.projects.map(p => p.workspaceRoot) ?? [])])];
+    await Promise.all(paths.map(async path => { const identity = await repositoryIdentity(path); if (identity) this.repositoryIdentities.set(this.pathIdentity(path), identity.commonDir); else this.repositoryIdentities.delete(this.pathIdentity(path)); }));
+  }
+  private projectContainsWorkspace(project: { id: string; workspaceRoot: string }): boolean {
+    if (this.pathInWorkspace(project.workspaceRoot)) return true;
+    const common = this.repositoryIdentities.get(this.pathIdentity(project.workspaceRoot));
+    return this.workspaceRoots().some(root => common && this.repositoryIdentities.get(this.pathIdentity(root)) === common
+      || this.allThreads().some(t => t.projectId === project.id && t.worktreePath && this.pathIdentity(t.worktreePath) === this.pathIdentity(root)));
+  }
+  private visibleProjects() { return this.shell?.projects.filter(project => this.projectContainsWorkspace(project)) ?? []; }
   private visibleThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
     const projects = new Set(this.visibleProjects().map((project) => project.id));
     return this.allThreads().filter((thread) => !thread.deletedAt && projects.has(thread.projectId));
@@ -487,10 +538,13 @@ export class HostState {
   workspaceChanged(): Promise<void> {
     return this.enqueue(async () => {
       this.pathIdentities.clear();
+      this.repositoryIdentities.clear();
+      await this.refreshRepositoryIdentities();
       for (const view of this.views.values()) {
-        view.draftProjectId = undefined; view.draftWorkspaceRoot = undefined;
+        delete view.workspaceChoice; view.draftProjectId = undefined; view.draftWorkspaceRoot = undefined;
       }
       await this.reconcileViews(true);
+      this.scheduleWorktreeRefresh();
     });
   }
   private requireThread(id: string): OrchestrationV2ThreadShell {
@@ -506,6 +560,7 @@ export class HostState {
       if (view.activeThreadId === id && this.threads.get(id)?.subscription) return;
       const previous = view.chatThreadId;
       this.cancelSessionSearch(viewId);
+      delete view.workspaceChoice;
       view.activeThreadId = id;
       if (view.chatActive) view.chatThreadId = id;
       await this.syncThreadSubscriptions(); this.emit();
@@ -581,11 +636,14 @@ export class HostState {
     const active = this.findThread(view.activeThreadId);
     const projects = this.visibleProjects();
     const project = projects.find((item) => item.id === view.draftProjectId)
-      ?? (root ? projects.find((item) => this.pathIdentity(item.workspaceRoot) === this.pathIdentity(root))
+      ?? (root ? projects.find((item) => this.pathIdentity(item.workspaceRoot) === this.pathIdentity(root) || this.repositoryIdentities.get(this.pathIdentity(root)) !== undefined && this.repositoryIdentities.get(this.pathIdentity(item.workspaceRoot)) === this.repositoryIdentities.get(this.pathIdentity(root)) || this.allThreads().some(t => t.projectId === item.id && t.worktreePath && this.pathIdentity(t.worktreePath) === this.pathIdentity(root)))
         : view.draftWorkspaceRoot === null ? undefined : projects.find((item) => item.id === active?.projectId));
     const modelSelection = this.availableModel(view.draftModelSelection ?? project?.defaultModelSelection ?? active?.modelSelection);
     const supportsNoProject = !roots.length && availableScratchWorkspaceRoot(this.client.connected ? "connected" : null, this.client.config) !== null;
-    return { projectId: project?.id ?? null, workspaceRoot: project?.workspaceRoot ?? root, supportsNoProject, modelSelection,
+    const windowWorktree = project && roots.find(path => this.pathIdentity(path) !== this.pathIdentity(project.workspaceRoot)
+      && (this.repositoryIdentities.get(this.pathIdentity(path)) !== undefined && this.repositoryIdentities.get(this.pathIdentity(path)) === this.repositoryIdentities.get(this.pathIdentity(project.workspaceRoot))
+        || this.allThreads().some(t => t.projectId === project.id && t.worktreePath && this.pathIdentity(t.worktreePath) === this.pathIdentity(path))));
+    return { workspace: view.workspaceChoice ?? (active ? active.worktreePath ? { type: "existing", path: active.worktreePath, ...(active.branch ? { branch: active.branch } : {}) } : { type: "root" } : windowWorktree ? { type: "existing", path: windowWorktree } : { type: "root" }), projectId: project?.id ?? null, workspaceRoot: project?.workspaceRoot ?? root, supportsNoProject, modelSelection,
       runtimeMode: this.compatibleRuntimeMode(modelSelection, view.draftRuntimeMode), interactionMode: view.draftInteractionMode };
   }
   chooseProject(projectId?: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
@@ -597,6 +655,7 @@ export class HostState {
     });
   }
   private applyProjectSelection(view: ViewState, selection: ProjectSelection): void {
+    delete view.workspaceChoice;
     if ("noProject" in selection) {
       if (!this.conversationDraft(view).supportsNoProject) throw new Error("This server requires a project. Choose a project folder.");
       view.draftProjectId = undefined; view.draftWorkspaceRoot = null;
@@ -648,7 +707,9 @@ export class HostState {
     const id = randomUUID();
     await this.client.dispatch({ type: "thread.create", commandId: randomUUID(), threadId: id, projectId,
       createdBy: "user", creationSource: "web", title: "New thread", modelSelection: model,
-      runtimeMode: this.compatibleRuntimeMode(model, draft.runtimeMode), interactionMode: draft.interactionMode, branch: null, worktreePath: null });
+      runtimeMode: this.compatibleRuntimeMode(model, draft.runtimeMode), interactionMode: draft.interactionMode,
+      branch: draft.workspace?.type === "existing" ? draft.workspace.branch ?? null : null,
+      worktreePath: draft.workspace?.type === "existing" ? draft.workspace.path ?? null : null });
     this.shell = await this.client.snapshotShell();
     this.emptyThreads.add(id);
     const previous = view.chatThreadId;
@@ -673,11 +734,32 @@ export class HostState {
       if (!text.trim() && !attachments.length) throw new Error("Enter a message or attach a file.");
       const id = targetThreadId ?? await this.createThread(undefined, viewId, false);
       const view = this.requireView(viewId);
-      const thread = this.requireThread(id);
+      let thread = this.requireThread(id);
       if (thread.archivedAt) throw new Error("Restore this thread before sending a message.");
       if (thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") throw new Error("This subagent conversation is controlled by its provider. Return to the parent conversation to send instructions.");
       view.sending = true; this.emit();
       try {
+        const choice = view.workspaceChoice ?? this.conversationDraft(view).workspace;
+        if (this.worktrees && choice && (this.emptyThreads.has(id) || thread.itemCount === 0)) {
+          const allocations = choice.runs?.flatMap(run => Array.from({ length: run.count }, () => run.modelSelection)) ?? [thread.modelSelection];
+          for (const model of allocations) this.assertWorktreeModel(model);
+          if (allocations.length > 1) {
+            await this.sendParallelWorktrees(id, choice, allocations, text, attachments, context, viewId, targetThreadId ?? "new");
+            delete view.workspaceChoice;
+            await this.completeSentDraft(attachmentIds, targetThreadId ?? "new", viewId);
+            return;
+          }
+          if (choice.runs?.length) await this.applyModelSelection(id, allocations[0], viewId);
+          await this.prepareThreadWorkspace(id, choice);
+          thread = this.requireThread(id);
+          delete view.workspaceChoice;
+        } else if (this.worktrees && thread.worktreePath && !thread.activeRunId && !this.acceptedMessages.has(id)) {
+          const tree = this.worktrees.snapshot().items.find(w => w.projectId === thread.projectId && w.path === thread.worktreePath);
+          if (tree?.missing) await this.worktrees.restore(thread.projectId, thread.worktreePath);
+          await this.prepareThreadWorkspace(id, { type: "existing", path: thread.worktreePath });
+        }
+        const instructions = thread.worktreePath ? await this.worktrees?.environmentInstructions(thread.projectId, thread.worktreePath) : undefined;
+        const dispatchText = instructions ? `${text}\n\n<worktree_environment>\n${instructions}\n</worktree_environment>` : text;
         const messageId = randomUUID(), alreadyWorking = !!thread.activeRunId || !!(this.threads.get(id)?.projection && deriveThreadQueueWorkflowState(this.threads.get(id)!.projection!).activeRun) || this.acceptedMessages.has(id);
         const cwd = this.workspaceForThread(id);
         // Queued/steered runs have no reliable pre-execution boundary on the client.
@@ -685,22 +767,180 @@ export class HostState {
         if (!alreadyWorking && mode === "auto" && cwd)
           await this.client.captureTurnBaseline(cwd, id, messageId).catch(() => undefined);
         await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id,
-          createdBy: "user", creationSource: "web", messageId, text, attachments, ...(context ? { context } : {}),
+          createdBy: "user", creationSource: "web", messageId, text: dispatchText, attachments, ...(context ? { context } : {}),
           titleSeed: deriveThreadTitleSeed({ text, attachments }), ...(mode !== "queue" ? { deliveryIntent: mode } : {}), dispatchMode: { type: mode === "queue" ? "queue_after_active" : "start_immediately" } });
         this.emptyThreads.delete(id);
         if (!alreadyWorking) this.acceptedMessages.set(id, { messageId, startedAt: new Date().toISOString() });
-        for (const id of attachmentIds) { const upload = this.uploads.get(id); if (upload) upload.sent = true; }
-        const record = this.composerDrafts.owned(this.draftScope(), targetThreadId ?? "new", viewId);
-        if (record) {
-          for (const file of record.draft.attachments ?? []) if (file.attachment) await this.releaseAttachment(file.attachment.id, `draft:${record.id}`);
-          this.composerDrafts.save(record, { text: "", contexts: [] }); this.composerDrafts.flush();
-        }
+        await this.completeSentDraft(attachmentIds, targetThreadId ?? "new", viewId);
         if (!targetThreadId && this.views.get(viewId) === view) { view.activeThreadId = id; if (view.chatActive) view.chatThreadId = id; await this.syncThreadSubscriptions(); }
       } catch (cause) {
-        if (!targetThreadId) await this.cleanupEmptyThread(id).catch(() => undefined);
+        if (!targetThreadId && !this.findThread(id)?.worktreePath) await this.cleanupEmptyThread(id).catch(() => undefined);
         throw cause;
       } finally { view.sending = false; this.emit(); }
     });
+  }
+  private async completeSentDraft(attachmentIds: ReadonlyArray<string>, draftKey: string, owner: string): Promise<void> {
+    for (const id of attachmentIds) { const upload = this.uploads.get(id); if (upload) upload.sent = true; }
+    const record = this.composerDrafts.owned(this.draftScope(), draftKey, owner);
+    if (record) {
+      for (const file of record.draft.attachments ?? []) if (file.attachment) await this.releaseAttachment(file.attachment.id, `draft:${record.id}`);
+      this.composerDrafts.save(record, { text: "", contexts: [] }); this.composerDrafts.flush();
+    }
+  }
+  async refreshWorktrees(cleanupEnvironments = false): Promise<void> {
+    this.shell = await this.client.snapshotShell(); await this.refreshRepositoryIdentities(); await this.worktrees?.refresh(); this.emit();
+    if (cleanupEnvironments) { await this.worktrees?.cleanupMissingEnvironments(); this.emit(); }
+  }
+  async configureWorktree(input: unknown, projectId: string | undefined, viewId = SIDEBAR_VIEW_ID): Promise<void> {
+    if (!this.worktrees) throw new Error("Worktree support is unavailable.");
+    const choice = parseWorktreeChoice(input), view = this.requireView(viewId), thread = this.findThread(view.activeThreadId);
+    if (thread && !this.emptyThreads.has(thread.id) && thread.itemCount > 0) throw new Error("An existing conversation keeps its checkout. Start a new conversation or use Continue in worktree.");
+    if (thread?.activeRunId || view.sending) throw new Error("Wait for the current operation before changing the workspace.");
+    if (projectId && thread && thread.projectId !== projectId) throw new Error("Open a new chat for another project.");
+    if (projectId) this.applyProjectSelection(view, { projectId });
+    const project = projectId ?? thread?.projectId ?? this.conversationDraft(view).projectId;
+    if (!project) throw new Error("Choose a project first.");
+    if (choice.type === "existing") await this.worktrees.requireCheckout(project, choice.path!);
+    for (const run of choice.runs ?? []) this.assertWorktreeModel(run.modelSelection);
+    view.workspaceChoice = choice; this.emit();
+  }
+  private assertWorktreeModel(selection: ModelSelection) {
+    const provider = this.client.config?.providers.find(p => p.instanceId === selection.instanceId);
+    const model = provider?.models.find(m => m.slug === selection.model);
+    if (!provider?.enabled || !provider.installed || provider.availability === "unavailable" || !model) throw new Error("Choose an available model for each run.");
+    Schema.decodeUnknownSync(ModelSelectionSchema)(selection);
+    for (const option of selection.options ?? []) {
+      const descriptor = model.capabilities?.optionDescriptors?.find(d => d.id === option.id);
+      if (!descriptor || (descriptor.type === "boolean" ? typeof option.value !== "boolean" : typeof option.value !== "string" || !descriptor.options.some(o => o.id === option.value) || descriptor.promptInjectedValues?.includes(option.value))) throw new Error("A run uses an unsupported model option.");
+    }
+  }
+  private async bindEmptyThread(id: string, path: string | null, branch: string | null): Promise<void> {
+    const current = this.requireThread(id);
+    if (current.worktreePath !== path || current.branch !== branch) {
+      if (current.activeRunId || this.acceptedMessages.has(id) || (!this.emptyThreads.has(id) && current.itemCount > 0)) throw new Error("Cannot change an existing conversation’s checkout.");
+      await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, worktreePath: path, branch, expectedWorktreePath: current.worktreePath, expectedEmpty: true });
+      this.shell = await this.client.snapshotShell(); await this.syncThreadSubscriptions();
+    }
+    // Once a checkout exists, a failed preparation retries it instead of creating another.
+    for (const view of this.views.values()) if (view.activeThreadId === id) view.workspaceChoice = path ? { type: "existing", path, ...(branch ? { branch } : {}) } : { type: "root" };
+    this.emit();
+  }
+  async prepareThreadWorkspace(id: string, choice: WorktreeChoice, group?: { groupId: string; title: string }): Promise<void> {
+    if (!this.worktrees) throw new Error("Worktree support is unavailable.");
+    const thread = this.requireThread(id);
+    await this.worktrees.prepare(thread.projectId, id, choice, (path, branch) => this.bindEmptyThread(id, path, branch), group);
+  }
+  async retryWorktreePreparation(id: string): Promise<void> {
+    if (!this.worktrees) throw new Error("Worktree support is unavailable.");
+    const preparation = this.worktrees.snapshot().preparations.find(p => p.id === id);
+    if (!preparation) throw new Error("Refresh worktrees before retrying setup.");
+    const handoff = this.worktrees.handoffFor(id);
+    await this.worktrees.retry(id, preparation.threadId && !preparation.threadId.startsWith("checkout:") ? (path, branch) => handoff
+      ? this.bindContinuedThread(preparation.threadId!, path, branch, handoff)
+      : this.bindEmptyThread(preparation.threadId!, path, branch) : undefined);
+  }
+  private async bindContinuedThread(id: string, path: string | null, branch: string | null, handoff: WorktreeHandoff): Promise<void> {
+    if (!path) throw new Error("A worktree is required to continue.");
+    this.shell = await this.client.snapshotShell();
+    const current = this.requireThread(id);
+    if (current.worktreePath === path) return; // The metadata response may have been lost after commit.
+    if (current.worktreePath || current.activeRunId || current.archivedAt || this.acceptedMessages.has(id)) throw new Error("The conversation changed while preparing its worktree.");
+    const root = this.visibleProjects().find(p => p.id === current.projectId)?.workspaceRoot;
+    if (!root) throw new Error("The project is no longer available.");
+    if (handoff.copyEdits && handoff.files.length) {
+      if ((await worktreeChanges({ projectRoot: root, path: root, baseRef: "HEAD" })).baseRef !== handoff.baseRef) throw new Error("The source branch changed during handoff. Restore the original branch before retrying.");
+      await applyWorktreeFiles({ projectRoot: root, path: root, destination: path, baseRef: handoff.baseRef, files: [...handoff.files], allowAlreadyApplied: true });
+    }
+    await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, worktreePath: path, branch, expectedWorktreePath: null });
+    this.shell = await this.client.snapshotShell(); await this.syncThreadSubscriptions();
+    for (const view of this.views.values()) if (view.activeThreadId === id) view.workspaceChoice = { type: "existing", path, ...(branch ? { branch } : {}) };
+    this.emit();
+  }
+  continueInWorktree(viewId = SIDEBAR_VIEW_ID, copyEdits = false): Promise<void> {
+    return this.enqueue(async () => {
+      if (!this.worktrees) throw new Error("Worktree support is unavailable.");
+      const view = this.requireView(viewId), id = view.activeThreadId;
+      if (!id) throw new Error("Open a conversation first.");
+      const thread = this.requireThread(id);
+      if (thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") throw new Error("This subagent conversation is controlled by its provider. Continue from its parent conversation.");
+      if (thread.worktreePath || thread.activeRunId || thread.archivedAt || this.acceptedMessages.has(id) || view.sending) throw new Error("Only an idle conversation in the main checkout can continue in a new worktree.");
+      const root = this.workspaceForThread(id)!;
+      const changes = await worktreeChanges({ projectRoot: root, path: root, baseRef: "HEAD" });
+      const handoff: WorktreeHandoff = { copyEdits, baseRef: changes.baseRef, files: changes.files.map(f => f.path) };
+      view.sending = true; this.emit();
+      try {
+        await this.worktrees.prepare(thread.projectId, id, { type: "new", baseRef: changes.baseRef, startFromOrigin: false },
+          (path, branch) => this.bindContinuedThread(id, path, branch, handoff), { handoff });
+      } finally { view.sending = false; this.emit(); }
+    });
+  }
+  private async sendParallelWorktrees(firstId: string, choice: WorktreeChoice, models: ReadonlyArray<ModelSelection>, text: string, attachments: ReadonlyArray<ChatAttachment>, context: unknown, viewId: string, draftKey: string) {
+    const initial = this.requireThread(firstId), view = this.requireView(viewId), ids = [firstId], group = { groupId: randomUUID(), title: deriveThreadTitleSeed({ text, attachments }) };
+    const sourceDraft = this.composerDrafts.owned(this.draftScope(), draftKey, viewId);
+    const pendingDraft = sourceDraft?.draft ?? { text, contexts: [] };
+    const titles = new Map<string, string>();
+    try {
+      for (let i = 1; i < models.length; i++) {
+        const id = randomUUID(), title = `${group.title} · ${i + 1}`;
+        ids.push(id); titles.set(id, title); this.emptyThreads.add(id);
+        await this.client.dispatch({ type: "thread.create", commandId: randomUUID(), threadId: id, projectId: initial.projectId,
+          createdBy: "user", creationSource: "web", title, modelSelection: models[i],
+          runtimeMode: this.compatibleRuntimeMode(models[i]!, initial.runtimeMode), interactionMode: initial.interactionMode, branch: null, worktreePath: null });
+      }
+      this.shell = await this.client.snapshotShell();
+    } catch (cause) {
+      // Nothing has been prepared or sent yet. Re-read even after a lost create response
+      // and remove only our still-untouched siblings, before claiming any draft leases.
+      this.shell = await this.client.snapshotShell().catch(() => this.shell);
+      for (const id of ids.slice(1)) await this.cleanupEmptyThread(id, titles.get(id)!).catch(() => undefined);
+      throw cause;
+    }
+    let results: PromiseSettledResult<void>[];
+    try {
+      for (const id of ids) {
+        if (id === firstId && draftKey === firstId) continue;
+        const owner = id === firstId ? viewId : `worktree-run:${id}`, draft = this.composerDrafts.claim(this.draftScope(), id, owner);
+        this.composerDrafts.save(draft, structuredClone(pendingDraft), sourceDraft?.selection);
+        for (const file of draft.draft.attachments ?? []) if (file.attachment) {
+          this.composerDrafts.copyAttachmentFile(draft, file.key, file.attachment.id);
+          this.uploads.get(file.attachment.id)?.owners.add(`draft:${draft.id}`);
+        }
+      }
+      this.composerDrafts.flush();
+      results = await Promise.allSettled(ids.map(async (id, i) => {
+        await this.applyModelSelection(id, models[i], viewId);
+        const { runs: _runs, ...single } = choice;
+        await this.prepareThreadWorkspace(id, { ...single, ...(choice.branch ? { branch: `${choice.branch}-${i + 1}` } : {}) }, group);
+        const t = this.requireThread(id), instructions = t.worktreePath ? await this.worktrees?.environmentInstructions(t.projectId, t.worktreePath) : undefined;
+        const messageId = randomUUID();
+        if (t.worktreePath) await this.client.captureTurnBaseline(t.worktreePath, id, messageId).catch(() => undefined);
+        await this.client.dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id, createdBy: "user", creationSource: "web", messageId,
+          text: instructions ? `${text}\n\n<worktree_environment>\n${instructions}\n</worktree_environment>` : text, attachments, ...(context ? { context } : {}), titleSeed: deriveThreadTitleSeed({ text, attachments }), dispatchMode: { type: "start_immediately" } });
+        this.emptyThreads.delete(id); this.acceptedMessages.set(id, { messageId, startedAt: new Date().toISOString() });
+        for (const attachment of attachments) { const upload = this.uploads.get(attachment.id); if (upload) upload.sent = true; }
+        if (id !== firstId || draftKey !== firstId) await this.completeSentDraft(attachments.map(a => a.id), id, id === firstId ? viewId : `worktree-run:${id}`);
+      }));
+    } finally {
+      for (const id of ids.slice(1)) this.composerDrafts.release(`worktree-run:${id}`);
+    }
+    const failed = results.flatMap((r, i) => r.status === "rejected" ? [`Run ${i + 1}: ${describeError(r.reason)}`] : []);
+    if (failed.length) this.notice = `${failed.join("; ")}. Successful runs were not repeated. Retry preparation in the failed checkout, then send its prompt.`;
+    view.activeThreadId = firstId; if (view.chatActive) view.chatThreadId = firstId;
+    await this.syncThreadSubscriptions(); this.emit();
+    if (results[0]?.status === "rejected") throw new Error(this.notice);
+  }
+  referenceForView(reference: FileReference, viewId: string): FileReference {
+    const root = this.referenceRoot(viewId);
+    const label = root ? relative(root, reference.path).replaceAll("\\", "/") : reference.path;
+    return { ...reference, label: !root || label === ".." || label.startsWith("../") || isAbsolute(label) ? reference.path : label };
+  }
+  private referenceRoot(viewId: string): string | null {
+    const view = this.requireView(viewId), thread = this.findThread(view.activeThreadId), draft = this.conversationDraft(view);
+    if (thread && thread.itemCount > 0) return this.workspaceForThread(thread.id);
+    const choice = view.workspaceChoice ?? draft.workspace;
+    if (choice?.type === "new" || choice?.type === "pr" || choice?.type === "branch") return null;
+    if (choice?.type === "existing") return choice.path ?? null;
+    return this.visibleProjects().find(p => p.id === (thread?.projectId ?? draft.projectId))?.workspaceRoot ?? draft.workspaceRoot;
   }
   setModel(id: string | undefined, input: unknown, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     return this.enqueue(() => this.applyModelSelection(id, input, viewId));
@@ -988,15 +1228,27 @@ export class HostState {
     if (query.length > 256) throw new Error("Suggestion query is too long.");
     const thread = this.findThread(view.activeThreadId);
     const draft = this.conversationDraft(view);
-    const cwd = thread ? this.workspaceForThread(thread.id) : draft.workspaceRoot ?? this.visibleProjects().find((project) => project.id === draft.projectId)?.workspaceRoot ?? null;
+    const cwd = this.referenceRoot(viewId) ?? draft.workspaceRoot;
     const selection = thread?.modelSelection ?? draft.modelSelection;
     const instanceId = selection?.instanceId;
     if (kind === "path") {
       if (!cwd) return [];
-      const result = await this.client.searchPaths(cwd, query);
+      const projectId = thread?.projectId ?? draft.projectId;
+      const projectRoot = this.visibleProjects().find(p => p.id === projectId)?.workspaceRoot;
+      const common = projectRoot ? this.repositoryIdentities.get(this.pathIdentity(projectRoot)) : undefined;
+      const sources = [cwd, ...this.workspaceRoots().filter(path => projectRoot && (this.pathIdentity(path) === this.pathIdentity(projectRoot) || common !== undefined && this.repositoryIdentities.get(this.pathIdentity(path)) === common)),
+        ...(this.worktrees?.snapshot().items.filter(w => w.projectId === projectId && !w.missing).map(w => w.path) ?? [])];
+      const roots = [...new Set(sources.map(path => this.pathIdentity(path)))].slice(0, 20);
+      const results = await Promise.allSettled(roots.map(async root => ({ root, result: await this.client.searchPaths(root, query) })));
       this.requireView(viewId);
-      // Returned paths and their server ordering come from T3's workspace index.
-      return result.entries.map((entry) => ({ id: `path:${entry.kind}:${entry.path}`, kind: entry.kind, value: entry.path, uri: pathToFileURL(resolve(cwd, entry.path)).toString(), label: basename(entry.path), description: entry.path.includes("/") ? entry.path.slice(0, entry.path.lastIndexOf("/")) : "" }));
+      const available = results.flatMap(result => result.status === "fulfilled" ? [result.value] : []);
+      if (!available.length && results[0]?.status === "rejected") throw results[0].reason;
+      // Each absolute URI identifies its source checkout even when two files share a name.
+      return available.flatMap(({ root, result }) => result.entries.map(entry => {
+        const path = resolve(root, entry.path), uri = pathToFileURL(path).toString();
+        const value = this.referenceForView({ type: "file", path, uri, label: entry.path }, viewId).label;
+        return { id: `path:${entry.kind}:${path}`, kind: entry.kind, value, uri, label: basename(entry.path), description: value.includes("/") ? value.slice(0, value.lastIndexOf("/")) : "" };
+      })).slice(0, 100);
     }
     if (kind !== "slash-command" && kind !== "skill") throw new Error("Unknown composer trigger.");
     let provider = this.client.config?.providers.find((provider) => provider.instanceId === instanceId);
@@ -1117,6 +1369,7 @@ export class HostState {
     if (accepted && !acknowledgedWorking && activeThreadId) this.acceptedMessages.delete(activeThreadId);
     return {
       ...(acknowledgedWorking ? { acknowledgedWorking } : {}),
+      ...(this.worktrees ? { worktrees: this.worktrees.snapshot() } : {}),
       revision: this.revision, phase: this.phase, home: this.options.home,
       connectionSetup: { ...this.setup, ...(this.connectionProblem ? { problem: this.connectionProblem } : {}) },
       searchPreferences: this.searchPreferences,
@@ -1142,7 +1395,8 @@ export class HostState {
           : thread.activeRunId && thread.activeRunId === thread.latestRunId && !thread.latestRunCompletedAt
             ? (thread.latestRunStartedAt || thread.latestRunRequestedAt ? DateTime.formatIso((thread.latestRunStartedAt ?? thread.latestRunRequestedAt)!) : null) : null,
         settled: thread.settledOverride === "settled", searchTerms: threadPullRequestSearchTerms(thread),
-        branch: thread.branch,
+        branch: thread.branch, worktreePath: thread.worktreePath,
+        canChooseWorkspace: !thread.activeRunId && (this.emptyThreads.has(thread.id) || thread.itemCount === 0) && !thread.archivedAt,
         parentThreadId: thread.lineage.parentThreadId && visibleThreadIds.has(thread.lineage.parentThreadId) ? thread.lineage.parentThreadId : null,
         relationshipToParent: thread.lineage.relationshipToParent,
         providerNativeSubagent: thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider",
@@ -1289,8 +1543,10 @@ export class HostState {
     for (const [listener, viewId] of this.listeners) listener(this.snapshot(viewId));
   }
   async dispose(): Promise<void> {
+    if (this.worktreeRefreshTimer) clearTimeout(this.worktreeRefreshTimer);
+    if (this.worktreePoll) clearInterval(this.worktreePoll);
     this.composerDrafts.dispose();
-    this.disposed = true; this.client.onClose = null; this.client.onConfig = null;
+    this.disposed = true; this.worktrees?.dispose(); this.client.onClose = null; this.client.onConfig = null;
     if (this.emitTimer) clearTimeout(this.emitTimer);
     await this.stopSubscriptions(); await this.client.disconnect(); this.listeners.clear();
   }

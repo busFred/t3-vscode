@@ -3,6 +3,7 @@ import { captureTurnBaseline, findTurnBaseline } from "./turnBaseline.js";
 import { randomUUID } from "node:crypto";
 import {
   CommandId, ProjectId, ThreadId, TurnItemId, OrchestrationV2Command, ScheduledTaskId, ScheduledTaskUpsertInput, type ScheduledTask,
+  OrchestrationV2ThreadLaunchInput, VcsCreateWorktreeInput, VcsListRefsInput, GitPreparePullRequestThreadInput, GitRunStackedActionInput, ServerSettingsPatch, type WorktreeSetupStreamEvent,
   ORCHESTRATION_V2_WS_METHODS as V2, WS_METHODS,
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
@@ -38,10 +39,12 @@ export class T3Client {
   private server: DiscoveredServer | null = null;
   private accessToken: string | null = null;
   private configState: Option.Option<ServerConfigProjection> = Option.none();
+  private settingsSupport = { worktreesDirectory: false, cleanupRetention: false, runOnSettle: false };
   onClose: (() => void) | null = null;
   onConfig: ((config: ServerConfig) => void) | null = null;
   get connected(): boolean { return this.session !== null; }
   get config(): ServerConfig | null { return Option.getOrNull(this.configState)?.config ?? null; }
+  get worktreeSettingsCapabilities() { return this.settingsSupport; }
 
   async connect(server: DiscoveredServer, accessToken: string): Promise<void> {
     await this.disconnect();
@@ -86,6 +89,7 @@ export class T3Client {
   async disconnect(): Promise<void> {
     const scope = this.scope;
     this.scope = null; this.session = null; this.server = null; this.accessToken = null;
+    this.settingsSupport = { worktreesDirectory: false, cleanupRetention: false, runOnSettle: false };
     if (scope) await Effect.runPromise(Scope.close(scope, Exit.void));
   }
   private run<A, E>(effect: Effect.Effect<A, E, Services>): Promise<A> {
@@ -124,6 +128,52 @@ export class T3Client {
   async dispatch(input: unknown): Promise<void> {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(input);
     await this.run(this.requireSession().client[V2.dispatchCommand](command));
+  }
+  launchThread(input: unknown) {
+    return this.run(this.requireSession().client[V2.launchThread](Schema.decodeUnknownSync(OrchestrationV2ThreadLaunchInput)(input)));
+  }
+  listRefs(input: unknown) {
+    return this.run(this.requireSession().client[WS_METHODS.vcsListRefs](Schema.decodeUnknownSync(VcsListRefsInput)(input)));
+  }
+  createWorktree(input: unknown) {
+    return this.run(this.requireSession().client[WS_METHODS.vcsCreateWorktree](Schema.decodeUnknownSync(VcsCreateWorktreeInput)(input)));
+  }
+  removeWorktree(cwd: string, path: string, force = false) {
+    return this.run(this.requireSession().client[WS_METHODS.vcsRemoveWorktree]({ cwd, path, force }));
+  }
+  preparePullRequest(input: unknown) {
+    return this.run(this.requireSession().client[WS_METHODS.gitPreparePullRequestThread](Schema.decodeUnknownSync(GitPreparePullRequestThreadInput)(input)));
+  }
+  async getSettings() {
+    const session = this.requireSession();
+    const settings = await this.run(session.client[WS_METHODS.serverGetSettings]({}));
+    if (this.session !== session) throw new Error("T3 connection changed while loading settings.");
+    // Optional fields retain their absence when decoding older server snapshots.
+    const directory = this.config?.environment.capabilities.worktreesDirectory === true || settings.worktreesDirectory !== undefined;
+    this.settingsSupport = { worktreesDirectory: directory,
+      cleanupRetention: settings.storageCleanup.worktreeKeepWhen !== undefined && settings.storageCleanup.worktreeSettledAfterDays !== undefined,
+      // Settle actions shipped before the directory capability; legacy servers omit both.
+      runOnSettle: directory };
+    return settings;
+  }
+  updateSettings(patch: unknown) {
+    const decoded = Schema.decodeUnknownSync(ServerSettingsPatch)(patch);
+    if (decoded.projectSettingsOverrides && this.config?.environment.capabilities.projectSettingsOverrides !== true)
+      throw new Error("Update T3 Code to save shared project settings.");
+    return this.run(this.requireSession().client[WS_METHODS.serverUpdateSettings]({ patch: decoded }));
+  }
+  subscribeWorktreeSetup(id: string, handler: (event: WorktreeSetupStreamEvent) => void) {
+    return this.subscribe(this.requireSession().client[WS_METHODS.subscribeWorktreeSetup]({ threadId: threadId(id) }), handler);
+  }
+  cancelWorktreeSetup(id: string) { return this.run(this.requireSession().client[WS_METHODS.worktreeSetupCancel]({ threadId: threadId(id) })); }
+  async gitAction(input: unknown, onProgress: (message: string) => void) {
+    const events = await this.run(Stream.runCollect(this.requireSession().client[WS_METHODS.gitRunStackedAction](Schema.decodeUnknownSync(GitRunStackedActionInput)(input)).pipe(
+      Stream.tap((event) => Effect.sync(() => onProgress(JSON.stringify(event)))),
+    )));
+    const failed = events.find(event => event.kind === "action_failed");
+    if (failed?.kind === "action_failed") throw new Error(failed.message);
+    if (!events.some(event => event.kind === "action_finished")) throw new Error("Git action ended without a completion result. Refresh the checkout before retrying.");
+    return events;
   }
   async ensureScratchProject(): Promise<string> {
     const result = await this.run(this.requireSession().client[WS_METHODS.projectsEnsureScratch]({}));

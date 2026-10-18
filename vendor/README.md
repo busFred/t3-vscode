@@ -113,6 +113,15 @@ Then re-apply the package.json edits by hand (they are **not** scripted):
    that its form does not edit. `src/host/scheduledTasks.test.ts` verifies this
    boundary. The separate T3 Code application is not changed.
 
+6. Preserve the narrow worktree settings backports in `contracts/src/environment.ts`,
+   `settings.ts`, `project.ts`, `t3ProjectFile.ts`, and `shared/src/projectSettings.ts`.
+   They were checked against T3 Code revision
+   `6a6ebb278dc70dd859439a3c28960a7d23a1e645` for the extension's v0.2.0 worktree
+   feature. Optional directory, retention and settle-action fields retain absence
+   on older servers so unsupported controls stay disabled. The remaining wire/runtime
+   copy keeps the original pin above. `src/host/worktreeSettings.test.ts` covers
+   native roundtrips, compatibility and preservation of unrelated settings.
+
 Update the provenance block at the top of this file, and re-run the
 verification greps: no `three` imports outside `client-runtime/src/device/`,
 no imports of `./testing` / `@t3tools/shared/testing` outside test files.

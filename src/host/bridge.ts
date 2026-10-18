@@ -1,3 +1,5 @@
+import { parseWorktreeChoice } from "./worktrees.js";
+import { runWorktreeNativeAction, type WorktreeNativePort } from "./worktreeNativeActions.js";
 import type { ScheduledTaskEditorRequest } from "../shared/scheduledTasks.js";
 import { parseSearchFilters } from "../shared/sessionSearch.js";
 /** VS Code adapter for typed UI intents. Never exposes a generic T3 RPC tunnel. */
@@ -47,7 +49,7 @@ export class BridgeHandler {
   private readonly showSettings: () => PromiseLike<unknown>;
   private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean> };
   private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
-  private readonly viewActions: { openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>; keepTab?: (viewId: string) => PromiseLike<unknown>; closeTaskTab?: (viewId: string) => void; editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
+  private readonly viewActions: { openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>; keepTab?: (viewId: string) => PromiseLike<unknown>; closeTaskTab?: (viewId: string) => void; editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:hungtienhuang.t3-vscode"),
     prompts = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
@@ -59,7 +61,7 @@ export class BridgeHandler {
       closeTaskTab?: (viewId: string) => void;
       editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown;
       openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown;
-      newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown;
+      newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown;
       showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown;
       configureUsage?: () => PromiseLike<unknown>;
     } = {}) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; this.prompts = prompts; this.openDiff = openDiff; this.viewActions = viewActions; }
@@ -103,6 +105,32 @@ export class BridgeHandler {
           return { id: message.id, result: this.hostState.sessionSearchPreviews(id(), stringParam(params, "query"), params.matchIds, viewId) };
         }
         case "revealSessionMatch": this.hostState.revealSessionMatch(stringParam(params, "matchId"), viewId); break;
+        case "refreshWorktrees": await this.hostState.refreshWorktrees(params.cleanupEnvironments === true); break;
+        case "configureWorktree": await this.hostState.configureWorktree(params.choice, params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
+        case "newWorktreeChat": {
+          if (!this.viewActions.newWorktreeChat) throw new Error("Worktree chat tabs are unavailable.");
+          await this.viewActions.newWorktreeChat(viewId, stringParam(params, "projectId"), parseWorktreeChoice(params.choice)); break;
+        }
+        case "saveWorktreeSettings": {
+          if (!this.hostState.worktrees) throw new Error("Worktree support is unavailable.");
+          await this.hostState.worktrees.saveSettings(stringParam(params, "projectId"), params.settings); break;
+        }
+        case "worktreeReview": {
+          if (!this.hostState.worktrees) throw new Error("Worktree support is unavailable.");
+          if (params.baseRef !== undefined && typeof params.baseRef !== "string") throw new Error("Invalid review base.");
+          return { id: message.id, result: await this.hostState.worktrees.review(stringParam(params, "projectId"), stringParam(params, "path"), params.baseRef as string | undefined) };
+        }
+        case "worktreeAction": {
+          if (!this.hostState.worktrees) throw new Error("Worktree support is unavailable.");
+          if (params.action === "continue") {
+            if (typeof params.copyEdits !== "boolean") throw new Error("Choose whether to copy local edits.");
+            const state = this.hostState.snapshot(viewId), thread = state.threads.find((entry) => entry.id === state.activeThreadId);
+            if (!thread || thread.projectId !== stringParam(params, "projectId")) throw new Error("Choose this conversation’s project.");
+            const native = this.nativeWorktreePort();
+            if (await native.confirm("Continue this conversation in a new worktree?", `The conversation history stays attached. ${params.copyEdits ? "Local edits will be copied to the new checkout." : "The new checkout starts from the current branch."}`, "Continue in worktree")) await this.hostState.continueInWorktree(viewId, params.copyEdits);
+          } else await runWorktreeNativeAction(this.hostState.worktrees, params, this.nativeWorktreePort(), { retry: (id) => this.hostState.retryWorktreePreparation(id) });
+          break;
+        }
         case "refreshScheduledTasks": await this.hostState.refreshScheduledTasks(); break;
         case "saveScheduledTask": await this.hostState.saveScheduledTask(params); break;
         case "setScheduledTaskEnabled": await this.hostState.setScheduledTaskEnabled(stringParam(params, "taskId"), stringParam(params, "projectId"), params.enabled); break;
@@ -251,10 +279,18 @@ export class BridgeHandler {
           if (typeof params.text !== "string") throw new Error("Invalid text.");
           await (await import("vscode")).env.clipboard.writeText(params.text); break;
         }
-        case "openLink": await this.openLink(stringParam(params, "href"), typeof params.threadId === "string" ? params.threadId : undefined); break;
+        case "openLink": await this.openLink(stringParam(params, "href"), typeof params.threadId === "string" ? params.threadId : this.hostState.snapshot(viewId).activeThreadId ?? undefined); break;
       }
       return { id: message.id, result: this.hostState.snapshot(viewId) };
     } catch (cause) { return { id: message.id, error: cause instanceof Error ? cause.message : String(cause) }; }
+  }
+  private nativeWorktreePort(): WorktreeNativePort {
+    return {
+      confirm: async (message, detail, action) => (await (await import("vscode")).window.showWarningMessage(message, { modal: true, detail }, action)) === action,
+      openWindow: async (path) => { const vscode = await import("vscode"); return vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(path), { forceNewWindow: true }); },
+      terminal: async (command) => { const vscode = await import("vscode"); const terminal = vscode.window.createTerminal({ name: command.title, cwd: command.cwd, shellPath: command.executable, shellArgs: command.args, env: command.env }); terminal.show(); },
+      openDiff: this.openDiff,
+    };
   }
   private async openLink(href: string, threadId?: string): Promise<void> {
     const vscode = await import("vscode");

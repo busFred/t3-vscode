@@ -14,6 +14,7 @@ export interface TurnDiff {
   readonly threadId: string;
   readonly title: string;
   readonly turnNumber: number;
+  readonly displayLabel?: string;
   readonly cwd: string;
   readonly baseRef: string;
   readonly headRef: string;
