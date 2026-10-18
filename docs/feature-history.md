@@ -9,7 +9,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
 | [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.1.22 |
-| [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and an independent model/effort editor in the sidebar. | v0.1.16 | v0.1.21 |
+| [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and an independent model/effort editor in the sidebar. | v0.1.16 | v0.1.22 |
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.13 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
@@ -157,6 +157,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 - Match the conversation rows: two lines, hairline separators and the same relative padding, dropping a task row from up to 122px to about 34px.
 - Drop the origin column from the project list, where it read "Independent task" for almost every row, and fold it into the schedule tooltip.
+
+#### v0.1.22
+
+- Use the same icon-only Scheduled tasks button as adjacent chat-header actions; preserve its accessible name, drawer toggle and session task count in the tooltip.
 
 ### Workspace scope
 

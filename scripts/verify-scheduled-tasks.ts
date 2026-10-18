@@ -22,6 +22,11 @@ export async function verifyScheduledTasks(sidebar: Page, chat: Page, other: Pag
   ];
   for (const [taskId, threadId] of [["session-monitor", "second"], ["other-monitor", "third"]]) origins.push({ environmentId: host.snapshot().environment!.environmentId, projectId, taskId: taskId!, threadId: threadId! });
   await host.refreshScheduledTasks(); host.refreshAppearance();
+  const scheduledButton = chat.getByRole("button", { name: "Scheduled tasks", exact: true });
+  assert.equal(await scheduledButton.textContent(), "", "Scheduled uses the same icon-only treatment as the other header actions");
+  const scheduledBox = await scheduledButton.boundingBox();
+  const historyBox = await chat.getByRole("button", { name: "History", exact: true }).boundingBox();
+  assert.equal(scheduledBox!.width, historyBox!.width); assert.equal(scheduledBox!.height, historyBox!.height);
   await chat.getByRole("button", { name: "Scheduled tasks", exact: true }).click();
   const drawer = chat.getByRole("region", { name: "Current session scheduled tasks" });
   await drawer.getByRole("button", { name: "Edit task Monitor this session" }).waitFor();

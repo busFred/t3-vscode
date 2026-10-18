@@ -719,14 +719,10 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .scheduled-task-editor > footer { display: flex; flex: none; justify-content: flex-end; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--border); }
 .scheduled-task-editor > footer button { padding: 6px 10px; border: 1px solid var(--input); border-radius: 5px; font-size: .75rem; }
 .scheduled-task-editor > footer .primary { background: var(--primary); color: var(--primary-foreground); }
-.scheduled-header-button { display: flex; align-items: center; gap: 4px; font-size: .6875rem; padding: 4px; flex: none; }
 .chat-main { position: relative; }
 .chat-scheduled-drawer { position: absolute; right: 8px; top: 46px; z-index: 40; width: min(330px, calc(100% - 16px)); max-height: min(450px, calc(100% - 60px)); display: flex; border: 1px solid var(--border); background: var(--sidebar); border-radius: 6px; box-shadow: 0 5px 18px #0003; }
-@media (max-width: 600px) { .scheduled-header-button > span { display: none; } }
 @media (max-width: 260px) {
   .chat-header .icon-button { width: 22px; }
-  .scheduled-header-button { padding: 3px; }
-  .scheduled-header-button small { display: none; }
 }
 
 .retained-sidebar { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
