@@ -14,7 +14,7 @@ Setup distinguishes a missing server, a stopped process, an unanswered probe, in
 
 ## Settings
 
-Settings live in **Preferences → Settings → Extensions → T3 VSCode**, grouped under **Appearance**, **Reading**, **Usage** and **Connection**. Use the native User/Workspace tabs to choose where values are saved, and each setting's **Reset Setting** action to restore its default.
+Settings live in **Preferences → Settings → Extensions → T3 VSCode**, grouped under **Appearance**, **Reading**, **Usage**, **Refresh** and **Connection**. Use the native User/Workspace tabs to choose where values are saved, and each setting's **Reset Setting** action to restore its default.
 
 | Setting | Key | Default | Notes |
 | --- | --- | --- | --- |
@@ -24,14 +24,16 @@ Settings live in **Preferences → Settings → Extensions → T3 VSCode**, grou
 | Message Navigation | `t3-vscode.messageNavigation` | `left` | Rail placement: `left`, `right` or `off`. |
 | Usage: Follow Active Conversation | `t3-vscode.usage.followActiveConversation` | `true` | Status meters track the focused chat's provider. |
 | Usage: Pinned Accounts | `t3-vscode.usage.pinnedAccounts` | `[]` | Accounts always shown in the status bar. |
-| Usage: Refresh Interval Seconds | `t3-vscode.usage.refreshIntervalSeconds` | `600` | Seconds between automatic usage refreshes, plus up to 20% jitter. Values from 1 to 14 are raised to 15; `0` disables periodic refresh. |
+| Refresh: Default Interval Minutes | `t3-vscode.refresh.defaultIntervalMinutes` | `10` | Shared periodic refresh interval for usage and worktrees. Fractional minutes are supported; `0` disables periodic refresh. |
+| Refresh: Usage Interval Minutes | `t3-vscode.refresh.usageIntervalMinutes` | `null` | Inherit the default unless overridden. Usage adds up to 20% jitter. Explicit legacy seconds settings remain effective until overridden or reset. |
+| Refresh: Worktree Interval Minutes | `t3-vscode.refresh.worktreeIntervalMinutes` | `null` | Inherit the default unless overridden. Manual refresh and checkout-changing actions still update immediately. |
 | T3 Home | `t3-vscode.t3Home` | empty | Empty uses the default T3 home; set it to your server's data directory and reload VS Code. |
 
 Font size changes apply immediately to every view and preserve conversations and drafts. The settings button at the bottom of the session manager and the **T3 VSCode: Font Settings** command open that native settings page. Existing setting keys and saved values are preserved across versions.
 
 ## Sessions sidebar
 
-The sidebar has **Sessions** and **Tasks** tabs, each with its own **+** action. Sessions begin directly below search, with one **New Thread** button beside the search field and no project-name row. **Settled** and **Archive** have separate lists. Session activity appears beside the provider: minutes, hours and days through 7 days, then a local date; hover for the exact time.
+The sidebar has **Sessions**, **Worktrees** and **Tasks** tabs, each with its own **+** action. Sessions begin directly below search, with one **New Thread** button beside the search field and no project-name row. **Settled** and **Archive** have separate lists. Session activity appears beside the provider: minutes, hours and days through 7 days, then a local date; hover for the exact time.
 
 Use the sort button beside **+** to order sessions by last activity or title, ascending or descending. The menu floats over the list; the view remembers your choice. Pins stay first and subagents stay with their parent.
 
@@ -50,6 +52,12 @@ With a folder open, canonical paths and Git repository identity determine which 
 Open **Worktrees** beside Sessions and Tasks, or use **Worktree** immediately after the permission mode inside the message box. New conversations can use Root, a new checkout, an existing branch/checkout, or a GitHub pull request. Choose the base branch and model allocations before sending; parallel runs each receive their own checkout.
 
 Every window shows the entire project, including its sessions and tasks. Each conversation keeps its own checkout. File references from another checkout show the full source path; choosing a new checkout does not silently retarget an existing reference.
+
+Linked checkouts share one collapsible repository group even when T3 has separate project records for them. **Main checkout** identifies the original Git checkout; other rows are checkouts, not a list of all branches. Detached checkouts include their folder and commit. Submodules have distinct Git identities and appear separately only when they are already visible T3 projects; the extension does not recursively discover them. If several T3 project records share a repository, the settings and action selectors retain their separate service settings.
+
+Use **Groups** at the bottom right to show or hide repository groups. Visibility is saved for the current service/workspace; new groups start visible. Ordinary conversations appear under their checkout, with subagents nested beneath their parent in collapsed **Subagents** groups, including children using another checkout. Their tooltip identifies the child's actual working directory. Counts exclude subagents, and search expands matching descendants. Closing an untouched new chat removes only that conversation; typing or attempting setup preserves it.
+
+Worktrees refreshes every 10 minutes by default, on page open, after checkout changes and with the search bar's refresh button. The refresh icon spins while existing rows stay in place. Ordinary conversation activity does not rescan Git. Override the interval in **Refresh** settings; Sessions and Tasks receive live service updates instead of periodic polling.
 
 Open checkout details for setup status, logs, terminal, project actions, native diffs and selected-file transfers. Applying files asks for an explicit destination and stops on conflicts. **Continue in new worktree** moves an idle Root conversation with its history; copying uncommitted files is optional. Removing a checkout retains its branch and conversations, so it can be restored later.
 
@@ -75,7 +83,7 @@ The status bar shows a small provider icon followed by reported month/week/sessi
 
 ### Automatic refresh
 
-Usage refreshes once when T3 VSCode connects and then on the interval set by **T3 VSCode: Usage: Refresh Interval Seconds**. Each wait adds up to 20% random jitter, so the default 600 seconds means a real gap of 600 to 720 seconds — about every ten to twelve minutes. Set the value to `0` to disable periodic refresh; values from 1 to 14 are raised to 15.
+Usage refreshes once when T3 VSCode connects and then inherits **Refresh: Default Interval Minutes**, initially 10. Set **Refresh: Usage Interval Minutes** for a separate cadence; fractional values work and `0` disables periodic refresh. Each usage wait adds up to 20% random jitter, so the default means ten to twelve minutes. Explicit values in the deprecated `t3-vscode.usage.refreshIntervalSeconds` setting remain effective until you set a new usage override or reset that legacy value. The legacy minimum of 15 seconds does not apply to the new minute settings.
 
 A refresh makes T3 rescan provider transcripts and re-probe provider instances, which competes with sending a message on the same server:
 

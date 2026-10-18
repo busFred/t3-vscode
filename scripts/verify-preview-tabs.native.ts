@@ -51,6 +51,18 @@ export async function run() {
       ?? vscode.window.tabGroups.all.flatMap(group => group.tabs).find(tab => tab.label === "New thread");
     assert.ok(freshTab, "New chat opens in a native editor tab");
     await vscode.window.tabGroups.close(freshTab); await tick();
+    assert(!host.snapshot().threads.some(thread => thread.id === freshId), "Closing an untouched new editor cleans up its conversation");
+    // Inherit a linked checkout exactly as the new-chat action does, without a real provider.
+    client.shell = { ...client.shell, threads: client.shell.threads.map(thread => thread.id === 'second'
+      ? { ...thread, worktreePath: '/tmp/t3-vscode-linked-fixture', branch: 'fixture-worktree' } : thread) };
+    client.shellHandler!({ kind: 'snapshot', snapshot: client.shell });
+    const worktreeView = await provider.createNewPanel(second); await tick();
+    const worktreeId = host.snapshot(worktreeView).activeThreadId!;
+    assert.equal(host.snapshot(worktreeView).threads.find(thread => thread.id === worktreeId)?.worktreePath, '/tmp/t3-vscode-linked-fixture');
+    const worktreeTab = vscode.window.tabGroups.all.flatMap(group => group.tabs).find(tab => tab.label === 'New thread')!;
+    await vscode.window.tabGroups.close(worktreeTab); await tick();
+    assert(!host.snapshot().threads.some(thread => thread.id === worktreeId), "Closing an untouched worktree editor cleans up its conversation");
+    assert(host.snapshot().threads.some(thread => thread.id === 'second'), "The source conversation is retained");
     const projectId = host.snapshot().projects[0]!.id;
     client.scheduledTasks = [scheduledTaskFixture({ projectId, id: "task-one", title: "Task one" }), scheduledTaskFixture({ projectId, id: "task-two", title: "Task two" })];
     assert.equal(host.snapshot().scheduledTasks?.tasks.length ?? 0, 0, "Restore fixture is ready before initial task data");
@@ -62,6 +74,6 @@ export async function run() {
     assert.equal(tabs().find(tab => tab.label === "Task two")!.isPreview, false);
     await provider.openSession("second", true); await tick();
     assert.equal(tabs().filter(tab => tab.label === "second conversation").length, 1);
-    await writeFile(process.env.T3_PREVIEW_RESULT!, "Native session/task preview, promotion, History identity and tab reuse checks passed.\n");
+    await writeFile(process.env.T3_PREVIEW_RESULT!, "Native session/task preview, promotion, History identity, tab reuse and untouched root/worktree chat cleanup checks passed.\n");
   } finally { await vscode.commands.executeCommand("workbench.action.closeAllEditors"); off(); registration.dispose(); await host.dispose(); }
 }

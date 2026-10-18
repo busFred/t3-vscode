@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { MAX_REFRESH_TIMEOUT_MS } from "./refreshSettings.js";
 import { DEFAULT_USAGE_REFRESH_SECONDS, UsageRefreshScheduler, usageRefreshIntervalMs, type UsageRefreshTimers } from "./usageRefresh.js";
 
 function fakeTimers(...jitter: ReadonlyArray<number>) {
@@ -195,4 +196,51 @@ test("a tick during an in-flight refresh is still satisfied by it rather than qu
   clock.advance(60_000); clock.tick(); await settle(); assert.equal(calls, 1);
   finish(); await settle();
   assert.equal(calls, 1, "only connect and display transitions survive a refresh's completion");
+});
+
+test("minute preferences preserve fractional cadence and disabled reconnect refreshes", async () => {
+  const clock = fakeTimers(0.5); let calls = 0;
+  const scheduler = new UsageRefreshScheduler(async () => { calls += 1; }, clock.timers);
+  scheduler.configureMinutes(0.1); assert.deepEqual(clock.delays(), [6_600]);
+  scheduler.setReady(true); await settle(); assert.equal(calls, 1);
+  scheduler.configureMinutes(0); assert.equal(clock.active.size, 0);
+  scheduler.setReady(false); scheduler.setReady(true); await settle(); assert.equal(calls, 2);
+  scheduler.dispose();
+});
+
+test("disabling periodic refresh cancels a tick deferred by a busy session", async () => {
+  const clock = fakeTimers(); let calls = 0;
+  const scheduler = new UsageRefreshScheduler(async () => { calls += 1; }, clock.timers);
+  scheduler.configureMinutes(1); scheduler.setReady(true); await settle();
+  scheduler.setBusy(true); clock.advance(60_000); clock.tick(); await settle();
+  scheduler.configureMinutes(0); scheduler.setBusy(false); await settle();
+  assert.equal(calls, 1, "a periodic refresh cannot run after it is disabled");
+  assert.equal(clock.active.size, 0);
+  scheduler.dispose();
+});
+
+test("disabling periodic refresh preserves a connection refresh waiting for a meter", async () => {
+  const clock = fakeTimers(); let calls = 0;
+  const scheduler = new UsageRefreshScheduler(async () => { calls += 1; }, clock.timers);
+  scheduler.configureMinutes(1); scheduler.setDisplayed(false); scheduler.setReady(true);
+  scheduler.configureMinutes(0); scheduler.setDisplayed(true); await settle();
+  assert.equal(calls, 1);
+  scheduler.dispose();
+});
+
+
+test("large intervals including jitter remain safe and retain a finite staleness deadline", async () => {
+  const clock = fakeTimers(1); let calls = 0;
+  const scheduler = new UsageRefreshScheduler(async () => { calls += 1; }, clock.timers);
+  assert.equal(usageRefreshIntervalMs(Number.MAX_VALUE), MAX_REFRESH_TIMEOUT_MS);
+  scheduler.configureMinutes(Number.MAX_VALUE);
+  assert.deepEqual(clock.delays(), [MAX_REFRESH_TIMEOUT_MS]);
+  scheduler.setReady(true); await settle(); scheduler.setBusy(true);
+  for (let interval = 1; interval <= 5; interval += 1) {
+    clock.advance(MAX_REFRESH_TIMEOUT_MS); clock.tick(); await settle();
+    assert.deepEqual(clock.delays(), [MAX_REFRESH_TIMEOUT_MS]);
+    assert.equal(calls, interval < 5 ? 1 : 2, "staleness uses the bounded effective interval");
+  }
+  scheduler.configureMinutes(0); assert.equal(clock.active.size, 0);
+  scheduler.dispose();
 });

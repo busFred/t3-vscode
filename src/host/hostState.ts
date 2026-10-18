@@ -1,6 +1,7 @@
 import { WorktreeCoordinator, parseWorktreeChoice, type WorktreeTransport, type WorktreeHandoff } from "./worktrees.js";
 import { repositoryIdentity, worktreeChanges, applyWorktreeFiles } from "./worktreeGit.js";
 import type { WorktreeChoice } from "../shared/worktrees.js";
+import { DEFAULT_REFRESH_INTERVAL_MINUTES, refreshIntervalMs } from "../shared/refreshSettings.js";
 import type { FileReference } from "../shared/composerContext.js";
 import { resolveDateFormat, resolveTimeFormat, type DateFormat, type TimeFormat } from "../shared/timeFormat.js";
 import { ComposerDraftStore, type StoredComposerDraft } from "./composerDraftStore.js";
@@ -81,6 +82,7 @@ export interface HostStateOptions {
   readonly discover?: typeof discoverServer;
   readonly pair?: typeof pairWithServer;
   readonly reconnectDelayMs?: number;
+  readonly worktreeRefreshMinutes?: () => number;
 }
 interface ThreadState {
   projection: OrchestrationV2ThreadProjection | null;
@@ -153,7 +155,7 @@ export class HostState {
   private readonly pathIdentities = new Map<string, string>();
   private readonly workspaceRefreshes = new Map<string, Promise<unknown>>();
   private worktreeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-  private worktreePoll: ReturnType<typeof setInterval> | null = null;
+  private worktreePoll: ReturnType<typeof setTimeout> | null = null;
 
   private readonly options: HostStateOptions;
   private readonly client: HostTransport;
@@ -173,8 +175,22 @@ export class HostState {
         if (!this.disposed) this.setPhase("error", describeError(cause));
       });
     };
-    client.onConfig = () => { this.scheduleEmit(); this.scheduleWorktreeRefresh(); };
-    if (this.worktrees) { this.worktreePoll = setInterval(() => this.scheduleWorktreeRefresh(), 30_000); this.worktreePoll.unref(); }
+    client.onConfig = () => { this.scheduleEmit(); };
+    this.refreshIntervalsChanged();
+  }
+  refreshIntervalsChanged(): void {
+    if (this.worktreePoll) clearTimeout(this.worktreePoll);
+    this.worktreePoll = null;
+    if (!this.worktrees || this.disposed) return;
+    const configured = this.options.worktreeRefreshMinutes?.() ?? DEFAULT_REFRESH_INTERVAL_MINUTES;
+    const interval = refreshIntervalMs(Number.isFinite(configured) && configured >= 0 ? configured : DEFAULT_REFRESH_INTERVAL_MINUTES);
+    if (interval === null) return;
+    this.worktreePoll = setTimeout(() => {
+      this.worktreePoll = null;
+      this.scheduleWorktreeRefresh();
+      this.refreshIntervalsChanged();
+    }, interval);
+    this.worktreePoll.unref();
   }
   private scheduleWorktreeRefresh(): void {
     if (!this.worktrees || !this.client.connected || this.disposed || this.worktreeRefreshTimer) return;
@@ -233,11 +249,11 @@ export class HostState {
   private async cleanupEmptyThread(id: string, untouchedTitle = "New thread"): Promise<void> {
     if (!this.emptyThreads.has(id) || !this.client.connected || [...this.views.values()].some((view) => view.chatThreadId === id)) return;
     const thread = this.findThread(id);
-    if (!thread || thread.worktreePath || thread.activeRunId || thread.archivedAt || thread.deletedAt || thread.title !== untouchedTitle || thread.pinnedAt || thread.settledOverride) return;
+    if (!thread || (thread.worktreePath && thread.branch) || thread.activeRunId || thread.archivedAt || thread.deletedAt || thread.title !== untouchedTitle || thread.pinnedAt || thread.settledOverride) return;
     // Check durable server data, rather than assuming an unloaded transcript is empty.
     const projection = await this.client.getThreadProjection(id).catch(() => null);
     if (!projection || projection.messages.length || projection.runs.length || projection.visibleTurnItems.some((row) => row.item.type === "user_message" || row.item.type === "assistant_message")
-      || projection.thread.title !== untouchedTitle || projection.thread.worktreePath || projection.thread.archivedAt || projection.thread.pinnedAt || projection.thread.settledOverride
+      || projection.thread.title !== untouchedTitle || (projection.thread.worktreePath && projection.thread.branch) || projection.thread.archivedAt || projection.thread.deletedAt || projection.thread.pinnedAt || projection.thread.settledOverride
       || !this.emptyThreads.has(id) || [...this.views.values()].some((view) => view.chatThreadId === id)) return;
     await this.client.dispatch({ type: "thread.delete", commandId: randomUUID(), threadId: id });
     this.emptyThreads.delete(id); this.shell = await this.client.snapshotShell();
@@ -432,6 +448,7 @@ export class HostState {
   }
   private handleShell(item: OrchestrationV2ShellStreamItem): void {
     if (item.kind === "synchronized") return;
+    const previousWorkspaces = this.worktreeScopeKey();
     if (item.kind === "snapshot") {
       this.shell = ShellState.mergeShellSnapshotProjects(this.shell, item.snapshot,
         item.resolvedRepositoryIdentityRoots === undefined ? undefined : { resolvedRepositoryIdentityRoots: item.resolvedRepositoryIdentityRoots });
@@ -440,7 +457,15 @@ export class HostState {
     }
     this.reconcileRemovedThreads();
     this.scheduleEmit();
-    if (item.kind === "snapshot" || item.kind === "project.updated" || item.kind === "thread.updated") this.scheduleWorktreeRefresh();
+    if (previousWorkspaces !== this.worktreeScopeKey()) this.scheduleWorktreeRefresh();
+  }
+  private worktreeScopeKey(): string {
+    const projects = this.visibleProjects();
+    const ids = new Set(projects.map(project => project.id));
+    return JSON.stringify([
+      projects.map(project => [project.id, project.workspaceRoot, project.scripts]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+      [...new Set(this.allThreads().filter(thread => ids.has(thread.projectId) && thread.worktreePath).map(thread => thread.worktreePath!))].sort(),
+    ]);
   }
   loadArchive(): Promise<void> { return this.subscribeArchive(); }
   private subscribeArchive(): Promise<void> {
@@ -708,7 +733,10 @@ export class HostState {
     await this.client.dispatch({ type: "thread.create", commandId: randomUUID(), threadId: id, projectId,
       createdBy: "user", creationSource: "web", title: "New thread", modelSelection: model,
       runtimeMode: this.compatibleRuntimeMode(model, draft.runtimeMode), interactionMode: draft.interactionMode,
-      branch: draft.workspace?.type === "existing" ? draft.workspace.branch ?? null : null,
+      // Bind the directory now, but publish the branch only when a send prepares it.
+      // T3's worktree-on-delete policy requires a branch: closing an untouched tab
+      // must delete only this new conversation, never its existing checkout.
+      branch: null,
       worktreePath: draft.workspace?.type === "existing" ? draft.workspace.path ?? null : null });
     this.shell = await this.client.snapshotShell();
     this.emptyThreads.add(id);
@@ -828,6 +856,8 @@ export class HostState {
   async prepareThreadWorkspace(id: string, choice: WorktreeChoice, group?: { groupId: string; title: string }): Promise<void> {
     if (!this.worktrees) throw new Error("Worktree support is unavailable.");
     const thread = this.requireThread(id);
+    // A preparation attempt represents user work even when setup fails before a run starts.
+    this.emptyThreads.delete(id);
     await this.worktrees.prepare(thread.projectId, id, choice, (path, branch) => this.bindEmptyThread(id, path, branch), group);
   }
   async retryWorktreePreparation(id: string): Promise<void> {
@@ -1544,7 +1574,7 @@ export class HostState {
   }
   async dispose(): Promise<void> {
     if (this.worktreeRefreshTimer) clearTimeout(this.worktreeRefreshTimer);
-    if (this.worktreePoll) clearInterval(this.worktreePoll);
+    if (this.worktreePoll) clearTimeout(this.worktreePoll);
     this.composerDrafts.dispose();
     this.disposed = true; this.worktrees?.dispose(); this.client.onClose = null; this.client.onConfig = null;
     if (this.emitTimer) clearTimeout(this.emitTimer);

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { existingCheckoutChoice } from "../../shared/worktreeGroups";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import type { WorktreeReview, WorktreeSummary } from "../../shared/worktrees";
 import { useActions } from "../actions";
@@ -41,7 +42,7 @@ export function WorktreeInspector({ state, item }: { readonly state: HostStateSn
   const environment = item.environment;
   return <>
     <p className="task-context">{item.root ? "Root checkout" : item.branch || "Detached checkout"}{item.missing ? " · Missing" : ""}{item.locked ? " · Locked" : ""}<br />{item.path}</p>
-    <div className="worktree-actions"><button type="button" disabled={busy || item.missing || state.phase !== "ready"} onClick={() => { void action("open"); }}>Open window</button><button type="button" disabled={busy || item.missing || state.phase !== "ready"} onClick={() => { void action("terminal"); }}>Terminal</button><button type="button" disabled={busy || item.missing || state.phase !== "ready"} onClick={() => { void run("newWorktreeChat", { projectId: item.projectId, choice: item.root ? { type: "root" } : { type: "existing", path: item.path } }); }}>New chat</button>
+    <div className="worktree-actions"><button type="button" disabled={busy || item.missing || state.phase !== "ready"} onClick={() => { void action("open"); }}>Open window</button><button type="button" disabled={busy || item.missing || state.phase !== "ready"} onClick={() => { void action("terminal"); }}>Terminal</button><button type="button" disabled={busy || item.missing || state.phase !== "ready"} onClick={() => { void run("newWorktreeChat", { projectId: item.projectId, choice: existingCheckoutChoice(item) }); }}>New chat</button>
       {!item.root ? item.missing ? <button type="button" disabled={busy || state.phase !== "ready"} onClick={() => { void action("restore"); }}>Restore…</button> : <button type="button" disabled={busy || state.phase !== "ready" || item.locked} onClick={() => { void action("remove"); }}>Remove…</button> : null}</div>
     <details className="task-workspace" open><summary>Environment · {item.root ? "Root checkout" : environment?.status ?? (settings?.environment.enabled ? "Not prepared" : "Disabled")}</summary>
       {item.root ? <small>Worktree environment profiles apply to linked checkouts. The root checkout keeps its existing environment.</small> : <>

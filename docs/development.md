@@ -86,9 +86,9 @@ pnpm install --frozen-lockfile
 pnpm run package
 ```
 
-This rebuilds both bundles, uses the channel metadata in `package.json`, and produces `target-installer/t3-vscode-0.1.15.vsix` without the prerelease flag. All packaged VSIX installers go into `target-installer/`, which is excluded from Git. The archive includes compiled code, icons, the lazy Mermaid renderer, KaTeX CSS/fonts and license notices; development profiles, server data, source maps and `node_modules` are excluded.
+This rebuilds both bundles and produces a versioned installer under `target-installer/`, which is excluded from Git. Check the intended channel and use `vsce --pre-release` for prerelease metadata. Preserve previously published artifacts when building a local same-version follow-up by choosing a distinct output filename. The archive includes compiled code, icons, the lazy Mermaid renderer, KaTeX CSS/fonts and license notices; development profiles, server data, source maps and `node_modules` are excluded.
 
-For a revision that keeps the same version, update that canonical installer path too; keep superseded artifacts under `target-installer/archive/` with descriptive names. A preview in a subdirectory must not leave the documented installer pointing at an older build. Compare bundled files or SHA-256 hashes when diagnosing a same-version install, then reinstall the corrected VSIX in the intended profile and run **Developer: Reload Window**; CLI reinstalls can use `--force` with the same isolated storage arguments.
+For a same-version follow-up, link the exact new filename in the handoff and preserve published artifacts. Replace a canonical installer only when the owner requests that replacement, archiving its previous bytes under `target-installer/archive/` with a descriptive name. Compare bundled files or SHA-256 hashes when diagnosing a same-version install. An authorized reinstall should target the intended profile and be followed by **Developer: Reload Window**; CLI reinstalls can use `--force` with the same isolated storage arguments. Packaging alone never authorizes installation.
 
 ## Where things live
 

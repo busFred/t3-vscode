@@ -1,3 +1,5 @@
+import { MAX_REFRESH_TIMEOUT_MS, refreshIntervalMs } from "./refreshSettings.js";
+
 export const DEFAULT_USAGE_REFRESH_SECONDS = 600;
 export const MIN_USAGE_REFRESH_SECONDS = 15;
 /** Extra delay, as a fraction of the interval, drawn randomly per tick so a fixed beat cannot keep landing on the same keystrokes. */
@@ -9,7 +11,7 @@ export const USAGE_REFRESH_STALENESS_INTERVALS = 5;
 export function usageRefreshIntervalMs(seconds: unknown): number | null {
   if (typeof seconds !== "number" || !Number.isFinite(seconds)) return DEFAULT_USAGE_REFRESH_SECONDS * 1000;
   if (seconds <= 0) return null;
-  return Math.max(MIN_USAGE_REFRESH_SECONDS, seconds) * 1000;
+  return Math.min(MAX_REFRESH_TIMEOUT_MS, Math.max(MIN_USAGE_REFRESH_SECONDS, seconds) * 1000);
 }
 
 export interface UsageRefreshTimers {
@@ -41,6 +43,7 @@ export class UsageRefreshScheduler {
   private displayed = true;
   private disposed = false;
   private pending = false;
+  private pendingPeriodic = false;
   private inFlight = false;
   /** Counts connect and display transitions, which want their own refresh even if one was already under way. */
   private releases = 0;
@@ -54,16 +57,23 @@ export class UsageRefreshScheduler {
   }
   /** Applies a (possibly changed) interval setting, restarting the timer. */
   configure(seconds: unknown): void {
-    const intervalMs = usageRefreshIntervalMs(seconds);
+    this.configureInterval(usageRefreshIntervalMs(seconds));
+  }
+  /** Applies the shared, resolved minutes setting, including fractional minutes. */
+  configureMinutes(minutes: number): void {
+    this.configureInterval(refreshIntervalMs(minutes));
+  }
+  private configureInterval(intervalMs: number | null): void {
     if (intervalMs === this.intervalMs && (this.handle !== null) === (intervalMs !== null)) return;
     this.intervalMs = intervalMs;
+    if (intervalMs === null && this.pendingPeriodic) { this.pending = false; this.pendingPeriodic = false; }
     this.schedule();
   }
   /** Reports whether the host is connected; the transition to ready requests an immediate refresh. */
   setReady(ready: boolean): void {
     if (this.disposed || ready === this.ready) return;
     this.ready = ready;
-    if (ready) { this.pending = true; this.releases += 1; this.drain(); }
+    if (ready) { this.pending = true; this.pendingPeriodic = false; this.releases += 1; this.drain(); }
   }
   /** Reports whether the host is sending a message or running a turn; going idle releases a deferred refresh. */
   setBusy(busy: boolean): void {
@@ -85,7 +95,7 @@ export class UsageRefreshScheduler {
   private schedule(): void {
     this.stop();
     if (this.disposed || this.intervalMs === null) return;
-    const delay = this.intervalMs + Math.round(this.intervalMs * USAGE_REFRESH_JITTER * this.timers.random());
+    const delay = Math.min(MAX_REFRESH_TIMEOUT_MS, this.intervalMs + Math.round(this.intervalMs * USAGE_REFRESH_JITTER * this.timers.random()));
     this.handle = this.timers.set(() => this.tick(), delay);
   }
   private stop(): void {
@@ -96,6 +106,7 @@ export class UsageRefreshScheduler {
     this.handle = null;
     this.schedule();
     if (!this.ready) return;
+    if (!this.pending) this.pendingPeriodic = true;
     this.pending = true;
     this.drain();
   }
@@ -108,6 +119,7 @@ export class UsageRefreshScheduler {
     if (this.disposed || !this.pending || !this.ready || this.inFlight || !this.displayed) return;
     if (this.busy && !this.overdue()) return;
     this.pending = false;
+    this.pendingPeriodic = false;
     this.inFlight = true;
     const releases = this.releases;
     void this.refresh().catch(() => undefined).finally(() => {

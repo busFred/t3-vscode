@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -10,7 +10,7 @@ import * as Schema from 'effect/Schema';
 import { ProjectId, ServerSettings, ThreadId } from '@t3tools/contracts';
 import { v2Project, v2ThreadShell, v2Projection } from '../../vendor/client-runtime/src/state/orchestrationV2TestFixtures';
 import { HostState, type HostTransport } from './hostState';
-import { FakeTransport, credentials, provider, server } from './testing/fakeTransport';
+import { FakeTransport, credentials, provider, server, publishText } from './testing/fakeTransport';
 import { ComposerDraftStore } from './composerDraftStore';
 import { scheduledTaskFixture } from './testing/scheduledTaskFixture';
 
@@ -31,7 +31,7 @@ async function fixture(t: { after(action: () => Promise<void>): void }) {
     { ...v2ThreadShell, id: ThreadId.make('other-session'), itemCount: 1, modelSelection: selection, activeRunId: null, worktreePath: other, branch: 'external' },
   ] };
   let settings = Schema.decodeUnknownSync(ServerSettings)({ newWorktreesStartFromOrigin: false, worktreeSubmodules: 'none' });
-  let creates = 0, windowRoot = other;
+  let creates = 0, windowRoot = other, refreshMinutes = 10;
   const transport: HostTransport = Object.assign(client, {
     getSettings: async () => settings,
     updateSettings: async (raw: unknown) => { const patch = raw as Partial<typeof settings>; settings = { ...settings, ...patch }; return settings; },
@@ -45,11 +45,12 @@ async function fixture(t: { after(action: () => Promise<void>): void }) {
   });
   const drafts = new ComposerDraftStore();
   const host = new HostState({ home, credentials, discover: async () => ({ ok: true, server }),
-    workspaceRoot: () => windowRoot, draftStore: drafts, worktreeStorageRoot: join(home, 'storage') }, transport);
+    workspaceRoot: () => windowRoot, draftStore: drafts, worktreeStorageRoot: join(home, 'storage'), worktreeRefreshMinutes: () => refreshMinutes }, transport);
   await host.start(); await host.refreshWorktrees();
   t.after(async () => { await host.dispose(); await rm(home, { recursive: true, force: true }); });
   return { home, root, other, client, host, drafts, selection, git, creates: () => creates,
     window: (path: string) => { windowRoot = path; },
+    refreshMinutes: (value: number) => { refreshMinutes = value; host.refreshIntervalsChanged(); },
     setup: (command: string) => { settings = Schema.decodeUnknownSync(ServerSettings)({ newWorktreesStartFromOrigin: false, worktreeSubmodules: 'none',
       defaultProjectScripts: [{ id: 'setup', name: 'Setup', icon: 'configure', command, runOnWorktreeCreate: true, async: false }] }); },
   };
@@ -65,6 +66,112 @@ test('a worktree window retains project sessions/tasks and new chat defaults to 
   const id = await f.host.newThread(undefined, 'new');
   assert.equal(f.host.snapshot('new').threads.find(t => t.id === id)?.worktreePath, f.other);
   assert.equal(f.client.projectCreates, 0);
+});
+
+test('closing an untouched worktree chat deletes only the new conversation, without native checkout cleanup eligibility', async t => {
+  const f = await fixture(t);
+  f.host.registerView('unused', undefined, false); f.host.beginNewChat('unused');
+  await f.host.configureWorktree({ type: 'existing', path: f.other, branch: 'external' }, v2Project.id, 'unused');
+  const id = await f.host.newThread(v2Project.id, 'unused');
+  await f.host.composerState(id, true, false, 'unused');
+  const created = f.client.commands.find(c => c.type === 'thread.create' && c.threadId === id);
+  assert.equal(created?.type === 'thread.create' && created.worktreePath, f.other);
+  assert.equal(created?.type === 'thread.create' && created.branch, null, 'Untouched chats must not opt a checkout into T3 worktree-on-delete cleanup');
+  await f.host.removeView('unused');
+  assert(f.client.commands.some(c => c.type === 'thread.delete' && c.threadId === id));
+  assert(!f.host.snapshot().threads.some(t => t.id === id));
+  assert(f.host.snapshot().threads.some(t => t.id === 'other-session'));
+  assert.equal(await readFile(join(f.other, 'file.py'), 'utf8'), 'base\n');
+  assert.match(await f.git(f.root, 'worktree', 'list', '--porcelain'), /branch refs\/heads\/external/);
+});
+
+test('worktree cleanup retains typed chats, external edits and failed preparation attempts', async t => {
+  const f = await fixture(t);
+  for (const reason of ['typed-and-cleared', 'external-branch', 'external-message', 'failed-setup']) {
+    f.host.registerView(reason, undefined, false); f.host.beginNewChat(reason);
+    if (reason === 'failed-setup') await f.host.configureWorktree({ type: 'new', startFromOrigin: false }, v2Project.id, reason);
+    const id = await f.host.newThread(v2Project.id, reason);
+    await f.host.composerState(id, true, false, reason);
+    if (reason === 'typed-and-cleared') await f.host.composerState(id, undefined, true, reason);
+    if (reason === 'external-branch') {
+      f.client.shell = { ...f.client.shell, threads: f.client.shell.threads.map(thread => thread.id === id ? { ...thread, branch: 'external' } : thread) };
+      f.client.shellHandler!({ kind: 'snapshot', snapshot: f.client.shell });
+    }
+    if (reason === 'external-message') publishText(f.client, id, 'Keep the message sent elsewhere');
+    if (reason === 'failed-setup') { f.setup('exit 17'); await assert.rejects(f.host.sendMessage('attempt setup', id, reason)); }
+    await f.host.removeView(reason);
+    assert(f.host.snapshot().threads.some(thread => thread.id === id), reason);
+    assert(!f.client.commands.some(c => c.type === 'thread.delete' && c.threadId === id), reason);
+  }
+});
+
+test('worktree scans ignore conversation activity/config churn and retain configurable periodic/manual refresh', async t => {
+  const f = await fixture(t);
+  const internals = f.host as unknown as { worktreePoll: NodeJS.Timeout | null; worktreeRefreshTimer: NodeJS.Timeout | null };
+  assert.equal((internals.worktreePoll as unknown as { _idleTimeout: number })._idleTimeout, 600_000);
+  f.refreshMinutes(0);
+  assert.equal(internals.worktreePoll, null);
+  f.refreshMinutes(0.5);
+  assert.equal((internals.worktreePoll as unknown as { _idleTimeout: number })._idleTimeout, 30_000);
+  f.refreshMinutes(0);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  assert.equal(internals.worktreeRefreshTimer, null);
+  for (let i = 1; i <= 3; i++) {
+    f.client.shell = { ...f.client.shell, snapshotSequence: f.client.shell.snapshotSequence + 1,
+      threads: f.client.shell.threads.map(thread => ({ ...thread, title: `Activity ${i}`, itemCount: thread.itemCount + 1 })) };
+    f.client.shellHandler!({ kind: 'snapshot', snapshot: f.client.shell });
+    f.client.onConfig?.(f.client.config as Parameters<NonNullable<HostTransport['onConfig']>>[0]);
+    assert.equal(internals.worktreeRefreshTimer, null, 'Ordinary conversation/provider updates must not scan Git');
+  }
+  f.client.shell = { ...f.client.shell, threads: [...f.client.shell.threads,
+    { ...v2ThreadShell, id: ThreadId.make('new-checkout'), worktreePath: join(f.home, 'new-checkout'), branch: 'new-checkout' }] };
+  f.client.shellHandler!({ kind: 'snapshot', snapshot: f.client.shell });
+  assert(internals.worktreeRefreshTimer, 'A new checkout path should refresh promptly');
+  await f.host.refreshWorktrees();
+  assert(f.host.worktrees!.snapshot().items.some(tree => tree.path === join(f.home, 'new-checkout')));
+});
+
+test('linked service projects retain canonical repository metadata and correct main-checkout chat binding', async t => {
+  const f = await fixture(t), linkedId = ProjectId.make('linked');
+  f.client.shell = { ...f.client.shell, projects: [...f.client.shell.projects, { ...v2Project, id: linkedId, workspaceRoot: f.other, title: 'Linked project' }],
+    threads: [...f.client.shell.threads, { ...v2ThreadShell, id: ThreadId.make('linked-root-session'), projectId: linkedId, worktreePath: null, branch: 'external' }] };
+  f.client.shellHandler!({ kind: 'snapshot', snapshot: f.client.shell });
+  await f.host.refreshWorktrees();
+  const items = f.host.worktrees!.snapshot().items;
+  assert.equal(new Set(items.map(item => item.repositoryId)).size, 1);
+  assert(items.filter(item => item.root).every(item => item.path === f.root));
+  assert(items.filter(item => item.projectId === linkedId).every(item => item.projectRoot === f.other));
+  assert(items.every(item => item.head));
+  f.host.registerView('main-chat', undefined, false); f.host.beginNewChat('main-chat');
+  await f.host.configureWorktree({ type: 'existing', path: f.root }, linkedId, 'main-chat');
+  const id = await f.host.newThread(linkedId, 'main-chat');
+  await f.host.sendMessage('work in main', id, 'main-chat');
+  const thread = f.host.snapshot().threads.find(thread => thread.id === id);
+  assert.equal(thread?.worktreePath, f.root); assert.equal(thread?.branch, 'main');
+  assert.equal(f.creates(), 0);
+  assert.equal(f.host.worktrees!.snapshot().preparations.length, 0, 'Main checkout never runs worktree setup');
+});
+
+test('repository subfolder and symlink projects retain checkout membership and current-window markers', async t => {
+  const f = await fixture(t), subdir = join(f.root, 'src'), alias = join(f.root, 'linked-alias');
+  await mkdir(subdir); await symlink(f.other, alias, 'dir');
+  const subId = ProjectId.make('subdir'), aliasId = ProjectId.make('alias');
+  f.client.shell = { ...f.client.shell, projects: [...f.client.shell.projects,
+    { ...v2Project, id: subId, workspaceRoot: subdir }, { ...v2Project, id: aliasId, workspaceRoot: alias }],
+    threads: [...f.client.shell.threads,
+      { ...v2ThreadShell, id: ThreadId.make('subdir-session'), projectId: subId, worktreePath: null },
+      { ...v2ThreadShell, id: ThreadId.make('alias-session'), projectId: aliasId, worktreePath: null }] };
+  f.client.shellHandler!({ kind: 'snapshot', snapshot: f.client.shell });
+  f.window(alias); await f.host.refreshWorktrees();
+  const items = f.host.worktrees!.snapshot().items;
+  assert(items.find(item => item.projectId === subId && item.path === f.root)?.threadIds.includes('subdir-session'));
+  assert(items.find(item => item.projectId === aliasId && item.path === f.other)?.threadIds.includes('alias-session'));
+  assert.equal(items.find(item => item.projectId === subId)?.projectCheckoutPath, f.root);
+  assert.equal(items.find(item => item.projectId === aliasId)?.projectCheckoutPath, f.other);
+  assert(items.filter(item => item.openInWindow).every(item => item.path === f.other));
+  assert(items.some(item => item.openInWindow));
+  assert.equal(f.host.snapshot().projects.find(project => project.id === subId)?.workspaceRoot, subdir);
+  await assert.rejects(f.host.worktrees!.removalDetails(v2Project.id, f.other), /open in this window/);
 });
 
 test('an inherited nonempty conversation does not prevent selecting a new worktree chat', async t => {

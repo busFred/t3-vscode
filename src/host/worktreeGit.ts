@@ -21,7 +21,7 @@ function git(cwd: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}, inpu
 }
 const out = async (cwd: string, args: string[]) => (await git(cwd, args)).toString('utf8').trim();
 
-export interface LocalWorktree { path: string; branch: string; root: boolean; missing: boolean; locked: boolean }
+export interface LocalWorktree { path: string; branch: string; head?: string; root: boolean; missing: boolean; locked: boolean }
 export async function repositoryIdentity(path: string): Promise<{ root: string; commonDir: string } | null> {
   try {
     const commonDir = await realpath(await out(path, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
@@ -41,7 +41,8 @@ export async function listLocalWorktrees(projectRoot: string): Promise<LocalWork
     const path = fields.find((field) => field.startsWith('worktree '))?.slice(9);
     if (!path) continue;
     const canonical = await realpath(path).catch(() => resolve(path));
-    result.push({ path: canonical, branch: fields.find((field) => field.startsWith('branch '))?.slice(7).replace(/^refs\/heads\//, '') ?? '', root: canonical === identity.root,
+    const head = fields.find(field => field.startsWith('HEAD '))?.slice(5, 17);
+    result.push({ path: canonical, branch: fields.find((field) => field.startsWith('branch '))?.slice(7).replace(/^refs\/heads\//, '') ?? '', ...(head ? { head } : {}), root: canonical === identity.root,
       missing: !(await lstat(path).catch(() => null)), locked: fields.some((field) => field === 'locked' || field.startsWith('locked ')) });
   }
   return result;

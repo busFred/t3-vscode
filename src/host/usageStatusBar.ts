@@ -1,8 +1,21 @@
 import * as vscode from "vscode";
 import { formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
 import type { HostStateSnapshot } from "../shared/bridge.js";
-import { DEFAULT_USAGE_REFRESH_SECONDS, UsageRefreshScheduler } from "../shared/usageRefresh.js";
+import { explicitLegacyUsageSeconds, resolveRefreshSettings, type RefreshSettings } from "../shared/refreshSettings.js";
+import { UsageRefreshScheduler } from "../shared/usageRefresh.js";
 import { accountWindows, meterLabels, meterText, selectedUsageAccounts, usageAccounts, usageRefreshTarget, type UsageAccount } from "../shared/usage.js";
+
+/** Read explicit legacy values separately so its schema default cannot mask the shared default. */
+export function readRefreshSettings(): RefreshSettings {
+  const config = vscode.workspace.getConfiguration("t3-vscode");
+  const legacy = config.inspect<number>("usage.refreshIntervalSeconds");
+  return resolveRefreshSettings({
+    defaultIntervalMinutes: config.get("refresh.defaultIntervalMinutes"),
+    usageIntervalMinutes: config.get("refresh.usageIntervalMinutes"),
+    worktreeIntervalMinutes: config.get("refresh.worktreeIntervalMinutes"),
+    legacyUsageIntervalSeconds: explicitLegacyUsageSeconds(legacy),
+  });
+}
 
 export class UsageStatusBar implements vscode.Disposable {
   private readonly items = new Map<string, vscode.StatusBarItem>();
@@ -21,7 +34,7 @@ export class UsageStatusBar implements vscode.Disposable {
   update(): void {
     const state = this.state();
     const config = vscode.workspace.getConfiguration("t3-vscode");
-    this.refresher.configure(config.get<number>("usage.refreshIntervalSeconds", DEFAULT_USAGE_REFRESH_SECONDS));
+    this.refresher.configureMinutes(readRefreshSettings().usageIntervalMinutes);
     const accounts = usageAccounts(state);
     const instanceId = state.threads.find((thread) => thread.id === state.activeThreadId)?.modelSelection.instanceId ?? state.draft.modelSelection?.instanceId;
     const selected = state.phase === "ready" ? selectedUsageAccounts(accounts, {

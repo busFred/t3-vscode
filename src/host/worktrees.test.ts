@@ -235,11 +235,38 @@ test("persisted failed setup reloads and retries the same bound checkout", async
 
 test("untrusted and root preparations cannot execute project setup or Python commands", async (t) => {
   const f = await fixture(t);
-  await assert.rejects(f.coordinator.prepare("project", "thread", { type: "existing", path: f.root }, f.bind), /main checkout/);
-  assert.deepEqual(f.events, []);
+  await f.coordinator.prepare("project", "thread", { type: "existing", path: f.root }, f.bind);
+  assert.deepEqual(f.events, ["bind"]);
+  assert.equal(f.state.creates, 0);
   await assert.rejects(f.coordinator.prepareCheckout("project", f.root), /main checkout/);
   f.state.trusted = false;
   await assert.rejects(f.coordinator.prepare("project", "thread", { type: "new" }, f.bind), /untrusted/);
+  assert.equal(f.state.creates, 0);
+});
+
+test("activity in a linked service project protects its checkout from removal, apply and orphan cleanup", async t => {
+  const f = await fixture(t);
+  await f.coordinator.environments.saveProfile("server-a:project", { enabled: true, location: "named", customSetup: "" });
+  const prepared = await f.coordinator.prepare("project", "thread", { type: "new" }, f.bind);
+  f.options.projects = () => [f.project, { ...f.project, id: "linked", workspaceRoot: prepared.path }];
+  f.options.threads = () => [{ ...f.threads()[0]!, id: "linked-session", projectId: "linked", worktreePath: null, activeRunId: "working" }];
+  await assert.rejects(f.coordinator.removalDetails("project", prepared.path), /agent or setup/);
+  await assert.rejects(f.coordinator.apply("project", f.root, prepared.path, []), /agent is writing/);
+  await f.git(f.root, "worktree", "remove", "--force", prepared.path);
+  await f.coordinator.cleanupMissingEnvironments(Date.now());
+  await f.coordinator.cleanupMissingEnvironments(Date.now() + DAY * 2);
+  assert.equal((await f.coordinator.environments.get("server-a:project", prepared.path))?.missingSince, undefined);
+  assert.equal(f.events.filter(event => event === "python-remove").length, 0);
+});
+
+test("a linked service-project root can be explicitly prepared without treating it as the Git main checkout", async t => {
+  const f = await fixture(t), linked = join(f.home, 'linked-service-root');
+  await f.git(f.root, 'worktree', 'add', '-b', 'linked-service-root', linked);
+  f.options.projects = () => [f.project, { ...f.project, id: 'linked', workspaceRoot: linked }];
+  await f.coordinator.environments.saveProfile('server-a:linked', { enabled: true, customSetup: '' });
+  await f.coordinator.prepareCheckout('linked', linked);
+  assert.equal((await f.coordinator.environments.get('server-a:linked', linked))?.status, 'ready');
+  await assert.rejects(f.coordinator.prepareCheckout('linked', f.root), /main checkout/);
   assert.equal(f.state.creates, 0);
 });
 

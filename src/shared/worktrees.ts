@@ -15,6 +15,13 @@ export interface WorktreeChoice {
 export interface WorktreeSummary {
   readonly id: string;
   readonly projectId: string;
+  /** Physical Git identity, independent of the service's project records. */
+  readonly repositoryId?: string;
+  readonly projectRoot?: string;
+  /** Canonical checkout containing the owning service project's working directory. */
+  readonly projectCheckoutPath?: string;
+  readonly openInWindow?: boolean;
+  readonly head?: string;
   readonly path: string;
   readonly branch: string;
   readonly root: boolean;

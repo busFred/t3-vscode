@@ -4,12 +4,19 @@ import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { WorktreePopover } from "./WorktreePopover";
 import { WorktreeInspector } from "./WorktreeInspector";
+import { checkoutForWorkingDirectory } from "../../shared/worktreeGroups";
 
 export function WorktreeHeader({ state }: { readonly state: HostStateSnapshot }) {
   const thread = state.threads.find((item) => item.id === state.activeThreadId);
   const projectId = thread?.projectId ?? state.draft.projectId;
-  const path = thread?.worktreePath ?? (state.draft.workspace?.type === "existing" ? state.draft.workspace.path : undefined);
-  const item = state.worktrees?.items.find((item) => item.projectId === projectId && (path ? item.path === path : item.root));
+  const path = thread?.worktreePath ?? (state.draft.workspace?.type === "existing" ? state.draft.workspace.path : undefined)
+    ?? state.projects.find(project => project.id === projectId)?.workspaceRoot;
+  const items = state.worktrees?.items.filter(item => item.projectId === projectId) ?? [];
+  const item = items.find(item => item.path === path)
+    ?? (thread ? items.find(item => item.threadIds.includes(thread.id)) : undefined)
+    ?? items.find(item => item.path === (thread?.worktreePath || state.draft.workspace?.type === "existing"
+      ? checkoutForWorkingDirectory(path ?? "", items.map(item => item.path))
+      : items[0]?.projectCheckoutPath ?? checkoutForWorkingDirectory(path ?? "", items.map(item => item.path))));
   const [open, setOpen] = useState(false); const [copyEdits, setCopyEdits] = useState(false); const [busy, setBusy] = useState(false);
   const close = useCallback(() => setOpen(false), []); const anchor = useRef<HTMLButtonElement>(null); const run = useActions();
   useEffect(() => { if (projectId && state.phase === "ready") void run("refreshWorktrees", { projectId }); }, [projectId, state.phase, run]);

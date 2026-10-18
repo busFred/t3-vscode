@@ -21,7 +21,7 @@ import { resolveMessageNavigation } from "./shared/messageNavigation.js";
 import { FONT_SIZE_KEYS, resolveAppearance, type AppearanceSettings } from "./shared/appearance.js";
 import { editorReference } from "./host/editorReference.js";
 import { registerNativeDiff } from "./host/nativeDiff.js";
-import { UsageStatusBar } from "./host/usageStatusBar.js";
+import { readRefreshSettings, UsageStatusBar } from "./host/usageStatusBar.js";
 import { InputNotificationTracker } from "./host/inputNotifications.js";
 import { TaskOriginStore } from "./host/taskOrigins.js";
 import { ModelPreferenceStore } from "./host/modelPreferenceStore.js";
@@ -40,6 +40,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const modelPreferences = new ModelPreferenceStore(context.globalState);
   const taskOrigins = new TaskOriginStore(context.globalState);
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
+    worktreeRefreshMinutes: () => readRefreshSettings().worktreeIntervalMinutes,
     worktreeStorageRoot: resolve(context.globalStorageUri.fsPath, "worktrees"),
     assertTrustedWorkspace: async () => {
       if (!vscode.workspace.isTrusted) throw new Error("Trust this workspace using Manage Workspace Trust before running worktree setup or actions.");
@@ -132,7 +133,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("t3-vscode.dateFormat") || event.affectsConfiguration("t3-vscode.timeFormat") || event.affectsConfiguration("t3-vscode.messageNavigation") || FONT_SIZE_KEYS.some((key) => event.affectsConfiguration(`t3-vscode.${key}`))) hostState?.refreshAppearance();
-      if (event.affectsConfiguration("t3-vscode.usage")) meters.update();
+      if (event.affectsConfiguration("t3-vscode.usage") || event.affectsConfiguration("t3-vscode.refresh")) meters.update();
+      if (event.affectsConfiguration("t3-vscode.refresh.defaultIntervalMinutes") || event.affectsConfiguration("t3-vscode.refresh.worktreeIntervalMinutes")) hostState?.refreshIntervalsChanged();
       if (event.affectsConfiguration("t3-vscode.t3Home")) {
         void vscode.window
           .showInformationMessage("T3 home setting changed. Reload the window to apply it.", "Reload")

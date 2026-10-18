@@ -28,3 +28,10 @@
 .worktree-sidebar .history-shelf > summary { height: calc(var(--sidebar-band-height) - 1px); padding-block: 0; }
 .worktree-sidebar .history-settings { height: var(--sidebar-band-height); flex-shrink: 0; }
 .worktree-sidebar .history-settings .icon-button { height: min(27px, calc(var(--sidebar-band-height) - 1px)); }
+.worktree-repository > summary.history-heading { gap: 7px; font-size: .8125rem; }
+.worktree-repository > summary.history-heading strong { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.worktree-repository > summary.history-heading .icon-button { flex: none; }
+.worktree-sidebar .worktree-group-visibility { min-width: 0; padding: 0 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .625rem; color: var(--muted-foreground); }
+.worktree-group-option > span { min-width: 0; }
+.worktree-group-option small, .worktree-project-choice small { display: block; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.worktree-project-choice { text-align: left; overflow-wrap: anywhere; }

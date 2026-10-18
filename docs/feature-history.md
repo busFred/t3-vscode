@@ -18,8 +18,8 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.1.13 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
-| [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.1.22 |
-| [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched new chats while retaining worktree bindings for retry. | v0.0.8 | v0.2.0 |
+| [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.2.0 |
+| [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
 | [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box. | v0.0.1 | v0.2.0 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.2.0 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
@@ -37,7 +37,8 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.1.13 |
 | [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.1.21 |
-| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.1.21 |
+| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.2.0 |
+| [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.1.21 |
 | [Editor references](#editor-references) | Inserts file ranges with checkout-aware labels and preserved source URIs. | v0.0.4 | v0.2.0 |
 | [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.23 |
@@ -47,7 +48,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.1.15 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
-| [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage and Connection. | v0.0.9 | v0.1.10 |
+| [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, scannable README listing and a separate user guide for reference detail. | v0.0.7 | v0.1.19 |
 | [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.1.15 |
@@ -343,6 +344,10 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Subagent conversations
 
+#### v0.2.0 — local follow-up
+
+- Worktrees uses the existing Sessions hierarchy: ordinary parent conversations contain collapsed Subagents groups, nested children retain their parent even across checkouts, and search expands matching ancestors. Tooltips retain the child's actual working directory. Checkout counts exclude subagents; orphaned subagents never become ordinary top-level rows.
+
 #### v0.0.1
 
 - Render typed subagent items and offer a link to their child conversation.
@@ -369,6 +374,10 @@ Session resources retain the current History selection for restoration. Opening 
 #### v0.2.0
 
 - Retain empty conversations already bound to a worktree so failed setup can be retried. If creating parallel conversations fails before setup starts, remove only the newly created, still-untouched siblings and preserve the source draft.
+
+#### v0.2.0 — local follow-up
+
+- Clean up untouched worktree new-chat tabs just like root chats. New chats bind their directory immediately and publish a branch only when preparation starts, so deleting an unused chat does not qualify its checkout for T3's worktree-on-delete cleanup. Preserve typing, references, external metadata/content, other open surfaces and failed preparation attempts.
 
 #### v0.0.8
 
@@ -739,6 +748,13 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Continue an idle root conversation in a new checkout with history preserved and optional copying of uncommitted files. Existing worktree conversations cannot be silently retargeted; provider-controlled subagents remain read-only.
 - Review committed and local changes, apply selected files to an explicit checkout after conflict checks, and run service-backed commit/push/PR actions. Removal protects dirty/active/main checkouts and retains branch/history; a missing checkout can be restored.
 
+#### v0.2.0 — local follow-up
+
+- Collapse duplicate T3 project records under canonical Git common-directory groups and deduplicate checkouts. Null worktree paths resolve to their owning project root, including linked project roots. Repository-subfolder projects and symlink aliases keep their actual working directory and map to the containing physical checkout. Git submodules remain distinct; there is no recursive discovery.
+- Replace the footer caption with a persistent Groups visibility picker scoped to the service/workspace. Label Main checkout, distinguish detached folders/commits, and mark the current window's checkout independently of active agents. Preserve service settings/action owners and preparation groups when repositories are combined.
+- Nest subagent conversations using the Sessions hierarchy and ordinary-conversation counts. Replace the flashing loading row with the existing refresh icon's spinner; retain rows while loading. Scan periodically at the shared minute interval and promptly for checkout changes, rather than every conversation/config update.
+- Allow conversations in the actual main checkout of a linked-root service project without running worktree setup there. Protect shared checkouts from removal, apply and environment cleanup when an agent from any visible service project is using them.
+
 ### Worktree environments and settings
 
 #### v0.2.0
@@ -896,6 +912,16 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 - Raise the `t3-vscode.usage.refreshIntervalSeconds` default from 300 to 600 seconds; jitter makes the real gap 600 to 720.
 - Add **T3 VSCode: Refresh Usage Meters** to the command palette, which refreshes the figures now rather than waiting for the interval. It is distinct from Configure Status Meters, which only chooses which account the status bar shows.
+
+#### v0.2.0 — local follow-up
+
+- Inherit the shared minute-based refresh interval unless usage has an override. Preserve explicit legacy seconds settings, connection/manual refresh, displayed-account targeting, jitter and busy/staleness gates. Disabling periodic refresh drops a deferred periodic request, and large intervals cannot overflow into rapid timers.
+
+### Shared refresh settings
+
+#### v0.2.0 — local follow-up
+
+- Add a 10-minute default plus nullable usage and worktree overrides under native Refresh settings. All new settings use minutes, accept fractions and apply immediately; zero disables periodic refresh. Sessions/tasks continue streaming updates, while display clocks, retries and debounces keep their existing purpose.
 
 ## VS Code integration
 
@@ -1126,6 +1152,10 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - Open Sessions directly when ready and show provider guidance above existing sessions without a success page; retain editor conversations and drafts across reconnects.
 
 ### Settings organization
+
+#### v0.2.0 — local follow-up
+
+- Add the Refresh category with default, usage and worktree intervals in minutes. Hide the deprecated usage-seconds setting from the Settings UI while retaining explicitly saved values.
 
 #### v0.0.9
 
@@ -1604,3 +1634,10 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - `verify-preview-tabs.mjs` passed in real Linux VS Code with disposable user-data, extensions, shared-data and explicitly isolated T3 home directories. Existing preview/persistent session and task tabs, History identity, tab reuse and new-chat defaults remain covered. Tests use deterministic service/Conda fixtures; no live provider calls or normal-profile installation. Windows/macOS native execution and a real Conda installation were not tested.
 - The owner approved automatic orphan-environment cleanup with a 24-hour grace period and an extension-only disable setting. Coverage includes grace persistence across windows, orphan records without sessions, cleanup opt-out, missing environments, leases, setting sync and restoration before/after cleanup. Separately launched external Python processes cannot all be detected; the setting can be disabled when those environments must be retained.
 - Packaged `target-installer/t3-vscode-0.2.0.vsix` locally and verified its version, stable metadata, ZIP integrity and all 25 bundled distribution files against the final build. SHA-256: `b4df021acc38e20ec6ac5b0778a27babb0d462765f23f1373cae38bc01f78110`. This stable-metadata artifact is preserved. The prerelease package `target-installer/t3-vscode-0.2.0-prerelease.vsix` passed ZIP/metadata validation and its 31 bundled runtime/resource/vendor files match the stable artifact byte-for-byte. Its SHA-256 is `107e71aba85f7b10e4ca890af30a3f026d08bae92413bd8f5d3480d569bb865b`. A fresh-context reviewer approved the channel-only delta; all 590 source snapshot files remained unchanged. The authorized Marketplace prerelease upload reported success, but the October 18 public listing still showed stable 0.1.23 and prerelease 0.1.21, so propagation is pending. See the publication record for details.
+
+### v0.2.0 — local worktree follow-up (not published)
+
+- Preserve the published 0.2.0 artifacts and manifest version. Build the follow-up as `target-installer/t3-vscode-0.2.0-worktree-fixes.vsix`; no new publication or installation is authorized.
+- Fresh-context independent regression review compared these changes with the source snapshot of the published 0.2.0 candidate. Fixed its findings for cross-checkout subagent ancestry, repository-subfolder sessions and canonical symlink grouping/header/current-window safety. Final code review approved local packaging with no remaining blockers; the reviewer independently passed 18 real-Git host, 8 grouping, 6 refresh-setting and 21 usage-scheduler tests.
+- Validation passed: 402 deterministic tests, TypeScript, the full production build, broad UI and shared-host browser suites, and isolated Linux VS Code session/task preview, promotion, tab reuse and untouched root/worktree chat closure checks. After the final review fixes, host/webview builds, TypeScript, 8 grouping tests and the complete focused Worktrees browser suite passed; the canonical-window guard also passed independent host verification. Fixtures made no live provider calls and did not use the normal T3 home or VS Code profile.
+- Packaged the separate 45-file local prerelease VSIX (3,304,643 bytes), verified ZIP/manifest/refresh-setting metadata and all 31 bundled runtime/resource/vendor files against the final build. SHA-256: `fcabfb90aee6ce2b0028ca8ec6d8343517f25b4ab0f447ac013191d0d53283cb`. Both original 0.2.0 artifacts retain their previous hashes. This follow-up was neither published nor installed.

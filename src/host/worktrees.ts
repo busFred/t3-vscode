@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { checkoutForWorkingDirectory } from "../shared/worktreeGroups.js";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile, rename, stat, rm, readdir, realpath } from "node:fs/promises";
 import { basename, isAbsolute, join, resolve, relative, sep } from "node:path";
@@ -116,10 +118,22 @@ export class WorktreeCoordinator {
   snapshot(): WorktreesState {
     const threads = this.options.threads();
     if (this.hydratedScope !== null && this.hydratedScope !== this.options.scope()) return { loading: true, items: [], settings: [], branches: [], preparations: [] };
+    const canonical = this.canonicalPaths();
+    const projects = new Map(this.options.projects().map(project => [project.id, project.workspaceRoot]));
+    const membership = new Map<string, ThreadSummary[]>();
+    const paths = [...new Set(this.value.items.map(item => item.path))];
+    const opened = new Set(this.options.windowRoots().map(root => checkoutForWorkingDirectory(canonical(root), paths)));
+    for (const thread of threads) {
+      const cwd = thread.worktreePath ?? projects.get(thread.projectId);
+      if (!cwd) continue;
+      const checkout = checkoutForWorkingDirectory(canonical(cwd), this.value.items.filter(item => item.projectId === thread.projectId).map(item => item.path));
+      if (!checkout) continue;
+      const key = `${thread.projectId}:${checkout}`;
+      membership.set(key, [...membership.get(key) ?? [], thread]);
+    }
     return { ...this.value, items: this.value.items.map(w => {
-      const root = this.options.projects().find(p => p.id === w.projectId)?.workspaceRoot;
-      const matches = threads.filter(t => t.projectId === w.projectId && (t.worktreePath || root) && resolve(t.worktreePath ?? root!) === resolve(w.path));
-      return { ...w, threadIds: matches.map(t => t.id), active: matches.some(t => t.activeRunId !== null) };
+      const matches = membership.get(`${w.projectId}:${w.path}`) ?? [];
+      return { ...w, threadIds: matches.map(t => t.id), active: matches.some(t => t.activeRunId !== null), openInWindow: opened.has(w.path) };
     }) };
   }
   async refresh(): Promise<void> {
@@ -140,6 +154,7 @@ export class WorktreeCoordinator {
       if (!identity) continue;
       try {
         const local = await listLocalWorktrees(project.workspaceRoot);
+        const projectCheckoutPath = checkoutForWorkingDirectory(await realpath(project.workspaceRoot), local.map(tree => tree.path));
         for (const thread of this.options.threads().filter(t => t.projectId === project.id && t.worktreePath)) if (!local.some(w => resolve(w.path) === resolve(thread.worktreePath!))) local.push({ path: thread.worktreePath!, branch: thread.branch ?? "", root: false, missing: true, locked: false });
         // Deleted T3 threads/Git entries must not hide an environment that still needs cleanup.
         const environments = await this.environments.list(`${service}:${project.id}`, project.workspaceRoot).catch(cause => { errors.push(errorText(cause)); return []; });
@@ -150,7 +165,8 @@ export class WorktreeCoordinator {
         for (const tree of local) {
           const environment = tree.root ? null : await this.environments.get(`${service}:${project.id}`, tree.path).catch(() => null);
           const description = environment?.status === "ready" ? this.environments.describe(environment) : null;
-          items.push({ ...tree, id: `${project.id}:${tree.path}`, projectId: project.id, imported: this.imported.has(tree.path), environment, threadIds: [], active: false,
+          items.push({ ...tree, id: `${project.id}:${tree.path}`, projectId: project.id, repositoryId: identity.commonDir, projectRoot: project.workspaceRoot,
+            ...(projectCheckoutPath ? { projectCheckoutPath } : {}), imported: this.imported.has(tree.path), environment, threadIds: [], active: false,
             ...(description ? { environmentCommand: description.terminalCommand, environmentInstructions: description.agentInstructions } : {}) });
         }
         if (this.options.client.listRefs) {
@@ -199,8 +215,8 @@ export class WorktreeCoordinator {
         try {
           check();
           release = await acquireWorktreeLease(this.options.storageRoot, `checkout:${record.worktreePath}`);
-          const busy = () => this.options.windowRoots().some(root => resolve(root) === record.worktreePath)
-            || this.options.threads().some(t => t.projectId === project.id && t.worktreePath === record.worktreePath && t.activeRunId)
+          const busy = () => this.checkoutOpenInWindow(record.worktreePath)
+            || this.checkoutBusy(record.worktreePath)
             || [...this.attempts.values()].some(a => a.path === record.worktreePath && this.jobs.has(a.preparation.id));
           const safe = async () => {
             check(); await this.options.assertTrusted(); check();
@@ -309,6 +325,15 @@ export class WorktreeCoordinator {
     const project = this.project(projectId);
     const choice = parseWorktreeChoice(raw);
     if (choice.type === "root") { await onCheckout(null, null); return { path: project.workspaceRoot, branch: "" }; }
+    if (choice.type === "existing") {
+      const { tree } = await this.requireCheckout(projectId, choice.path!);
+      // A T3 project may itself point to a linked checkout. Its actual Git main
+      // checkout remains a valid conversation destination, without worktree setup.
+      if (tree.root) {
+        await onCheckout(resolve(tree.path) === resolve(project.workspaceRoot) ? null : tree.path, tree.branch || null);
+        return { path: tree.path, branch: tree.branch };
+      }
+    }
     const backgroundCheckout = choice.type === "existing" ? this.orderedAttempts().filter(a => a.preparation.projectId === projectId && a.path === choice.path).at(-1) : undefined;
     if (backgroundCheckout?.preparation.backgroundRunning && backgroundCheckout.preparation.phase === "ready" && this.ownerAlive(backgroundCheckout)) {
       const { tree } = await this.requireCheckout(projectId, choice.path!);
@@ -435,7 +460,7 @@ export class WorktreeCoordinator {
       if (!attempt.path) throw new Error("No checkout was created");
       check();
       const { tree } = await this.requireCheckout(preparation.projectId, attempt.path);
-      if (tree.root || resolve(attempt.path) === resolve(project.workspaceRoot)) throw new Error("The main checkout cannot be prepared as a worktree");
+      if (tree.root) throw new Error("The main checkout cannot be prepared as a worktree");
       releaseCheckout = await acquireWorktreeLease(this.options.storageRoot, `checkout:${await realpath(attempt.path)}`, abort.signal);
       attempt.branch = tree.branch;
       const bind = this.bindings.get(id);
@@ -541,8 +566,8 @@ export class WorktreeCoordinator {
   async removalDetails(projectId: string, path: string) {
     const { project, tree } = await this.requireCheckout(projectId, path);
     if (tree.root || tree.locked) throw new Error("The main or a locked checkout cannot be removed.");
-    if (this.options.windowRoots().some(root => resolve(root) === resolve(path))) throw new Error("This checkout is open in this window. Open the main checkout before removing it.");
-    if (this.options.threads().some(t => t.projectId === projectId && resolve(t.worktreePath ?? project.workspaceRoot) === resolve(path) && t.activeRunId)
+    if (this.checkoutOpenInWindow(path)) throw new Error("This checkout is open in this window. Open the main checkout before removing it.");
+    if (this.checkoutBusy(path)
       || [...this.attempts.values()].some(a => a.path === path && this.jobs.has(a.preparation.id))) throw new Error("An agent or setup is using this checkout. Stop it before removal.");
     const status = await readWorktreeStatus(path);
     const environment = await this.environments.get(this.scope(projectId), path);
@@ -587,8 +612,33 @@ export class WorktreeCoordinator {
   async diffFile(projectId: string, path: string, baseRef: string, file: string) { const { project } = await this.requireCheckout(projectId, path); return readWorktreeDiffFile({ projectRoot: project.workspaceRoot, path, baseRef, file }); }
   async apply(projectId: string, path: string, destination: string, files: string[], baseRef?: string) {
     await this.options.assertTrusted(); const { project } = await this.requireCheckout(projectId, path); await this.requireCheckout(projectId, destination);
-    if (this.options.threads().some(t => t.activeRunId && resolve(t.worktreePath ?? project.workspaceRoot) === resolve(destination))) throw new Error("An agent is writing to the destination checkout.");
+    if (this.checkoutBusy(destination)) throw new Error("An agent is writing to the destination checkout.");
     await applyWorktreeFiles({ projectRoot: project.workspaceRoot, path, destination, files, ...(baseRef ? { baseRef } : {}) });
+  }
+  private checkoutBusy(path: string): boolean {
+    const canonical = this.canonicalPaths();
+    const roots = new Map(this.options.projects().map(project => [project.id, project.workspaceRoot]));
+    const destination = canonical(path), paths = [...new Set([...this.value.items.map(item => item.path), destination])];
+    return this.options.threads().some(thread => {
+      const checkout = thread.worktreePath ?? roots.get(thread.projectId);
+      return !!thread.activeRunId && !!checkout && checkoutForWorkingDirectory(canonical(checkout), paths) === destination;
+    });
+  }
+  private canonicalPaths(): (path: string) => string {
+    const cache = new Map<string, string>();
+    return path => {
+      let canonical = cache.get(path);
+      if (canonical === undefined) {
+        try { canonical = realpathSync(path); } catch { canonical = resolve(path); }
+        cache.set(path, canonical);
+      }
+      return canonical;
+    };
+  }
+  private checkoutOpenInWindow(path: string): boolean {
+    const canonical = this.canonicalPaths();
+    const checkout = canonical(path), paths = [...new Set([...this.value.items.map(item => item.path), checkout])];
+    return this.options.windowRoots().some(root => checkoutForWorkingDirectory(canonical(root), paths) === checkout);
   }
   async command(projectId: string, path: string, actionId?: string) {
     await this.options.assertTrusted(); const { project } = await this.requireCheckout(projectId, path);

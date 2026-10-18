@@ -284,13 +284,51 @@
             "minimum": 0,
             "scope": "window",
             "markdownDescription": "How often, in seconds, to refresh provider usage for the status bar meters while connected. Each wait adds up to 20% random jitter, so the default 600 means 600 to 720 seconds. Usage is also refreshed once when T3 VSCode connects. A refresh that falls due while a message is being sent or a response is running waits for the session to go idle, so it is far less likely to delay your messages; one is forced through once the meters are five intervals stale. Automatic refreshes also pause while no meter is displayed, and the waiting refresh runs as soon as one appears. Values from 1 to 14 are raised to 15; `0` disables periodic refresh. Changes apply immediately.",
+            "order": 3,
+            "included": false,
+            "markdownDeprecationMessage": "Use `#t3-vscode.refresh.usageIntervalMinutes#` (in minutes). Explicit legacy values remain active until a usage override is set."
+          }
+        }
+      },
+      {
+        "title": "Refresh",
+        "order": 4,
+        "properties": {
+          "t3-vscode.refresh.defaultIntervalMinutes": {
+            "type": "number",
+            "default": 10,
+            "minimum": 0,
+            "scope": "window",
+            "markdownDescription": "Default periodic refresh interval in minutes for usage and worktrees. Fractional minutes are supported. `0` disables periodic refresh; connection and manual refreshes still run. Changes apply immediately.",
+            "order": 1
+          },
+          "t3-vscode.refresh.usageIntervalMinutes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null,
+            "minimum": 0,
+            "scope": "window",
+            "markdownDescription": "Usage refresh interval in minutes. Leave unset or `null` to inherit the default (or an explicitly configured legacy usage interval). Fractional minutes are supported. `0` disables periodic refresh; connection and manual refreshes still run. Each wait adds up to 20% jitter. Refreshes wait while no meter is displayed or a session is busy, with a refresh forced after five intervals of staleness. Changes apply immediately.",
+            "order": 2
+          },
+          "t3-vscode.refresh.worktreeIntervalMinutes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null,
+            "minimum": 0,
+            "scope": "window",
+            "markdownDescription": "Worktree refresh interval in minutes. Leave unset or `null` to inherit the default. Fractional minutes are supported. `0` disables periodic refresh; connection and manual refreshes still run. Changes apply immediately.",
             "order": 3
           }
         }
       },
       {
         "title": "Connection",
-        "order": 4,
+        "order": 5,
         "properties": {
           "t3-vscode.t3Home": {
             "type": "string",
