@@ -3,7 +3,7 @@ import { compareSessions, type SessionSort } from "./sessionSort.js";
 
 export interface SessionTreeNode { readonly thread: ThreadSummary; readonly children: SessionTreeNode[] }
 
-/** Search retains matching sessions and their ancestors; ordinary forks remain roots. */
+/** Search retains matching sessions and their ancestors; only ordinary conversations/forks can be roots. */
 export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: ReadonlyArray<ThreadSummary> = threads, sort: SessionSort = "date-desc"): SessionTreeNode[] {
   const byId = new Map(threads.map((thread) => [thread.id, thread]));
   const parentOf = (thread: ThreadSummary): ThreadSummary | undefined => {
@@ -22,13 +22,24 @@ export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: Read
   for (const thread of ordered) {
     const node = nodes.get(thread.id)!;
     const parent = parentOf(thread);
-    // Corrupt lineage must never hide sessions or create a recursive render loop.
+    // Corrupt child lineage must never create a recursive render loop or a standalone subagent row.
     let ancestor = parent; const seen = new Set([thread.id]); let cyclic = false;
     while (ancestor) { if (seen.has(ancestor.id)) { cyclic = true; break; } seen.add(ancestor.id); ancestor = parentOf(ancestor); }
     const parentNode = !cyclic && parent ? nodes.get(parent.id) : undefined;
-    if (parentNode) parentNode.children.push(node); else roots.push(node);
+    if (parentNode) parentNode.children.push(node);
+    else if (thread.relationshipToParent !== "subagent") roots.push(node);
   }
   return roots;
+}
+
+/** Classify each ordinary conversation once, by its own state, keeping all its children beneath it. */
+export function sessionShelves(threads: ReadonlyArray<ThreadSummary>, matches: ReadonlyArray<ThreadSummary> = threads, sort: SessionSort = "date-desc") {
+  const roots = sessionTree(threads, matches, sort);
+  return {
+    active: roots.filter(node => !node.thread.archived && !node.thread.settled),
+    settled: roots.filter(node => !node.thread.archived && node.thread.settled),
+    archived: roots.filter(node => node.thread.archived),
+  };
 }
 
 /** The card and the sidebar must agree, so every status either reads as working on both or neither. */

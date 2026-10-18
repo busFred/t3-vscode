@@ -13,12 +13,12 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.13 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
-| [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.0.7 |
-| [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.0.6 |
+| [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.22 |
+| [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.1.13 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
-| [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.1.21 |
+| [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.1.22 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched new chats and rejected first-send threads. | v0.0.8 | v0.1.13 |
 | [Compact composer](#compact-composer) | Permanent toolbar and compact controls inside the message box. | v0.0.1 | v0.1.22 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.1.22 |
@@ -53,7 +53,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.1.15 |
 | [Release versioning](#release-versioning) | Keeps the owner-selected version and publishes only a specifically authorized version/channel. | v0.1.10 | v0.1.17 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
-| [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.13 |
+| [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.22 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
 | [Markdown composer tools](#markdown-composer-tools) | Literal formatting, selection wrapping, automatic numbering, indentation and undo. | v0.1.13 | v0.1.21 |
 | [Message timestamps](#message-timestamps) | Recorded local date/time beside each message’s footer actions. | v0.1.22 | v0.1.22 |
@@ -68,6 +68,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 - Add a default-closed, searchable History picker to each editor tab with workspace sessions, status badges and nested subagents.
 - Switch only the originating tab while retaining its conversation drafts and keeping Settled and Archive separate.
 - Support keyboard navigation, Escape and outside-click dismissal in narrow editor groups.
+
+#### v0.1.22
+
+- Classify each ordinary conversation once by its own state; keep all matching subagents beneath it without duplicate parent context rows.
 
 ### New chat editor actions
 
@@ -229,6 +233,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 - Keep both sections in the dedicated Sessions sidebar and load archived history separately.
 
+#### v0.1.22
+
+- Count and classify only ordinary conversations by their own state. Subagent state never adds a parent to another shelf, so a settled row’s menu genuinely offers **Un-settle thread**.
+
 ### Conversation search
 
 #### v0.0.1
@@ -239,6 +247,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 - Use T3's native conversation index so message text matches include snippets.
 - Give search a visible bordered input and retain workspace scope.
+
+#### v0.1.22
+
+- Keep child-only matches under their ancestors in the ordinary parent’s own shelf, without duplicate contextual parent rows.
 
 ### Find in session
 
@@ -312,6 +324,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 #### v0.1.21
 
 - Show the working badge for a subagent whose run is driven by its parent. Its own status lags that run, so the sidebar read it as idle while the transcript card showed it running; both now share one predicate.
+
+#### v0.1.22
+
+- Keep active, settled and archived subagents nested beneath their ordinary parent only. Load archived descendants when expanding a session; exclude orphaned or malformed subagent lineage from main lists and counts while retaining ordinary forks as independent conversations.
 
 ### Untouched chat cleanup
 
@@ -1439,3 +1455,9 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Pass TypeScript checking, 260 deterministic tests, the webview/Mermaid/math build and the full `verify-views.ts` suite, including exact geometry comparisons at 360px sidebar width and interface font size 20; existing multi-project task selectors keep their separate row.
 - Obtain fresh-context independent regression approval against `32cef59` with no blocking findings; preserve compact History, sorting, native theme/font behavior and the existing v0.1.22 manifest.
 - Replace the canonical v0.1.22 installer after review, retaining the previous artifact in `target-installer/archive/`; no publication or normal-profile installation is authorized.
+
+### v0.1.22 — ordinary conversations own their shelves
+
+- Classify each ordinary conversation once by its own state; retain subagents only beneath its tree, including search matches and archived descendants. Remove misleading Parent session duplicates and exclude children from shelf counts.
+- Pass 262 deterministic tests, TypeScript checking, full builds and both documented isolated browser suites. Cover own-state Un-settle menus, child-only search and lazy archived-child discovery in compact History.
+- Obtain fresh-context independent final regression approval against `21fff34` after covering archived-only compact expansion; no blocking findings remain. Keep the owner-selected v0.1.22 manifest.

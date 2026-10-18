@@ -2,6 +2,8 @@
 
 ## 0.1.22 — Unpublished
 
+- Keep subagents beneath their parent instead of counting them in Active, Settled or Archive. Remove duplicate “Parent session” entries; each ordinary conversation belongs to its own state’s section, including during search.
+
 - Match Sessions search height and spacing to Tasks and keep the field and buttons stationary when entering or clearing text.
 
 - Rebuild verification: 260 deterministic tests, TypeScript, full builds, both browser suites and focused Markdown-copy fixtures pass. Independent final regression review against `39759da` approves packaging after fixes to Markdown serialization and stale selection recovery.

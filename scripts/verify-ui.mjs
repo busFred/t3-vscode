@@ -450,22 +450,45 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   assert.equal(await page.locator('.session-list .thread[data-thread-id="subagent-one"]').count(), 0);
   await page.locator('.session-list').getByRole('button', { name: 'Expand session of Migrate the T3 chat experience', exact: true }).click();
   await page.locator('.session-list .thread[data-thread-id="subagent-one"]').waitFor();
-  assert.equal(await page.locator('.session-list .thread[data-thread-id="subagent-archive"]').count(), 0);
-  const archiveShelf = page.locator('.history-shelf').filter({ hasText: 'Archive' });
-  await archiveShelf.locator('summary').click();
-  await archiveShelf.getByRole('button', { name: 'Expand session of Migrate the T3 chat experience', exact: true }).click();
-  await archiveShelf.locator('.thread[data-thread-id="subagent-archive"]').waitFor();
-  assert.equal(await archiveShelf.locator('.thread[data-thread-id="subagent-one"]').count(), 0);
-  const settledShelf = page.locator('.history-shelf').filter({ hasText: 'Settled' });
-  await settledShelf.locator('summary').click();
-  // Branch expansion follows the same parent within this session-manager surface.
-  if (await settledShelf.getByRole('button', { name: 'Expand session of Migrate the T3 chat experience', exact: true }).count()) await settledShelf.getByRole('button', { name: 'Expand session of Migrate the T3 chat experience', exact: true }).click();
-  await settledShelf.locator('.thread[data-thread-id="subagent-settled"]').waitFor();
-  await page.getByRole('textbox', { name: 'Search threads' }).fill('Regression Audit');
-  await page.locator('.session-list .thread[data-thread-id="subagent-one"]').waitFor();
+  await page.locator('.session-list .thread[data-thread-id="subagent-archive"]').waitFor();
+  await page.locator('.session-list .thread[data-thread-id="subagent-settled"]').waitFor();
+  const archiveShelf = page.locator('.history-shelf').filter({ has: page.locator('summary > span', { hasText: /^Archive$/ }) });
+  const settledShelf = page.locator('.history-shelf').filter({ has: page.locator('summary > span', { hasText: /^Settled$/ }) });
+  assert.equal(await archiveShelf.locator('.shelf-count').textContent(), '0');
+  assert.equal(await settledShelf.locator('.shelf-count').textContent(), '0');
+  assert.equal(await page.locator('.thread[data-thread-id="thread-one"]').count(), 1, 'A parent appears exactly once, regardless of child states');
+  assert.equal(await page.getByText('Parent session', { exact: true }).count(), 0);
+  // Settling the ordinary parent moves its complete tree; its menu can genuinely unsettle it.
+  await page.evaluate(() => window.__replace({ threads: window.__state.threads.map(thread => thread.id === 'thread-one' ? { ...thread, settled: true } : thread) }));
+  await settledShelf.locator(':scope > summary').click();
+  await settledShelf.locator('.thread[data-thread-id="thread-one"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Un-settle thread', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  assert.equal(await settledShelf.locator('.shelf-count').textContent(), '1');
+  assert.equal(await page.locator('.session-list .thread[data-thread-id="thread-one"]').count(), 0);
+  await page.evaluate(() => window.__replace({ threads: window.__state.threads.map(thread => thread.id === 'thread-one' ? { ...thread, settled: false } : thread) }));
+  assert.equal(await settledShelf.locator('.shelf-count').textContent(), '0');
+  // A child-only match stays beneath its real parent in the parent's shelf.
+  await page.getByRole('textbox', { name: 'Search threads' }).fill('Settled Audit');
+  await page.locator('.session-list .thread[data-thread-id="subagent-settled"]').waitFor();
+  assert.equal(await settledShelf.locator('.shelf-count').textContent(), '0');
   assert.equal(await page.locator('.session-list .thread[data-thread-id="subagent-archive"]').count(), 0);
   await page.screenshot({ path: `${evidence}/subagent-session-tree.png` });
   await page.getByRole('textbox', { name: 'Search threads' }).fill('');
+  // Compact History can discover archived-only children without opening the Archive shelf.
+  await page.evaluate(initial => {
+    document.body.dataset.surface = 'panel';
+    window.__replace({ ...initial, threads: initial.threads, archiveLoaded: false });
+    window.__archiveRequestsBefore = window.__requests.filter(request => request.method === 'loadArchive').length;
+  }, initial);
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.locator('.compact-history').getByRole('button', { name: 'Expand subagents of Migrate the T3 chat experience', exact: true }).click();
+  await page.waitForFunction(() => window.__requests.filter(request => request.method === 'loadArchive').length > window.__archiveRequestsBefore);
+  await page.evaluate(() => window.__replace({ archiveLoaded: true, threads: [...window.__state.threads, { ...window.__state.threads[0], id: 'archived-only-child', title: 'Archived-only child', pinned: false, archived: true, parentThreadId: 'thread-one', relationshipToParent: 'subagent' }] }));
+  await page.locator('.compact-history .session-list .thread[data-thread-id="archived-only-child"]').waitFor();
+  assert.equal(await page.locator('.compact-history .history-shelf').filter({ hasText: 'Archive' }).locator('.shelf-count').textContent(), '0');
+  assert.equal(await page.locator('.compact-history .thread[data-thread-id="thread-one"]').count(), 1);
+  await page.keyboard.press('Escape');
   // Wide editors retain the virtualized single-column layout after removing the reader.
   await page.setViewportSize({ width: 1640, height: 920 });
   await page.evaluate(() => {
