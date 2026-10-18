@@ -43,7 +43,29 @@ Subagents appear beneath their parent session in a tree whose branches start col
 
 ## Workspace scope
 
-With a folder open, only projects whose workspace root matches that folder and their threads appear, including archived conversations. Multi-root workspaces include each opened folder. An empty VS Code window can browse all server projects and use **No project** when the server supports it. New threads use an opened folder, or the selected project when there is no workspace.
+With a folder open, canonical paths and Git repository identity determine which projects appear. Opening a linked worktree includes its entire project's conversations and tasks, including archived conversations. Multi-root workspaces include each opened folder. An empty VS Code window can browse all server projects and use **No project** when the server supports it. New threads default to the opened checkout, or the selected project when there is no workspace.
+
+## Worktrees
+
+Open **Worktrees** beside Sessions and Tasks, or use **Worktree** immediately after the permission mode inside the message box. New conversations can use Root, a new checkout, an existing branch/checkout, or a GitHub pull request. Choose the base branch and model allocations before sending; parallel runs each receive their own checkout.
+
+Every window shows the entire project, including its sessions and tasks. Each conversation keeps its own checkout. File references from another checkout show the full source path; choosing a new checkout does not silently retarget an existing reference.
+
+Open checkout details for setup status, logs, terminal, project actions, native diffs and selected-file transfers. Applying files asks for an explicit destination and stops on conflicts. **Continue in new worktree** moves an idle Root conversation with its history; copying uncommitted files is optional. Removing a checkout retains its branch and conversations, so it can be restored later.
+
+### Worktree settings and Python
+
+**Actions**, **Creation** and supported **Cleanup** settings save to the T3 service and appear in T3 Web. The worktree directory is a service-wide machine setting. Import `t3.json` actions before running them. A setup action with **Wait for setup** blocks the first message; background actions do not.
+
+**Environment** is extension-managed. For a Python project, enable a profile, choose a directory or unique Conda name, select an environment file or an existing environment to clone, and supply a custom setup command such as `bash ./setup.sh`. Add `.` to editable packages for this checkout’s project. The stable identity belongs to the checkout, not the agent or conversation.
+
+Preparation creates the environment, runs custom setup, installs editables and verifies interpreter/source paths. Failure keeps the prompt and checkout for retry. Use the displayed environment helper or the checkout’s terminal for Python commands; instructions are supplied to agents, but their arbitrary shell commands are not automatically activated. The base environment is never modified or deleted.
+
+The Python profile syncs between this extension’s windows, not into T3 Web. Web-created worktrees need preparation in the extension to use it. Explicit extension removal cleans up only environments it owns.
+
+**Environment cleanup · extension only** is enabled by default. Opening or refreshing Worktrees checks for owned environments left after a checkout was removed, including removal by T3 Web. A 24-hour grace period starts at the first confirmed removal; cleanup happens on a later open/refresh after that period, not on a background timer. Git identity, environment ownership and known activity are checked again before deletion. Moved, registered-but-missing or inaccessible checkouts are retained. Disabling this option retains environments and resets the grace period on the next check.
+
+An already-missing environment only updates its record; it never causes checkout deletion. Sessions and branches remain available. Restoring a checkout reuses its retained named environment or rebuilds one that was cleaned up, then reruns setup and verification. Separately launched Python processes cannot all be detected; disable automatic environment cleanup if you need to keep one running independently. Older records without the required Git identity are retained until the checkout is prepared again.
 
 ## Account and usage meters
 

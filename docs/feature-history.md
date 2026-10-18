@@ -2,7 +2,7 @@
 
 This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
-The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The v0.1.17 prerelease adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly authorized publication of v0.1.17 to the Marketplace prerelease channel. v0.1.18 is published to the Marketplace release channel from `251cfec`, with the transcript resize-padding, streaming row-overlap and automatic usage-refresh changes. v0.1.19 was published to the Marketplace prerelease channel with the owner's explicit authorization, and keeps that background usage refresh from delaying sent messages. v0.1.20 reworks how file references and assistant quotes are written into and rendered from a message. It was authorized for and published to the prerelease channel, though the upload returned an outage page and was recorded as failed until a later readback showed the Marketplace had ingested it; its changes ship again in v0.1.21. The owner explicitly authorized v0.1.21 for the Marketplace prerelease channel. v0.1.23 was published to the Marketplace stable channel on 2026-10-18; the immediate listing readback still showed v0.1.22, so public indexing is pending. See the release verification entries below for earlier installers and publication history.
+The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The v0.1.17 prerelease adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly authorized publication of v0.1.17 to the Marketplace prerelease channel. v0.1.18 is published to the Marketplace release channel from `251cfec`, with the transcript resize-padding, streaming row-overlap and automatic usage-refresh changes. v0.1.19 was published to the Marketplace prerelease channel with the owner's explicit authorization, and keeps that background usage refresh from delaying sent messages. v0.1.20 reworks how file references and assistant quotes are written into and rendered from a message. It was authorized for and published to the prerelease channel, though the upload returned an outage page and was recorded as failed until a later readback showed the Marketplace had ingested it; its changes ship again in v0.1.21. The owner explicitly authorized v0.1.21 for the Marketplace prerelease channel. v0.2.0 is authorized for Marketplace prerelease publication, with its version unchanged from the reviewed candidate. v0.1.23 was published to the Marketplace stable channel on 2026-10-18; the immediate listing readback still showed v0.1.22, so public indexing is pending. See the release verification entries below for earlier installers and publication history.
 
 ## Overview
 
@@ -10,7 +10,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | --- | --- | --- | --- |
 | [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.1.23 |
 | [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and independent model/effort editor tabs. | v0.1.16 | v0.1.23 |
-| [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
+| [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.2.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.23 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.23 |
@@ -19,9 +19,9 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.1.13 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.1.22 |
-| [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched new chats and rejected first-send threads. | v0.0.8 | v0.1.13 |
-| [Compact composer](#compact-composer) | Permanent toolbar and compact controls inside the message box. | v0.0.1 | v0.1.23 |
-| [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.1.22 |
+| [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched new chats while retaining worktree bindings for retry. | v0.0.8 | v0.2.0 |
+| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box. | v0.0.1 | v0.2.0 |
+| [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.2.0 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.23 |
@@ -39,7 +39,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.1.21 |
 | [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.1.21 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.1.21 |
-| [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.20 |
+| [Editor references](#editor-references) | Inserts file ranges with checkout-aware labels and preserved source URIs. | v0.0.4 | v0.2.0 |
 | [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.23 |
 | [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.22 |
 | [Saved turn diffs](#saved-turn-diffs) | Shows one nonempty agent-only response diff; hides manual edits. | v0.0.6 | v0.1.17 |
@@ -54,10 +54,12 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Release versioning](#release-versioning) | Keeps the owner-selected version and publishes only a specifically authorized version/channel. | v0.1.10 | v0.1.17 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.22 |
-| [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
+| [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.2.0 |
 | [Markdown composer tools](#markdown-composer-tools) | Literal formatting, selection wrapping, automatic numbering, indentation and undo. | v0.1.13 | v0.1.21 |
 | [Message timestamps](#message-timestamps) | Recorded local date/time beside each message’s footer actions. | v0.1.22 | v0.1.23 |
 | [Dense transcript spacing](#dense-transcript-spacing) | Compact gaps, one author per run and unobtrusive message actions. | v0.1.13 | v0.1.22 |
+| [Worktree management](#worktree-management) | Checkout creation, import, parallel runs, review, selected-file apply and retained conversations. | v0.2.0 | v0.2.0 |
+| [Worktree environments and settings](#worktree-environments-and-settings) | Service-backed native settings and extension-owned Python environments per checkout. | v0.2.0 | v0.2.0 |
 
 ## Sessions and navigation
 
@@ -74,6 +76,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 - Classify each ordinary conversation once by its own state; keep all matching subagents beneath it without duplicate parent context rows.
 
 ### New chat editor actions
+
+#### v0.2.0
+
+- A new chat inherits the selected checkout without inheriting the source conversation’s binding guard. Opening another worktree window retains all project sessions and tasks.
 
 #### v0.1.13
 
@@ -176,6 +182,10 @@ Task entries open independent editor tabs with the same preview/keep behavior. E
 - Use the same icon-only Scheduled tasks button as adjacent chat-header actions; preserve its accessible name, drawer toggle and session task count in the tooltip.
 
 ### Workspace scope
+
+#### v0.2.0
+
+- Recognize Git common-directory identity so a linked-worktree window shows the entire project’s conversations, worktrees and scheduled tasks. New chats may choose the open checkout; existing conversations retain their own checkout.
 
 #### v0.0.2
 
@@ -356,6 +366,10 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Untouched chat cleanup
 
+#### v0.2.0
+
+- Retain empty conversations already bound to a worktree so failed setup can be retried. If creating parallel conversations fails before setup starts, remove only the newly created, still-untouched siblings and preserve the source draft.
+
 #### v0.0.8
 
 - Delete only newly created empty conversations when their last chat surface closes.
@@ -369,6 +383,10 @@ Session resources retain the current History selection for restoration. Opening 
 ## Composer and attachments
 
 ### Compact composer
+
+#### v0.2.0
+
+- Add the Worktree control immediately after permissions inside the message box. Select root, a new checkout, an existing checkout/branch or a pull request; use existing theme tokens, controls and typography.
 
 #### v0.1.23 — same-version rebuild
 
@@ -433,6 +451,10 @@ Typed composer text uses the editor foreground for stronger contrast, while plac
 - Restore undo and redo after an insertion. See [Compact composer](#compact-composer) for the mechanism.
 
 ### Slash commands and file suggestions
+
+#### v0.2.0
+
+- Search the selected project’s available checkouts. Same-checkout references stay relative; other checkouts use the absolute source path and an unambiguous file URI.
 
 #### v0.0.6
 
@@ -704,6 +726,29 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Remove the two-column engine, automatic switching, per-tab override and related settings after reports of lag.
 - Retain equation scrolling, previews and copying in the single-column transcript.
 
+## Worktrees
+
+### Worktree management
+
+#### v0.2.0
+
+- Built on `main` revision `e07321ee2be7912a547880cda5cc4bb77405eab6` (verified manifest **0.1.23**), on `feat/worktrees-from-main`; no code from the abandoned worktree branch is used.
+- Add a Worktrees sidebar beside Sessions and Tasks without changing existing styles. Show each checkout once with its conversations and short branch label; open its folder in another VS Code window or start another conversation there.
+- Create from a selected base, use an existing checkout/branch, or import a GitHub pull request through the T3 service. One to four explicit model allocations use separate checkouts; compare their files and open individual chats or native diffs.
+- Bind the conversation before setup, retain a failed/cancelled preparation for retry, and wait for required setup before the first message. Store stable attempt identities to reconcile a lost creation response; retain the checkout and prompt on failure.
+- Continue an idle root conversation in a new checkout with history preserved and optional copying of uncommitted files. Existing worktree conversations cannot be silently retargeted; provider-controlled subagents remain read-only.
+- Review committed and local changes, apply selected files to an explicit checkout after conflict checks, and run service-backed commit/push/PR actions. Removal protects dirty/active/main checkouts and retains branch/history; a missing checkout can be restored.
+
+### Worktree environments and settings
+
+#### v0.2.0
+
+- Read and save all native counterparts through T3 settings: project actions, setup wait/background behavior, base/origin defaults, branch prefix, submodules, machine worktree directory and supported cleanup policies. Preserve unrelated service overrides and action metadata. Unsupported server fields are disabled rather than silently saved locally.
+- Import project actions from `t3.json` explicitly. Local environment-file copying and Python profiles stay extension-owned and are shared by this extension’s windows for the same service/project.
+- Support a directory or stable per-worktree Conda name, environment-file creation or cloning, custom setup and editable packages. Conversations sharing a checkout reuse its identity. Verify interpreter and editable source locations; block required setup on failure.
+- Project actions and the environment terminal use an explicit Conda command helper. Agent messages include that helper; arbitrary provider shell commands are not automatically activated. Root environments are never claimed, cloned source environments are never removed, and cleanup requires ownership proof.
+- T3 Web has no UI for the extension’s Python profile. Web-created checkouts can be prepared from the extension. An extension-only automatic environment cleanup setting defaults on: opening/refreshing Worktrees starts a persisted 24-hour grace period after confirmed checkout removal, then removes only owned environments on a later check. Git/parent identity, ownership, active work and shared leases are rechecked; moved, inaccessible and still-registered checkouts stay protected. Missing environments only update records. Session/branch history is retained, and older records without removal identity remain untouched. Restored checkouts reuse retained named environments or rebuild cleaned ones and rerun setup/editable verification, including when Git assigns a different administration directory.
+
 ## Providers and usage
 
 ### Models and provider instances
@@ -873,6 +918,10 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Leave a web link to the webview host, which prompts before opening. The link carried both a real href and a handler calling `openExternal`, so the browser opened immediately whether or not the prompt was answered, and Cancel did nothing.
 
 ### Editor references
+
+#### v0.2.0
+
+- Relabel reference chips and recognized tokens when a draft’s checkout changes, keeping source URI, captured text, range and composer selection. Native file links resolve against the originating chat view.
 
 #### v0.0.4
 
@@ -1546,3 +1595,12 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - The owner explicitly authorized public/release-channel publication and requested a low-cost delegate. GPT-6 Luna Low published the exact reviewed installer from `1330052` using `vsce publish --packagePath target-installer/t3-vscode-0.1.23.vsix`; the CLI reported successful publication.
 - Published artifact SHA-256: `6faaa1b5d1acda97075d96ec024a7a64041c26ebe2669bf1a3aded18fc41755a`. No rebuild, version change or normal-profile installation was performed.
 - Immediate and follow-up public Marketplace queries still returned v0.1.22 as the latest stable version. Upload is accepted; public availability/indexing remains pending. Listing: https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode.
+
+### v0.2.0 — worktrees from main (Marketplace prerelease)
+
+- Owner explicitly authorized version **0.2.0** for the Marketplace prerelease channel. Keep version **0.2.0** unchanged, set `preview: true`, and use a separate prerelease installer. Preserve the existing stable local installer and do not install into the normal VS Code profile.
+- Fresh-context independent regression review against `main` **e07321ee** approved the final code with no remaining blockers. Fixes cover setup/retry concurrency, removal leases and service switching, persisted handoff retries, parallel draft/attachment retention and creation-failure cleanup, native async defaults, narrow layouts and provider-controlled subagent restrictions. A second fresh-context review approved the final automatic-cleanup and restoration changes after independently checking ownership, trust/activity rechecks, moved-checkout protection and Git administration-directory reuse. Existing visual styles are preserved.
+- Verification passed: **377 deterministic tests**, TypeScript checking, full production builds, complete `verify-ui.mjs` and `verify-views.ts` browser suites, and the focused `verify-worktrees.mjs` browser suite. The focused UI checks include page-open/refresh cleanup triggers and the extension-only toggle. The final reviewer independently passed 38 environment/Git tests, both restoration integration cases and TypeScript; the full suite and host build passed again after the final restoration fix.
+- `verify-preview-tabs.mjs` passed in real Linux VS Code with disposable user-data, extensions, shared-data and explicitly isolated T3 home directories. Existing preview/persistent session and task tabs, History identity, tab reuse and new-chat defaults remain covered. Tests use deterministic service/Conda fixtures; no live provider calls or normal-profile installation. Windows/macOS native execution and a real Conda installation were not tested.
+- The owner approved automatic orphan-environment cleanup with a 24-hour grace period and an extension-only disable setting. Coverage includes grace persistence across windows, orphan records without sessions, cleanup opt-out, missing environments, leases, setting sync and restoration before/after cleanup. Separately launched external Python processes cannot all be detected; the setting can be disabled when those environments must be retained.
+- Packaged `target-installer/t3-vscode-0.2.0.vsix` locally and verified its version, stable metadata, ZIP integrity and all 25 bundled distribution files against the final build. SHA-256: `b4df021acc38e20ec6ac5b0778a27babb0d462765f23f1373cae38bc01f78110`. This stable-metadata artifact is preserved. The prerelease package `target-installer/t3-vscode-0.2.0-prerelease.vsix` passed ZIP/metadata validation and its 31 bundled runtime/resource/vendor files match the stable artifact byte-for-byte. Its SHA-256 is `107e71aba85f7b10e4ca890af30a3f026d08bae92413bd8f5d3480d569bb865b`. A fresh-context reviewer approved the channel-only delta; all 590 source snapshot files remained unchanged. The authorized Marketplace prerelease upload reported success, but the October 18 public listing still showed stable 0.1.23 and prerelease 0.1.21, so propagation is pending. See the publication record for details.

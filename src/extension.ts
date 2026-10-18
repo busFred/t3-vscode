@@ -40,6 +40,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const modelPreferences = new ModelPreferenceStore(context.globalState);
   const taskOrigins = new TaskOriginStore(context.globalState);
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
+    worktreeStorageRoot: resolve(context.globalStorageUri.fsPath, "worktrees"),
+    assertTrustedWorkspace: async () => {
+      if (!vscode.workspace.isTrusted) throw new Error("Trust this workspace using Manage Workspace Trust before running worktree setup or actions.");
+    },
     taskOrigins: () => taskOrigins.read(), saveTaskOrigin: (origin) => taskOrigins.save(origin),
     workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject,
     dateFormat: () => resolveDateFormat(vscode.workspace.getConfiguration("t3-vscode").get("dateFormat")),
@@ -59,6 +63,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     closeTaskTab: (id) => provider.closeTaskTab(id),
     openInTab: (id, draft) => provider.createPanel(id, draft),
     newChatTab: (id) => provider.createNewPanel(id),
+    newWorktreeChat: (id, projectId, choice) => provider.createNewPanel(id, projectId, choice),
     editScheduledTask: (request, preview) => provider.editScheduledTask(request, preview),
     showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(),
   });

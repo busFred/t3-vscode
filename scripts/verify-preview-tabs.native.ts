@@ -43,6 +43,14 @@ export async function run() {
     await provider.openSession("third", true); await tick();
     assert.ok(tabs().some(tab => tab.label === "third conversation"), "History change must not leave URI pointing to wrong session");
     assert.equal(host.snapshot(second).activeThreadId, "second", "Independent pinned tab unchanged");
+    const fresh = await provider.createNewPanel(second); await tick();
+    const freshId = host.snapshot(fresh).activeThreadId;
+    assert.ok(freshId && freshId !== "second", "New editor starts a distinct conversation after inheriting defaults");
+    assert.equal(host.snapshot(second).activeThreadId, "second", "Creating a chat must preserve the originating editor binding");
+    const freshTab = tabs().find(tab => tab.label === "New thread")
+      ?? vscode.window.tabGroups.all.flatMap(group => group.tabs).find(tab => tab.label === "New thread");
+    assert.ok(freshTab, "New chat opens in a native editor tab");
+    await vscode.window.tabGroups.close(freshTab); await tick();
     const projectId = host.snapshot().projects[0]!.id;
     client.scheduledTasks = [scheduledTaskFixture({ projectId, id: "task-one", title: "Task one" }), scheduledTaskFixture({ projectId, id: "task-two", title: "Task two" })];
     assert.equal(host.snapshot().scheduledTasks?.tasks.length ?? 0, 0, "Restore fixture is ready before initial task data");

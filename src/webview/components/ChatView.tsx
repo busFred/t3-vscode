@@ -18,6 +18,7 @@ import { SessionFind, type SearchTarget } from "./SessionFind";
 import { useSearchPreferences } from "../searchPreferences";
 import { ScheduledTaskList } from "./ScheduledTaskList";
 import { SessionHistory } from "./SessionHistory";
+import { WorktreeHeader } from "./WorktreeHeader";
 
 /** Short enough to stay readable as a draft token, and checked against the draft so one cannot shadow another. */
 function quoteContextId(contexts: ReadonlyArray<ComposerContext>): string {
@@ -79,7 +80,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
   }, [run, state.activeThreadId, state.environment?.environmentId]);
   const thread = state.threads.find((item) => item.id === state.activeThreadId);
   const parent = thread?.relationshipToParent === "subagent" ? state.threads.find((entry) => entry.id === thread.parentThreadId) : undefined;
-  const project = state.projects.find((item) => item.id === thread?.projectId);
+  const project = state.projects.find((item) => item.id === (thread?.projectId ?? state.draft.projectId));
   return <div className="chat-view" onKeyDownCapture={(event) => { if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "f" && thread) { event.preventDefault(); event.stopPropagation(); setHistoryOpen(false); setFindOpen(true); } }}>
     <main className="chat-main" data-reading-layout="one" data-thread-id={state.activeThreadId ?? ""} onPointerDown={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }} onFocusCapture={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }}>
       <header className="chat-header">
@@ -88,6 +89,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
           window.getSelection()?.removeAllRanges();
           void run("threadAction", { threadId: thread.id, action: "rename" });
         } : undefined}>{thread?.title || "New conversation"}</strong></div>
+        <WorktreeHeader state={state} />
         {thread ? <button className="icon-button" aria-label="Scheduled tasks" title={`Scheduled tasks (${state.scheduledTasks?.tasks.filter((task) => task.projectId === thread.projectId && task.originThreadId === thread.id).length ?? 0}) — tasks created by this session`} aria-expanded={scheduledOpen} onClick={() => setScheduledOpen(!scheduledOpen)}><CalendarClockIcon size={15} /></button> : null}
         {thread ? <button className="icon-button" aria-label="Find in session" title="Find in this session (Ctrl/Cmd+F)" onClick={() => { setHistoryOpen(false); if (findOpen) closeFind(); else setFindOpen(true); }}><SearchIcon size={15} /></button> : null}
         <button ref={historyAnchor} className="icon-button" aria-label="History" title="History — switch conversation in this tab" aria-expanded={historyOpen} aria-controls={historyOpen ? "session-history" : undefined} onClick={() => { setHistoryOpen(!historyOpen); setThreadMenu(null); }}><HistoryIcon size={15} /></button>

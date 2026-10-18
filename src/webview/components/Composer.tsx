@@ -26,6 +26,9 @@ import { collectAssistantCitations } from "../../shared/messageCitations.js";
 import { changesListStructure, continueMarkdownList, formatMarkdown, indentMarkdown, protectMarkdownSelection, renumberMarkdownList, textReplacement, wrapMarkdownSelection, type MarkdownEdit, type MarkdownFormat } from "../../shared/composerEditing";
 import { useComposerPreferences } from "../composerPreferences";
 import { ComposerFormatting } from "./ComposerFormatting";
+import { relabelWorktreeReferences } from "../../shared/worktreeReferences";
+import { WorktreeSelector, composerWorktreeLabel } from "./WorktreeSelector";
+import { activeWorktreePreparations, WorktreePreparation } from "./WorktreePreparation";
 
 const runtimeLabels: Record<string, string> = { "approval-required": "Ask permission", "auto-accept-edits": "Auto-accept edits", auto: "Auto", "full-access": "Full access" };
 const steerShortcut = navigator.userAgent.includes("Mac") ? "Cmd+Enter" : "Ctrl+Enter";
@@ -93,6 +96,15 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const project = state.projects.find((item) => item.id === state.draft.projectId);
   const projectLabel = project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1)
     ?? (state.draft.supportsNoProject ? "No project" : "Choose project");
+  const preparations = activeWorktreePreparations(state);
+  const setupBlocked = preparations.some((item) => !item.background && item.phase !== "ready");
+  const worktreeLabel = composerWorktreeLabel(state);
+  const workspace = state.draft.workspace;
+  const draftCheckout = !thread || thread.canChooseWorkspace;
+  const referenceCheckoutRoot = draftCheckout && workspace && workspace.type !== "root"
+    ? workspace.type === "existing" ? workspace.path ?? null
+      : workspace.type === "branch" ? state.worktrees?.branches.find((item) => item.projectId === (thread?.projectId ?? state.draft.projectId) && item.name === workspace.branch)?.path ?? null : null
+    : thread?.worktreePath ?? state.projects.find((item) => item.id === (thread?.projectId ?? state.draft.projectId))?.workspaceRoot ?? state.draft.workspaceRoot;
   const disabled = !recovery.ready || busy || state.sending || thread?.archived === true || thread?.providerNativeSubagent === true;
   const inputSelection = (): TextSelection => ({ start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length });
   const editing = useRef(false);
@@ -166,6 +178,16 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     pendingCaret.current = { position: caret.start, end: caret.end, focus: false };
     setCursor(caret.start); onSelectionChange(caret);
   }, [text, contexts, recovery.ready, draftKey, onSelectionChange]);
+  useLayoutEffect(() => {
+    if (!recovery.ready) return;
+    const synced = relabelWorktreeReferences(text, contexts, referenceCheckoutRoot);
+    if (!synced) return;
+    const input = textarea.current;
+    const caret = { start: synced.map(input?.selectionStart ?? text.length), end: synced.map(input?.selectionEnd ?? text.length) };
+    updateDraft(draftKey, (draft) => draft.text === text ? { ...draft, text: synced.text, contexts: synced.contexts } : draft, "keep-focus");
+    pendingCaret.current = { position: caret.start, end: caret.end, focus: false };
+    setCursor(caret.start); onSelectionChange(caret);
+  }, [text, contexts, referenceCheckoutRoot, recovery.ready, draftKey, onSelectionChange]);
   const placeCursor = (position: number, focus = false) => { pendingCaret.current = { position, focus }; };
   const focusCursor = (position: number) => placeCursor(position, true);
   const chooseSuggestion = (item: ComposerSuggestion) => {
@@ -229,18 +251,19 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       const style = getComputedStyle(row);
       context.font = `400 ${style.fontSize} ${style.fontFamily}`;
       const traitsWidth = context.measureText(runtimeLabels[runtimeMode] ?? runtimeMode).width + 24
-        + (effort ? context.measureText(effortLabel).width + 24 : 0);
+        + (effort ? context.measureText(effortLabel).width + 24 : 0)
+        + (state.worktrees && (state.draft.projectId || thread?.projectId) ? context.measureText(worktreeLabel).width + 44 : 0);
       setCompactControls(modelWidth + traitsWidth + 12 > row.clientWidth);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(row); measure();
     return () => observer.disconnect();
-  }, [modelLabel, effortLabel, Boolean(effort), runtimeMode, state.appearance.fontSizeInterface]);
+  }, [modelLabel, effortLabel, Boolean(effort), runtimeMode, worktreeLabel, Boolean(state.worktrees), state.draft.projectId, thread?.projectId, state.appearance.fontSizeInterface]);
   const running = Boolean(thread?.activeRunId || state.queue?.activeRunId || state.acknowledgedWorking);
   const shortcutHint = `${running ? `Enter to queue${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Enter to send"} · Shift+Enter for a new line`;
   const send = async (steer = false) => {
     const value = formatComposerMessage(text, contexts);
-    if ((!value && !attachments.length) || disabled || !selection || picking || attachments.some((file) => file.pending || !file.attachment)) return;
+    if ((!value && !attachments.length) || disabled || setupBlocked || !selection || picking || attachments.some((file) => file.pending || !file.attachment)) return;
     setBusy(true);
     const mode = resolveComposerDispatchMode({ running, activeTurnDefault: "queue", alternateModifier: steer && state.queue?.canSteer === true });
     const sent = await run("sendMessage", { text: value, mode, attachmentIds: attachments.map((file) => file.attachment!.id), attachmentReferences: attachments.flatMap((file) => file.contextId ? [{ contextId: file.contextId, attachmentId: file.attachment!.id }] : []), ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
@@ -291,11 +314,13 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       setBusy(true); void run("setModelOption", { ...target, optionId: effort.id, value: event.target.value }).finally(() => setBusy(false));
     }}>{getProviderOptionCurrentValue(effort) === undefined ? <option value="" disabled>Default</option> : null}{effort.options.map((option) => <option key={option.id} value={option.id} title={option.description}>{option.label}</option>)}</select></label> : null}
     <select aria-label="Permission mode" value={runtimeMode} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => { void run("setModes", { ...target, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes ?? ["approval-required", "auto", "full-access"]).map((mode) => <option key={mode} value={mode}>{runtimeLabels[mode]}</option>)}</select>
+    <WorktreeSelector state={state} disabled={busy || state.sending || thread?.providerNativeSubagent === true} />
   </div>;
   return <div className="composer-area"><div className="composer-column">
     <PendingRequests state={state} />
     {recovery.error ? <p className="composer-attachment-error" role="alert">{recovery.error}</p> : null}
     <ConversationActivity key={draftKey} state={state} />
+    {preparations.filter((item) => item.phase !== "ready" || item.backgroundRunning).map((preparation) => <WorktreePreparation key={preparation.id} preparation={preparation} />)}
     {thread?.archived ? <div className="archived-banner">This thread is archived.<button className="text-button" onClick={() => { void run("threadAction", { threadId: thread.id, action: "unarchive" }); }}>Restore thread</button></div> : null}
     {thread?.providerNativeSubagent ? <p className="subagent-readonly" role="status">This conversation is controlled by its provider. Send instructions in the parent conversation.</p> : null}
     <div className="composer-box" onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); addFiles([...event.dataTransfer.files]); } }}>
@@ -376,12 +401,12 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         <div ref={controls} className="composer-controls">
           <button ref={modelTrigger} className="model-trigger" title={modelLabel} disabled={busy || thread?.providerNativeSubagent} onClick={() => setModelsOpen(!modelsOpen)} aria-expanded={modelsOpen} aria-label="Choose model"><span>{modelLabel}</span><ChevronDownIcon size={12} /></button>
           {modelsOpen && modelTrigger.current ? <ModelPicker state={state} selection={selection} anchor={modelTrigger.current} onClose={closeModels} /> : null}
-          {compactControls ? <details ref={overflow} className="composer-options-overflow" onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary className="icon-button" aria-label="Effort and permissions" title="Effort and permissions"><MoreHorizontalIcon size={16} /></summary><div className="composer-options-popup">{traits}</div></details> : traits}
+          {compactControls ? <details ref={overflow} className="composer-options-overflow" onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary className="icon-button" aria-label="Effort and permissions" title="Effort, permissions and worktree"><MoreHorizontalIcon size={16} /></summary><div className="composer-options-popup">{traits}</div></details> : traits}
         </div>
         <div className="composer-send-controls">
           <span className="composer-shortcuts" aria-hidden="true"><span>{running ? "Enter to queue" : "Enter to send"}</span><span>{running && state.queue?.canSteer ? `${steerShortcut} to steer` : "Shift+Enter for a new line"}</span></span>
           {running && thread ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
-          <button className="send-button" aria-label="Send message" title={shortcutHint} disabled={disabled || picking || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
+          <button className="send-button" aria-label="Send message" title={shortcutHint} disabled={disabled || setupBlocked || picking || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
         </div>
       </div>
     </div>

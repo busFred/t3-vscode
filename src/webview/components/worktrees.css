@@ -1,0 +1,30 @@
+/* Worktree controls reuse the session, task editor, and composer styles. These rules
+   only arrange controls that have no equivalent in the existing extension. */
+.worktree-popover { position: fixed; z-index: 46; border: 1px solid var(--input); border-radius: 6px; background: var(--card); box-shadow: 0 4px 18px #0003; overflow: hidden; }
+.worktree-popover > .worktree-popover-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.worktree-popover-heading h2 { margin: 0; }
+.worktree-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.worktree-actions > button { display: inline-flex; align-items: center; gap: 4px; font-size: .75rem; padding: 4px 6px; border: 1px solid var(--input); border-radius: 5px; }
+.worktree-checkout-heading { display: flex; align-items: center; min-width: 0; }
+.worktree-checkout-heading > summary { flex: 1; min-width: 0; }
+.worktree-checkout > summary { display: flex; align-items: center; gap: 7px; padding: 7px 8px; font-size: .75rem; cursor: pointer; }
+.worktree-checkout > summary span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.worktree-checkout > .session-tree-children { margin: 0 0 0 12px; }
+.worktree-list { flex: 1; min-height: 0; overflow: auto; }
+.worktree-checkout-tools { padding: 4px 8px; }
+.worktree-log { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font-size: .6875rem; font-family: var(--vscode-editor-font-family, monospace); }
+.worktree-control { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; max-width: 125px; font-size: inherit; }
+.worktree-control > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.composer-options-popup .worktree-control { max-width: 100%; }
+.worktree-header-control { max-width: 140px; min-width: 0; flex-shrink: 1; overflow: hidden; font-size: .75rem; }
+.worktree-review-file { display: flex; gap: 5px; align-items: flex-start; font-size: .75rem; }
+.worktree-review-file > span { flex: 1; overflow-wrap: anywhere; }
+.worktree-preparation { padding: 6px 12px; font-size: .75rem; border-bottom: 1px solid var(--border); }
+.worktree-preparation summary { cursor: pointer; }
+.worktree-preparation .worktree-actions { margin-top: 6px; }
+
+/* Same sidebar sizing and bands as Sessions, with a separate semantic container. */
+.sidebar-view .worktree-sidebar { padding-top: 0; display: flex; position: static; inset: auto; flex: 1; width: 100%; min-width: 0; border: 0; box-shadow: none; }
+.worktree-sidebar .history-shelf > summary { height: calc(var(--sidebar-band-height) - 1px); padding-block: 0; }
+.worktree-sidebar .history-settings { height: var(--sidebar-band-height); flex-shrink: 0; }
+.worktree-sidebar .history-settings .icon-button { height: min(27px, calc(var(--sidebar-band-height) - 1px)); }

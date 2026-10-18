@@ -15,7 +15,7 @@ const tests = join(extension, 'tests.cjs');
 await build({ entryPoints: [join(root, 'scripts/verify-preview-tabs.native.ts')], outfile: tests, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], logLevel: 'warning' });
 const result = join(isolated, 'result.txt');
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('T3') && !['ELECTRON_RUN_AS_NODE','VITE_HTTP_URL','VITE_WS_URL'].includes(key)));
-const child = spawn(process.env.VSCODE_BIN ?? '/usr/share/code/code', ['--no-sandbox','--disable-gpu','--skip-welcome','--skip-release-notes','--disable-workspace-trust', `--user-data-dir=${isolated}/user`, `--extensions-dir=${isolated}/extensions`, `--shared-data-dir=${isolated}/shared`, `--extensionDevelopmentPath=${extension}`, `--extensionTestsPath=${tests}`], { env: { ...env, T3_PREVIEW_REPO: root, T3_PREVIEW_RESULT: result }, stdio: 'inherit' });
+const child = spawn(process.env.VSCODE_BIN ?? '/usr/share/code/code', ['--no-sandbox','--disable-gpu','--skip-welcome','--skip-release-notes','--disable-workspace-trust', `--user-data-dir=${isolated}/user`, `--extensions-dir=${isolated}/extensions`, `--shared-data-dir=${isolated}/shared`, `--extensionDevelopmentPath=${extension}`, `--extensionTestsPath=${tests}`], { env: { ...env, T3_CODE_HOME: join(isolated, 't3-home'), T3_PREVIEW_REPO: root, T3_PREVIEW_RESULT: result }, stdio: 'inherit' });
 const timeout = setTimeout(() => child.kill('SIGTERM'), 120_000);
 const code = await new Promise((resolve, reject) => { child.on('exit', resolve); child.on('error', reject); }); clearTimeout(timeout);
 if (code !== 0) throw new Error(`Native preview tests exited ${code}; fixture ${isolated}`);
