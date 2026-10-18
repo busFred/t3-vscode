@@ -437,7 +437,7 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .provider-setup .text-button { display: inline-flex; align-items: center; gap: 5px; font-size: .6875rem; margin: 0; }
 @media (max-width: 400px) { .server-setup { padding: 16px; } .server-setup h1 { font-size: 1.4375rem; } .setup-step { gap: 8px; } }
 
-.composer-box textarea { color: var(--vscode-input-foreground, var(--foreground)); }
+.composer-box textarea { color: var(--foreground); }
 .thread-search input::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted-foreground)); }
 .thread.active .thread-match { color: inherit; }
 
@@ -489,7 +489,7 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .markdown .katex:focus-visible { outline: 1px solid var(--ring); outline-offset: 4px; }
 .equation-preview { max-width: calc(100vw - 100px); overflow: auto; padding: 28px 16px; font-size: 1.25rem; }
 .equation-preview > .katex { display: inline-block; white-space: nowrap; }
-.selection-context-menu { position: fixed; z-index: 120; min-width: min(190px, calc(100vw - 12px)); max-width: calc(100vw - 12px); padding: 4px; border: 1px solid var(--vscode-menu-border, var(--border)); border-radius: 3px; background: var(--vscode-menu-background, var(--card)); color: var(--vscode-menu-foreground, var(--foreground)); box-shadow: 0 3px 10px #0003; }
+.selection-context-menu { position: fixed; z-index: 120; width: max-content; min-width: 0; max-width: calc(100vw - 12px); padding: 4px; border: 1px solid var(--vscode-menu-border, var(--border)); border-radius: 3px; background: var(--vscode-menu-background, var(--card)); color: var(--foreground); box-shadow: 0 3px 10px #0003; }
 .selection-context-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 3px; background: transparent; color: inherit; font-size: 0.75rem; text-align: left; }
 .selection-context-menu button:disabled { opacity: 0.5; }
 .selection-context-menu button:not(:disabled):hover, .selection-context-menu button:focus-visible { background: var(--vscode-menu-selectionBackground, var(--sidebar-row-active)); color: var(--vscode-menu-selectionForeground, var(--foreground)); }
@@ -635,7 +635,7 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .composer-formatting .icon-button { width: 23px; height: 24px; }
 .list-assist-toggle { margin-left: auto; border: 1px solid transparent; border-radius: 2px; padding: 4px; font-size: .625rem; color: var(--foreground); background: transparent; white-space: nowrap; }
 .list-assist-toggle[aria-pressed="true"] { color: var(--vscode-inputOption-activeForeground, var(--primary)); background: var(--vscode-inputOption-activeBackground, var(--muted)); border-color: var(--vscode-inputOption-activeBorder, var(--ring)); }
-.composer-box textarea { color: var(--vscode-input-foreground, var(--foreground)); opacity: 1; -webkit-text-fill-color: currentColor; }
+.composer-box textarea { color: var(--foreground); opacity: 1; -webkit-text-fill-color: currentColor; }
 .composer-bottom { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
 .composer-bottom .composer-controls { flex: 1; margin: 0; min-width: 0; }
 .composer-bottom .model-trigger { flex: 0 1 auto; max-width: 230px; }

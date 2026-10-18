@@ -20,7 +20,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Opens child conversations with status previews and a route back to the parent. | v0.0.1 | v0.1.22 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched new chats and rejected first-send threads. | v0.0.8 | v0.1.13 |
-| [Compact composer](#compact-composer) | Permanent toolbar and compact controls inside the message box. | v0.0.1 | v0.1.22 |
+| [Compact composer](#compact-composer) | Permanent toolbar and compact controls inside the message box. | v0.0.1 | v0.1.23 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.1.22 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
@@ -353,6 +353,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 ## Composer and attachments
 
 ### Compact composer
+
+#### v0.1.23 — same-version rebuild
+
+Typed composer text uses the editor foreground for stronger contrast, while placeholder text retains its theme placeholder color.
 
 #### v0.0.1
 
@@ -875,6 +879,10 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Accept whole-file references with no range or snapshot, so `@` menu picks and editor selections share one format.
 
 ### Assistant citations
+
+#### v0.1.23 — same-version rebuild
+
+The selected-text context menu fits its labels instead of reserving a 190px minimum. Enabled text uses the editor foreground; native menu selection, border and background colors remain themed.
 
 #### v0.0.4
 
