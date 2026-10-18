@@ -73,3 +73,19 @@ test("Native message rail placement changes preserve every view's session and dr
   }
   assert.equal(client.connections, connections); assert.equal(client.threadStarts, starts); assert.equal(client.commands.length, 0);
 });
+
+
+test("Time format changes reach every view without changing conversations or drafts", async (t) => {
+  let format: "automatic" | "12-hour" | "24-hour" = "automatic";
+  const host = new HostState({ home: "/tmp/fake-t3-time-test", credentials, timeFormat: () => format }, new FakeTransport());
+  t.after(() => host.dispose());
+  host.registerView("time-tab");
+  const states: HostStateSnapshot[] = [];
+  host.onDidChangeState(state => states.push(state), "time-tab");
+  for (const value of ["24-hour", "12-hour", "automatic"] as const) {
+    format = value; host.refreshAppearance();
+    assert.equal(states.at(-1)!.timeFormat, value);
+    assert.equal(host.snapshot().timeFormat, value);
+    assert.equal(states.at(-1)!.activeThreadId, undefined);
+  }
+});

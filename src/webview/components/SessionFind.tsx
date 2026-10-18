@@ -131,7 +131,7 @@ export function SessionFind({ state, preferences, onPreferences, onClose, onSele
     <div ref={feedback} className="find-feedback">
       {search?.error ? <p className="turn-error" role="status">Incomplete search: {search.error}</p> : null}
       {previewError ? <p className="turn-error" role="status">Context unavailable: {previewError}</p> : null}
-      {search && search.total > matches.length ? <p>Showing the first {matches.length.toLocaleString(undefined, timeOptions)} matches; refine the search to see others.</p> : null}
+      {search && search.total > matches.length ? <p>Showing the first {matches.length.toLocaleString()} matches; refine the search to see others.</p> : null}
       {query && search && !search.scanning && !search.error && !search.total ? <p role="status">No matches in this session.</p> : null}
     </div>
     {results && matches.length ? <><div className="find-results" aria-label="Session search results" style={{ height: Math.min(height, maxHeight) }}>
