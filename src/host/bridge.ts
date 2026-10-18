@@ -47,14 +47,17 @@ export class BridgeHandler {
   private readonly showSettings: () => PromiseLike<unknown>;
   private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean> };
   private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
-  private readonly viewActions: { editScheduledTask?: (request: ScheduledTaskEditorRequest) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
+  private readonly viewActions: { openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>; keepTab?: (viewId: string) => PromiseLike<unknown>; closeTaskTab?: (viewId: string) => void; editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:hungtienhuang.t3-vscode"),
     prompts = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
       confirmDelete: async (title: string): Promise<boolean> => (await (await import("vscode")).window.showWarningMessage(`Delete "${title}"?`, { modal: true }, "Delete thread")) === "Delete thread",
     }, openDiff: BridgeHandler["openDiff"] = async () => { throw new Error("Native diff editor is unavailable."); },
     viewActions: {
-      editScheduledTask?: (request: ScheduledTaskEditorRequest) => PromiseLike<unknown> | unknown;
+      openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>;
+      keepTab?: (viewId: string) => PromiseLike<unknown>;
+      closeTaskTab?: (viewId: string) => void;
+      editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown;
       openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown;
       newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown;
       showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown;
@@ -106,10 +109,19 @@ export class BridgeHandler {
         case "runScheduledTask": await this.hostState.runScheduledTask(stringParam(params, "taskId"), stringParam(params, "projectId")); break;
         case "editScheduledTask": {
           const request = this.hostState.scheduledTaskEditorRequest(params);
-          if (this.viewActions.editScheduledTask) await this.viewActions.editScheduledTask(request);
+          if (this.viewActions.editScheduledTask) await this.viewActions.editScheduledTask(request, params.preview === true);
           else this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.editScheduledTask, request);
           break;
         }
+        case "openSessionTab": {
+          const threadId = stringParam(params, "threadId");
+          if (this.viewActions.openSessionTab) await this.viewActions.openSessionTab(threadId, params.preview === true);
+          else { await this.hostState.selectThread(threadId, viewId); await this.viewActions.openInTab?.(viewId); }
+          break;
+        }
+        case "openTaskManager": await (await import("vscode")).commands.executeCommand("t3.webview.focus"); this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showTaskManager, undefined); break;
+        case "keepTab": await this.viewActions.keepTab?.(viewId); break;
+        case "closeTaskTab": this.viewActions.closeTaskTab?.(viewId); break;
         case "getState": break;
         case "searchThreads": {
           if (typeof params.query !== "string") throw new Error("Invalid search query.");
@@ -130,6 +142,7 @@ export class BridgeHandler {
         }
         case "composerState": {
           if ((params.active !== undefined && typeof params.active !== "boolean") || (params.touched !== undefined && typeof params.touched !== "boolean")) throw new Error("Invalid composer state.");
+          if (params.touched === true) await this.viewActions.keepTab?.(viewId);
           await this.hostState.composerState(id(), params.active as boolean | undefined, params.touched === true, viewId); break;
         }
         case "uploadAttachment": {

@@ -138,17 +138,18 @@ export async function captureReadme({ home, workbench, sidebar, findWebview, run
   await click(sidebar, '#tasks-tab');
   await sidebar.wait('document.querySelector("#tasks-manager .scheduled-task-list")');
   await click(sidebar, '[aria-label="New task"]');
-  await sidebar.wait('document.querySelector(".scheduled-task-editor")');
-  await type(sidebar, 'input[aria-label="Task name"]', 'Morning dependency audit');
-  await type(sidebar, 'textarea[aria-label="Task prompt"]', 'Check the lockfile for new advisories, then summarize anything that needs an upgrade.');
-  await choose(sidebar, 'select[aria-label="Task schedule"]', 'fixed_time');
-  await sidebar.wait('document.querySelector(\'input[aria-label="Task time"]\')');
-  await type(sidebar, 'input[aria-label="Task time"]', '07:30');
+  const taskEditor = await findWebview('task');
+  await taskEditor.wait('document.querySelector(".scheduled-task-editor")');
+  await type(taskEditor, 'input[aria-label="Task name"]', 'Morning dependency audit');
+  await type(taskEditor, 'textarea[aria-label="Task prompt"]', 'Check the lockfile for new advisories, then summarize anything that needs an upgrade.');
+  await choose(taskEditor, 'select[aria-label="Task schedule"]', 'fixed_time');
+  await taskEditor.wait('document.querySelector(\'input[aria-label="Task time"]\')');
+  await type(taskEditor, 'input[aria-label="Task time"]', '07:30');
   // Leave the demonstration task disabled so no schedule can reach a provider.
-  await sidebar.evaluate('(() => { const box = document.querySelector(\'input[aria-label="Task enabled"]\'); if (box.checked) box.click(); })()');
-  await sidebar.wait('document.querySelector(\'input[aria-label="Task enabled"]\').checked === false');
-  await capture(sidebar, 'scheduled-tasks.png');
-  await sidebar.evaluate('document.querySelector(".scheduled-task-editor button[type=submit]").click()');
+  await taskEditor.evaluate('(() => { const box = document.querySelector(\'input[aria-label="Task enabled"]\'); if (box.checked) box.click(); })()');
+  await taskEditor.wait('document.querySelector(\'input[aria-label="Task enabled"]\').checked === false');
+  await capture(taskEditor, 'scheduled-tasks.png');
+  await taskEditor.evaluate('document.querySelector(".scheduled-task-editor button[type=submit]").click()');
   await sidebar.wait('document.querySelector(".scheduled-task-row")');
   assert.match(await sidebar.evaluate('document.querySelector(".scheduled-task-row").textContent'), /Morning dependency audit/);
   await click(sidebar, '#sessions-tab');

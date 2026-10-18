@@ -1,3 +1,4 @@
+import { T3WebviewProvider } from "./host/editorProvider.js";
 import { resolveDateFormat, resolveTimeFormat } from "./shared/timeFormat.js";
 /**
  * Activation: build the host state machine, register the sidebar webview view
@@ -19,14 +20,10 @@ import { Events, type ProjectSelection, type ProjectSummary } from "./shared/bri
 import { resolveMessageNavigation } from "./shared/messageNavigation.js";
 import { FONT_SIZE_KEYS, resolveAppearance, type AppearanceSettings } from "./shared/appearance.js";
 import { editorReference } from "./host/editorReference.js";
-import type { FileReference } from "./shared/composerContext.js";
 import { registerNativeDiff } from "./host/nativeDiff.js";
 import { UsageStatusBar } from "./host/usageStatusBar.js";
 import { InputNotificationTracker } from "./host/inputNotifications.js";
-import type { DraftTransfer } from "./shared/viewDraft.js";
-import { usageAccounts } from "./shared/usage.js";
 import { TaskOriginStore } from "./host/taskOrigins.js";
-import type { ScheduledTaskEditorRequest } from "./shared/scheduledTasks.js";
 import { ModelPreferenceStore } from "./host/modelPreferenceStore.js";
 
 let hostState: HostState | null = null;
@@ -57,12 +54,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let provider: T3WebviewProvider;
   const meters = new UsageStatusBar(() => hostState!.snapshot(registry.focusedViewId), async (instanceId) => { await hostState?.refreshUsage(instanceId); }, () => hostState?.busy ?? false);
   const bridge = new BridgeHandler(hostState, registry, showSettings, undefined, registerNativeDiff(context), {
+    openSessionTab: (threadId, preview) => provider.openSession(threadId, preview),
+    keepTab: (id) => provider.keepTab(id),
+    closeTaskTab: (id) => provider.closeTaskTab(id),
     openInTab: (id, draft) => provider.createPanel(id, draft),
     newChatTab: (id) => provider.createNewPanel(id),
-    editScheduledTask: (request) => provider.editScheduledTask(request),
+    editScheduledTask: (request, preview) => provider.editScheduledTask(request, preview),
     showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(),
   });
-  provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState);
+  provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState, context.workspaceState);
   const notifications = new InputNotificationTracker();
   const unlisten = hostState.onDidChangeState((state) => {
     bridge.pushState();
@@ -78,6 +78,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const unfocus = registry.onDidFocusView(() => meters.update());
   context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider("t3.session", provider, { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: false }),
     meters, { dispose: unlisten }, { dispose: unfocus },
     vscode.window.registerWebviewViewProvider("t3.webview", provider, {
       webviewOptions: { retainContextWhenHidden: true },
@@ -176,157 +177,3 @@ async function pickConversationProject(projects: ReadonlyArray<ProjectSummary>, 
   return folders?.[0] ? { workspaceRoot: folders[0].fsPath } : null;
 }
 
-/**
- * Sidebar WebviewViewProvider + editor-tab WebviewPanel host. Same HTML, same
- * bundle, same BridgeHandler — only the container differs (architecture doc §5).
- * The sidebar manages sessions; editor panels render conversations.
- */
-class T3WebviewProvider implements vscode.WebviewViewProvider {
-  private sidebar: vscode.WebviewView | undefined;
-  private readonly panels = new Map<string, vscode.WebviewPanel>();
-  private readonly extensionUri: vscode.Uri;
-  private readonly registry: WebviewRegistry;
-  private readonly bridge: BridgeHandler;
-  private readonly host: HostState;
-
-  constructor(extensionUri: vscode.Uri, registry: WebviewRegistry, bridge: BridgeHandler, host: HostState) {
-    this.extensionUri = extensionUri;
-    this.registry = registry;
-    this.bridge = bridge;
-    this.host = host;
-  }
-
-  resolveWebviewView(webviewView: vscode.WebviewView): void {
-    this.sidebar = webviewView;
-    const id = SIDEBAR_VIEW_ID;
-    webviewView.webview.options = this.webviewOptions();
-    this.registry.add(id, webviewView.webview, false);
-    this.bridge.attach(webviewView.webview, id);
-    webviewView.webview.html = this.htmlFor(webviewView.webview, "sidebar");
-    webviewView.onDidDispose(() => { if (this.sidebar === webviewView) { this.registry.remove(id); this.sidebar = undefined; } });
-    this.updateTitles();
-  }
-
-  updateTitles(): void {
-    if (this.sidebar) this.sidebar.title = "T3 VSCode";
-    for (const [id, panel] of this.panels) { const state = this.host.snapshot(id); panel.title = state.threads.find((thread) => thread.id === state.activeThreadId)?.title.trim() || "New conversation"; }
-  }
-
-  async editScheduledTask(request: ScheduledTaskEditorRequest): Promise<void> {
-    await vscode.commands.executeCommand("t3.webview.focus");
-    this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.editScheduledTask, request);
-  }
-  async showThreads(): Promise<void> {
-    await vscode.commands.executeCommand("t3.webview.focus");
-    this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showNavigation, undefined);
-  }
-  async showUsage(accountKey?: string, sourceViewId = this.registry.focusedViewId): Promise<void> {
-    const state = this.host.snapshot(sourceViewId);
-    const instanceId = state.threads.find((thread) => thread.id === state.activeThreadId)?.modelSelection.instanceId ?? state.draft.modelSelection?.instanceId;
-    const key = accountKey ?? usageAccounts(state).find((account) => account.instanceIds.includes(instanceId ?? ""))?.key;
-    await vscode.commands.executeCommand("t3.webview.focus");
-    this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key);
-  }
-  async createNewPanel(sourceViewId?: string): Promise<string> {
-    // Capture the invoking group before project selection or server I/O can move focus.
-    const column = (sourceViewId ? this.panels.get(sourceViewId)?.viewColumn : undefined) ?? vscode.window.tabGroups.activeTabGroup.viewColumn;
-    const id = `panel_${crypto.randomUUID()}`;
-    // Inherit project/model choices, but never the source chat's attachment ownership.
-    this.host.registerView(id, sourceViewId ?? this.registry.focusedViewId, false);
-    try {
-      const threadId = await this.host.newThread(undefined, id);
-      await this.host.composerState(threadId, true, false, id);
-      this.mountPanel(id, column);
-      return id;
-    } catch (cause) {
-      await this.host.removeView(id);
-      throw cause;
-    }
-  }
-  async openSession(threadId: string): Promise<string> {
-    for (const [id, panel] of this.panels) if (this.host.snapshot(id).activeThreadId === threadId) {
-      panel.reveal(panel.viewColumn); this.registry.focus(id); return id;
-    }
-    await this.host.selectThread(threadId, SIDEBAR_VIEW_ID);
-    return this.createPanel(SIDEBAR_VIEW_ID);
-  }
-  async insertReference(reference: FileReference): Promise<void> {
-    const focusedId = this.registry.focusedViewId;
-    const id = this.panels.has(focusedId) ? focusedId : await this.createPanel(SIDEBAR_VIEW_ID);
-    const threadId = this.host.snapshot(id).activeThreadId;
-    if (threadId) await this.host.composerState(threadId, undefined, true, id);
-    this.registry.postWhenReady(id, Events.insertReference, { draftKey: this.host.snapshot(id).activeThreadId ?? "new", reference });
-    const panel = this.panels.get(id);
-    if (panel) panel.reveal(panel.viewColumn);
-  }
-
-  async createPanel(sourceViewId = SIDEBAR_VIEW_ID, transfer?: DraftTransfer): Promise<string> {
-    const threadId = this.host.snapshot(sourceViewId).activeThreadId;
-    if (threadId) for (const [id, panel] of this.panels) if (this.host.snapshot(id).activeThreadId === threadId) {
-      panel.reveal(panel.viewColumn); this.registry.focus(id); return id;
-    }
-    const id = `panel_${crypto.randomUUID()}`;
-    this.host.registerView(id, sourceViewId);
-    this.mountPanel(id, vscode.ViewColumn.Active, transfer);
-    return id;
-  }
-
-  private mountPanel(id: string, column: vscode.ViewColumn, transfer?: DraftTransfer): void {
-    const panel = vscode.window.createWebviewPanel("t3Panel", "T3 VSCode", column, {
-      ...this.webviewOptions(),
-      retainContextWhenHidden: true,
-    });
-    panel.iconPath = { light: vscode.Uri.joinPath(this.extensionUri, "resources", "t3-tab-light.svg"), dark: vscode.Uri.joinPath(this.extensionUri, "resources", "t3-tab-dark.svg") };
-    this.panels.set(id, panel);
-    this.registry.add(id, panel.webview);
-    this.registry.focus(id);
-    this.bridge.attach(panel.webview, id);
-    if (transfer) this.registry.postWhenReady(id, Events.initializeDraft, transfer);
-    panel.webview.html = this.htmlFor(panel.webview, "panel");
-    this.updateTitles();
-    panel.onDidChangeViewState(({ webviewPanel }) => { if (webviewPanel.active) this.registry.focus(id); });
-    panel.onDidDispose(() => {
-      this.registry.remove(id); this.panels.delete(id);
-      void this.host.removeView(id).catch((cause) => vscode.window.showErrorMessage(String(cause)));
-    });
-  }
-
-  private webviewOptions(): vscode.WebviewOptions {
-    return {
-      enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "dist")],
-    };
-  }
-
-  private htmlFor(webview: vscode.Webview, surface: "sidebar" | "panel"): string {
-    const mathCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "math", "katex.css"));
-    const visualsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "mermaid.js"));
-    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "webview.js"));
-    const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
-    const csp = [
-      `default-src 'none'`,
-      `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `img-src ${webview.cspSource} data: blob: http: https:`,
-      `font-src ${webview.cspSource}`,
-      `media-src ${webview.cspSource} data: blob: http: https:`,
-      `connect-src ${webview.cspSource}`,
-      `worker-src ${webview.cspSource} blob:`,
-      `frame-src http://127.0.0.1:* http://localhost:* http://[::1]:*`,
-      `script-src 'nonce-${nonce}' ${webview.cspSource}`,
-    ].join("; ");
-    return /* html */ `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="${csp}" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>T3 VSCode</title>
-  <link rel="stylesheet" href="${mathCssUri}" />
-</head>
-<body data-surface="${surface}" data-mermaid-url="${visualsUri}">
-  <div id="root"></div>
-  <script nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`;
-  }
-}

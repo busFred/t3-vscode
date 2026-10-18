@@ -45,13 +45,14 @@ client.config = { providers: [
 let settingsOpened = 0;
 let renamesRequested = 0;
 let deleteConfirmed = false;
+const keptTabs: string[] = []; const closedTaskTabs: string[] = [];
 const openedSessions: Array<string | undefined> = [];
 const openedDiffs: Array<{ turn: number; path: string; old: string; current: string }> = [];
 const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry, async () => { settingsOpened += 1; }, {
   rename: async () => { renamesRequested += 1; return "Renamed through history"; }, confirmDelete: async () => deleteConfirmed,
-}, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); }, { openInTab: (id) => { openedSessions.push(host.snapshot(id).activeThreadId); }, showUsage: (_id, key) => { registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key); } });
+}, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); }, { keepTab: async (id) => { keptTabs.push(id); }, closeTaskTab: id => { closedTaskTabs.push(id); }, openInTab: (id) => { openedSessions.push(host.snapshot(id).activeThreadId); }, showUsage: (_id, key) => { registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key); } });
 const views = new Map<string, FakeWebview>(); const sinks = new Map<string, Set<ServerResponse>>();
-for (const id of [SIDEBAR_VIEW_ID, "tab-one", "tab-two", "tab-three", "tab-narrow"]) {
+for (const id of [SIDEBAR_VIEW_ID, "tab-one", "tab-two", "tab-three", "tab-narrow", "task-tab-one", "task-tab-two"]) {
   if (id !== SIDEBAR_VIEW_ID) host.registerView(id);
   const view = new FakeWebview(); const listeners = new Set<ServerResponse>();
   view.onPostMessage = (message) => {
@@ -83,7 +84,7 @@ const server = createServer(async (request, response) => {
     }
     response.setHeader("content-type", "text/html");
     response.end(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-      <body class="vscode-light" data-surface="${id === SIDEBAR_VIEW_ID ? "sidebar" : "panel"}"><div id="root"></div><script>
+      <body class="vscode-light" data-surface="${id === SIDEBAR_VIEW_ID ? "sidebar" : id.startsWith("task-tab-") ? "task" : "panel"}"><div id="root"></div><script>
       const viewId = ${JSON.stringify(id)}; window.__completed = [];
       window.acquireVsCodeApi = () => ({ postMessage: (message) => {
         fetch('/rpc?view=' + viewId, { method: 'POST', body: JSON.stringify(message) }).then(response => response.json()).then(data => {
@@ -233,7 +234,7 @@ try {
   assert.equal(await manager.locator(".sidebar-modes, textarea, .chat-header").count(), 0);
   assert.equal(await manager.locator(".account-usage > summary").textContent(), "ACCOUNT & USAGE");
   await manager.getByRole("button", { name: "first conversation", exact: true }).click();
-  await manager.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some((entry) => entry.method === "openInTab"));
+  await manager.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some((entry) => entry.method === "openSessionTab"));
   assert.deepEqual(openedSessions, ["first"]);
   const selectInView = async (page: Page, threadId: string) => {
     await host.selectThread(threadId, new URL(page.url()).searchParams.get("view")!);
@@ -422,7 +423,7 @@ try {
   await second.getByRole("button", { name: "Copy message", exact: true }).click();
   await second.waitForFunction(() => !document.querySelector(".citation-selection-button"));
   assert.equal(await second.evaluate(() => window.getSelection()?.toString()), "reply in second conversation", "A click on a transcript control keeps the selection the dismissed button could have quoted");
-  await second.mouse.click(stillSelected.start.x + 2, stillSelected.start.y, { button: "right" });
+  await second.locator(".assistant-message [data-assistant-citation-source]").filter({ hasText: "reply in second conversation" }).first().click({ button: "right" });
   await second.getByRole("menu", { name: "Selected text", exact: true }).waitFor();
   assert.deepEqual(await second.getByRole("menuitem").allTextContents(), ["Copy as plain text", "Copy as Markdown", "Quote"], "One Quote action opens the optional-comment editor");
   await second.screenshot({ path: `${evidence}/selection-context-menu.png` });
@@ -757,6 +758,28 @@ try {
     await verifyStreamingLayout(pages[1]!, host, client, evidence);
   }
   await verifyScheduledTasks(manager, pages[1]!, pages[2]!, host, client, taskOrigins, evidence);
+  const task = host.snapshot().scheduledTasks!.tasks.find(task => task.title.trim())!;
+  assert.ok(task);
+  const taskPage = await browser.newPage({ viewport: { width: 820, height: 700 } });
+  const taskRequest = { projectId: task.projectId, taskId: task.id };
+  registry.postWhenReady("task-tab-one", Events.editScheduledTask, taskRequest);
+  await taskPage.goto(`http://127.0.0.1:${address.port}/?view=task-tab-one`);
+  await taskPage.getByRole("textbox", { name: "Task name", exact: true }).fill("Unsaved tab edit");
+  await taskPage.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some(entry => entry.method === "keepTab"));
+  assert.ok(keptTabs.includes("task-tab-one"), "Task editing keeps its preview tab open");
+  await manager.bringToFront(); await manager.getByRole("tab", { name: "Sessions", exact: true }).click();
+  await taskPage.bringToFront();
+  assert.equal(await taskPage.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Unsaved tab edit");
+  // Reloading the webview restores the edit from its own persisted state.
+  registry.postWhenReady("task-tab-one", Events.editScheduledTask, taskRequest);
+  await taskPage.reload();
+  assert.equal(await taskPage.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Unsaved tab edit");
+  await taskPage.getByRole("button", { name: "Cancel", exact: true }).click();
+  await taskPage.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some(entry => entry.method === "closeTaskTab"));
+  assert.ok(closedTaskTabs.includes("task-tab-one"));
+  assert.notEqual(client.scheduledTasks.find(item => item.id === task.id)!.title, "Unsaved tab edit", "Cancel never saves");
+  await taskPage.close();
+  console.log("PASS: task editor tab promotes on edit, preserves its draft across sidebar navigation/reload, and Cancel closes without saving.");
   }
   assert.deepEqual(errors, []);
   if (!process.argv.includes("--responses-only") && !process.argv.includes("--streaming-only")) console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");

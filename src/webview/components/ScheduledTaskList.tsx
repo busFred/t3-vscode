@@ -11,7 +11,7 @@ export function ScheduledTaskRows({ state, tasks }: { readonly state: HostStateS
     const model = provider?.models.find((model) => model.slug === task.modelSelection.model);
     const origin = task.originThreadId ? state.threads.find((thread) => thread.id === task.originThreadId)?.title ?? "Origin session unavailable" : task.originKnown ? "Independent task" : "Origin unknown";
     return <div key={task.id} className="scheduled-task-row" data-task-id={task.id}>
-      <button className="scheduled-task-open" onClick={() => void run("editScheduledTask", { taskId: task.id, projectId: task.projectId })} aria-label={`Edit task ${task.title}`}>
+      <button className="scheduled-task-open" onClick={(event) => void run("editScheduledTask", { taskId: task.id, projectId: task.projectId, preview: event.detail < 2 })} onDoubleClick={() => void run("editScheduledTask", { taskId: task.id, projectId: task.projectId, preview: false })} aria-label={`Edit task ${task.title}`}>
         <span className="scheduled-task-title"><strong title={task.title}>{task.title}</strong></span>
         <span className="scheduled-task-meta">
           {task.lastRunStatus === "running" ? <small className="task-run-state"><CircleDashedIcon size={12} />Running</small>

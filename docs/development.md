@@ -122,7 +122,7 @@ For a revision that keeps the same version, update that canonical installer path
 | `src/webview/components/ThreadActionsMenu.tsx` | Shared mouse/keyboard thread management menu for history rows and editor headers |
 | `src/webview/components/Composer.tsx`, `src/webview/composerDrafts.ts` | Independent text/context drafts, model effort, permissions and Stop |
 | `src/webview/components/ModelPicker.tsx`, `src/shared/modelOptions.ts` | Provider browsing, fuzzy search, favorites and capability-based model options |
-| `src/webview/components/AssistantSelectionToolbar.tsx`, `CitationCommentEditor.tsx`, `AssistantCitationLink.tsx` | Quote selection, optional comments and saved citation/source previews |
+| `src/webview/components/AssistantSelectionMenu.tsx`, `CitationCommentEditor.tsx`, `AssistantCitationLink.tsx` | Quote selection, optional comments and saved citation/source previews |
 | `src/webview/components/TranscriptView.tsx`, `ChatMarkdown.tsx` | Virtualized typed turn items, markdown and native file/link intents |
 | `src/webview/components/PendingRequests.tsx` | Provider approval choices and question forms |
 | `src/webview/components/t3/` | Portable components copied from T3, retaining upstream presentation |
@@ -155,8 +155,10 @@ The same suite calls `verify-session-find.ts` to check flat occurrences, matchin
 
 ## Scheduled tasks verification
 
-`verify-views.ts` includes `verify-scheduled-tasks.ts` for session/project scope, independent creation, the secondary sidebar editor, model isolation, Save/Back/Cancel, failure retention and narrow layouts. Use `--tasks-only` for that focused fixture. It does not call a provider.
+`verify-views.ts` includes `verify-scheduled-tasks.ts` for session/project scope, independent creation, the task editor and legacy sidebar fixture, model isolation, Save/Back/Cancel, failure retention and narrow layouts. Use `--tasks-only` for that focused fixture. It does not call a provider.
 
 `pnpm exec tsx scripts/verify-scheduled-live.ts --base-dir <isolated-home>` checks real list/subscription/create/edit and saved model options; it creates only disabled tasks. Add `--run-turn` to verify one actual scheduled dispatch and its completed reply using advertised GPT-6 Luna Low (or the explicit `T3_VSCODE_TEST_MODEL` alternative). The script rejects normal T3 homes and missing low-effort catalogs. Stop the disposable server after verification.
 
-The native `--editor-controls-only` suite also verifies chat-to-sidebar task editing, disabled session/independent task creation, real Sessions/Account & Usage command routing and retention of the chat's text and image attachment draft. All three VS Code storage directories are disposable and no task is run.
+The native `--editor-controls-only` suite also verifies chat-to-editor task editing, disabled session/independent task creation, real Sessions/Account & Usage command routing and retention of the chat's text and image attachment draft. All three VS Code storage directories are disposable and no task is run.
+
+`node scripts/verify-preview-tabs.mjs` checks actual VS Code preview replacement, keeping tabs, existing-tab reuse, History/resource identity and restored task loading using deterministic host fixtures. It creates fresh user-data, extensions and shared-data directories under `/tmp`; no T3 server or provider call is used. The full `verify-views.ts` suite also checks task-tab draft retention, reload and Cancel.

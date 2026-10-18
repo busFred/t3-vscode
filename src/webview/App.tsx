@@ -1,3 +1,4 @@
+import { TaskEditorPanel } from "./components/TaskEditorPanel";
 import { DateFormatContext, TimeFormatContext } from "./timeFormat";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { XIcon } from "lucide-react";
@@ -71,7 +72,7 @@ export function App() {
   if (sidebar && state?.phase === "ready") lastSidebarState.current = state;
   let content;
   if (!state) content = <StatusView title="Opening T3 VSCode…" detail="Connecting to the extension host." />;
-  else if (state.phase === "ready") content = document.body.dataset.surface === "sidebar" ? <SidebarView navigationRequest={navigationRequest} taskRequest={taskRequest} state={state} usageRequest={usageRequest} onAppearance={() => { void run(Methods.openSettings); }} /> : <ChatView state={state} />;
+  else if (state.phase === "ready") content = document.body.dataset.surface === "sidebar" ? <SidebarView navigationRequest={navigationRequest} taskRequest={taskRequest} state={state} usageRequest={usageRequest} onAppearance={() => { void run(Methods.openSettings); }} /> : document.body.dataset.surface === "task" ? <TaskEditorPanel state={state} request={taskRequest} /> : <ChatView state={state} />;
   else if (state.phase === "no-server" || state.phase === "error") content = <ServerSetup state={state} />;
   else content = <StatusView
     title={state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}

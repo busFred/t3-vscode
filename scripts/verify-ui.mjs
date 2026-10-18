@@ -42,7 +42,7 @@ function mockBridge() {
     if (request.method === "uploadAttachment") { const image = { key: 'pasted-upload', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length, previewUrl: `data:${params.mimeType};base64,${params.base64}`, environmentId: 'fixture', attachment: { type: 'image', id: 'pending-pasted', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length } }; setTimeout(() => window.postMessage({ id: request.id, result: image }, '*'), 50); return; }
     if (request.method === "pickAttachments") { const file = { key: 'picked-upload', name: 'outside-workspace.txt', mimeType: 'text/plain', sizeBytes: 3, environmentId: 'fixture', attachment: { type: 'file', id: 'pending-picked', name: 'outside-workspace.txt', mimeType: 'text/plain', sizeBytes: 3 } }; window.postMessage({ id: request.id, result: { attachments: [file], errors: [] } }, '*'); return; }
     if (request.method === "chatAsset") { setTimeout(() => window.postMessage({ id: request.id, result: { url: `${location.origin}/${params.reference.kind === "media" || params.reference.kind === "attachment" ? "image.svg" : "visual.html"}`, expiresAt: Date.now() + 60_000 } }, "*"), 0); return; }
-    if (request.method === "selectThread") window.__replace({ activeThreadId: params.threadId });
+    if (["selectThread", "openSessionTab"].includes(request.method)) window.__replace({ activeThreadId: params.threadId });
     if (request.method === "setModel") window.__replace(params.threadId
       ? { threads: window.__state.threads.map((thread) => thread.id === params.threadId ? { ...thread, modelSelection: params.modelSelection } : thread) }
       : { draft: { ...window.__state.draft, modelSelection: params.modelSelection } });

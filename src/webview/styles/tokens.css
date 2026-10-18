@@ -731,6 +731,8 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 
 .retained-sidebar { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
 
+.task-editor-panel { display:flex; flex:1; min-height:0; max-width:820px; width:100%; margin:0 auto; }
+
 .image-caption-backdrop { position:fixed; inset:0; z-index:121; display:flex; align-items:center; justify-content:center; background:#0003; }
 .image-caption-editor { position:relative; inset:auto; max-height:calc(100vh - 24px); overflow:auto; }
 .image-caption-preview { display:block; border:0; background:transparent; padding:0; width:100%; cursor:zoom-in; }

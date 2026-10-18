@@ -330,7 +330,19 @@
           "fontCharacter": "\\E004"
         }
       }
-    }
+    },
+    "customEditors": [
+      {
+        "viewType": "t3.session",
+        "displayName": "T3 Session or Task",
+        "selector": [
+          {
+            "filenamePattern": "*.t3-session"
+          }
+        ],
+        "priority": "option"
+      }
+    ]
   },
   "scripts": {
     "build": "pnpm run build:extension && pnpm run build:webview",

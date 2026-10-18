@@ -1,0 +1,22 @@
+/** Real VS Code tab API with deterministic host fixtures and isolated user/extensions/shared data. */
+import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { build } = createRequire(require.resolve('vite'))('esbuild');
+const root = resolve(import.meta.dirname, '..');
+const isolated = await mkdtemp(join(tmpdir(), 't3-preview-native-'));
+const extension = join(isolated, 'fixture'); await mkdir(extension);
+await writeFile(join(extension, 'package.json'), JSON.stringify({ name: 't3-preview-fixture', version: '1.0.0', publisher: 'test', engines: { vscode: '^1.100.0' }, main: './empty.cjs', contributes: { customEditors: [{ viewType: 't3.session', displayName: 'T3 fixture', selector: [{ filenamePattern: '*.t3-session' }], priority: 'option' }] } }));
+await writeFile(join(extension, 'empty.cjs'), 'exports.activate = () => {};');
+const tests = join(extension, 'tests.cjs');
+await build({ entryPoints: [join(root, 'scripts/verify-preview-tabs.native.ts')], outfile: tests, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], logLevel: 'warning' });
+const result = join(isolated, 'result.txt');
+const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('T3') && !['ELECTRON_RUN_AS_NODE','VITE_HTTP_URL','VITE_WS_URL'].includes(key)));
+const child = spawn(process.env.VSCODE_BIN ?? '/usr/share/code/code', ['--no-sandbox','--disable-gpu','--skip-welcome','--skip-release-notes','--disable-workspace-trust', `--user-data-dir=${isolated}/user`, `--extensions-dir=${isolated}/extensions`, `--shared-data-dir=${isolated}/shared`, `--extensionDevelopmentPath=${extension}`, `--extensionTestsPath=${tests}`], { env: { ...env, T3_PREVIEW_REPO: root, T3_PREVIEW_RESULT: result }, stdio: 'inherit' });
+const timeout = setTimeout(() => child.kill('SIGTERM'), 120_000);
+const code = await new Promise((resolve, reject) => { child.on('exit', resolve); child.on('error', reject); }); clearTimeout(timeout);
+if (code !== 0) throw new Error(`Native preview tests exited ${code}; fixture ${isolated}`);
+console.log(await readFile(result, 'utf8'));

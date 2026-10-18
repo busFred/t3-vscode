@@ -8,10 +8,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.1.22 |
-| [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and an independent model/effort editor in the sidebar. | v0.1.16 | v0.1.22 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.1.23 |
+| [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and independent model/effort editor tabs. | v0.1.16 | v0.1.23 |
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
-| [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.13 |
+| [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.23 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.23 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
@@ -83,6 +83,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 ### Sessions sidebar
 
+#### v0.1.23 — same-version rebuild
+
+Single-clicking an entry opens a native VS Code preview tab. Another preview replaces it; double-click keeps it open. Existing tabs are reused, and editing keeps the preview open. Sidebar selection follows the opened session.
+
 #### v0.0.7
 
 - Make Sessions the default sidebar page and retain a separate Chat mode for smaller screens.
@@ -126,6 +130,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 - Match the Sessions search row’s height and top/side spacing to Tasks, and reserve the clear control’s space so typing and clearing do not resize the field or move its buttons.
 
 ### Scheduled task management
+
+#### v0.1.23 — same-version rebuild
+
+Task entries open independent editor tabs with the same preview/keep behavior. Editing keeps the tab open; drafts survive sidebar navigation and webview reload. Save or Cancel closes the task editor, while Task manager returns to the sidebar. Restored task tabs wait for task data before validation.
 
 #### v0.1.16 — local source revision
 
@@ -179,6 +187,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 - Resolve inline media relative to the source conversation's worktree, matching native file links.
 
 ### Independent chat views
+
+#### v0.1.23 — same-version rebuild
+
+Session resources retain the current History selection for restoration. Opening the previous session from the sidebar creates/reuses the correct editor, while conversation drafts remain independent.
 
 #### v0.0.2
 

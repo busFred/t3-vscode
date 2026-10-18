@@ -1,3 +1,4 @@
+import { bridge, Events } from "../bridge-client";
 import { useEffect, useRef, useState } from "react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import type { ScheduledTaskEditorRequest } from "../../shared/scheduledTasks";
@@ -9,6 +10,7 @@ import { ScheduledTaskEditor, taskDraft, type TaskDraft } from "./ScheduledTaskE
 
 export function SidebarView({ state, onAppearance, usageRequest, taskRequest, navigationRequest }: { readonly state: HostStateSnapshot; readonly onAppearance: () => void; readonly usageRequest: { accountKey?: string } | null; readonly taskRequest: ScheduledTaskEditorRequest | null; readonly navigationRequest: number }) {
   const [tab, setTab] = useState<"sessions" | "tasks">("sessions");
+  useEffect(() => bridge.on(Events.showTaskManager, () => { setEditing(null); setTab("tasks"); }), []);
   const [selectedProject, setProject] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, TaskDraft>>({});
