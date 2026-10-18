@@ -2,7 +2,7 @@
 
 ## 0.1.22 — Unpublished
 
-- Use the standard icon-only Scheduled tasks header button, retaining its count in the tooltip.
+- Use the standard icon-only Scheduled tasks header button, retaining its count in the tooltip. Match the Settled, Archive and settings row heights to the Sessions/Tasks tab strip at every interface font size.
 
 - Keep subagents beneath their parent instead of counting them in Active, Settled or Archive. Remove duplicate “Parent session” entries; each ordinary conversation belongs to its own state’s section, including during search.
 

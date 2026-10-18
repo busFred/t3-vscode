@@ -49,6 +49,8 @@
   --message-surface: var(--vscode-textBlockQuote-background, var(--muted));
   /* A list divider must read on the sidebar background; --border matches it in several light themes. */
   --list-separator: color-mix(in srgb, var(--foreground) 14%, transparent);
+  /* Match the existing tab line height, padding and borders at every interface font size. */
+  --sidebar-band-height: calc(1.1625rem + 9px);
   --code-background: var(--vscode-textCodeBlock-background, var(--background));
 }
 
@@ -107,7 +109,10 @@ select, input { color: inherit; background: var(--card); }
 .history-shelf > summary::after { content: "›"; }
 .history-shelf[open] > summary::after { transform: rotate(90deg); }
 .shelf-count { margin-left: auto; color: var(--muted-foreground); font-size: 0.6875rem; }
-.history-settings { padding: 3px 5px; }
+.history-settings { padding: 0 5px; }
+.dedicated-sessions .history-shelf > summary { height: calc(var(--sidebar-band-height) - 1px); padding-block: 0; }
+.dedicated-sessions .history-settings { height: var(--sidebar-band-height); flex-shrink: 0; }
+.dedicated-sessions .history-settings .icon-button { height: min(27px, calc(var(--sidebar-band-height) - 1px)); }
 .thread-dot, .connection-dot { height: 6px; width: 6px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
 .thread-dot.waiting { background: var(--warning); }
 .connection-dot { background: #22c55e; }
@@ -665,7 +670,7 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 
 /* Sessions and scheduled tasks share a sidebar; editing keeps the front page mounted. */
 .sidebar-front, .sidebar-manager { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
-.sidebar-tabs { display: flex; flex: none; gap: 3px; border-bottom: 1px solid var(--border); padding: 0 6px; }
+.sidebar-tabs { height: var(--sidebar-band-height); display: flex; flex: none; gap: 3px; border-bottom: 1px solid var(--border); padding: 0 6px; }
 .sidebar-tabs > button { flex: none; padding: 3px 7px; border-bottom: 2px solid transparent; color: var(--muted-foreground); font-size: .75rem; }
 .sidebar-tabs > button:hover { color: var(--foreground); }
 .sidebar-tabs > button[aria-selected="true"] { border-bottom-color: var(--primary); color: var(--foreground); font-weight: 600; }

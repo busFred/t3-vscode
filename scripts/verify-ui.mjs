@@ -441,6 +441,15 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
     document.body.className = 'vscode-light';
     for (const [key, value] of Object.entries({ foreground: '#202020', 'editor-foreground': '#202020', 'editor-background': '#ffffff', 'sideBar-background': '#f3f3f3', 'sideBar-foreground': '#202020', 'list-activeSelectionBackground': '#005fb8', 'list-activeSelectionForeground': '#ffffff', 'input-background': '#ffffff', 'input-foreground': '#202020' })) document.documentElement.style.setProperty(`--vscode-${key}`, value);
   });
+  for (const fontSize of [12, 16, 20]) {
+    const bands = await page.evaluate(size => {
+      document.documentElement.style.fontSize = `${size}px`;
+      return [...document.querySelectorAll('.sidebar-tabs, .dedicated-sessions .history-shelf > summary, .dedicated-sessions .history-settings')].map(element => ({ height: element.getBoundingClientRect().height + (element.tagName === 'SUMMARY' ? 1 : 0) }));
+    }, fontSize);
+    assert.equal(bands.length, 4);
+    assert.ok(bands.every(band => Math.abs(band.height - bands[0].height) < 1), `Sidebar footer bands match tab height at ${fontSize}px`);
+  }
+  await page.evaluate(() => { document.documentElement.style.fontSize = '16px'; });
   assert.equal(await page.locator('.project-heading').count(), 0);
   assert.equal(await page.locator('.session-list > .session-tree-node').count() > 0, true);
   // The sessions band is gone; its + sits beside the search field and names what the active tab creates.

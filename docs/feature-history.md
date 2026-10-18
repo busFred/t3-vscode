@@ -122,6 +122,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 - Add a sort button beside the existing New button; its floating menu orders sessions by last activity or title in either direction without shifting the list.
 - Remember the order in the view across reloads while retaining pinned precedence, shelf membership and subagent ancestry; sessions without activity use their recorded update time.
+- Match the Settled, Archive and settings rows to the Sessions/Tasks tab strip height, including interface font scaling.
 - Match the Sessions search row’s height and top/side spacing to Tasks, and reserve the clear control’s space so typing and clearing do not resize the field or move its buttons.
 
 ### Scheduled task management
@@ -1465,3 +1466,10 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Classify each ordinary conversation once by its own state; retain subagents only beneath its tree, including search matches and archived descendants. Remove misleading Parent session duplicates and exclude children from shelf counts.
 - Pass 262 deterministic tests, TypeScript checking, full builds and both documented isolated browser suites. Cover own-state Un-settle menus, child-only search and lazy archived-child discovery in compact History.
 - Obtain fresh-context independent final regression approval against `21fff34` after covering archived-only compact expansion; no blocking findings remain. Keep the owner-selected v0.1.22 manifest.
+
+### v0.1.22 — compact scheduled action and matching sidebar bands
+
+- Use the standard Scheduled tasks header icon with the task count in its tooltip; give Settled, Archive and settings the same height as the Sessions/Tasks tab strip.
+- Pass TypeScript, webview builds and both complete isolated browser suites, including 12/16/20px band equality, header icon dimensions, scoped drawer behavior and narrow layouts. Earlier subagent validation passed all 262 deterministic tests and full builds.
+- Obtain fresh-context independent final approval against `fd1163a` with no blocking findings; the earlier subagent fix was independently approved against `21fff34`.
+- Rebuild the owner-requested v0.1.22 canonical VSIX after approval, retaining the previous installer in `target-installer/archive/`. Preserve existing prerelease metadata; no publishing or normal-profile installation.
