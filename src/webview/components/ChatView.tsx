@@ -109,7 +109,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
       <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} searchTarget={findOpen ? searchTarget : null} onNavigate={() => { setCitationTarget(null); setSearchTarget(null); }} />
       {/* Quote inserts straight away wherever it appears; the comment stays editable from the chip or the draft token. */}
       <AssistantSelectionToolbar viewport={viewport} onCite={quote} />
-      <AssistantSelectionMenu viewport={viewport} onComment={openComment} onQuote={quote} />
+      <AssistantSelectionMenu key={`${state.environment?.environmentId}:${state.activeThreadId}`} viewport={viewport} onComment={openComment} onQuote={quote} />
       <Composer key={state.activeThreadId ?? "draft"} state={state} onSelectionChange={rememberSelection} onUsage={() => { void run("showUsage"); }} onEditCitation={(citation, index) => setCommentTarget({ citation, index, draftKey: state.activeThreadId ?? "new" })} />
       {commentTarget ? <CitationCommentEditor key={`${commentTarget.citation.messageId}:${commentTarget.citation.start}:${commentTarget.index ?? "new"}`} citation={commentTarget.citation} anchor={commentTarget.anchor} onClose={() => setCommentTarget(null)} onSave={(comment) => {
         const context = { type: "assistant" as const, citation: withAssistantCitationComment(commentTarget.citation, comment) };

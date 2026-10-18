@@ -871,9 +871,10 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 
 #### v0.1.22
 
-- Offer Copy, Quote and Quote with comment when selected response text is right-clicked, or Shift+F10 / the Menu key is pressed, so a stray click that dismissed the floating button no longer costs the selection. Equations keep the math menu, and a selection that cannot be quoted keeps the platform's own menu.
-- Insert a quote immediately from the menu's Quote, without the comment editor; the comment is still added later from the chip or the draft token. Quote with comment keeps the editor, which is what the floating button opens.
+- Offer Copy as plain text, Copy as Markdown, Quote and Quote with comment in the response selection menu; another right-click on the same source recovers the last valid selection after an outside click clears it. Shift+F10 / the Menu key work within the transcript; unrelated or invalid selections retain their native menu, and equations retain the math menu.
+- Insert a quote immediately from the menu's Quote, without the comment editor; the comment is still added later from the chip or the draft token. Quote with comment opens the editor; the floating Quote button inserts immediately.
 - Rename the floating button from Cite to Quote, so the two entry points share one name.
+- Preserve selected formatting, links, nested lists, tables and code when copying Markdown; retain only session-scoped citation data and revalidate the source on recovery, with no permanent quote button.
 
 ### Response forks
 

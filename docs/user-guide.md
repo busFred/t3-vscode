@@ -101,7 +101,7 @@ Favorites, visibility and ordering are saved independently in VS Code. Configure
 
 Select text in a file and press **Ctrl+K** (**Cmd+K** on macOS), or choose **Reference Editor Selection** from its context menu, to insert a compact reference such as `@README.md:43-46` at the last-used chat's prompt cursor. **Alt+K** remains available. The shortcut preserves existing prompt text and includes the exact selected text, including unsaved changes, when you send; removing the inline reference omits its snapshot. If no chat is open, the shortcut opens an editor chat; browsing sidebar usage preserves the last focused editor target.
 
-Select text in an assistant response and choose **Cite** to insert its reference at the last cursor position in your prompt, replacing selected prompt text when present. Add an optional comment, then Ctrl/Cmd+click the inline reference, or plain-click its quote chip, to edit it; **Alt+Enter** opens the reference at the cursor. A plain click on an inline reference only moves the caret, so its text can be edited by hand. Removing the quote chip also removes its inline references, and deleting an inline reference prevents that quote from being sent. Quotes keep their T3 source link and readable text when sent; saved source links can reopen and highlight the response. References and drafts stay with their own conversation and view.
+Select text in an assistant response and choose **Quote** to insert its reference at the last cursor position in your prompt, replacing selected prompt text when present. Add an optional comment, then Ctrl/Cmd+click the inline reference, or plain-click its quote chip, to edit it; **Alt+Enter** opens the reference at the cursor. A plain click on an inline reference only moves the caret, so its text can be edited by hand. Removing the quote chip also removes its inline references, and deleting an inline reference prevents that quote from being sent. Quotes keep their T3 source link and readable text when sent; saved source links can reopen and highlight the response. References and drafts stay with their own conversation and view.
 
 Inline references in the message box — files, images and quotes alike — open with **Ctrl+click** (**Cmd+click** on macOS); hold that key and the caret becomes a pointer. A plain click only moves the caret, so a path can be retyped by hand to reach a file the `@` suggestion list will not offer, such as a gitignored one.
 
@@ -124,6 +124,8 @@ Markdown images, video/audio, Mermaid diagrams and T3's `html_render` graphics r
 ### Response diffs
 
 A response with file changes shows one expandable changed-file summary with folders and additions/deletions. Saved manual edits made before the response are excluded and are not listed. Responses with no agent changes, or without a reliable pre-message snapshot, show no changes box. Clicking a file opens VS Code's read-only diff editor for that turn's saved before/after snapshots. Earlier turn diffs remain unchanged by later edits or commits. This uses checkpoint files in the local T3 workspace; binary files cannot be expanded as text.
+
+Right-click selected assistant text for **Copy as plain text**, **Copy as Markdown**, **Quote** or **Quote with comment**. After clicking elsewhere, right-click the same source again to recover that passage. A new selection replaces the saved passage; switching sessions clears it. Equations keep their own context menu.
 
 ## Find in session
 

@@ -5,18 +5,18 @@ import { assistantQuoteMenuItems, clampMenuPosition, QUOTE_TOO_LONG_LABEL } from
 
 test("The selection menu offers copy, then quoting with and without a comment, in the approved wording", () => {
   const items = assistantQuoteMenuItems(42);
-  assert.deepEqual(items.map((item) => item.label), ["Copy", "Quote", "Quote with comment"]);
-  assert.deepEqual(items.map((item) => item.action), ["copy", "quote", "comment"]);
+  assert.deepEqual(items.map((item) => item.label), ["Copy as plain text", "Copy as Markdown", "Quote", "Quote with comment"]);
+  assert.deepEqual(items.map((item) => item.action), ["copy", "markdown", "quote", "comment"]);
   // The owner asked for the ellipsis to be dropped, and for the separator to sit between copying and quoting.
   assert.ok(items.every((item) => !item.label.includes("…") && !item.label.endsWith("...")));
-  assert.deepEqual(items.map((item) => item.separated), [false, true, false]);
-  assert.deepEqual(items.map((item) => item.disabled), [false, false, false]);
+  assert.deepEqual(items.map((item) => item.separated), [false, false, true, false]);
+  assert.deepEqual(items.map((item) => item.disabled), [false, false, false, false]);
 });
 
 test("A selection past the citation length limit keeps copy and disables both quote items", () => {
   const items = assistantQuoteMenuItems(ASSISTANT_CITATION_MAX_TEXT_LENGTH + 1);
-  assert.deepEqual(items.map((item) => item.disabled), [false, true, true]);
-  assert.deepEqual(assistantQuoteMenuItems(ASSISTANT_CITATION_MAX_TEXT_LENGTH).map((item) => item.disabled), [false, false, false]);
+  assert.deepEqual(items.map((item) => item.disabled), [false, false, true, true]);
+  assert.deepEqual(assistantQuoteMenuItems(ASSISTANT_CITATION_MAX_TEXT_LENGTH).map((item) => item.disabled), [false, false, false, false]);
   assert.equal(QUOTE_TOO_LONG_LABEL, "Shorten selection");
 });
 

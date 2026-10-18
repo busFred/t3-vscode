@@ -4,7 +4,8 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useActions } from "../actions";
 import { assistantQuoteMenuItems, clampMenuPosition, QUOTE_TOO_LONG_LABEL, type AssistantQuoteMenuAction } from "../../shared/assistantQuoteMenu";
-import { captureAssistantTextSelection, type AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
+import { selectionMarkdown } from "../selectionMarkdown";
+import { findAssistantCitationSourceAnchor, captureAssistantTextSelection, type AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 
 /** The citation a live selection stands for, read the same way for both entry points so they cannot capture different spans. */
 export function captureSelectedCitation(viewport: HTMLElement, selection: Selection | null): { citation: AssistantCitation; anchor: AssistantCitationSourceAnchor; range: Range } | null {
@@ -15,40 +16,58 @@ export function captureSelectedCitation(viewport: HTMLElement, selection: Select
     anchor: { source: captured.source, range: captured.range, viewport }, range: captured.range };
 }
 
-const ICONS = { copy: CopyIcon, quote: QuoteIcon, comment: MessageSquareQuoteIcon } as const;
+const ICONS = { copy: CopyIcon, markdown: CopyIcon, quote: QuoteIcon, comment: MessageSquareQuoteIcon } as const;
 
-/**
- * Quoting from the transcript's own context menu, so a stray click that dismissed the floating button does not
- * cost the selection. Reads the selection when the menu opens rather than tracking it: `observeSelectionActions`
- * deliberately cancels on right-click, and this surface has no reason to keep that state alive.
- */
+/** Keep the last valid selection, scoped to this session and its source message, after dismissal. */
 export function AssistantSelectionMenu({ viewport, onQuote, onComment }: { readonly viewport: HTMLElement | null; readonly onQuote: (citation: AssistantCitation) => void; readonly onComment: (citation: AssistantCitation, anchor: AssistantCitationSourceAnchor) => void }) {
   const run = useActions(); const menu = useRef<HTMLDivElement>(null);
-  const [target, setTarget] = useState<{ citation: AssistantCitation; anchor: AssistantCitationSourceAnchor; x: number; y: number } | null>(null);
+  const remembered = useRef<{ citation: AssistantCitation; markdown: string } | null>(null);
+  const [target, setTarget] = useState<{ citation: AssistantCitation; markdown: string; anchor: AssistantCitationSourceAnchor; x: number; y: number } | null>(null);
   const [location, setLocation] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => {
     if (!viewport) return;
+    remembered.current = null; setTarget(null);
+    const remember = () => {
+      const selection = window.getSelection();
+      const captured = captureSelectedCitation(viewport, selection);
+      if (selection && !selection.isCollapsed && !captured) remembered.current = null;
+      if (captured) remembered.current = { citation: captured.citation, markdown: selectionMarkdown(captured.range, captured.anchor.source) };
+      return captured;
+    };
+    const recover = (source?: Element | null) => {
+      remember();
+      const saved = remembered.current; if (!saved) return null;
+      const anchor = findAssistantCitationSourceAnchor(document, saved.citation);
+      if (!anchor || !viewport.contains(anchor.source) || source && anchor.source !== source) return null;
+      return { ...saved, anchor, range: anchor.range };
+    };
     const show = (event: MouseEvent) => {
       // Equations keep the math menu, whose handler shares this document and capture phase: yielding by target
       // and by defaultPrevented fixes that precedence here rather than leaving it to listener registration order.
       if (event.defaultPrevented || !(event.target instanceof Node) || !viewport.contains(event.target)) return;
       if (event.target instanceof Element && event.target.closest(".katex")) return;
-      const captured = captureSelectedCitation(viewport, window.getSelection());
+      const source = event.target instanceof Element ? event.target.closest("[data-assistant-citation-source]") : event.target.parentElement?.closest("[data-assistant-citation-source]");
+      if (!source) return;
+      const captured = recover(source);
       // Without a citable selection the native menu stays: suppressing it would take the platform's copy with it.
       if (!captured) return;
-      event.preventDefault();
-      setTarget({ citation: captured.citation, anchor: captured.anchor, x: event.clientX, y: event.clientY });
+      event.preventDefault(); event.stopPropagation();
+      setTarget({ citation: captured.citation, markdown: captured.markdown, anchor: captured.anchor, x: event.clientX, y: event.clientY });
     };
     const keys = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
-      const captured = captureSelectedCitation(viewport, window.getSelection());
+      if (event.target instanceof Element && event.target.closest("input,textarea,[contenteditable=true],.katex")) return;
+      const live = captureSelectedCitation(viewport, window.getSelection());
+      if (!live && (!(event.target instanceof Node) || !viewport.contains(event.target))) return;
+      const captured = recover();
       if (!captured) return;
       event.preventDefault(); event.stopPropagation();
       const rect = captured.range.getBoundingClientRect();
-      setTarget({ citation: captured.citation, anchor: captured.anchor, x: rect.left, y: rect.bottom + 4 });
+      setTarget({ citation: captured.citation, markdown: captured.markdown, anchor: captured.anchor, x: rect.left, y: rect.bottom + 4 });
     };
+    document.addEventListener("selectionchange", remember); document.addEventListener("pointerdown", remember, true);
     document.addEventListener("contextmenu", show, true); document.addEventListener("keydown", keys, true);
-    return () => { document.removeEventListener("contextmenu", show, true); document.removeEventListener("keydown", keys, true); };
+    return () => { remembered.current = null; document.removeEventListener("selectionchange", remember); document.removeEventListener("pointerdown", remember, true); document.removeEventListener("contextmenu", show, true); document.removeEventListener("keydown", keys, true); };
   }, [viewport]);
   useLayoutEffect(() => {
     const element = menu.current;
@@ -71,6 +90,7 @@ export function AssistantSelectionMenu({ viewport, onQuote, onComment }: { reado
   const items = assistantQuoteMenuItems(target.citation.text.length);
   const choose = (action: AssistantQuoteMenuAction) => {
     if (action === "copy") void run("copyText", { text: target.citation.text });
+    else if (action === "markdown") void run("copyText", { text: target.markdown });
     else if (action === "quote") onQuote(target.citation);
     else onComment(target.citation, target.anchor);
     setTarget(null);

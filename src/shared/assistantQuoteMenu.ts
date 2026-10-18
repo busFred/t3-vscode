@@ -4,7 +4,7 @@ import { ASSISTANT_CITATION_MAX_TEXT_LENGTH } from "@t3tools/contracts";
 export const QUOTE_ACTION_LABEL = "Quote";
 export const QUOTE_COMMENT_ACTION_LABEL = "Quote with comment";
 export const QUOTE_TOO_LONG_LABEL = "Shorten selection";
-export type AssistantQuoteMenuAction = "copy" | "quote" | "comment";
+export type AssistantQuoteMenuAction = "copy" | "markdown" | "quote" | "comment";
 export interface AssistantQuoteMenuItem {
   readonly action: AssistantQuoteMenuAction;
   readonly label: string;
@@ -20,7 +20,8 @@ export interface AssistantQuoteMenuItem {
 export function assistantQuoteMenuItems(textLength: number): ReadonlyArray<AssistantQuoteMenuItem> {
   const disabled = textLength > ASSISTANT_CITATION_MAX_TEXT_LENGTH;
   return [
-    { action: "copy", label: "Copy", disabled: false, separated: false },
+    { action: "copy", label: "Copy as plain text", disabled: false, separated: false },
+    { action: "markdown", label: "Copy as Markdown", disabled: false, separated: false },
     { action: "quote", label: QUOTE_ACTION_LABEL, disabled, separated: true },
     { action: "comment", label: QUOTE_COMMENT_ACTION_LABEL, disabled, separated: false },
   ];

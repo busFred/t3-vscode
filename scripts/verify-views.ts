@@ -404,10 +404,17 @@ try {
   assert.equal(await second.evaluate(() => window.getSelection()?.toString()), "reply in second conversation", "A click on a transcript control keeps the selection the dismissed button could have quoted");
   await second.mouse.click(stillSelected.start.x + 2, stillSelected.start.y, { button: "right" });
   await second.getByRole("menu", { name: "Selected text", exact: true }).waitFor();
-  assert.deepEqual(await second.getByRole("menuitem").allTextContents(), ["Copy", "Quote", "Quote with comment"], "Copy leads, then quoting with and without a comment");
+  assert.deepEqual(await second.getByRole("menuitem").allTextContents(), ["Copy as plain text", "Copy as Markdown", "Quote", "Quote with comment"], "Copy leads, then quoting with and without a comment");
   await second.screenshot({ path: `${evidence}/selection-context-menu.png` });
   await second.keyboard.press("Escape");
   await second.waitForFunction(() => !document.querySelector(".selection-context-menu"));
+  // Clear the actual DOM selection, then right-click the same passage: the old implementation cannot reopen.
+  await second.locator(".chat-heading").click();
+  await second.evaluate(() => window.getSelection()?.removeAllRanges());
+  await second.locator(".assistant-message .markdown p").first().click({ button: "right", position: { x: 8, y: 8 } });
+  await second.getByRole("menu", { name: "Selected text", exact: true }).waitFor();
+  await second.keyboard.press("Escape");
+  await second.getByRole("button", { name: "Copy message", exact: true }).focus();
   // Shift+F10 reaches the same menu, and its Quote inserts straight into the draft rather than opening the comment editor.
   await second.keyboard.press("Shift+F10");
   await second.getByRole("menuitem", { name: "Quote", exact: true }).click();
