@@ -1,4 +1,4 @@
-import { useTimeFormat } from "../timeFormat";
+import { useDateTimeFormat } from "../timeFormat";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArchiveIcon, CheckIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, SettingsIcon, RefreshCwIcon, XIcon, MessageCircleQuestionIcon, CircleDashedIcon, LoaderCircleIcon, ChevronRightIcon, BotIcon, ArrowDownUpIcon } from "lucide-react";
 import type { HostStateSnapshot, ThreadSearchMatch, ThreadSummary } from "../../shared/bridge";
@@ -27,7 +27,7 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   readonly onSelect?: (threadId: string) => void;
   readonly compact?: boolean;
 }) {
-  const timeOptions = useTimeFormat();
+  const { dateTime } = useDateTimeFormat();
   const [sort, setSort] = useSessionSort();
   const [sortOpen, setSortOpen] = useState(false);
   const sortAnchor = useRef<HTMLButtonElement>(null);
@@ -55,7 +55,7 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
     const match = hits.data?.find((hit) => hit.threadId === thread.id);
     const provider = state.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId);
     const activity = sessionActivityLabel(thread.lastActiveAt, now);
-    const exactActivity = activity ? new Date(thread.lastActiveAt!).toLocaleString(undefined, timeOptions) : "";
+    const exactActivity = activity ? dateTime(new Date(thread.lastActiveAt!)) : "";
     return <button key={thread.id} data-thread-id={thread.id} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={() => { if (onSelect) onSelect(thread.id); else void run("selectThread", { threadId: thread.id }).then((ok) => { if (ok) void run("openInTab"); }); }} onContextMenu={compact ? undefined : (event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
       if (!compact && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }
     }} aria-label={thread.title || "Untitled"} aria-description={thread.pendingRuntimeRequest ? "Input needed" : working(thread) ? "Working" : undefined} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>

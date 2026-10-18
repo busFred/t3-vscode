@@ -9,9 +9,13 @@ export async function verifyMessageOptions(page) {
       return [...document.querySelectorAll('time.message-timestamp')].every(element => {
         const date = new Date(element.dateTime);
         return element.textContent.includes(date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit', ...options }))
-          && element.title === date.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'long', ...options });
+          && element.title === element.textContent;
       });
     }, format);
+  }
+  for (const [dateFormat, pattern] of [['yyyy-MM-dd', /^\d{4}-\d{2}-\d{2}/], ['MM/dd/yyyy', /^\d{2}\/\d{2}\/\d{4}/], ['dd-MMM-yy', /^\d{2}-[A-Z][a-z]{2}-\d{2}/]]) {
+    await page.evaluate(dateFormat => window.__replace({ dateFormat }), dateFormat);
+    await page.waitForFunction(source => [...document.querySelectorAll('time.message-timestamp')].every(time => new RegExp(source).test(time.textContent)), pattern.source);
   }
   await page.evaluate(() => window.__replace({ transcript: window.__state.transcript.map(row => row.item.type === 'user_message' ? { ...row, item: { ...row.item, text: 'My **own** message.' } } : row) }));
   const source = page.locator('.user-message .markdown p').first();

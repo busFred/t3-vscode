@@ -1,4 +1,4 @@
-import { TimeFormatContext } from "./timeFormat";
+import { DateFormatContext, TimeFormatContext } from "./timeFormat";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { XIcon } from "lucide-react";
 import type { ScheduledTaskEditorRequest } from "../shared/scheduledTasks";
@@ -82,8 +82,8 @@ export function App() {
     const remembered = lastSidebarState.current;
     content = <><div className="retained-sidebar" style={{ display: state?.phase === "ready" ? "flex" : "none" }}><SidebarView key={remembered.environment?.environmentId} navigationRequest={navigationRequest} taskRequest={taskRequest} state={remembered} usageRequest={usageRequest} onAppearance={() => { void run(Methods.openSettings); }} /></div>{state?.phase !== "ready" ? content : null}</>;
   }
-  return <TimeFormatContext.Provider value={state?.timeFormat ?? "automatic"}><Actions value={run}><div className="app">
+  return <DateFormatContext.Provider value={state?.dateFormat ?? "yyyy-MM-dd"}><TimeFormatContext.Provider value={state?.timeFormat ?? "automatic"}><Actions value={run}><div className="app">
     {error ? <div className="error-banner" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError(null)}><XIcon size={14} /></button></div> : null}
     {content}<MathContextMenu /><VisualDialog /><EquationPreview />
-  </div></Actions></TimeFormatContext.Provider>;
+  </div></Actions></TimeFormatContext.Provider></DateFormatContext.Provider>;
 }

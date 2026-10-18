@@ -1,4 +1,4 @@
-import { useTimeFormat } from "../timeFormat";
+import { useDateTimeFormat } from "../timeFormat";
 import { useCallback, useRef, useState } from "react";
 import { ArrowLeftIcon, ChevronDownIcon } from "lucide-react";
 import type { HostStateSnapshot, ModelSelection } from "../../shared/bridge";
@@ -29,7 +29,7 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
   readonly state: HostStateSnapshot; readonly draft: TaskDraft; readonly onChange: (draft: TaskDraft) => void;
   readonly onReturn: (discard: boolean) => void; readonly onReload: () => void; readonly returnLabel: string;
 }) {
-  const timeOptions = useTimeFormat();
+  const { dateTime } = useDateTimeFormat();
   const run = useActions(); const [saving, setSaving] = useState(false); const [failed, setFailed] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false); const anchor = useRef<HTMLButtonElement>(null);
   const closePicker = useCallback(() => setPickerOpen(false), []);
@@ -92,7 +92,7 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
       {draft.threadId ? <small>Uses the result session’s workspace.</small> : draft.workspaceStrategy.type === "worktree" ? <label>Base branch<input aria-label="Task base branch" value={draft.workspaceStrategy.baseRef} onChange={(event) => { if (draft.workspaceStrategy.type === "worktree") patch({ workspaceStrategy: { ...draft.workspaceStrategy, baseRef: event.target.value } }); }} /></label> : draft.workspaceStrategy.type === "existing_worktree" ? <small>{draft.workspaceStrategy.worktreePath}</small> : <small>{project?.workspaceRoot}</small>}
       {draft.base ? <small>Permissions: {draft.base.runtimeMode} · {draft.base.interactionMode}</small> : null}</details>
       <label className="task-enabled"><input type="checkbox" aria-label="Task enabled" checked={draft.enabled} onChange={(event) => patch({ enabled: event.target.checked })} />Enabled</label>
-      {draft.base?.nextRunAt ? <small>Next run: {new Date(draft.base.nextRunAt).toLocaleString(undefined, timeOptions)}</small> : null}
+      {draft.base?.nextRunAt ? <small>Next run: {dateTime(new Date(draft.base.nextRunAt))}</small> : null}
       </fieldset>
     </div>
     <footer><button type="button" disabled={saving} onClick={() => onReturn(true)}>Cancel</button><button type="submit" className="primary" disabled={!valid || saving || draft.scheduleType === "fixed_time" && draft.weekdays?.length === 0}>{saving ? "Saving…" : "Save task"}</button></footer>

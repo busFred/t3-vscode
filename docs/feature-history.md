@@ -540,6 +540,10 @@ Ctrl/Cmd+click (or Alt+Enter) on an inline image reference opens an image-captio
 
 ### Message timestamps
 
+#### v0.1.23 — same-version rebuild
+
+Native Date Format and Time Format settings use dropdowns only: seven short-date examples and two time examples (4:03:22 PM / 16:03:22). Defaults are yyyy-MM-dd and 24-hour; legacy explicit automatic settings remain readable. Changes apply live to message timestamps and date/time tooltips, including search results.
+
 #### v0.1.22
 
 - Show the recorded start date/time in local time beside each user/assistant message’s footer actions, with seconds and a full timezone tooltip; streaming completion does not change the timestamp.

@@ -1,4 +1,4 @@
-import type { TimeFormat } from "./timeFormat.js";
+import type { DateFormat, TimeFormat } from "./timeFormat.js";
 /** UI intents only. T3 credentials, RPCs, projections and subscriptions stay in the host. */
 import type {
   OrchestrationV2TurnItemJson,
@@ -118,6 +118,7 @@ export interface HostStateSnapshot {
   readonly home: string;
   readonly workspaceRoots: ReadonlyArray<string>;
   readonly timeFormat?: TimeFormat;
+  readonly dateFormat?: DateFormat;
   readonly appearance: AppearanceSettings;
   readonly messageNavigation?: MessageNavigationPlacement;
   readonly notice?: string;

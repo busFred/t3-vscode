@@ -195,19 +195,42 @@
           "t3-vscode.timeFormat": {
             "type": "string",
             "enum": [
-              "automatic",
               "12-hour",
               "24-hour"
             ],
-            "enumDescriptions": [
-              "Use the webview locale\u2019s default time format.",
-              "Always use 12-hour time with AM/PM.",
-              "Always use 24-hour time (00\u201323)."
-            ],
-            "default": "automatic",
+            "default": "24-hour",
             "scope": "window",
             "description": "Time format for timestamps and time tooltips throughout T3 VSCode. Automatic uses locale defaults, which may differ from a customized operating-system clock.",
-            "order": 4
+            "order": 4,
+            "enumItemLabels": [
+              "4:03:22 PM",
+              "16:03:22"
+            ],
+            "markdownDescription": "Time display in messages and timestamp tooltips. Examples show the same local time."
+          },
+          "t3-vscode.dateFormat": {
+            "type": "string",
+            "enum": [
+              "M/d/yyyy",
+              "M/d/yy",
+              "MM/dd/yy",
+              "MM/dd/yyyy",
+              "yy/MM/dd",
+              "yyyy-MM-dd",
+              "dd-MMM-yy"
+            ],
+            "enumItemLabels": [
+              "4/5/2017",
+              "4/5/17",
+              "04/05/17",
+              "04/05/2017",
+              "17/04/05",
+              "2017-04-05",
+              "05-Apr-17"
+            ],
+            "default": "yyyy-MM-dd",
+            "scope": "window",
+            "markdownDescription": "Date display in messages and timestamp tooltips. Examples use April 5, 2017."
           }
         }
       },

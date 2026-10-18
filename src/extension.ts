@@ -1,4 +1,4 @@
-import { resolveTimeFormat } from "./shared/timeFormat.js";
+import { resolveDateFormat, resolveTimeFormat } from "./shared/timeFormat.js";
 /**
  * Activation: build the host state machine, register the sidebar webview view
  * and the pop-out editor tab command, and bridge everything together. All T3
@@ -45,6 +45,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
     taskOrigins: () => taskOrigins.read(), saveTaskOrigin: (origin) => taskOrigins.save(origin),
     workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject,
+    dateFormat: () => resolveDateFormat(vscode.workspace.getConfiguration("t3-vscode").get("dateFormat")),
     timeFormat: () => resolveTimeFormat(vscode.workspace.getConfiguration("t3-vscode").get("timeFormat")), appearance: readAppearance, messageNavigation: () => resolveMessageNavigation(vscode.workspace.getConfiguration("t3-vscode").get("messageNavigation")),
     modelPreferences: () => modelPreferences.read(),
     searchPreferences: context.workspaceState.get("sessionSearchPreferences", {}),
@@ -124,7 +125,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await bridge.performThreadAction(thread.id, choice.action);
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("t3-vscode.timeFormat") || event.affectsConfiguration("t3-vscode.messageNavigation") || FONT_SIZE_KEYS.some((key) => event.affectsConfiguration(`t3-vscode.${key}`))) hostState?.refreshAppearance();
+      if (event.affectsConfiguration("t3-vscode.dateFormat") || event.affectsConfiguration("t3-vscode.timeFormat") || event.affectsConfiguration("t3-vscode.messageNavigation") || FONT_SIZE_KEYS.some((key) => event.affectsConfiguration(`t3-vscode.${key}`))) hostState?.refreshAppearance();
       if (event.affectsConfiguration("t3-vscode.usage")) meters.update();
       if (event.affectsConfiguration("t3-vscode.t3Home")) {
         void vscode.window

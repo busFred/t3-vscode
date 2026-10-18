@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveTimeFormat, timeFormatOptions } from "./timeFormat.js";
+import { DATE_FORMATS, formatDate, resolveDateFormat, resolveTimeFormat, timeFormatOptions } from "./timeFormat.js";
 test("Time overrides work across locales and preserve automatic defaults and midnight", () => {
   for (const locale of ["en-US", "en-GB"]) {
     const midnight = new Date("2026-10-18T00:05:00Z");
@@ -12,4 +12,10 @@ test("Time overrides work across locales and preserve automatic defaults and mid
   }
   for (const value of [null, undefined, "bad", 24]) assert.equal(resolveTimeFormat(value), "automatic");
   assert.equal(resolveTimeFormat("12-hour"), "12-hour"); assert.equal(resolveTimeFormat("24-hour"), "24-hour");
+});
+
+test("Date dropdown formats use local calendar fields and exact example order", () => {
+  const date = new Date(2017, 3, 5, 16, 3, 22);
+  assert.deepEqual(DATE_FORMATS.map(format => formatDate(date, format)), ["4/5/2017", "4/5/17", "04/05/17", "04/05/2017", "17/04/05", "2017-04-05", "05-Apr-17"]);
+  assert.equal(resolveDateFormat("invalid"), "yyyy-MM-dd");
 });

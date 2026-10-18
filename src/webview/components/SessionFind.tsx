@@ -1,4 +1,4 @@
-import { useTimeFormat } from "../timeFormat";
+import { useDateTimeFormat, useTimeFormat } from "../timeFormat";
 import { createContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, ChevronRightIcon, PanelTopIcon, PanelRightIcon, SearchIcon, XIcon, RefreshCwIcon, FilterIcon } from "lucide-react";
@@ -42,6 +42,7 @@ function SearchPreview({ preview, match, options, context, fontKey }: { preview?
 
 export function SessionFind({ state, preferences, onPreferences, onClose, onSelect, onSearch }: { state: HostStateSnapshot; preferences: SearchPreferences; onPreferences: (patch: Partial<SearchPreferences>) => void; onClose: () => void; onSelect: (target: SearchTarget | null) => void; onSearch: (options: SessionSearchOptions | null) => void }) {
   const timeOptions = useTimeFormat();
+  const { dateTime } = useDateTimeFormat();
   const [query, setQuery] = useState(""), [caseSensitive, setCase] = useState(false), [wholeWord, setWord] = useState(false), [refresh, setRefresh] = useState(0);
   const [selected, setSelected] = useState<string | null>(null), [results, setResults] = useState(true);
   const [page, setPage] = useState(0);
@@ -138,7 +139,7 @@ export function SessionFind({ state, preferences, onPreferences, onClose, onSele
       <div className="find-group-rows">{visible.map((hit) => {
         const stamp = hit.timestamp ? new Date(hit.timestamp) : null;
         return <div className={`find-entry ${hit.id === selected ? "selected" : ""}`} key={hit.id}>
-          <button className="find-result" aria-current={hit.id === selected ? "true" : undefined} onClick={() => { void select(hit); }}><span className="find-result-meta"><span>{kindLabel(hit)}{hit.field !== "text" ? ` · ${hit.field.startsWith("attachment:") ? "attachment" : hit.field}` : ""}</span>{stamp && Number.isFinite(stamp.getTime()) ? <time dateTime={hit.timestamp!} title={stamp.toLocaleString(undefined, timeOptions)}>{stamp.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", ...timeOptions })}</time> : null}</span><SearchPreview preview={previewMap.get(hit.id)} match={hit} options={options} context={preferences.contextLines} fontKey={`${state.appearance.fontSizeInterface}:${state.appearance.fontSizeCode}`} /></button>
+          <button className="find-result" aria-current={hit.id === selected ? "true" : undefined} onClick={() => { void select(hit); }}><span className="find-result-meta"><span>{kindLabel(hit)}{hit.field !== "text" ? ` · ${hit.field.startsWith("attachment:") ? "attachment" : hit.field}` : ""}</span>{stamp && Number.isFinite(stamp.getTime()) ? <time dateTime={hit.timestamp!} title={dateTime(stamp)}>{stamp.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", ...timeOptions })}</time> : null}</span><SearchPreview preview={previewMap.get(hit.id)} match={hit} options={options} context={preferences.contextLines} fontKey={`${state.appearance.fontSizeInterface}:${state.appearance.fontSizeCode}`} /></button>
         </div>;
       })}</div>
       {totalPages > 1 ? <div className="find-pagination"><button className="text-button" aria-label="Previous results" disabled={!currentPage} onClick={() => setPage(currentPage - 1)}>Previous</button><span>{currentPage * PAGE_SIZE + 1}–{Math.min(matches.length, (currentPage + 1) * PAGE_SIZE)} of {matches.length}</span><button className="text-button" aria-label="Next results" disabled={currentPage === totalPages - 1} onClick={() => setPage(currentPage + 1)}>Next</button></div> : null}
