@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.23 — Unpublished
+
+- Add Automatic / 12-hour / 24-hour timestamp settings, shared by message times and time tooltips throughout the extension.
+
 ## 0.1.22 — Release
 
 - Use the standard icon-only Scheduled tasks header button, retaining its count in the tooltip. Match the Settled, Archive and settings row heights to the Sessions/Tasks tab strip at every interface font size.

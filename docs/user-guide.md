@@ -150,3 +150,5 @@ code --user-data-dir /tmp/t3-vscode-preview/user-data --extensions-dir /tmp/t3-v
 ```
 
 The installed extension normally discovers your already-running T3 service under `~/.t3`. Leave **T3 VSCode: T3 Home** empty to use that default; an explicit setting or `T3CODE_HOME` overrides it. Packaging does not install the extension or start a server.
+
+Time display follows **T3 VSCode: Time Format** in native VS Code settings: **Automatic** uses the webview locale default, while **12-hour** and **24-hour** override it across timestamps and tooltips. Automatic does not necessarily match a customized operating-system clock.

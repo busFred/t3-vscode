@@ -1,3 +1,4 @@
+import { useTimeFormat } from "../timeFormat";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDownIcon, RefreshCwIcon, Settings2Icon } from "lucide-react";
 import { collectExternalUsageLinks, collectLimitNotices, formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
@@ -9,6 +10,7 @@ import { ProviderIcon } from "./ProviderIcon";
 import { useActions } from "../actions";
 
 export function AccountUsage({ state, request }: { readonly state: HostStateSnapshot; readonly request: { accountKey?: string } | null }) {
+  const timeOptions = useTimeFormat();
   const details = useRef<HTMLDetailsElement>(null);
   const accounts = useMemo(() => usageAccounts(state), [state.environment, state.providers, state.usageLimitSources]);
   const [key, setKey] = useState<string>();
@@ -41,7 +43,7 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
       {account ? <>
         <label className="usage-account-choice"><ProviderIcon brand={account.brand} /><select aria-label="Usage account" value={account.key} onChange={(event) => setKey(event.target.value)}>{accounts.map((account) => <option value={account.key} key={account.key}>{account.label}{account.email && account.email !== account.label ? ` · ${account.email}` : ""}</option>)}</select></label>
       </> : null}
-      <div className="account-usage-update"><small role="status">{refreshing ? "Refreshing limits…" : checkedAt ? <>Updated <time dateTime={checkedAt} title={new Date(checkedAt).toLocaleString()}>{new Date(checkedAt).toLocaleTimeString()}</time></> : "No update reported"}</small><button className="icon-button" aria-label="Refresh usage" title="Refresh usage" disabled={refreshing} onClick={() => { setRefreshing(true); void run("refreshUsage").finally(() => setRefreshing(false)); }}><RefreshCwIcon size={13} /></button><button className="icon-button" aria-label="Status meters" title="Status meters" onClick={() => { void run("configureUsage"); }}><Settings2Icon size={13} /></button></div>
+      <div className="account-usage-update"><small role="status">{refreshing ? "Refreshing limits…" : checkedAt ? <>Updated <time dateTime={checkedAt} title={new Date(checkedAt).toLocaleString(undefined, timeOptions)}>{new Date(checkedAt).toLocaleTimeString(undefined, timeOptions)}</time></> : "No update reported"}</small><button className="icon-button" aria-label="Refresh usage" title="Refresh usage" disabled={refreshing} onClick={() => { setRefreshing(true); void run("refreshUsage").finally(() => setRefreshing(false)); }}><RefreshCwIcon size={13} /></button><button className="icon-button" aria-label="Status meters" title="Status meters" onClick={() => { void run("configureUsage"); }}><Settings2Icon size={13} /></button></div>
       {account ? <>
         {account.plan ? <p className="account-plan subtle">{account.plan}</p> : null}
         {windows.map((window, index) => limit(window, meterLabels[index]!))}

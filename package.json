@@ -2,7 +2,7 @@
   "name": "t3-vscode",
   "displayName": "T3 VSCode",
   "description": "Alpha client for local T3 Code servers: workspace sessions, editor chat, rich messages and account usage.",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "publisher": "hungtienhuang",
   "repository": {
     "type": "git",
@@ -191,6 +191,23 @@
             "scope": "window",
             "description": "Font size in pixels for code blocks, diffs and tool output, independent of interface and prompt sizes. Changes apply immediately.",
             "order": 3
+          },
+          "t3-vscode.timeFormat": {
+            "type": "string",
+            "enum": [
+              "automatic",
+              "12-hour",
+              "24-hour"
+            ],
+            "enumDescriptions": [
+              "Use the webview locale\u2019s default time format.",
+              "Always use 12-hour time with AM/PM.",
+              "Always use 24-hour time (00\u201323)."
+            ],
+            "default": "automatic",
+            "scope": "window",
+            "description": "Time format for timestamps and time tooltips throughout T3 VSCode. Automatic uses locale defaults, which may differ from a customized operating-system clock.",
+            "order": 4
           }
         }
       },

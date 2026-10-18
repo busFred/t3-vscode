@@ -1,3 +1,4 @@
+import { resolveTimeFormat, type TimeFormat } from "../shared/timeFormat.js";
 import { ComposerDraftStore, type StoredComposerDraft } from "./composerDraftStore.js";
 import type { ViewDraft } from "../shared/viewDraft.js";
 import type { TextSelection } from "../shared/composerAttachments.js";
@@ -60,6 +61,7 @@ export interface HostStateOptions {
   readonly serverStartupHint?: string | undefined;
   readonly workspaceRoot?: () => string | null;
   readonly workspaceRoots?: () => ReadonlyArray<string>;
+  readonly timeFormat?: () => TimeFormat;
   readonly appearance?: () => AppearanceSettings;
   readonly messageNavigation?: () => MessageNavigationPlacement;
   readonly favoriteModels?: () => ReadonlyArray<FavoriteModel>;
@@ -1097,7 +1099,7 @@ export class HostState {
       searchPreferences: this.searchPreferences,
       ...(this.sessionSearches.get(viewId) ? { sessionSearch: this.sessionSearches.get(viewId)!.state } : {}),
       workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()),
-      appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
+      timeFormat: resolveTimeFormat(this.options.timeFormat?.()), appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
       ...(this.notice ? { notice: this.notice } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
       scheduledTasks: { loading: this.scheduledTasksLoading, ...(this.scheduledTaskError ? { error: this.scheduledTaskError } : {}), tasks: this.scheduledTasks.filter((task) => this.visibleProjects().some((project) => project.id === task.projectId)).map((task) => {

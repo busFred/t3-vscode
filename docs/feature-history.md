@@ -56,7 +56,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.22 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
 | [Markdown composer tools](#markdown-composer-tools) | Literal formatting, selection wrapping, automatic numbering, indentation and undo. | v0.1.13 | v0.1.21 |
-| [Message timestamps](#message-timestamps) | Recorded local date/time beside each message’s footer actions. | v0.1.22 | v0.1.22 |
+| [Message timestamps](#message-timestamps) | Recorded local date/time beside each message’s footer actions. | v0.1.22 | v0.1.23 |
 | [Dense transcript spacing](#dense-transcript-spacing) | Compact gaps, one author per run and unobtrusive message actions. | v0.1.13 | v0.1.22 |
 
 ## Sessions and navigation
@@ -532,6 +532,10 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 
 - Show the recorded start date/time in local time beside each user/assistant message’s footer actions, with seconds and a full timezone tooltip; streaming completion does not change the timestamp.
 - Place assistant icons before the timestamp and user Copy after it; show “Time unavailable” when historical data has no valid time rather than inventing one.
+
+#### v0.1.23
+
+- Add Automatic / 12-hour / 24-hour time format in native settings, applied live across message times, tooltips, search results, task next-run dates and usage updates. Automatic retains the webview locale default; 24-hour midnight is 00.
 
 ### Streaming and progressive history
 
