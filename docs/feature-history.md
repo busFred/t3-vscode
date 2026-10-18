@@ -85,6 +85,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 #### v0.1.23 — same-version rebuild
 
+Keep minute/hour/day ages through exactly 14 days. Beyond 14 days, show the full last-activity date and time on the existing second line using the selected Date Format and Time Format. The same instant remains available in the tooltip.
+
+#### v0.1.23 — same-version rebuild
+
 Single-clicking an entry opens a native VS Code preview tab. Another preview replaces it; double-click keeps it open. Existing tabs are reused, and editing keeps the preview open. Sidebar selection follows the opened session.
 
 #### v0.0.7

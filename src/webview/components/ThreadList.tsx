@@ -54,7 +54,7 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   const row = (thread: ThreadSummary) => {
     const match = hits.data?.find((hit) => hit.threadId === thread.id);
     const provider = state.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId);
-    const activity = sessionActivityLabel(thread.lastActiveAt, now);
+    const activity = sessionActivityLabel(thread.lastActiveAt, now, dateTime);
     const exactActivity = activity ? dateTime(new Date(thread.lastActiveAt!)) : "";
     return <button key={thread.id} data-thread-id={thread.id} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={(event) => { if (onSelect) onSelect(thread.id); else void run("openSessionTab", { threadId: thread.id, preview: event.detail < 2 }); }} onDoubleClick={onSelect ? undefined : () => { void run("openSessionTab", { threadId: thread.id, preview: false }); }} onContextMenu={compact ? undefined : (event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
       if (!compact && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }

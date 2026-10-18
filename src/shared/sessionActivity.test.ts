@@ -10,7 +10,9 @@ test("Session labels cover minute/hour/day boundaries, invalid and future dates"
   }
   assert.equal(sessionActivityLabel("invalid", now), "");
   assert.equal(sessionActivityLabel(null, now), "");
-  assert.equal(sessionActivityLabel(new Date(now - 604_800_001).toISOString(), now), new Date(now - 604_800_001).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+  assert.equal(sessionActivityLabel(new Date(now - 1_209_600_001).toISOString(), now), new Date(now - 1_209_600_001).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+  assert.equal(sessionActivityLabel(new Date(now - 1_209_600_000).toISOString(), now), "14 days");
+  assert.equal(sessionActivityLabel(new Date(now - 1_209_600_001).toISOString(), now, () => "2026-09-24 · 11:59:59"), "2026-09-24 · 11:59:59");
   const lastYear = new Date(2025, 11, 31);
   assert.equal(sessionActivityLabel(lastYear.toISOString(), now), lastYear.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }));
 });
