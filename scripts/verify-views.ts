@@ -280,6 +280,26 @@ try {
   await first.reload(); await expectFonts(first, preferences);
   assert.equal(host.snapshot("tab-one").activeThreadId, selections[0]);
   const sidebar = manager;
+  const searchGeometry = () => sidebar.locator('.sidebar-search-row:visible').evaluate(row => {
+    const field = row.querySelector('.thread-search')!;
+    const boxes = [row, field, field.querySelector('input')!, row.lastElementChild!].map(node => {
+      const { x, y, width, height } = node.getBoundingClientRect(); return { x, y, width, height };
+    });
+    return { row: boxes[0]!, field: boxes[1]!, input: boxes[2]!, add: boxes[3]! };
+  });
+  const emptySearch = await searchGeometry();
+  await sidebar.getByRole('textbox', { name: 'Search threads', exact: true }).fill('first');
+  assert.deepEqual(await searchGeometry(), emptySearch, 'Typing must not resize or move the session search field, input or action buttons');
+  await sidebar.getByRole('button', { name: 'Clear search', exact: true }).click();
+  assert.deepEqual(await searchGeometry(), emptySearch, 'Clearing must preserve the same search geometry');
+  await sidebar.getByRole('tab', { name: /^Tasks/ }).click();
+  const taskSearch = await searchGeometry();
+  assert.deepEqual(taskSearch.row, emptySearch.row, 'Sessions and Tasks search rows share their position and size');
+  assert.deepEqual(taskSearch.add, emptySearch.add, 'Both New buttons align');
+  assert.equal(taskSearch.field.x, emptySearch.field.x);
+  assert.equal(taskSearch.field.y, emptySearch.field.y);
+  assert.equal(taskSearch.field.height, emptySearch.field.height);
+  await sidebar.getByRole('tab', { name: 'Sessions', exact: true }).click();
   const listTop = await sidebar.locator('.session-list').evaluate(node => node.getBoundingClientRect().top);
   await sidebar.getByRole('button', { name: 'Sort sessions', exact: true }).click();
   assert.equal(await sidebar.locator('.session-list').evaluate(node => node.getBoundingClientRect().top), listTop, 'Sort popup must not move the list');

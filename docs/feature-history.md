@@ -118,6 +118,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 - Add a sort button beside the existing New button; its floating menu orders sessions by last activity or title in either direction without shifting the list.
 - Remember the order in the view across reloads while retaining pinned precedence, shelf membership and subagent ancestry; sessions without activity use their recorded update time.
+- Match the Sessions search row’s height and top/side spacing to Tasks, and reserve the clear control’s space so typing and clearing do not resize the field or move its buttons.
 
 ### Scheduled task management
 
@@ -1431,3 +1432,10 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - The reviewer independently verifies focused shared tests, Markdown-copy fixtures, all/current search highlights in prose and code, streaming repaint, virtual-row removal and cleanup, and inspects the passing full-suite logs.
 - Replace and inspect the 45-file canonical `target-installer/t3-vscode-0.1.22.vsix` (3,247,871 bytes), verifying v0.1.22, existing prerelease metadata, exact reviewed host/webview/Mermaid/notices bundles and the changelog after VSCE link normalization; preserve the previous installer under `target-installer/archive/`.
 - Record SHA-256 `81915f06a8b4837688e50a65ce0af6e7d1c83c8ef04af0a637cf2529d9e19743` in the installer sidecar; this build is local, unpublished and uninstalled.
+
+### v0.1.22 — stable sidebar search geometry
+
+- Remove the dedicated Sessions container’s extra top padding and reserve an absolute clear-button slot, matching Tasks search-row height/spacing and keeping the field, editable area and action buttons stationary while typing or clearing.
+- Pass TypeScript checking, 260 deterministic tests, the webview/Mermaid/math build and the full `verify-views.ts` suite, including exact geometry comparisons at 360px sidebar width and interface font size 20; existing multi-project task selectors keep their separate row.
+- Obtain fresh-context independent regression approval against `32cef59` with no blocking findings; preserve compact History, sorting, native theme/font behavior and the existing v0.1.22 manifest.
+- Replace the canonical v0.1.22 installer after review, retaining the previous artifact in `target-installer/archive/`; no publication or normal-profile installation is authorized.

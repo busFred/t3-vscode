@@ -88,8 +88,10 @@ select, input { color: inherit; background: var(--card); }
 .sidebar-search-row { display: flex; align-items: stretch; gap: 4px; margin: 5px 8px 6px; min-width: 0; }
 .sidebar-search-add { width: 27px; height: auto; border: 1px solid var(--input); border-radius: 6px; }
 .thread-search { flex: 1; display: flex; align-items: center; gap: 7px; min-width: 0; padding: 5px 8px; border: 1px solid var(--input); border-radius: 6px; background: var(--card); color: var(--foreground); }
+.thread-search-with-clear { position: relative; padding-right: 30px; }
+.thread-search-clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; }
 .thread-search:focus-within { border-color: var(--ring); }
-.thread-search input { width: 100%; border: 0; background: transparent; outline: none; font-size: 0.75rem; }
+.thread-search input { flex: 1; min-width: 0; width: 0; border: 0; background: transparent; outline: none; font-size: 0.75rem; }
 .sidebar-section { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding: 0 7px; color: var(--muted-foreground); font-size: 0.6875rem; font-weight: 600; }
 .session-list { flex: 1; overflow: auto; padding: 0 0 16px; }
 .thread { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; border: 0; background: transparent; color: var(--muted-foreground); width: 100%; text-align: left; font-size: 0.75rem; }
@@ -331,7 +333,7 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 
 /* Dedicated session management fills the sidebar; editor History uses a separate compact picker. */
 .sidebar-view { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--sidebar); color: var(--sidebar-foreground); }
-.sidebar-view .dedicated-sessions { display: flex; position: static; inset: auto; flex: 1; width: 100%; min-width: 0; border: 0; box-shadow: none; }
+.sidebar-view .dedicated-sessions { padding-top: 0; display: flex; position: static; inset: auto; flex: 1; width: 100%; min-width: 0; border: 0; box-shadow: none; }
 .thread { color: var(--foreground); border-radius: 0; padding: .15rem .38rem; }
 .session-tree-row:has(> .thread.active) { background: var(--vscode-list-activeSelectionBackground, var(--sidebar-row-active)); color: var(--vscode-list-activeSelectionForeground, var(--foreground)); }
 .session-tree-row:has(> .thread.active) > .session-tree-toggle, .thread.active { background: transparent; color: inherit; }

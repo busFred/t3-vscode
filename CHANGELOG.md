@@ -2,6 +2,8 @@
 
 ## 0.1.22 — Unpublished
 
+- Match Sessions search height and spacing to Tasks and keep the field and buttons stationary when entering or clearing text.
+
 - Rebuild verification: 260 deterministic tests, TypeScript, full builds, both browser suites and focused Markdown-copy fixtures pass. Independent final regression review against `39759da` approves packaging after fixes to Markdown serialization and stale selection recovery.
 - Show recorded local dates and times beside message footer actions: assistant Copy/Fork then time on the left, user time then Copy on the right.
 - Add a floating sort menu beside the Sessions + button for last-activity date or title, ascending or descending; remember the choice while preserving pinned sessions and the existing tree and shelves.
