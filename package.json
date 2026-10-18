@@ -200,8 +200,7 @@
             ],
             "default": "24-hour",
             "scope": "window",
-            "description": "Time format for timestamps and time tooltips throughout T3 VSCode. Automatic uses locale defaults, which may differ from a customized operating-system clock.",
-            "order": 4,
+            "order": 5,
             "enumItemLabels": [
               "4:03:22 PM",
               "16:03:22"
@@ -230,7 +229,8 @@
             ],
             "default": "yyyy-MM-dd",
             "scope": "window",
-            "markdownDescription": "Date display in messages and timestamp tooltips. Examples use April 5, 2017."
+            "markdownDescription": "Date display in messages and timestamp tooltips. Examples use April 5, 2017.",
+            "order": 4
           }
         }
       },

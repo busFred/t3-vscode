@@ -6,7 +6,12 @@
 
 - Initialize Archive counts automatically from summaries in the background. Keep the shelf collapsed, show loading only during a request and support retry without blocking chat.
 
-- Add Automatic / 12-hour / 24-hour timestamp settings, shared by message times and time tooltips throughout the extension.
+- Add date/time dropdowns with seven date examples and two time examples. Apply preferences live to message timestamps and date/time tooltips. Sessions older than 14 days show their full last-activity date and time on the existing second line.
+- Single-click Sessions and Tasks entries to preview them in native VS Code tabs; double-click to keep them open. Reuse existing tabs, keep edited previews open, preserve drafts and restore the current History selection.
+- Ctrl/Cmd+click an inline image reference to edit its caption with Preview, Save and Cancel. Preserve the attachment and native undo.
+- Fit the selected-text context menu to its content and use the editor foreground for menu and composer text, retaining theme placeholder and selection colors.
+
+- Same-version rebuild validation: 270 deterministic tests, TypeScript/build, both browser suites, isolated native VS Code preview/restoration checks and final independent regression review passed.
 
 ## 0.1.22 — Release
 

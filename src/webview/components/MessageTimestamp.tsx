@@ -4,5 +4,5 @@ export function MessageTimestamp({ value }: { value: string | null | undefined }
   const { dateTime } = useDateTimeFormat();
   const date = value ? new Date(value) : null;
   if (!date || !Number.isFinite(date.getTime())) return <span className="message-timestamp" title="This message has no recorded timestamp">Time unavailable</span>;
-  return <time className="message-timestamp" dateTime={value!} title={dateTime(date)}>{dateTime(date)}</time>;
+  return <time className="message-timestamp" dateTime={value!} title={dateTime(date, true)}>{dateTime(date)}</time>;
 }

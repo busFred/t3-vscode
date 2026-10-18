@@ -9,7 +9,7 @@ export async function verifyMessageOptions(page) {
       return [...document.querySelectorAll('time.message-timestamp')].every(element => {
         const date = new Date(element.dateTime);
         return element.textContent.includes(date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit', ...options }))
-          && element.title === element.textContent;
+          && element.title.startsWith(element.textContent + " ");
       });
     }, format);
   }

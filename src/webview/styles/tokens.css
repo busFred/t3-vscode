@@ -740,4 +740,4 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .image-caption-editor label { display:block; }
 
 /* Full image preview must appear above the caption editor that opened it. */
-.visual-expanded { z-index: 130; }
+body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
