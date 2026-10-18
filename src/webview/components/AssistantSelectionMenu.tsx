@@ -1,5 +1,6 @@
-import { EnvironmentId, MessageId, ThreadId, type AssistantCitation } from "@t3tools/contracts";
-import { CopyIcon, MessageSquareQuoteIcon, QuoteIcon } from "lucide-react";
+import type { AssistantCitation } from "../../shared/messageCitations.js";
+import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
+import { CopyIcon, QuoteIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useActions } from "../actions";
@@ -7,19 +8,19 @@ import { assistantQuoteMenuItems, clampMenuPosition, QUOTE_TOO_LONG_LABEL, type 
 import { selectionMarkdown } from "../selectionMarkdown";
 import { findAssistantCitationSourceAnchor, captureAssistantTextSelection, type AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 
-/** The citation a live selection stands for, read the same way for both entry points so they cannot capture different spans. */
+/** Capture a selected passage from a user or assistant message. */
 export function captureSelectedCitation(viewport: HTMLElement, selection: Selection | null): { citation: AssistantCitation; anchor: AssistantCitationSourceAnchor; range: Range } | null {
   const captured = captureAssistantTextSelection(viewport, selection);
   const dataset = captured?.source.dataset;
   if (!captured || !dataset?.assistantCitationSource || !dataset.assistantCitationEnvironment || !dataset.assistantCitationThread) return null;
-  return { citation: { version: 1, environmentId: EnvironmentId.make(dataset.assistantCitationEnvironment), threadId: ThreadId.make(dataset.assistantCitationThread), messageId: MessageId.make(dataset.assistantCitationSource), ...captured.selector },
+  return { citation: { version: 1, environmentId: EnvironmentId.make(dataset.assistantCitationEnvironment), threadId: ThreadId.make(dataset.assistantCitationThread), messageId: MessageId.make(dataset.assistantCitationSource), ...(dataset.citationAuthor === "user" ? { author: "user" as const } : {}), ...captured.selector },
     anchor: { source: captured.source, range: captured.range, viewport }, range: captured.range };
 }
 
-const ICONS = { copy: CopyIcon, markdown: CopyIcon, quote: QuoteIcon, comment: MessageSquareQuoteIcon } as const;
+const ICONS = { copy: CopyIcon, markdown: CopyIcon, quote: QuoteIcon } as const;
 
 /** Keep the last valid selection, scoped to this session and its source message, after dismissal. */
-export function AssistantSelectionMenu({ viewport, onQuote, onComment }: { readonly viewport: HTMLElement | null; readonly onQuote: (citation: AssistantCitation) => void; readonly onComment: (citation: AssistantCitation, anchor: AssistantCitationSourceAnchor) => void }) {
+export function AssistantSelectionMenu({ viewport, onQuote }: { readonly viewport: HTMLElement | null; readonly onQuote: (citation: AssistantCitation, anchor: AssistantCitationSourceAnchor) => void }) {
   const run = useActions(); const menu = useRef<HTMLDivElement>(null);
   const remembered = useRef<{ citation: AssistantCitation; markdown: string } | null>(null);
   const [target, setTarget] = useState<{ citation: AssistantCitation; markdown: string; anchor: AssistantCitationSourceAnchor; x: number; y: number } | null>(null);
@@ -91,8 +92,7 @@ export function AssistantSelectionMenu({ viewport, onQuote, onComment }: { reado
   const choose = (action: AssistantQuoteMenuAction) => {
     if (action === "copy") void run("copyText", { text: target.citation.text });
     else if (action === "markdown") void run("copyText", { text: target.markdown });
-    else if (action === "quote") onQuote(target.citation);
-    else onComment(target.citation, target.anchor);
+    else onQuote(target.citation, target.anchor);
     setTarget(null);
   };
   return createPortal(<div ref={menu} className="selection-context-menu" role="menu" aria-label="Selected text" style={{ left: (location ?? target).x, top: (location ?? target).y }} onKeyDown={(event) => {

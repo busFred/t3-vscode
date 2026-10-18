@@ -1,5 +1,5 @@
-import type { AssistantCitation } from "@t3tools/contracts";
-import { assistantCitationsToPlainText, collectAssistantCitations } from "@t3tools/shared/assistantCitations";
+import type { AssistantCitation } from "./messageCitations.js";
+import { assistantCitationsToPlainText, collectAssistantCitations } from "./messageCitations.js";
 
 /** Markup only. The vendored escaper also backslash-escaped punctuation, and the math normalizer then read its `\(…\)`/`\[…\]` as KaTeX. */
 function neutralizeMarkup(text: string): string {
@@ -9,7 +9,7 @@ function neutralizeMarkup(text: string): string {
 function quoteBlockLines(citation: AssistantCitation): string[] {
   const quote = neutralizeMarkup(citation.text).split("\n").map((line) => `> ${line}`);
   const comment = citation.comment === undefined ? [] : ["", ...`Comment: ${neutralizeMarkup(citation.comment)}`.split("\n")];
-  return ["> Assistant quote:", ...quote, ...comment];
+  return [`> ${citation.author === "user" ? "User" : "Assistant"} quote:`, ...quote, ...comment];
 }
 /** Readable copy of a quote for clients and providers that never expand `t3-citation:` links. */
 export function renderAssistantQuoteBlock(citation: AssistantCitation): string {
@@ -48,7 +48,7 @@ export function stripRenderedAssistantQuotes(text: string): string {
   return stripped ? lines.join("\n").trim() : text;
 }
 
-const CITATION_LINK = "[Assistant quote](t3-citation:";
+const CITATION_LINK = "t3-citation:";
 let renderedSource = "", renderedText = "";
 /**
  * What the transcript shows: the readable quote block is gone and each citation link reads as its

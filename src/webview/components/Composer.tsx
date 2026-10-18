@@ -6,7 +6,7 @@ import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
 import { clearDraft, readDraftSelection, registerDraftTextEditor, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useDraftRecovery, useComposerDraft, type DraftTextEdit } from "../composerDrafts";
 import { assistantQuoteLabel, assistantQuoteNumbers, contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, insertFileReference, removeContextReference, syncAssistantQuoteLabels, type FileReference } from "../../shared/composerContext";
-import type { AssistantCitation } from "@t3tools/contracts";
+import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
 import { effortDescriptor } from "../../shared/modelOptions";
 import { ModelPicker } from "./ModelPicker";
@@ -21,7 +21,7 @@ import type { DraftAttachment, TextSelection } from "../../shared/composerAttach
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { openVisual } from "./ChatMedia";
 import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
-import { collectAssistantCitations } from "@t3tools/shared/assistantCitations";
+import { collectAssistantCitations } from "../../shared/messageCitations.js";
 import { changesListStructure, continueMarkdownList, formatMarkdown, indentMarkdown, protectMarkdownSelection, renumberMarkdownList, textReplacement, wrapMarkdownSelection, type MarkdownEdit, type MarkdownFormat } from "../../shared/composerEditing";
 import { useComposerPreferences } from "../composerPreferences";
 import { ComposerFormatting } from "./ComposerFormatting";

@@ -1,4 +1,5 @@
-import { ASSISTANT_CITATION_MAX_COMMENT_LENGTH, type AssistantCitation } from "@t3tools/contracts";
+import type { AssistantCitation } from "../../shared/messageCitations.js";
+import { ASSISTANT_CITATION_MAX_COMMENT_LENGTH } from "@t3tools/contracts";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 
@@ -19,7 +20,7 @@ export function CitationCommentEditor({ citation, anchor, onSave, onClose }: { r
     const close = (event: PointerEvent) => { if (!popup.current?.contains(event.target as Node)) onClose(); };
     window.addEventListener("pointerdown", close); return () => window.removeEventListener("pointerdown", close);
   }, [onClose]);
-  return <div ref={popup} className="citation-comment" role="dialog" aria-label="Comment on assistant quote" onKeyDown={(event) => {
+  return <div ref={popup} className="citation-comment" role="dialog" aria-label="Comment on quote" onKeyDown={(event) => {
     event.stopPropagation();
     if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape") { event.preventDefault(); onClose(); }

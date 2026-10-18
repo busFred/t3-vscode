@@ -7,7 +7,7 @@ import { normalizeMathMarkdown } from "../../shared/mathMarkdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import { collectAssistantCitations, parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
+import { collectAssistantCitations, parseAssistantCitationHref } from "../../shared/messageCitations.js";
 import { useActions } from "../actions";
 import { AssistantCitationLink, AssistantCitationNumbersContext, citationKey } from "./AssistantCitationLink";
 import { ChatMedia } from "./ChatMedia";
@@ -61,7 +61,7 @@ const components: Components = {
   },
 };
 export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source, assetSource, streaming = false, context, attachments = [] }: {
-  text: string; threadId: string; source?: { environmentId: string; threadId: string; messageId: string }; assetSource?: ChatAssetSource; streaming?: boolean; context?: unknown; attachments?: ReadonlyArray<Pick<ChatAttachment, "id" | "name" | "mimeType" | "sizeBytes">>;
+  text: string; threadId: string; source?: { environmentId: string; threadId: string; messageId: string; author?: "user" }; assetSource?: ChatAssetSource; streaming?: boolean; context?: unknown; attachments?: ReadonlyArray<Pick<ChatAttachment, "id" | "name" | "mimeType" | "sizeBytes">>;
 }) {
   const parsedContext = useMemo(() => { try { return context ? Schema.decodeUnknownSync(OrchestrationMessageContext)(context) : undefined; } catch { return undefined; } }, [context]);
   const citationNumbers = useMemo(() => { const numbers = new Map<string, number>(); for (const { citation } of collectAssistantCitations(text)) { const key = citationKey(citation); if (!numbers.has(key)) numbers.set(key, numbers.size + 1); } return numbers; }, [text]);
@@ -71,7 +71,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source,
     const attachment = record && "attachmentId" in record && typeof record.attachmentId === "string" ? attachments.find((attachment) => attachment.id === record.attachmentId) : undefined;
     return attachment ? <InlineAttachment attachment={attachment} threadId={threadId} source={assetSource} /> : null;
   };
-  return <MarkdownScopeContext.Provider value={{ threadId, assetSource, streaming, inlineAttachment }}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeKatex, { strict: "ignore", trust: false, throwOnError: false }]]}
+  return <MarkdownScopeContext.Provider value={{ threadId, assetSource, streaming, inlineAttachment }}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeKatex, { strict: "ignore", trust: false, throwOnError: false }]]}
     urlTransform={(url, key) => url.startsWith("file:") || url.startsWith("t3-citation:") || url.startsWith("t3-context:") || (key === "src" && /^data:(image|video|audio)\//i.test(url)) ? url : defaultUrlTransform(url)}
     components={components}>{normalizeMathMarkdown(text)}</ReactMarkdown></div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
 });

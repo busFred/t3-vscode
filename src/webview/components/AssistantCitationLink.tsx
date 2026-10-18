@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import { ChevronDownIcon, ChevronUpIcon, ExternalLinkIcon } from "lucide-react";
-import type { AssistantCitation } from "@t3tools/contracts";
+import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { setCitationExpanded, useCitationExpanded } from "../citationExpansion";
 import { quoteDisplayText } from "../../shared/assistantQuoteText";
 

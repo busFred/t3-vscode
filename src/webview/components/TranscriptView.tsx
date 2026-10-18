@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList, type LegendListRef, type OnViewableItemsChangedInfo } from "@legendapp/list/react";
-import type { AssistantCitation } from "@t3tools/contracts";
+import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, WrenchIcon, ArrowRightLeftIcon, MinusIcon, XIcon } from "lucide-react";
 import type { HostStateSnapshot, TranscriptItem, WireTurnItem } from "../../shared/bridge";
 import { useActions } from "../actions";
@@ -104,7 +104,7 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
   // first can rewrite a snapshot that repeats a quote, and the section then stops being attributable.
   const sent = useMemo(() => splitMessageReferences(item.type === "user_message" ? item.text : ""), [item]);
   const assetSource = { sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id };
-  const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} assetSource={assetSource} {...(item.type === "user_message" ? { context: item.context, attachments: item.attachments } : {})} />;
+  const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} assetSource={assetSource} {...(item.type === "user_message" ? { context: item.context, attachments: item.attachments, source: { environmentId, threadId: row.sourceThreadId, messageId: item.messageId, author: "user" as const } } : {})} />;
   const openThread = (id: string) => { void run("selectThread", { threadId: id }); };
   switch (item.type) {
     case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.inputIntent === "steer" ? <span className="steer-label">↪ Steer</span> : null}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{sent.text || !sent.references.length ? markdown(stripRenderedAssistantQuotes(sent.text)) : null}<MessageReferences references={sent.references} scope={row.key} threadId={threadId} /></div>{/* Copy and search keep the sent payload: a row hides the snapshot from the page, not from the user. */}<div className="response-actions user-message-footer"><MessageTimestamp value={item.startedAt} /><CopyButton text={renderedMessageText(item.text)} /></div></article>;
@@ -189,7 +189,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   };
   const attempts = useRef<{ target: AssistantCitation | null; pages: number }>({ target: null, pages: 0 });
   const [citationNotice, setCitationNotice] = useState<string | null>(null);
-  const sourceIndex = citationTarget ? rows.findIndex((group) => group.rows.some((row) => row.sourceThreadId === citationTarget.threadId && row.item.type === "assistant_message" && row.item.messageId === citationTarget.messageId)) : -1;
+  const sourceIndex = citationTarget ? rows.findIndex((group) => group.rows.some((row) => row.sourceThreadId === citationTarget.threadId && (row.item.type === "assistant_message" || row.item.type === "user_message") && row.item.messageId === citationTarget.messageId)) : -1;
   const matchIndex = searchTarget && searchTarget.threadId === id ? rows.findIndex((group) => group.rows.some((row) => row.key === searchTarget.rowKey)) : -1;
   useEffect(() => {
     CSS.highlights?.delete("t3-session-match");
@@ -218,14 +218,14 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
       if (state.threadLoading) return;
       if (state.history.hasMore && attempts.current.pages < 20) {
         if (!state.history.loading) { attempts.current.pages += 1; void run("loadHistory", { threadId: id }); }
-      } else setCitationNotice("The source response is unavailable. Your saved quote is unchanged.");
+      } else setCitationNotice("The source message is unavailable. Your saved quote is unchanged.");
       return;
     }
     setCitationNotice(null);
     let stopped = false; let frame = 0;
     // A new list's initial scroll can supersede scrollToIndex's completion.
     // Source matching uses its rendered DOM instead of waiting on that promise.
-    void list.current?.scrollToIndex({ index: sourceIndex, animated: false, viewPosition: 0.25 }).catch(() => { if (!stopped) setCitationNotice("Could not open the source response. Your saved quote is unchanged."); });
+    void list.current?.scrollToIndex({ index: sourceIndex, animated: false, viewPosition: 0.25 }).catch(() => { if (!stopped) setCitationNotice("Could not open the source message. Your saved quote is unchanged."); });
     let checks = 0;
     const show = () => {
       if (stopped) return;
@@ -251,7 +251,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     </div>;
   }, [id, state.environment?.environmentId, boundaries, working, activeRun]);
   const header = <div className="timeline-header">{state.history.hasMore || state.history.error ? <button className="btn" disabled={state.history.loading} onClick={() => { void run("loadHistory", { threadId: id }); }}>{state.history.loading ? "Loading…" : state.history.error ? "Retry loading earlier messages" : "Load earlier messages"}</button> : null}{state.history.error ? <p className="turn-error">{state.history.error}</p> : null}</div>;
-  if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source response…"}</p></div>;
+  if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source message…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading && !working)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length && !working) return <div className="chat-empty"><p>Loading conversation…</p></div>;
   return <SearchTargetContext.Provider value={searchTarget ?? null}><SubagentState value={state}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation">

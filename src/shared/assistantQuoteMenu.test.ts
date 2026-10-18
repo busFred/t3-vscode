@@ -3,20 +3,20 @@ import assert from "node:assert/strict";
 import { ASSISTANT_CITATION_MAX_TEXT_LENGTH } from "@t3tools/contracts";
 import { assistantQuoteMenuItems, clampMenuPosition, QUOTE_TOO_LONG_LABEL } from "./assistantQuoteMenu.js";
 
-test("The selection menu offers copy, then quoting with and without a comment, in the approved wording", () => {
+test("The selection menu offers copy and a single Quote action for optional comments", () => {
   const items = assistantQuoteMenuItems(42);
-  assert.deepEqual(items.map((item) => item.label), ["Copy as plain text", "Copy as Markdown", "Quote", "Quote with comment"]);
-  assert.deepEqual(items.map((item) => item.action), ["copy", "markdown", "quote", "comment"]);
+  assert.deepEqual(items.map((item) => item.label), ["Copy as plain text", "Copy as Markdown", "Quote"]);
+  assert.deepEqual(items.map((item) => item.action), ["copy", "markdown", "quote"]);
   // The owner asked for the ellipsis to be dropped, and for the separator to sit between copying and quoting.
   assert.ok(items.every((item) => !item.label.includes("…") && !item.label.endsWith("...")));
-  assert.deepEqual(items.map((item) => item.separated), [false, false, true, false]);
-  assert.deepEqual(items.map((item) => item.disabled), [false, false, false, false]);
+  assert.deepEqual(items.map((item) => item.separated), [false, false, true]);
+  assert.deepEqual(items.map((item) => item.disabled), [false, false, false]);
 });
 
-test("A selection past the citation length limit keeps copy and disables both quote items", () => {
+test("A selection past the citation length limit keeps copy and disables quoting", () => {
   const items = assistantQuoteMenuItems(ASSISTANT_CITATION_MAX_TEXT_LENGTH + 1);
-  assert.deepEqual(items.map((item) => item.disabled), [false, false, true, true]);
-  assert.deepEqual(assistantQuoteMenuItems(ASSISTANT_CITATION_MAX_TEXT_LENGTH).map((item) => item.disabled), [false, false, false, false]);
+  assert.deepEqual(items.map((item) => item.disabled), [false, false, true]);
+  assert.deepEqual(assistantQuoteMenuItems(ASSISTANT_CITATION_MAX_TEXT_LENGTH).map((item) => item.disabled), [false, false, false]);
   assert.equal(QUOTE_TOO_LONG_LABEL, "Shorten selection");
 });
 

@@ -5,12 +5,11 @@ import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { Composer } from "./Composer";
 import { TranscriptView } from "./TranscriptView";
-import type { AssistantCitation } from "@t3tools/contracts";
-import { withAssistantCitationComment } from "@t3tools/shared/assistantCitations";
+import type { AssistantCitation } from "../../shared/messageCitations.js";
+import { withAssistantCitationComment } from "../../shared/messageCitations.js";
 import { readDraft, updateDraft } from "../composerDrafts";
 import { insertAssistantQuote, syncAssistantQuoteLabels, type ComposerContext } from "../../shared/composerContext";
 import type { TextSelection } from "../../shared/composerAttachments";
-import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
 import { AssistantSelectionMenu } from "./AssistantSelectionMenu";
 import { CitationCommentEditor } from "./CitationCommentEditor";
 import type { AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
@@ -68,11 +67,6 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
     return cursor;
   }, []);
   const openComment = useCallback((citation: AssistantCitation, anchor: AssistantCitationSourceAnchor) => setCommentTarget({ citation, anchor, ...quoteTarget() }), [quoteTarget]);
-  const quote = useCallback((citation: AssistantCitation) => {
-    const { draftKey, selection } = quoteTarget();
-    const cursor = insertQuote(citation, draftKey, selection);
-    window.dispatchEvent(new CustomEvent("t3-focus-composer", { detail: { draftKey, cursor } }));
-  }, [quoteTarget, insertQuote]);
   useEffect(() => {
     const open = (event: Event) => {
       const citation = (event as CustomEvent<AssistantCitation>).detail;
@@ -109,9 +103,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
       <div className="chat-conversation" key="conversation">
       {thread?.relationshipToParent === "subagent" ? <div className="subagent-parent-bar">{parent ? <button className="subagent-parent-link" onClick={() => { void run("selectThread", { threadId: parent.id }); }}><ArrowLeftIcon size={12} /><BotIcon size={12} /><span>Subagent of · {parent.title || "Untitled"}</span></button> : <span>Subagent conversation · parent unavailable in this workspace</span>}</div> : null}
       <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} searchTarget={findOpen ? searchTarget : null} searchOptions={findOpen ? searchOptions : null} onNavigate={() => { setCitationTarget(null); setSearchTarget(null); }} />
-      {/* Quote inserts straight away wherever it appears; the comment stays editable from the chip or the draft token. */}
-      <AssistantSelectionToolbar viewport={viewport} onCite={quote} />
-      <AssistantSelectionMenu key={`${state.environment?.environmentId}:${state.activeThreadId}`} viewport={viewport} onComment={openComment} onQuote={quote} />
+      <AssistantSelectionMenu key={`${state.environment?.environmentId}:${state.activeThreadId}`} viewport={viewport} onQuote={openComment} />
       <Composer key={state.activeThreadId ?? "draft"} state={state} onSelectionChange={rememberSelection} onUsage={() => { void run("showUsage"); }} onEditCitation={(citation, index) => setCommentTarget({ citation, index, draftKey: state.activeThreadId ?? "new" })} />
       {commentTarget ? <CitationCommentEditor key={`${commentTarget.citation.messageId}:${commentTarget.citation.start}:${commentTarget.index ?? "new"}`} citation={commentTarget.citation} anchor={commentTarget.anchor} onClose={() => setCommentTarget(null)} onSave={(comment) => {
         const context = { type: "assistant" as const, citation: withAssistantCitationComment(commentTarget.citation, comment) };

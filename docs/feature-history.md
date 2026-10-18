@@ -40,7 +40,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.1.21 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.1.21 |
 | [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.20 |
-| [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.22 |
+| [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.23 |
 | [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.22 |
 | [Saved turn diffs](#saved-turn-diffs) | Shows one nonempty agent-only response diff; hides manual edits. | v0.0.6 | v0.1.17 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
@@ -911,6 +911,11 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Rename the floating button from Cite to Quote, so the two entry points share one name.
 - Preserve selected formatting, links, nested lists, tables and code when copying Markdown; retain only session-scoped citation data and revalidate the source on recovery, with no permanent quote button.
 
+#### v0.1.23
+
+- Remove the floating Quote button and redundant Quote with comment action. Right-click selected assistant or user text for Copy as plain text, Copy as Markdown and Quote; Quote opens the optional-comment editor, with insertion only on Save. Keep dismissal recovery and keyboard access.
+- Preserve user authorship in draft storage, sent readable blocks and source links; source navigation can highlight either author’s message. Existing assistant links remain compatible.
+
 ### Response forks
 
 #### v0.0.5
@@ -1489,3 +1494,9 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Fresh-context review of the exact metadata delta against `43a2d5d` approved with no blocking findings; final package review also approved the 45-file VSIX and verified runtime assets are byte-identical to the archived preview package.
 - Pass package verification: embedded version `0.1.22`, publisher `hungtienhuang`, `preview: false`, no prerelease property and stable `Public` gallery flag. VSIX SHA-256 is `a69e70b331308c8197a3d3e2323ef1fa343d002b7b8f0e5e5c2ec887e06ee54e`; archived the prior prerelease artifact at `target-installer/archive/t3-vscode-0.1.22-prerelease.vsix`.
 - Publish successfully on October 17 with `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.1.22.vsix` after retrying outside the restricted network sandbox. The CLI confirms `Published hungtienhuang.t3-vscode v0.1.22`. The immediate public gallery query does not yet list 0.1.22, so Marketplace validation/propagation is still pending; the uploaded package is stable.
+
+### v0.1.23 — time preferences, selection quoting and archive startup
+
+- Increment the owner-selected patch version from 0.1.22 (comparison revision `2d34881`) to 0.1.23; keep stable package metadata and build under `target-installer/` without publishing or normal-profile installation.
+- Pass 269 deterministic tests, TypeScript checking, full host/webview builds and both complete documented isolated browser suites. Verify live time preferences, user and assistant quote menus, Markdown/plain copying, dismissal recovery, optional-comment cancel/save, draft undo and source navigation, plus archive failure/retry and stale-request guards.
+- Obtain fresh-context independent final regression approval against `2d34881`; no blocking findings. Address review cleanup to numeric result formatting and restore bounded citation parsing before final verification and packaging.

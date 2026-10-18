@@ -1,3 +1,4 @@
+import { verifyMessageOptions } from "./verify-message-options.mjs";
 /** Browser verification of the actual built webview, using deterministic host snapshots. */
 import assert from "node:assert/strict";
 import { readFile, mkdir } from "node:fs/promises";
@@ -119,6 +120,7 @@ try {
   await page.getByRole("textbox", { name: "Message", exact: true }).waitFor();
   await page.getByText("The core chat is ready.", { exact: false }).waitFor();
   assert.ok(await page.locator(".markdown strong").count());
+  await verifyMessageOptions(page);
   await page.getByRole("button", { name: "Ran 1 command · 1 tool call" }).click();
   await page.getByRole("button", { name: "pnpm run typecheck" }).click();
   await page.getByText("Typecheck passed", { exact: false }).waitFor();
@@ -476,6 +478,7 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   assert.equal(await settledShelf.locator('.shelf-count').textContent(), '1');
   assert.equal(await page.locator('.session-list .thread[data-thread-id="thread-one"]').count(), 0);
   await page.evaluate(() => window.__replace({ threads: window.__state.threads.map(thread => thread.id === 'thread-one' ? { ...thread, settled: false } : thread) }));
+  await page.locator('.session-list .thread[data-thread-id="thread-one"]').waitFor();
   assert.equal(await settledShelf.locator('.shelf-count').textContent(), '0');
   // A child-only match stays beneath its real parent in the parent's shelf.
   await page.getByRole('textbox', { name: 'Search threads' }).fill('Settled Audit');

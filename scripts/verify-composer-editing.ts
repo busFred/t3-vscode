@@ -95,8 +95,10 @@ export async function verifyComposerEditing(page: Page, other: Page, host: HostS
   await message.fill("Before replace after."); await message.focus();
   await message.evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(7, 14));
   await selectAssistantText(page, "reply in first conversation");
-  await page.getByRole("button", { name: "Quote selection in composer" }).click();
-  // Quote never prompts, so the insertion is an undo step on its own, before any comment exists.
+  await page.keyboard.press("Shift+F10");
+  await page.getByRole("menuitem", { name: "Quote", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // Saving a quote without a comment remains one undo step.
   const inserted = await message.inputValue();
   assert.ok(inserted.startsWith("Before ") && inserted.endsWith(" after."), inserted);
   await focused(); await caretAt(inserted.indexOf(")") + 1);

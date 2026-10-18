@@ -12,7 +12,7 @@ export function parseDraftTransfer(raw: unknown, expectedKey: string, allowPendi
   if (!isObject(raw.draft) || typeof raw.draft.text !== "string" || !Array.isArray(raw.draft.contexts)) throw new Error("Invalid conversation draft.");
   const contexts = raw.draft.contexts.map((context): ComposerContext => {
     if (!isObject(context)) throw new Error("Invalid draft context.");
-    if (context.type === "assistant") return { type: "assistant", citation: Schema.decodeUnknownSync(AssistantCitation)(context.citation), ...(context.contextId !== undefined ? { contextId: Schema.decodeUnknownSync(ComposerContextId)(context.contextId) } : {}) };
+    if (context.type === "assistant") return { type: "assistant", citation: { ...Schema.decodeUnknownSync(AssistantCitation)(context.citation), ...(isObject(context.citation) && context.citation.author === "user" ? { author: "user" as const } : {}) }, ...(context.contextId !== undefined ? { contextId: Schema.decodeUnknownSync(ComposerContextId)(context.contextId) } : {}) };
     const position = (raw: unknown) => isObject(raw) && Number.isInteger(raw.line) && Number(raw.line) > 0 && Number.isInteger(raw.column) && Number(raw.column) > 0;
     // A reference picked from the `@` menu covers a whole file, so it carries neither a range nor a snapshot.
     const range = context.range === undefined ? undefined : isObject(context.range) && position(context.range.start) && position(context.range.end);

@@ -1,10 +1,9 @@
 import { ASSISTANT_CITATION_MAX_TEXT_LENGTH } from "@t3tools/contracts";
 
-/** One name for the action, shared by the floating button and the context menu so the two entry points cannot drift. */
+/** Quoting opens the optional-comment editor for either message author. */
 export const QUOTE_ACTION_LABEL = "Quote";
-export const QUOTE_COMMENT_ACTION_LABEL = "Quote with comment";
 export const QUOTE_TOO_LONG_LABEL = "Shorten selection";
-export type AssistantQuoteMenuAction = "copy" | "markdown" | "quote" | "comment";
+export type AssistantQuoteMenuAction = "copy" | "markdown" | "quote";
 export interface AssistantQuoteMenuItem {
   readonly action: AssistantQuoteMenuAction;
   readonly label: string;
@@ -14,8 +13,8 @@ export interface AssistantQuoteMenuItem {
 }
 
 /**
- * Copy leads because suppressing the native menu takes the platform's own copy with it, and both quote
- * items share the floating button's length limit rather than failing at the contract.
+ * Copy leads because suppressing the native menu takes the platform's own copy with it.
+ * Oversized selections remain copyable but cannot be quoted.
  */
 export function assistantQuoteMenuItems(textLength: number): ReadonlyArray<AssistantQuoteMenuItem> {
   const disabled = textLength > ASSISTANT_CITATION_MAX_TEXT_LENGTH;
@@ -23,7 +22,6 @@ export function assistantQuoteMenuItems(textLength: number): ReadonlyArray<Assis
     { action: "copy", label: "Copy as plain text", disabled: false, separated: false },
     { action: "markdown", label: "Copy as Markdown", disabled: false, separated: false },
     { action: "quote", label: QUOTE_ACTION_LABEL, disabled, separated: true },
-    { action: "comment", label: QUOTE_COMMENT_ACTION_LABEL, disabled, separated: false },
   ];
 }
 

@@ -1,5 +1,6 @@
-import { ComposerContextId, type AssistantCitation } from "@t3tools/contracts";
-import { collectAssistantCitations, serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
+import type { AssistantCitation } from "./messageCitations.js";
+import { ComposerContextId } from "@t3tools/contracts";
+import { collectAssistantCitations, serializeAssistantCitation } from "./messageCitations.js";
 import { collectComposerContextReferences, formatComposerContextReference, replaceComposerContextReferences, sanitizeComposerContextLabel } from "@t3tools/shared/composerContextReferences";
 import { insertComposerReferenceText, type TextSelection } from "./composerAttachments.js";
 import { renderAssistantQuoteBlock } from "./assistantQuoteText.js";

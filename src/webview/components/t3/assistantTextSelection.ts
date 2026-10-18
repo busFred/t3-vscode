@@ -1,5 +1,6 @@
+import type { AssistantCitation } from "../../../shared/messageCitations.js";
 /** Ported from T3 Code lib/assistantTextSelection.ts at 7812230572f2d7e042d8d14ada2381fc71377560; MIT, see vendor/LICENSE.t3code. */
-import { ASSISTANT_CITATION_CONTEXT_LENGTH, type AssistantCitation } from "@t3tools/contracts";
+import { ASSISTANT_CITATION_CONTEXT_LENGTH } from "@t3tools/contracts";
 
 export type AssistantTextSelector = {
   readonly text: string;

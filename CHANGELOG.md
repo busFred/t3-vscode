@@ -2,6 +2,8 @@
 
 ## 0.1.23 — Unpublished
 
+- Quote selected user or assistant message text through the recoverable right-click menu. Quote opens the optional-comment editor; remove the floating Quote button and redundant Quote with comment action. Preserve user authorship in saved and sent quotes.
+
 - Initialize Archive counts automatically from summaries in the background. Keep the shelf collapsed, show loading only during a request and support retry without blocking chat.
 
 - Add Automatic / 12-hour / 24-hour timestamp settings, shared by message times and time tooltips throughout the extension.
