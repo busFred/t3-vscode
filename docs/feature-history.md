@@ -1422,3 +1422,12 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Pass TypeScript checking and all 204 deterministic tests.
 - Build the 41-file `target-installer/t3-vscode-0.1.18-usage-refresh.vsix` (2,635,894 bytes) under a distinguishable name so the reviewed `t3-vscode-0.1.18.vsix` is not overwritten.
 - Record SHA-256 `50b8b73c9c67f9cb6eabd30b6d9c55075c18f5ed46d4313c34bdd97312194316` in its sidecar; the installer is local, unreleased and uninstalled.
+
+### v0.1.22 — message footers, session sorting, quote recovery and inline search
+
+- Rebuild at the owner-requested v0.1.22, already present in comparison revision `39759da87156b15a3c432e394bd699845db74c2c`; replace the canonical installer under `target-installer/` without publishing or installing into a normal profile.
+- Pass TypeScript checking, 260 deterministic tests, the full extension/webview/Mermaid/math build, both complete browser suites (`verify-views.ts`, `verify-ui.mjs`) and the focused real-DOM Markdown-copy fixture; no live provider or normal T3/VS Code profile is used.
+- Obtain final fresh-context independent regression approval against `39759da` with no remaining blockers; resolve the review’s nested-list/literal/table Markdown-copy findings and invalid-selection/keyboard-scope recovery findings before approval.
+- The reviewer independently verifies focused shared tests, Markdown-copy fixtures, all/current search highlights in prose and code, streaming repaint, virtual-row removal and cleanup, and inspects the passing full-suite logs.
+- Replace and inspect the 45-file canonical `target-installer/t3-vscode-0.1.22.vsix` (3,247,871 bytes), verifying v0.1.22, existing prerelease metadata, exact reviewed host/webview/Mermaid/notices bundles and the changelog after VSCE link normalization; preserve the previous installer under `target-installer/archive/`.
+- Record SHA-256 `81915f06a8b4837688e50a65ce0af6e7d1c83c8ef04af0a637cf2529d9e19743` in the installer sidecar; this build is local, unpublished and uninstalled.

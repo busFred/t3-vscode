@@ -2,13 +2,11 @@
 
 ## 0.1.22 — Unpublished
 
-- Highlight all rendered search matches inside messages and code, with a stronger active match, while preserving the existing search layout and refreshing highlights through scrolling and streaming.
-
-- Recover the last valid selected passage by right-clicking its source again after dismissal, even when the native selection has cleared. Copy as plain text and Copy as Markdown join the quote options; no permanent quote button is added.
-
-- Add a floating sort menu beside the Sessions + button for last-activity date or title, ascending or descending; remember the choice while preserving pinned sessions and the existing tree and shelves.
-
+- Rebuild verification: 260 deterministic tests, TypeScript, full builds, both browser suites and focused Markdown-copy fixtures pass. Independent final regression review against `39759da` approves packaging after fixes to Markdown serialization and stale selection recovery.
 - Show recorded local dates and times beside message footer actions: assistant Copy/Fork then time on the left, user time then Copy on the right.
+- Add a floating sort menu beside the Sessions + button for last-activity date or title, ascending or descending; remember the choice while preserving pinned sessions and the existing tree and shelves.
+- Recover the last valid selected passage by right-clicking its source again after dismissal, even when the native selection has cleared. Copy as plain text and Copy as Markdown join the quote options; no permanent quote button is added.
+- Highlight all rendered search matches inside messages and code, with a stronger active match, while preserving the existing search layout and refreshing highlights through scrolling and streaming.
 
 - Right-click selected response text for Copy as plain text, Copy as Markdown, Quote and Quote with comment; Shift+F10 and the Menu key open the same menu. A stray click used to dismiss the floating button with no way back to the quote short of reselecting the text. Quote inserts the quote straight away and never prompts, from the menu and from the floating button alike; the comment is added afterwards from the chip or the draft token, so it can no longer be lost to a dismissed dialog. Right-clicking an equation still shows the equation menu, and a selection that cannot be quoted still shows the platform's own menu, which is why Copy leads.
 - Rename the floating Cite button to Quote, so the button and the menu item share one name.
