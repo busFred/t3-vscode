@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArchiveIcon, CheckIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, SettingsIcon, RefreshCwIcon, XIcon, MessageCircleQuestionIcon, CircleDashedIcon, ChevronRightIcon, BotIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArchiveIcon, CheckIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, SettingsIcon, RefreshCwIcon, XIcon, MessageCircleQuestionIcon, CircleDashedIcon, ChevronRightIcon, BotIcon, ArrowDownUpIcon } from "lucide-react";
 import type { HostStateSnapshot, ThreadSearchMatch, ThreadSummary } from "../../shared/bridge";
 import { searchThreads } from "../../shared/composerSuggestions";
 import { useActions } from "../actions";
 import { useBridgeQuery } from "../useBridgeQuery";
 import { ThreadActionsMenu } from "./ThreadActionsMenu";
 import { ScheduledTaskRows } from "./ScheduledTaskList";
+import { SessionSortMenu } from "./SessionSortMenu";
+import { useSessionSort } from "../sessionSortPreference";
+import { SESSION_SORTS } from "../../shared/sessionSort";
 import { ProviderIcon } from "./ProviderIcon";
 import { providerBrand } from "../../shared/usage";
 import { sessionTree, threadIsWorking as working, type SessionTreeNode } from "../../shared/sessionTree";
@@ -23,6 +26,10 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   readonly onSelect?: (threadId: string) => void;
   readonly compact?: boolean;
 }) {
+  const [sort, setSort] = useSessionSort();
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortAnchor = useRef<HTMLButtonElement>(null);
+  const closeSort = useCallback(() => setSortOpen(false), []);
   const [search, setSearch] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -44,9 +51,9 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   const activeMatches = matching.filter((thread) => !thread.archived && !thread.settled);
   const settledMatches = matching.filter((thread) => !thread.archived && thread.settled);
   const archiveMatches = matching.filter((thread) => thread.archived);
-  const active = useMemo(() => sessionTree(state.threads, matching.filter((thread) => !thread.archived && !thread.settled)), [state.threads, matching]);
-  const settled = useMemo(() => sessionTree(state.threads, matching.filter((thread) => !thread.archived && thread.settled)), [state.threads, matching]);
-  const archived = useMemo(() => sessionTree(state.threads, matching.filter((thread) => thread.archived)), [state.threads, matching]);
+  const active = useMemo(() => sessionTree(state.threads, matching.filter((thread) => !thread.archived && !thread.settled), sort), [state.threads, matching, sort]);
+  const settled = useMemo(() => sessionTree(state.threads, matching.filter((thread) => !thread.archived && thread.settled), sort), [state.threads, matching, sort]);
+  const archived = useMemo(() => sessionTree(state.threads, matching.filter((thread) => thread.archived), sort), [state.threads, matching, sort]);
   const row = (thread: ThreadSummary, context = false) => {
     const match = hits.data?.find((hit) => hit.threadId === thread.id);
     const provider = state.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId);
@@ -75,6 +82,7 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   return <aside className={compact ? "compact-history" : "projects-sidebar dedicated-sessions"} aria-label={compact ? "Conversation history" : "Sessions"}>
     {compact ? <div className="history-heading"><strong>History</strong><span>Current workspace</span></div> : null}
     <div className="sidebar-search-row"><label className="thread-search"><SearchIcon size={14} /><input placeholder="Search conversations…" aria-label="Search threads" value={search} onChange={(event) => setSearch(event.target.value)} />{search ? <button className="icon-button" aria-label="Clear search" onClick={() => setSearch("")}><XIcon size={13} /></button> : null}</label>
+      {compact ? null : <button ref={sortAnchor} className="icon-button sidebar-search-add" aria-label="Sort sessions" aria-haspopup="menu" aria-expanded={sortOpen} title={`Sort sessions: ${SESSION_SORTS.find(option => option.value === sort)!.label} (date uses last activity)`} onClick={() => { setSortOpen(!sortOpen); setMenu(null); }}><ArrowDownUpIcon size={15} /></button>}
       {/* Each tab renders its own +, so the name follows the visible list instead of a shared button mutating behind it. */}
       {compact ? null : <button className="icon-button sidebar-search-add" aria-label="New thread" title="Open New Chat in Editor Tab" onClick={() => { void run("newChatTab"); }}><PlusIcon size={15} /></button>}</div>
     {hits.pending ? <p className="search-status" role="status">Searching messages…</p> : hits.error ? <p className="search-status turn-error" role="status">{hits.error}</p> : null}
@@ -88,6 +96,7 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
       <details className="history-shelf" open={archiveOpen} onToggle={(event) => { const open = event.currentTarget.open; setArchiveOpen(open); if (open && !state.archiveLoaded) void run("loadArchive"); }}><summary><ArchiveIcon size={13} /><span>Archive</span><span className="shelf-count">{state.archiveLoaded ? archiveMatches.length : "…"}</span></summary><div>{archived.map((node) => treeRow(node, archiveMatches, "archive"))}{state.archiveLoaded && !archived.length ? <p className="empty-list">No archived threads.</p> : null}</div></details>
     </div></div>
     {compact ? <div className="history-picker-hint">Switch this tab · drafts stay with each conversation</div> : <div className="history-settings"><button className="icon-button" aria-label="T3 VSCode settings" title="T3 VSCode settings" onClick={onAppearance}><SettingsIcon size={15} /></button><span>Current workspace only</span><button className="icon-button" aria-label="Refresh connection" title="Reconnect" onClick={() => { void run("reconnect"); }}><RefreshCwIcon size={14} /></button></div>}
+    {sortOpen && sortAnchor.current ? <SessionSortMenu anchor={sortAnchor.current} value={sort} onChange={setSort} onClose={closeSort} /> : null}
     {menu && menuThread ? <ThreadActionsMenu thread={menuThread} position={menu} onClose={closeMenu} /> : null}
   </aside>;
 }

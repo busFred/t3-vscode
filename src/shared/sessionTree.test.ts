@@ -56,3 +56,15 @@ test("The sidebar and the subagent card call the same statuses working", () => {
   }
   for (const done of ["idle", "completed", "failed", "error", "cancelled"]) assert.equal(statusIsWorking(done), false, `${done} must not read as working`);
 });
+
+test("Session sorting uses last activity, natural titles, pinned precedence and sibling-only ordering", () => {
+  const threads = [thread("z", { title: "Task 10", lastActiveAt: "2026-10-01T00:00:00Z" }), thread("a", { title: "Task 2", lastActiveAt: "2026-10-08T00:00:00Z" }), child("child", "z", { title: "AAA", lastActiveAt: "2026-10-09T00:00:00Z" }), thread("pin", { pinned: true, title: "ZZZ" })];
+  const roots = (order: Parameters<typeof sessionTree>[2]) => sessionTree(threads, threads, order).map(node => node.thread.id);
+  assert.deepEqual(roots("date-desc"), ["pin", "a", "z"]);
+  assert.deepEqual(roots("date-asc"), ["pin", "z", "a"]);
+  assert.deepEqual(roots("title-asc"), ["pin", "a", "z"]);
+  assert.deepEqual(roots("title-desc"), ["pin", "z", "a"]);
+  assert.deepEqual(sessionTree(threads, threads, "title-asc")[2]!.children.map(node => node.thread.id), ["child"]);
+  const invalid = thread("invalid", { lastActiveAt: "bad", updatedAt: "bad" });
+  for (const order of ["date-asc", "date-desc"] as const) assert.equal(sessionTree([...threads, invalid], [...threads, invalid], order).at(-1)!.thread.id, "invalid");
+});

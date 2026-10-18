@@ -8,7 +8,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.1.21 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.1.22 |
 | [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and an independent model/effort editor in the sidebar. | v0.1.16 | v0.1.21 |
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.13 |
@@ -113,6 +113,11 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 - Reclaim 56px above the first conversation: drop the section-label band that repeated the selected tab, move its `+` beside the search field, and take the padding off the Account & Usage header and the tab bar. The `+` acts on the open tab, and only that tab's button is in the accessibility tree.
 - Give each row two lines — a title that wraps to two and owns the full width, then run status, branch or match, age and icons — with the expand chevron spanning both so it never shortens the title. Titles read about 40px wider.
 - Separate rows with a hairline instead of whitespace, at padding relative to the interface font size, and run the selection as a full-width band. Rows drop from about 50px to 35px. The separator is derived from the foreground because `--border` matches the sidebar background in several light themes, and joins the other explicit boundaries under high contrast, where the selection also gains an outline because the platform paints its background the same colour as the list.
+
+#### v0.1.22
+
+- Add a sort button beside the existing New button; its floating menu orders sessions by last activity or title in either direction without shifting the list.
+- Remember the order in the view across reloads while retaining pinned precedence, shelf membership and subagent ancestry; sessions without activity use their recorded update time.
 
 ### Scheduled task management
 

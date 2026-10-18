@@ -2,6 +2,8 @@
 
 ## 0.1.22 — Unpublished
 
+- Add a floating sort menu beside the Sessions + button for last-activity date or title, ascending or descending; remember the choice while preserving pinned sessions and the existing tree and shelves.
+
 - Show recorded local dates and times beside message footer actions: assistant Copy/Fork then time on the left, user time then Copy on the right.
 
 - Right-click selected response text for Copy, Quote and Quote with comment; Shift+F10 and the Menu key open the same menu. A stray click used to dismiss the floating button with no way back to the quote short of reselecting the text. Quote inserts the quote straight away and never prompts, from the menu and from the floating button alike; the comment is added afterwards from the chip or the draft token, so it can no longer be lost to a dismissed dialog. Right-clicking an equation still shows the equation menu, and a selection that cannot be quoted still shows the platform's own menu, which is why Copy leads.

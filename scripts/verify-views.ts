@@ -90,7 +90,7 @@ const server = createServer(async (request, response) => {
           window.__completed.push({ method: message.method, data });
           window.dispatchEvent(new MessageEvent('message', { data }));
         });
-      }, getState: () => undefined, setState: () => {} });
+      }, getState: () => JSON.parse(sessionStorage.getItem("viewState") || "null"), setState: value => sessionStorage.setItem("viewState", JSON.stringify(value)) });
       new EventSource('/events?view=' + viewId).onmessage = event => window.dispatchEvent(new MessageEvent('message', { data: JSON.parse(event.data) }));
       </script><script src="/webview.js?view=${id}"></script></body></html>`);
   } catch (cause) { response.writeHead(500); response.end(String(cause)); }
@@ -280,6 +280,16 @@ try {
   await first.reload(); await expectFonts(first, preferences);
   assert.equal(host.snapshot("tab-one").activeThreadId, selections[0]);
   const sidebar = manager;
+  const listTop = await sidebar.locator('.session-list').evaluate(node => node.getBoundingClientRect().top);
+  await sidebar.getByRole('button', { name: 'Sort sessions', exact: true }).click();
+  assert.equal(await sidebar.locator('.session-list').evaluate(node => node.getBoundingClientRect().top), listTop, 'Sort popup must not move the list');
+  await sidebar.getByRole('menuitemradio', { name: 'Title · Z → A', exact: true }).click();
+  const sorted = await sidebar.locator('.session-list > .session-tree-node > .session-tree-row .thread-title').allTextContents();
+  assert.deepEqual(sorted, [...sorted].sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' })));
+  await sidebar.reload();
+  await sidebar.getByRole('button', { name: 'Sort sessions', exact: true }).click();
+  assert.equal(await sidebar.getByRole('menuitemradio', { name: 'Title · Z → A', exact: true }).getAttribute('aria-checked'), 'true');
+  await sidebar.getByRole('menuitemradio', { name: 'Date · newest first', exact: true }).click();
   assert.equal(await sidebar.locator(".account-usage").evaluate((element) => (element as HTMLDetailsElement).open), false);
   const originalShell = client.shell;
   client.shell = { ...client.shell, threads: client.shell.threads.map((thread) => thread.id === "second" ? { ...thread, pendingRuntimeRequest: { id: RuntimeRequestId.make("browser-input"), kind: "user_input", createdAt: v2Now } } : thread.id === "third" ? { ...thread, status: "running", activityRunStartedAt: DateTime.makeUnsafe(new Date(Date.now() - 20 * 60_000).toISOString()) } : thread) };

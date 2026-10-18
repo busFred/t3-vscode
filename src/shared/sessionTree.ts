@@ -1,9 +1,10 @@
 import type { ThreadSummary, WireTurnItem } from "./bridge.js";
+import { compareSessions, type SessionSort } from "./sessionSort.js";
 
 export interface SessionTreeNode { readonly thread: ThreadSummary; readonly children: SessionTreeNode[] }
 
 /** Search retains matching sessions and their ancestors; ordinary forks remain roots. */
-export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: ReadonlyArray<ThreadSummary> = threads): SessionTreeNode[] {
+export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: ReadonlyArray<ThreadSummary> = threads, sort: SessionSort = "date-desc"): SessionTreeNode[] {
   const byId = new Map(threads.map((thread) => [thread.id, thread]));
   const parentOf = (thread: ThreadSummary): ThreadSummary | undefined => {
     const parent = thread.relationshipToParent === "subagent" && thread.parentThreadId ? byId.get(thread.parentThreadId) : undefined;
@@ -15,7 +16,7 @@ export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: Read
     const seen = new Set<string>();
     while (thread && !seen.has(thread.id)) { seen.add(thread.id); retained.add(thread.id); thread = parentOf(thread); }
   }
-  const ordered = threads.filter((thread) => retained.has(thread.id)).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
+  const ordered = threads.filter((thread) => retained.has(thread.id)).sort((a, b) => compareSessions(a, b, sort));
   const nodes = new Map(ordered.map((thread) => [thread.id, { thread, children: [] as SessionTreeNode[] }]));
   const roots: SessionTreeNode[] = [];
   for (const thread of ordered) {
