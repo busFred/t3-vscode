@@ -13,7 +13,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Workspace scope](#workspace-scope) | Shows conversations belonging to opened workspace folders. | v0.0.2 | v0.0.8 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.1.13 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
-| [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.22 |
+| [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.23 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.1.13 |
@@ -241,6 +241,10 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 #### v0.1.22
 
 - Count and classify only ordinary conversations by their own state. Subagent state never adds a parent to another shelf, so a settled row’s menu genuinely offers **Un-settle thread**.
+
+#### v0.1.23
+
+- Fetch archive summaries in the background after connection without expanding the section or loading archived message histories. Show a spinner only during the request; archive errors keep chat usable and offer retry. Ignore results from obsolete connections.
 
 ### Conversation search
 

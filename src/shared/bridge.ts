@@ -126,6 +126,8 @@ export interface HostStateSnapshot {
   readonly projects: ReadonlyArray<ProjectSummary>;
   readonly threads: ReadonlyArray<ThreadSummary>;
   readonly archiveLoaded?: boolean;
+  readonly archiveLoading?: boolean;
+  readonly archiveError?: string;
   readonly providers: ReadonlyArray<ServerProvider>;
   readonly usageLimitSources?: UsageLimitSourceSnapshots;
   readonly favoriteModels: ReadonlyArray<FavoriteModel>;

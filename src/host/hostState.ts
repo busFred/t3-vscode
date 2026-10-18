@@ -121,6 +121,9 @@ export class HostState {
   private readonly views = new Map<string, ViewState>([[SIDEBAR_VIEW_ID, blankView()]]);
   private archive: OrchestrationV2ArchivedShellSnapshot | null = null;
   private archiveSubscription: Subscription | null = null;
+  private archiveLoad: Promise<void> | null = null;
+  private archiveGeneration = 0;
+  private archiveError: string | undefined;
   private readonly threads = new Map<string, ThreadState>();
   private shellSubscription: Subscription | null = null;
   private chain: Promise<unknown> = Promise.resolve();
@@ -323,6 +326,7 @@ export class HostState {
   refreshAppearance(): void { this.emit(); }
 
   private async stopSubscriptions(): Promise<void> {
+    this.archiveGeneration += 1; this.archiveLoad = null; this.archiveError = undefined;
     for (const viewId of this.sessionSearches.keys()) this.cancelSessionSearch(viewId);
     this.scheduledGeneration += 1;
     await this.scheduledSubscription?.(); this.scheduledSubscription = null;
@@ -367,9 +371,9 @@ export class HostState {
       if (this.disposed) { await this.client.disconnect(); return; }
       this.shell = await this.client.snapshotShell();
       this.shellSubscription = await this.client.subscribeShell((item) => this.handleShell(item));
-      if (this.archive) await this.subscribeArchive();
       await this.reconcileViews(true);
       this.setPhase("ready");
+      void this.loadArchive().catch(() => {}); // Archive failures must not block chat startup.
       await this.loadScheduledTasks();
     } catch (cause) {
       const kind = cause instanceof PairingError ? cause.kind : this.phase === "pairing" ? "pairing" : "connection";
@@ -396,12 +400,30 @@ export class HostState {
     this.reconcileRemovedThreads();
     this.scheduleEmit();
   }
-  loadArchive(): Promise<void> { return this.enqueue(() => this.subscribeArchive()); }
-  private async subscribeArchive(): Promise<void> {
-    if (this.archiveSubscription) return;
-    this.archive = await this.client.snapshotArchive();
-    this.archiveSubscription = await this.client.subscribeArchive((item) => this.handleArchive(item));
+  loadArchive(): Promise<void> { return this.subscribeArchive(); }
+  private subscribeArchive(): Promise<void> {
+    if (this.archiveSubscription || this.disposed) return Promise.resolve();
+    if (this.archiveLoad) return this.archiveLoad;
+    const generation = this.archiveGeneration;
+    this.archiveError = undefined;
+    const current = () => !this.disposed && generation === this.archiveGeneration;
+    this.archiveLoad = (async () => {
+      try {
+        const snapshot = await this.client.snapshotArchive();
+        if (!current()) return;
+        this.archive = snapshot;
+        const subscription = await this.client.subscribeArchive((item) => { if (current()) this.handleArchive(item); });
+        if (!current()) { await subscription(); return; }
+        this.archiveSubscription = subscription;
+      } catch (cause) {
+        if (current()) this.archiveError = describeError(cause);
+        throw cause;
+      } finally {
+        if (current()) { this.archiveLoad = null; this.emit(); }
+      }
+    })();
     this.emit();
+    return this.archiveLoad;
   }
   private handleArchive(item: OrchestrationV2ArchivedShellStreamItem): void {
     if (item.kind === "snapshot") this.archive = item.snapshot;
@@ -1130,7 +1152,7 @@ export class HostState {
         })(),
       })),
       providers: this.client.config?.providers ?? [],
-      archiveLoaded: this.archive !== null,
+      archiveLoaded: this.archive !== null, archiveLoading: this.archiveLoad !== null, ...(this.archiveError ? { archiveError: this.archiveError } : {}),
       usageLimitSources: this.client.config?.usageLimitSources ?? [],
       favoriteModels: this.modelPreferences().favoriteModels,
       providerModelPreferences: this.modelPreferences().providerModelPreferences,

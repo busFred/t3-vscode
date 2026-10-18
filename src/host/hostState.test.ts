@@ -154,12 +154,11 @@ function workspaceFixture() {
   ] };
   return client;
 }
-test("Workspace lists match project paths, including their worktrees, without leaking unrelated or archived threads", async (t) => {
+test("Workspace lists match project paths, including their worktrees, without leaking unrelated active or archived threads", async (t) => {
   const client = workspaceFixture();
   client.archive = { ...client.archive, threads: client.shell.threads.map((thread) => ({ ...thread, id: ThreadId.make(`archived-${thread.id}`), archivedAt: v2Now })) };
   const { host } = await harness({ workspaceRoots: () => ["/tmp/t3-vscode/"] }, client); t.after(() => host.dispose());
   assert.deepEqual(host.snapshot().projects.map((project) => project.id), [v2Project.id]);
-  assert.deepEqual(host.snapshot().threads.map((thread) => thread.id), [v2ThreadShell.id]);
   assert.equal(host.snapshot().activeThreadId, v2ThreadShell.id);
   assert.equal(host.workspaceForThread(v2ThreadShell.id), "/tmp/t3-worktrees/feature");
   await host.loadArchive();
@@ -356,11 +355,11 @@ test("Archiving keeps a thread discoverable and restorable outside the active sh
   assert.equal(client.commands.findLast((command) => command.type === "message.dispatch")?.threadId, id);
 });
 
-test("Archive updates from other clients appear on demand and reject stale deltas", async (t) => {
-  const { host, client } = await harness(); t.after(() => host.dispose());
+test("Archive updates from other clients arrive automatically and reject stale deltas", async (t) => {
+  const client = new FakeTransport();
   const archived = { ...v2ThreadShell, id: ThreadId.make("archived"), archivedAt: v2Now };
   client.archive = { ...client.archive, threads: [archived] };
-  assert.equal(host.snapshot().threads.length, 1);
+  const { host } = await harness({}, client); t.after(() => host.dispose());
   await host.loadArchive();
   assert.equal(host.snapshot().threads.length, 2);
   client.archiveHandler?.({ kind: "thread.updated", sequence: 5, thread: { ...archived, title: "Renamed in T3" } });
@@ -403,4 +402,37 @@ test("Approvals validate pending and resumable state before dispatching a respon
   handler({ kind: "snapshot", snapshotSequence: 3, projection: { ...v2Projection, runtimeRequests: [{ ...request, status: "resolved" }] } });
   assert.equal(host.snapshot().pending.approvals.length, 0);
   await assert.rejects(host.respondToRequest({ threadId: v2ThreadShell.id, requestId: request.id, decision: "accept" }), /no longer pending/);
+});
+
+
+test("Archive initialization is nonblocking, deduplicated and recoverable without message history", async (t) => {
+  const client = new FakeTransport();
+  let release!: () => void; let requests = 0;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  client.snapshotArchive = async () => { requests++; await gate; throw new Error("Archive unavailable"); };
+  const { host } = await harness({}, client); t.after(() => host.dispose());
+  assert.equal(host.snapshot().phase, "ready"); assert.equal(host.snapshot().archiveLoading, true);
+  const sameRequest = host.loadArchive(); assert.equal(requests, 1);
+  const subscriptions = client.threadStarts;
+  release(); await assert.rejects(sameRequest, /Archive unavailable/);
+  assert.equal(host.snapshot().phase, "ready"); assert.equal(host.snapshot().archiveLoading, false);
+  assert.match(host.snapshot().archiveError!, /Archive unavailable/);
+  client.snapshotArchive = async () => client.archive;
+  await host.loadArchive();
+  assert.equal(host.snapshot().archiveLoaded, true); assert.equal(host.snapshot().archiveError, undefined);
+  assert.equal(client.threadStarts, subscriptions, "Loading summaries must not load archived message projections");
+});
+
+test("A stale archive request cannot overwrite the reconnected snapshot", async (t) => {
+  const client = new FakeTransport();
+  let release!: (value: typeof client.archive) => void;
+  client.snapshotArchive = () => new Promise(resolve => { release = resolve; });
+  const { host } = await harness({}, client); t.after(() => host.dispose());
+  const stale = host.loadArchive();
+  client.snapshotArchive = async () => client.archive;
+  await host.reconnect(); await host.loadArchive();
+  release({ ...client.archive, threads: [{ ...v2ThreadShell, id: ThreadId.make("stale-archive"), archivedAt: v2Now }] });
+  await stale;
+  assert.equal(host.snapshot().threads.some(thread => thread.id === "stale-archive"), false);
+  assert.equal(client.archiveStarts, 1);
 });

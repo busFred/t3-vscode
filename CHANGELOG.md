@@ -2,6 +2,8 @@
 
 ## 0.1.23 — Unpublished
 
+- Initialize Archive counts automatically from summaries in the background. Keep the shelf collapsed, show loading only during a request and support retry without blocking chat.
+
 - Add Automatic / 12-hour / 24-hour timestamp settings, shared by message times and time tooltips throughout the extension.
 
 ## 0.1.22 — Release
