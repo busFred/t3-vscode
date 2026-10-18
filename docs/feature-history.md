@@ -41,7 +41,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.1.21 |
 | [Editor references](#editor-references) | Inserts selected file ranges at the last-used chat's prompt cursor with Ctrl/Cmd+K or Alt+K. | v0.0.4 | v0.1.20 |
 | [Assistant citations](#assistant-citations) | Inserts assistant quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.1.22 |
-| [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.13 |
+| [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.22 |
 | [Saved turn diffs](#saved-turn-diffs) | Shows one nonempty agent-only response diff; hides manual edits. | v0.0.6 | v0.1.17 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
@@ -56,7 +56,8 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.13 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.1.13 |
 | [Markdown composer tools](#markdown-composer-tools) | Literal formatting, selection wrapping, automatic numbering, indentation and undo. | v0.1.13 | v0.1.21 |
-| [Dense transcript spacing](#dense-transcript-spacing) | Compact gaps, one author per run and unobtrusive message actions. | v0.1.13 | v0.1.13 |
+| [Message timestamps](#message-timestamps) | Recorded local date/time beside each message’s footer actions. | v0.1.22 | v0.1.22 |
+| [Dense transcript spacing](#dense-transcript-spacing) | Compact gaps, one author per run and unobtrusive message actions. | v0.1.13 | v0.1.22 |
 
 ## Sessions and navigation
 
@@ -489,6 +490,17 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Display an assistant author once per run, keeping every assistant message visible between compact activity groups.
 - Retain internal code, math, image and interactive-visual spacing.
 
+#### v0.1.22
+
+- Move each message’s Copy into its footer, align assistant actions left and user actions right, and keep the supported Fork at the settled run’s end.
+
+### Message timestamps
+
+#### v0.1.22
+
+- Show the recorded start date/time in local time beside each user/assistant message’s footer actions, with seconds and a full timezone tooltip; streaming completion does not change the timestamp.
+- Place assistant icons before the timestamp and user Copy after it; show “Time unavailable” when historical data has no valid time rather than inventing one.
+
 ### Streaming and progressive history
 
 #### v0.0.1
@@ -872,6 +884,10 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 
 - Offer one capability-gated fork after a settled run’s final content; interim assistant messages retain Copy without separate fork points.
 - Keep Copy/Fork actions out of the pinned Working status header.
+
+#### v0.1.22
+
+- Align the existing final Copy/Fork footer left and place the response timestamp after its icons; eligibility and fork behavior are unchanged.
 
 ### Saved turn diffs
 

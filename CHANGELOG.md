@@ -2,6 +2,8 @@
 
 ## 0.1.22 — Unpublished
 
+- Show recorded local dates and times beside message footer actions: assistant Copy/Fork then time on the left, user time then Copy on the right.
+
 - Right-click selected response text for Copy, Quote and Quote with comment; Shift+F10 and the Menu key open the same menu. A stray click used to dismiss the floating button with no way back to the quote short of reselecting the text. Quote inserts the quote straight away and never prompts, from the menu and from the floating button alike; the comment is added afterwards from the chip or the draft token, so it can no longer be lost to a dismissed dialog. Right-clicking an equation still shows the equation menu, and a selection that cannot be quoted still shows the platform's own menu, which is why Copy leads.
 - Rename the floating Cite button to Quote, so the button and the menu item share one name.
 - Open a reference in the message box with Ctrl+click (Cmd on macOS) rather than a plain click, and hold Ctrl to see the caret turn into a pointer. A plain click now only moves the caret, so a path can be retyped by hand — a file the suggestion list will never offer, such as one that is gitignored. This applies to file references, image references and quote tokens alike.

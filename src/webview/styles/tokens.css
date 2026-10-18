@@ -139,8 +139,8 @@ select, input { color: inherit; background: var(--card); }
 .timeline-header:empty { padding: 0; }
 .timeline-footer { height: 22px; }
 .message { position: relative; margin-bottom: 8px; }
-.user-message { display: flex; flex-direction: row; justify-content: flex-end; align-items: center; gap: 4px; padding-top: 2px; }
-.user-bubble { min-width: 0; max-width: calc(100% - 27px); border-radius: 18px; padding: 6px 16px; background: var(--message-surface); overflow-wrap: anywhere; }
+.user-message { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding-top: 2px; }
+.user-bubble { min-width: 0; max-width: 100%; border-radius: 18px; padding: 6px 16px; background: var(--message-surface); overflow-wrap: anywhere; }
 .message-author { display: flex; align-items: center; gap: 9px; font-size: 0.6875rem; font-weight: 500; margin: 0 0 4px; }
 .message-author > span { color: var(--muted-foreground); }
 .message-author .streaming-label { margin-left: auto; font-size: 0.625rem; font-weight: 400; }
@@ -642,10 +642,12 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .sticky-working { position: absolute; top: 0; left: 0; right: 0; z-index: 12; padding: 3px 22px; border-bottom: 1px solid var(--border); background: var(--background); }
 .sticky-working .response-header { max-width: 728px; margin: 0 auto; min-height: 25px; }
 .assistant-message { position: relative; }
-.message-copy { position: absolute; right: 0; top: -3px; opacity: 0; background: var(--background); }
-.assistant-message:hover .message-copy, .message-copy:focus-within { opacity: 1; }
-.message-copy .copy-button, .response-end .copy-button, .response-end .fork-button { margin-top: 0; }
-.response-end { justify-content: flex-end; margin: -3px 0 5px; }
+.message-footer, .user-message-footer, .response-end { gap: 8px; flex-wrap: wrap; }
+.message-footer .copy-button, .user-message-footer .copy-button, .response-end .copy-button, .response-end .fork-button { margin-top: 0; }
+.message-footer, .response-end { justify-content: flex-start; margin: 4px 0 5px; }
+.user-message-footer { justify-content: flex-end; }
+.message-timestamp { font-size: .625rem; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+
 .steer-label { display: block; color: var(--muted-foreground); font-size: .6875rem; margin-bottom: 3px; }
 .work-group { margin-bottom: 6px; }.work-group-toggle { padding: 4px 0; }
 

@@ -35,6 +35,13 @@ export async function verifyResponseLayout(page: Page, host: HostState, client: 
   } });
   publish();
   await page.locator('.assistant-message').filter({ hasText: 'The seed is fixed' }).waitFor();
+  assert.equal(await page.locator('.message-timestamp').count(), 4, 'Both user messages and assistant messages have recorded timestamps');
+  for (const footer of await page.locator('.response-actions').all()) {
+    const user = await footer.evaluate(node => !!node.closest('.user-message'));
+    assert.equal(await footer.evaluate(node => getComputedStyle(node).justifyContent), user ? 'flex-end' : 'flex-start');
+    assert.equal(await footer.evaluate(node => node.firstElementChild?.tagName), user ? 'TIME' : 'BUTTON');
+    assert.equal(await footer.locator('time').getAttribute('datetime'), DateTime.formatIso(startedAt));
+  }
   assert.equal(await page.locator('.work-group-toggle').count(), 3);
   assert.equal(await page.locator('.work-group-toggle[aria-expanded="false"]').count(), 3);
   assert.equal(await page.locator('.assistant-message').count(), 2, 'Both partial answers remain visible while work is collapsed');

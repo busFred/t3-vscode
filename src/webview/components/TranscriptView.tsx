@@ -24,6 +24,7 @@ import { ChatMedia } from "./ChatMedia";
 import { SubagentCard, SubagentState } from "./SubagentCard";
 import { useContext } from "react";
 import { SearchTargetContext, type SearchTarget } from "./SessionFind";
+import { MessageTimestamp } from "./MessageTimestamp";
 import { highlightSearchResult } from "../searchHighlight";
 
 function CopyButton({ text }: { text: string }) {
@@ -105,11 +106,11 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
   const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} assetSource={assetSource} {...(item.type === "user_message" ? { context: item.context, attachments: item.attachments } : {})} />;
   const openThread = (id: string) => { void run("selectThread", { threadId: id }); };
   switch (item.type) {
-    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.inputIntent === "steer" ? <span className="steer-label">↪ Steer</span> : null}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{sent.text || !sent.references.length ? markdown(stripRenderedAssistantQuotes(sent.text)) : null}<MessageReferences references={sent.references} scope={row.key} threadId={threadId} /></div>{/* Copy and search keep the sent payload: a row hides the snapshot from the page, not from the user. */}<CopyButton text={renderedMessageText(item.text)} /></article>;
+    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.inputIntent === "steer" ? <span className="steer-label">↪ Steer</span> : null}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{sent.text || !sent.references.length ? markdown(stripRenderedAssistantQuotes(sent.text)) : null}<MessageReferences references={sent.references} scope={row.key} threadId={threadId} /></div>{/* Copy and search keep the sent payload: a row hides the snapshot from the page, not from the user. */}<div className="response-actions user-message-footer"><MessageTimestamp value={item.startedAt} /><CopyButton text={renderedMessageText(item.text)} /></div></article>;
     case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}>
       {!item.runId ? <AssistantHeader /> : null}
-      {!row.canFork ? <div className="response-actions message-copy"><CopyButton text={item.text} /></div> : null}
       <ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} assetSource={assetSource} streaming={item.streaming} />
+      {!row.canFork || !item.runId ? <div className="response-actions message-footer"><CopyButton text={item.text} /><MessageTimestamp value={item.startedAt} /></div> : null}
     </article>;
     case "reasoning": return <Disclosure label={item.streaming ? "Thinking…" : "Thought process"} icon={<BrainIcon size={14} />} row={row} threadId={threadId}>{markdown(item.text)}</Disclosure>;
     case "proposed_plan": return <section className="plan-card"><header><span className="plan-badge">Plan</span><strong>Proposed plan</strong><CopyButton text={item.markdown} /></header>{markdown(item.markdown)}</section>;
@@ -241,7 +242,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     return <div data-message-key={item.key} className={`timeline-row${first.item.type === "checkpoint" ? " checkpoint-row" : ""}`}>
       {boundary?.first === first.key ? <AssistantHeader working={working && first.item.runId === activeRun} headerKey={first.key} /> : null}
       {isWorkItem(first) ? <WorkGroup rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : <TurnItem row={first} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} />}
-      {finalAnswer?.item.type === "assistant_message" ? <div className="response-actions response-end"><CopyButton text={finalAnswer.item.text} /><ForkButton row={finalAnswer} threadId={id ?? ""} /></div> : null}
+      {finalAnswer?.item.type === "assistant_message" ? <div className="response-actions response-end"><CopyButton text={finalAnswer.item.text} /><ForkButton row={finalAnswer} threadId={id ?? ""} /><MessageTimestamp value={finalAnswer.item.startedAt} /></div> : null}
     </div>;
   }, [id, state.environment?.environmentId, boundaries, working, activeRun]);
   const header = <div className="timeline-header">{state.history.hasMore || state.history.error ? <button className="btn" disabled={state.history.loading} onClick={() => { void run("loadHistory", { threadId: id }); }}>{state.history.loading ? "Loading…" : state.history.error ? "Retry loading earlier messages" : "Load earlier messages"}</button> : null}{state.history.error ? <p className="turn-error">{state.history.error}</p> : null}</div>;

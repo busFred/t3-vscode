@@ -71,6 +71,8 @@ Each editor tab retains its conversation and draft. Text, cursor position, refer
 
 Closing a newly created chat without typing, adding a reference/attachment or sending a message removes that untouched empty conversation after its last chat surface closes. Typing and later clearing still preserves it, as does managing the thread or renaming/pinning it in the Web UI. Preexisting empty conversations stay available.
 
+Message footers show their recorded date and time in your local timezone. Assistant icons precede the timestamp on the left; your timestamp precedes Copy on the right. Hover the time for its full date and timezone.
+
 Use **Fork** at the end of a settled assistant run to continue from that run in a new conversation. Interim answers keep their Copy action; they do not offer a separate fork point. The fork opens in that view and preserves the source conversation; the button is available when T3 supports native forking or its portable history fallback. File links in chat open a native VS Code editor, including links to a line or range such as `src/main.ts#L24-L25`.
 
 ## Composer and editing
