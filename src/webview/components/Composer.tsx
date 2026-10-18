@@ -1,3 +1,4 @@
+import { ImageCaptionEditor } from "./ImageCaptionEditor";
 import { bridge } from "../bridge-client";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon } from "lucide-react";
@@ -20,7 +21,7 @@ import { addDraftAttachments, pasteAttachments, removeDraftAttachment, trackAtta
 import type { DraftAttachment, TextSelection } from "../../shared/composerAttachments";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { openVisual } from "./ChatMedia";
-import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { formatComposerContextReference, collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 import { collectAssistantCitations } from "../../shared/messageCitations.js";
 import { changesListStructure, continueMarkdownList, formatMarkdown, indentMarkdown, protectMarkdownSelection, renumberMarkdownList, textReplacement, wrapMarkdownSelection, type MarkdownEdit, type MarkdownFormat } from "../../shared/composerEditing";
 import { useComposerPreferences } from "../composerPreferences";
@@ -42,6 +43,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const { text, contexts, attachments = [] } = useComposerDraft(draftKey);
   const visibleContexts = contexts.map((context, index) => ({ context, index })).filter(({ context }) => contextIsReferenced(text, context));
   const quoteNumbers = useMemo(() => assistantQuoteNumbers(text, contexts), [text, contexts]);
+  const [captionReference, setCaptionReference] = useState<{ reference: ReturnType<typeof collectComposerContextReferences>[number]; src?: string | undefined } | null>(null);
   const [peekDismissed, setPeekDismissed] = useState<string | null>(null);
   const touched = useRef(false);
   const markTouched = () => {
@@ -273,7 +275,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       if (context?.type === "assistant") { onEditCitation(context.citation, index); return true; }
     }
     const file = reference?.kind === "image" ? attachments.find((file) => file.contextId === reference.contextId) : undefined;
-    if (file?.previewUrl) { openVisual({ title: file.name, src: file.previewUrl }); return true; }
+    if (file && reference) { setCaptionReference({ reference, src: file.previewUrl }); return true; }
     return false;
   };
   const traits = <div className="composer-traits">
@@ -383,5 +385,14 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         </div>
       </div>
     </div>
+    {captionReference ? <ImageCaptionEditor label={captionReference.reference.label} src={captionReference.src} onClose={() => { setCaptionReference(null); textarea.current?.focus(); }} onSave={label => {
+      const old = captionReference.reference;
+      const current = collectComposerContextReferences(text).find(ref => ref.start === old.start && ref.contextId === old.contextId && ref.kind === "image");
+      if (current) {
+        const replacement = formatComposerContextReference({ ...current, label });
+        applyEdit({ start: current.start, end: current.end, text: replacement, selection: { start: current.start + replacement.length, end: current.start + replacement.length } });
+      }
+      setCaptionReference(null); textarea.current?.focus();
+    }} /> : null}
   </div></div>;
 }

@@ -730,3 +730,12 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 }
 
 .retained-sidebar { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
+
+.image-caption-backdrop { position:fixed; inset:0; z-index:121; display:flex; align-items:center; justify-content:center; background:#0003; }
+.image-caption-editor { position:relative; inset:auto; max-height:calc(100vh - 24px); overflow:auto; }
+.image-caption-preview { display:block; border:0; background:transparent; padding:0; width:100%; cursor:zoom-in; }
+.image-caption-preview img { display:block; max-width:100%; max-height:220px; margin:0 auto 10px; object-fit:contain; }
+.image-caption-editor label { display:block; }
+
+/* Full image preview must appear above the caption editor that opened it. */
+.visual-expanded { z-index: 130; }

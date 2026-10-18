@@ -24,7 +24,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and workspace files while typing. | v0.0.6 | v0.1.22 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
-| [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.21 |
+| [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.23 |
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.1.20 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.1.18 |
 | [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.1.21 |
@@ -467,6 +467,10 @@ The [read-only file-reference investigation](file-reference-investigation.md) ex
 - Retain the current composer draft and queued attachments through the existing inline Save/Cancel workflow.
 
 ### Attachment presentation
+
+#### v0.1.23 — same-version rebuild
+
+Ctrl/Cmd+click (or Alt+Enter) on an inline image reference opens an image-caption editor with Preview, Save and Cancel. Saving changes only that reference label, preserves attachment identity and uses the composer’s native undo history; thumbnail previews remain available.
 
 #### v0.0.1
 
