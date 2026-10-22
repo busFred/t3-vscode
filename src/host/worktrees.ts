@@ -9,7 +9,8 @@ import type { WorktreeChoice, WorktreeSummary, WorktreePreparation, WorktreesSta
 import type { T3Client } from "./t3Client.js";
 import { WorktreeEnvironmentManager, runEnvironmentCommand, sanitizeEnvironmentDiagnostic, acquireWorktreeLease, type EnvironmentRunner } from "./worktreeEnvironment.js";
 import { WorktreeSettingsStore, type WorktreeSettingsProject } from "./worktreeSettings.js";
-import { repositoryIdentity, listLocalWorktrees, worktreeChanges, applyWorktreeFiles, copyWorktreeConfig, restoreCheckout, readWorktreeStatus, readWorktreeDiffFile, worktreeCleanupIdentity, worktreeRemovalConfirmed } from "./worktreeGit.js";
+import { repositoryIdentity, listLocalWorktrees, worktreeChanges, applyWorktreeFiles, copyWorktreeConfig, restoreCheckout, readWorktreeStatus, readWorktreeDiffFile, worktreeCleanupIdentity, worktreeRemovalConfirmed, patchNumstat, type LocalWorktree } from "./worktreeGit.js";
+import { MergeRecordStore, parsePatchNumstat, resolveThreadForCheckout, type MergeRecord } from "./mergeRecords.js";
 
 export type WorktreeTransport = Pick<T3Client, "listRefs" | "createWorktree" | "removeWorktree" | "preparePullRequest" | "getSettings" | "updateSettings" | "gitAction"> & { readonly worktreeSettingsCapabilities?: { readonly worktreesDirectory: boolean; readonly cleanupRetention: boolean; readonly runOnSettle: boolean } };
 interface Project extends ProjectSummary { scripts: WorktreeSettingsProject["scripts"] }
@@ -100,6 +101,7 @@ export class WorktreeCoordinator {
   private readonly instance = randomUUID();
   private disposed = false;
   private timestamp = 0;
+  readonly merges: MergeRecordStore;
   private nextTimestamp() { this.timestamp = Math.max(Date.now(), this.timestamp + 1); return this.timestamp; }
   private orderedAttempts() { return [...this.attempts.values()].sort((a, b) => (a.preparation.updatedAt ?? 0) - (b.preparation.updatedAt ?? 0) || a.preparation.id.localeCompare(b.preparation.id)); }
   constructor(options: WorktreeCoordinatorOptions) {
@@ -108,6 +110,7 @@ export class WorktreeCoordinator {
     this.runner = options.runner ?? runEnvironmentCommand;
     this.environments = options.environmentManager ?? new WorktreeEnvironmentManager(join(options.storageRoot, "python"), { runner: this.runner });
     this.settingsStore = new WorktreeSettingsStore(options.storageRoot, this.environments);
+    this.merges = new MergeRecordStore(options.storageRoot);
   }
   scope(projectId: string) { return `${this.options.scope()}:${projectId}`; }
   private project(id: string): Project {
@@ -611,9 +614,24 @@ export class WorktreeCoordinator {
   }
   async diffFile(projectId: string, path: string, baseRef: string, file: string) { const { project } = await this.requireCheckout(projectId, path); return readWorktreeDiffFile({ projectRoot: project.workspaceRoot, path, baseRef, file }); }
   async apply(projectId: string, path: string, destination: string, files: string[], baseRef?: string) {
-    await this.options.assertTrusted(); const { project } = await this.requireCheckout(projectId, path); await this.requireCheckout(projectId, destination);
+    await this.options.assertTrusted(); const { project, tree: sourceTree } = await this.requireCheckout(projectId, path); const { tree: destinationTree } = await this.requireCheckout(projectId, destination);
     if (this.checkoutBusy(destination)) throw new Error("An agent is writing to the destination checkout.");
-    await applyWorktreeFiles({ projectRoot: project.workspaceRoot, path, destination, files, ...(baseRef ? { baseRef } : {}) });
+    const patch = await applyWorktreeFiles({ projectRoot: project.workspaceRoot, path, destination, files, ...(baseRef ? { baseRef } : {}) });
+    await this.recordMerge(projectId, project.workspaceRoot, sourceTree, destinationTree, patch).catch(() => undefined);
+  }
+  /** Best-effort: a merge that cannot be recorded still applied successfully, so this never fails the transfer. */
+  private async recordMerge(projectId: string, workspaceRoot: string, source: LocalWorktree, destination: LocalWorktree, patch: Buffer): Promise<MergeRecord | undefined> {
+    if (!patch.length) return undefined;
+    const threads = this.options.threads();
+    const destinationThread = resolveThreadForCheckout(threads, projectId, workspaceRoot, destination.path);
+    if (!destinationThread) return undefined;
+    const sourceThread = resolveThreadForCheckout(threads, projectId, workspaceRoot, source.path);
+    const files = parsePatchNumstat(await patchNumstat(destination.path, patch)).map((file) => ({ path: file.path, additions: file.additions, deletions: file.deletions, ...(file.binary ? { binary: true } : {}) }));
+    if (!files.length) return undefined;
+    return this.merges.record({
+      destinationThreadId: destinationThread.id, sourceThreadId: sourceThread?.id ?? "", sourceTitle: sourceThread?.title ?? basename(source.path),
+      sourceBranch: source.branch, destinationBranch: destination.branch, cwd: destination.path, appliedAt: new Date().toISOString(), files,
+    }, patch.toString("utf8"));
   }
   private checkoutBusy(path: string): boolean {
     const canonical = this.canonicalPaths();

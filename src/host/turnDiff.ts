@@ -16,6 +16,7 @@ export interface TurnDiff {
   readonly turnNumber: number;
   readonly displayLabel?: string;
   readonly cwd: string;
+  readonly branch?: string;
   readonly baseRef: string;
   readonly headRef: string;
   readonly files: ReadonlyArray<TurnDiffFile>;

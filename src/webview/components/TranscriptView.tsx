@@ -1,8 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList, type LegendListRef, type OnViewableItemsChangedInfo } from "@legendapp/list/react";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
-import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, WrenchIcon, ArrowRightLeftIcon, MinusIcon, XIcon } from "lucide-react";
+import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileClockIcon, FileIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, Undo2Icon, WrenchIcon, ArrowRightLeftIcon, MinusIcon, XIcon } from "lucide-react";
 import type { HostStateSnapshot, TranscriptItem, WireTurnItem } from "../../shared/bridge";
+import { RestorePreview } from "./RestorePreview";
 import { useActions } from "../actions";
 import { getQuestionAnswerText } from "@t3tools/client-runtime/work-log/user-input";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -38,6 +39,35 @@ function ForkButton({ row, threadId }: { row: TranscriptItem; threadId: string }
   return <button className="icon-button fork-button" title="Fork from this response" aria-label="Fork from this response" disabled={busy} onClick={() => {
     setBusy(true); void run("forkFromResponse", { threadId, sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }).finally(() => setBusy(false));
   }}><GitForkIcon size={13} /></button>;
+}
+/** "Edit from here" (conversation-only rewind) and "Restore files to this point" (extension-owned git restore) on a user message. */
+function RevertActions({ row, threadId }: { row: TranscriptItem; threadId: string }) {
+  const run = useActions();
+  const [confirming, setConfirming] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (row.revertTurnCount === undefined) return null;
+  const itemId = row.sourceItemId ?? row.item.id;
+  const rewind = () => {
+    setBusy(true); setError(null);
+    void run("revertConversation", { threadId, sourceThreadId: row.sourceThreadId, itemId })
+      .then((ok) => { if (ok) setConfirming(false); else setError("This message could not be rewound."); })
+      .finally(() => setBusy(false));
+  };
+  return <>
+    <div className="revert-actions">
+      {row.canRevert ? <button className="revert-action" aria-expanded={confirming} onClick={() => setConfirming(!confirming)}><Undo2Icon size={12} /><span>Edit from here</span></button> : null}
+      <button className="revert-action" aria-expanded={restoring} onClick={() => setRestoring(!restoring)}><FileClockIcon size={12} /><span>Restore files to this point</span></button>
+    </div>
+    {confirming ? <div className="revert-confirm">
+      <strong>Edit from here?</strong>
+      <p>Rewind the chat to before this message. Your prompt returns to the composer. Files are not changed.</p>
+      {error ? <p className="turn-error">{error}</p> : null}
+      <div className="revert-confirm-actions"><button className="btn primary" disabled={busy} onClick={rewind}>Rewind</button><button className="btn ghost" disabled={busy} onClick={() => setConfirming(false)}>Cancel</button></div>
+    </div> : null}
+    {restoring ? <RestorePreview threadId={threadId} sourceThreadId={row.sourceThreadId} locator={{ itemId }} turnNumber={row.revertTurnCount} onClose={() => setRestoring(false)} /> : null}
+  </>;
 }
 function Disclosure({ label, icon, children, row, threadId }: { label: string; icon: ReactNode; children: ReactNode; row: TranscriptItem; threadId: string }) {
   const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false);
@@ -107,7 +137,7 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
   const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} assetSource={assetSource} {...(item.type === "user_message" ? { context: item.context, attachments: item.attachments, source: { environmentId, threadId: row.sourceThreadId, messageId: item.messageId, author: "user" as const } } : {})} />;
   const openThread = (id: string) => { void run("selectThread", { threadId: id }); };
   switch (item.type) {
-    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.inputIntent === "steer" ? <span className="steer-label">↪ Steer</span> : null}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{sent.text || !sent.references.length ? markdown(stripRenderedAssistantQuotes(sent.text)) : null}<MessageReferences references={sent.references} scope={row.key} threadId={threadId} /></div>{/* Copy and search keep the sent payload: a row hides the snapshot from the page, not from the user. */}<div className="response-actions user-message-footer"><MessageTimestamp value={item.startedAt} /><CopyButton text={renderedMessageText(item.text)} /></div></article>;
+    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.inputIntent === "steer" ? <span className="steer-label">↪ Steer</span> : null}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{sent.text || !sent.references.length ? markdown(stripRenderedAssistantQuotes(sent.text)) : null}<MessageReferences references={sent.references} scope={row.key} threadId={threadId} /></div>{/* Copy and search keep the sent payload: a row hides the snapshot from the page, not from the user. */}<div className="response-actions user-message-footer"><MessageTimestamp value={item.startedAt} /><CopyButton text={renderedMessageText(item.text)} /></div><RevertActions row={row} threadId={threadId} /></article>;
     case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}>
       {!item.runId ? <AssistantHeader /> : null}
       <ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} assetSource={assetSource} streaming={item.streaming} />
@@ -139,6 +169,32 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
 
 function AssistantHeader({ working = false, headerKey }: { working?: boolean; headerKey?: string }) {
   return <div className="message-author response-header" data-run-header={headerKey}><T3Wordmark className="size-5" /><span>Assistant</span>{working ? <span className="working-label" role="status">· Working</span> : null}</div>;
+}
+/** The dimmed marker left behind by "Edit from here"; its own "Restore files" link targets the remembered checkpoint directly, since the original message row is gone. */
+function RewindMarkerRow({ threadId, marker }: { threadId: string; marker: NonNullable<HostStateSnapshot["rewindMarker"]> }) {
+  const run = useActions();
+  const [restoring, setRestoring] = useState(false);
+  return <div className="timeline-row">
+    <div className="rewind-marker">
+      <Undo2Icon size={12} /><span>{marker.rewoundMessageCount} message{marker.rewoundMessageCount === 1 ? "" : "s"} rewound</span><span aria-hidden="true">·</span>
+      <button className="text-button" aria-expanded={restoring} onClick={() => setRestoring(!restoring)}>Restore files to this point</button>
+      <button className="icon-button" title="Dismiss" aria-label="Dismiss rewind notice" onClick={() => { void run("dismissRewindMarker", { threadId }); }}><XIcon size={12} /></button>
+    </div>
+    {restoring ? <RestorePreview threadId={threadId} sourceThreadId={threadId} locator={{ checkpointId: marker.checkpointId, scopeId: marker.scopeId }} {...(marker.turnNumber !== undefined ? { turnNumber: marker.turnNumber } : {})} onClose={() => setRestoring(false)} /> : null}
+  </div>;
+}
+function RestoreResultRow({ threadId, result }: { threadId: string; result: NonNullable<HostStateSnapshot["restoreResult"]> }) {
+  const run = useActions();
+  return <div className="timeline-row">
+    <div className="restore-result">
+      <span>⎌ Restored files{result.turnNumber !== undefined ? ` to turn ${result.turnNumber}` : ""} · kept {result.keptCount} of your {result.keptCount === 1 ? "file" : "files"}</span>
+      <ul>{result.files.map((file) => <li key={file.path}>
+        {file.outcome === "conflict"
+          ? <>Conflict in <code>{file.path}</code>. Restored version is in place; your version saved as <code>{file.yoursPath}</code>. <button className="text-button" onClick={() => { void run("compareRestoredFile", { threadId, path: file.path, yoursPath: file.yoursPath }); }}>Compare</button></>
+          : file.outcome === "kept-untracked" ? <><code>{file.path}</code> kept.</> : <><code>{file.path}</code>: your edits re-applied.</>}
+      </li>)}</ul>
+    </div>
+  </div>;
 }
 
 export function TranscriptView({ state, onViewport, citationTarget, searchTarget, searchOptions, onNavigate }: { readonly state: HostStateSnapshot; readonly onViewport?: (element: HTMLDivElement | null) => void; readonly citationTarget?: AssistantCitation | null; readonly searchTarget?: SearchTarget | null; readonly searchOptions?: SessionSearchOptions | null; readonly onNavigate?: () => void }) {
@@ -265,7 +321,12 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
       className="transcript-list" style={{ height: "100%" }} onViewableItemsChanged={visible} viewabilityConfig={{ itemVisiblePercentThreshold: 0 }}
       onScroll={(event) => { updateSticky(); const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent; const node: unknown = list.current?.getScrollableNode(); const distance = node instanceof HTMLElement ? node.scrollHeight - node.scrollTop - node.clientHeight : contentSize.height - contentOffset.y - layoutMeasurement.height; const end = distance < 40; setAtEnd(end); if (end) setFollowEnd(true); }}
       ListHeaderComponent={header}
-      ListFooterComponent={<div className="timeline-footer">{working && !activeHeader ? <div className="timeline-row"><AssistantHeader working /></div> : null}</div>}
+      ListFooterComponent={<div className="timeline-footer">
+        {working && !activeHeader ? <div className="timeline-row"><AssistantHeader working /></div> : null}
+        {id && state.rollbackFailure ? <p className="turn-error" role="status">{state.rollbackFailure}</p> : null}
+        {id && state.rewindMarker ? <RewindMarkerRow threadId={id} marker={state.rewindMarker} /> : null}
+        {id && state.restoreResult ? <RestoreResultRow threadId={id} result={state.restoreResult} /> : null}
+      </div>}
     />
   </div></SubagentState></SearchTargetContext.Provider>;
 }

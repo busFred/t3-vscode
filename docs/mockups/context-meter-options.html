@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Context window meter — placement options</title>
+<style>
+/* Theme tokens mirror the extension's VS Code-derived variables (src/webview/styles). */
+:root[data-theme="light"]{color-scheme:light;--background:#f3f3f3;--card:#ffffff;--foreground:#3b3b3b;--muted-foreground:#717171;--muted:#e8e8e8;--border:#d4d4d4;--input:#cecece;--primary:#005fb8;--accent-bg:#005fb8;--accent-fg:#fff;--warn:#bf8803;--err:#c72e2e;--ok:#2e7d32;--track:#dcdcdc;--status-bg:#005fb8;--status-fg:#fff;--shadow:#0002}
+:root[data-theme="dark"]{color-scheme:dark;--background:#1f1f1f;--card:#181818;--foreground:#cccccc;--muted-foreground:#9d9d9d;--muted:#2a2a2a;--border:#3c3c3c;--input:#3c3c3c;--primary:#0078d4;--accent-bg:#0078d4;--accent-fg:#fff;--warn:#cca700;--err:#f14c4c;--ok:#7fd88a;--track:#3a3a3a;--status-bg:#0078d4;--status-fg:#fff;--shadow:#0006}
+*{box-sizing:border-box}
+body{margin:0;background:var(--background);color:var(--foreground);font:13px/1.5 "Segoe UI",system-ui,sans-serif}
+main{max-width:980px;margin:auto;padding:16px 16px 32px}
+h1{font-size:20px;margin:0 0 4px}
+h2{font-size:14px;margin:0}
+.lede{color:var(--muted-foreground);margin:0 0 14px}
+.controls{display:flex;gap:22px;flex-wrap:wrap;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:18px;position:sticky;top:0;z-index:50}
+.control{display:flex;gap:6px;align-items:center}
+.control b{color:var(--muted-foreground);font-weight:600;margin-right:2px}
+.controls button{font:inherit;color:var(--foreground);background:var(--muted);border:1px solid var(--border);border-radius:4px;padding:3px 9px;cursor:pointer}
+.controls button[aria-pressed=true]{border-color:var(--primary);color:var(--accent-fg);background:var(--accent-bg)}
+.option{margin-bottom:28px;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--card)}
+.option-head{padding:9px 14px;border-bottom:1px solid var(--border);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.tag{color:var(--primary);font-size:11px;font-weight:700;letter-spacing:.07em}
+.option-head p{margin:0;color:var(--muted-foreground);font-size:12px;flex-basis:100%}
+.pane{background:var(--background);padding:8px 22px 10px}
+.transcript{padding:6px 2px 12px;display:flex;flex-direction:column;gap:10px;font-size:12.5px}
+.msg{padding:6px 10px;border-radius:6px;max-width:80%}
+.msg.user{align-self:flex-end;background:var(--muted);border:1px solid var(--border)}
+.msg.assistant{align-self:flex-start}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;background:var(--muted);padding:0 3px;border-radius:3px}
+
+/* Replica of .composer-box from the extension. */
+.composer-box{position:relative;border:1px solid color-mix(in srgb,var(--foreground) 30%,var(--input));border-radius:3px;background:var(--card);padding:8px}
+.composer-formatting{display:flex;align-items:center;gap:3px 0;padding:0 0 4px;margin:0 0 5px;border-bottom:1px solid var(--border)}
+.fg{display:flex;align-items:center;border-right:1px solid var(--border);padding-right:3px;margin-right:3px}
+.fg:last-of-type{border-right:0}
+.ib{width:23px;height:24px;display:inline-flex;align-items:center;justify-content:center;color:var(--foreground);background:transparent;border:0;border-radius:3px;font-size:12px;font-family:ui-monospace,Menlo,monospace}
+.list-assist-toggle{margin-left:auto;border:1px solid var(--primary);border-radius:2px;padding:4px;font-size:10px;color:var(--accent-fg);background:var(--accent-bg);white-space:nowrap}
+.textarea{min-height:47px;padding:1px 4px 5px;font-size:14px;line-height:1.6;color:var(--muted-foreground)}
+.composer-bottom{display:flex;align-items:center;gap:6px;margin-top:3px}
+.composer-controls{display:flex;align-items:center;gap:4px;flex:1;min-width:0;font-size:11px}
+.model-trigger{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;padding:4px 2px}
+.trait{display:inline-flex;align-items:center;gap:2px;padding:4px 2px;color:var(--foreground)}
+.trait.muted{color:var(--muted-foreground)}
+.chev{font-size:9px;margin-left:2px}
+.composer-send-controls{margin-left:auto;display:flex;align-items:center;gap:6px}
+.composer-shortcuts{display:flex;flex-direction:column;text-align:right;color:var(--muted-foreground);font-size:9px;line-height:1.35;white-space:nowrap}
+.send-button{height:27px;width:27px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:4px;background:var(--foreground);color:var(--background);font-size:14px}
+
+/* Meter pieces */
+.ring{display:inline-flex;align-items:center;gap:3px;margin-right:6px;font-size:10px;color:var(--muted-foreground);position:relative;cursor:default}
+.ring svg{transform:rotate(-90deg)}
+.ring-track{stroke:var(--track)}
+.ring-fill{stroke-linecap:round}
+.tip{display:none;position:absolute;top:24px;right:0;width:190px;background:var(--card);border:1px solid var(--border);color:var(--foreground);border-radius:4px;padding:7px 9px;font-size:11px;line-height:1.4;box-shadow:0 6px 18px var(--shadow);z-index:30;white-space:normal;text-align:left}
+.ring:hover .tip,.ctx-chip:hover .tip,.sb-ctx:hover .tip{display:block}
+.topbar{position:absolute;left:-1px;right:-1px;top:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--track);overflow:hidden}
+.topbar div{height:100%;transition:width .2s}
+.topbar-label{position:absolute;top:4px;right:8px;font-size:9px;color:var(--muted-foreground)}
+.ctx-chip{display:inline-flex;align-items:center;gap:3px;padding:4px 5px;border-radius:3px;font-size:11px;cursor:pointer;position:relative}
+.ctx-chip:hover{background:var(--muted)}
+.ctx-chip .dot{width:7px;height:7px;border-radius:50%}
+.hint-ctx{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--muted-foreground);margin-right:4px}
+.hint-ctx .bar{width:46px;height:4px;border-radius:2px;background:var(--track);overflow:hidden}
+.hint-ctx .bar div{height:100%}
+.statusbar{display:flex;height:22px;background:var(--status-bg);color:var(--status-fg);align-items:center;font-size:12px;padding:0 10px;justify-content:space-between;margin-top:8px}
+.statusbar .right{display:flex;gap:12px}
+.sb-ctx{position:relative;cursor:default}
+.sb-ctx .tip{top:auto;bottom:22px}
+.band-low{color:var(--ok)!important}.band-mid{color:var(--warn)!important}.band-high{color:var(--err)!important}
+.bg-low{background:var(--ok)}.bg-mid{background:var(--warn)}.bg-high{background:var(--err)}
+.st-low{stroke:var(--ok)}.st-mid{stroke:var(--warn)}.st-high{stroke:var(--err)}
+table.pc{width:100%;border-collapse:collapse;font-size:12px}
+table.pc th,table.pc td{border-top:1px solid var(--border);padding:6px 10px;text-align:left;vertical-align:top}
+table.pc th{color:var(--muted-foreground);font-weight:600;width:18%;background:var(--background)}
+</style>
+<main>
+<h1>Context window meter — placement options</h1>
+<p class="lede">Four placements for a live context meter in the extension's real composer. Switch theme and fill level; hover any meter for the tooltip.</p>
+
+<div class="controls">
+  <div class="control"><b>Theme</b>
+    <button id="th-light" aria-pressed="true">Light</button>
+    <button id="th-dark" aria-pressed="false">Dark</button>
+  </div>
+  <div class="control"><b>Fill</b>
+    <button id="lvl-low" aria-pressed="false">18%</button>
+    <button id="lvl-mid" aria-pressed="true">62%</button>
+    <button id="lvl-high" aria-pressed="false">91%</button>
+  </div>
+</div>
+
+<!-- Composer replica template, cloned per option -->
+<template id="composer">
+  <div class="composer-box">
+    <div class="composer-formatting">
+      <span class="fg"><span class="ib"><b>B</b></span><span class="ib"><i>I</i></span><span class="ib"><u>U</u></span><span class="ib"><s>S</s></span></span>
+      <span class="fg"><span class="ib">&lt;&gt;</span><span class="ib">▣</span><span class="ib">❝</span></span>
+      <span class="fg"><span class="ib">🔗</span><span class="ib">📎</span></span>
+      <span class="fg"><span class="ib">•≡</span><span class="ib">1≡</span><span class="ib">☑≡</span></span>
+      <span class="fg"><span class="ib">⇤</span><span class="ib">⇥</span></span>
+      <span class="slot-toolbar-right"></span>
+      <span class="list-assist-toggle">List assist</span>
+    </div>
+    <div class="textarea">Ask anything, or describe a task…</div>
+    <div class="composer-bottom">
+      <div class="composer-controls">
+        <span class="model-trigger">Claude Fable 5.1<span class="chev">⌄</span></span>
+        <span class="trait">Medium<span class="chev">⌄</span></span>
+        <span class="trait">Auto<span class="chev">⌄</span></span>
+        <span class="trait">⎇ Root<span class="chev">⌄</span></span>
+        <span class="slot-traits"></span>
+      </div>
+      <div class="composer-send-controls">
+        <span class="slot-hint"></span>
+        <span class="composer-shortcuts"><span>Enter to send</span><span>Shift+Enter for a new line</span></span>
+        <span class="send-button">↑</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<section class="option" data-opt="A">
+  <div class="option-head"><span class="tag">A · TOOLBAR RING</span><h2>Ring + percent left of "List assist"</h2><p>Closest to T3 Code's upper-right meter. Hidden until the thread has usage; hover shows exact tokens.</p></div>
+  <div class="pane"><div class="transcript"><div class="msg user">Can you make the worktree status item show a spinner while syncing?</div><div class="msg assistant">Sure. I'll add a busy flag to <code>UsageStatusBar.update()</code> and swap the icon while a refresh is in flight.</div></div><div class="slot"></div></div>
+  <table class="pc">
+    <tr><th>Visibility</th><td>Visible whenever the composer is, but small; colour band carries the warning.</td></tr>
+    <tr><th>Space cost</th><td>None. The toolbar already has slack to the left of "List assist".</td></tr>
+    <tr><th>Sidebar vs tab</th><td>Toolbar wraps on narrow sidebars; the ring wraps with it and stays next to "List assist".</td></tr>
+    <tr><th>Cost</th><td>New bridge field plus a 20-line SVG component.</td></tr>
+  </table>
+</section>
+
+<section class="option" data-opt="B">
+  <div class="option-head"><span class="tag">B · TOP-EDGE BAR</span><h2>Thin bar along the composer's top border</h2><p>Always rendered so nothing shifts; the label fades in only above the threshold.</p></div>
+  <div class="pane"><div class="transcript"><div class="msg user">Can you make the worktree status item show a spinner while syncing?</div><div class="msg assistant">Sure. I'll add a busy flag to <code>UsageStatusBar.update()</code> and swap the icon while a refresh is in flight.</div></div><div class="slot"></div></div>
+  <table class="pc">
+    <tr><th>Visibility</th><td>Highest at a glance. Width scales with the pane, so it reads well in a narrow sidebar.</td></tr>
+    <tr><th>Space cost</th><td>3px strip on the box border. The label shares the toolbar's right slack with "List assist".</td></tr>
+    <tr><th>Sidebar vs tab</th><td>Identical in both; nothing to overflow.</td></tr>
+    <tr><th>Cost</th><td>New bridge field plus CSS. Lowest UI effort.</td></tr>
+  </table>
+</section>
+
+<section class="option" data-opt="C">
+  <div class="option-head"><span class="tag">C · TRAIT CHIP</span><h2>Chip after "Root" in the controls row</h2><p>Reads "62%"; click toggles to "124k / 200k". Coloured dot carries the band.</p></div>
+  <div class="pane"><div class="transcript"><div class="msg user">Can you make the worktree status item show a spinner while syncing?</div><div class="msg assistant">Sure. I'll add a busy flag to <code>UsageStatusBar.update()</code> and swap the icon while a refresh is in flight.</div></div><div class="slot"></div></div>
+  <table class="pc">
+    <tr><th>Visibility</th><td>Medium. Sits among model, effort, mode and branch pickers and can be tuned out.</td></tr>
+    <tr><th>Space cost</th><td>One chip. On narrow sidebars the traits already collapse into the "…" overflow popup, and this chip would go with them.</td></tr>
+    <tr><th>Sidebar vs tab</th><td>Hidden in the overflow popup on narrow sidebars, which defeats the purpose there.</td></tr>
+    <tr><th>Cost</th><td>New bridge field plus a chip and a toggle state.</td></tr>
+  </table>
+</section>
+
+<section class="option" data-opt="D">
+  <div class="option-head"><span class="tag">D · SEND-HINT METER + STATUS BAR</span><h2>Mini bar beside the "Enter to send" hint, mirrored in the VS Code status bar</h2><p>The hint column already sits at the composer's lower right; the status bar item follows the active thread.</p></div>
+  <div class="pane"><div class="transcript"><div class="msg user">Can you make the worktree status item show a spinner while syncing?</div><div class="msg assistant">Sure. I'll add a busy flag to <code>UsageStatusBar.update()</code> and swap the icon while a refresh is in flight.</div></div><div class="slot"></div>
+    <div class="statusbar"><span>⎇ main</span><div class="right"><span>T3: 42% today</span><span class="sb-ctx" id="d-sb">▤ <span id="d-sb-text"></span><span class="tip" id="d-sb-tip"></span></span></div></div>
+  </div>
+  <table class="pc">
+    <tr><th>Visibility</th><td>Two surfaces: always in the composer, and in the status bar even when the chat is hidden.</td></tr>
+    <tr><th>Space cost</th><td>Composer part is tiny. Status bar item takes one slot next to the existing usage item.</td></tr>
+    <tr><th>Sidebar vs tab</th><td>Composer part works in both. The status bar item can only reflect one thread, which is ambiguous with a sidebar thread and an editor-tab thread open together.</td></tr>
+    <tr><th>Cost</th><td>Highest: bridge field, composer piece, a second status bar class and active-thread wiring.</td></tr>
+  </table>
+</section>
+</main>
+<script>
+const LEVELS={low:{used:36,max:200,pct:18,cached:12},mid:{used:124,max:200,pct:62,cached:45},high:{used:182,max:200,pct:91,cached:60}};
+let level='mid';
+const band=p=>p>=85?'high':p>=55?'mid':'low';
+const k=n=>n+'k';
+const tipText=L=>`<b>Context window</b><br>${k(L.used)} / ${k(L.max)} tokens (${L.pct}%)<br>${k(L.cached)} cached`;
+const R=9.5,C=2*Math.PI*R;
+function ringSvg(L){const b=band(L.pct);return `<svg width="16" height="16" viewBox="0 0 24 24"><circle class="ring-track" cx="12" cy="12" r="${R}" fill="none" stroke-width="3.5"/><circle class="ring-fill st-${b}" cx="12" cy="12" r="${R}" fill="none" stroke-width="3.5" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-L.pct/100)}"/></svg>`;}
+function build(){
+  const L=LEVELS[level],b=band(L.pct);
+  document.querySelectorAll('.option').forEach(sec=>{
+    const opt=sec.dataset.opt,slot=sec.querySelector('.slot');
+    slot.innerHTML='';const box=document.getElementById('composer').content.firstElementChild.cloneNode(true);
+    const tr=box.querySelector('.slot-toolbar-right'),tt=box.querySelector('.slot-traits'),th=box.querySelector('.slot-hint');
+    if(opt==='A'){tr.outerHTML=`<span class="ring" style="margin-left:auto">${ringSvg(L)}<span class="band-${b}">${L.pct}%</span><span class="tip">${tipText(L)}</span></span>`;box.querySelector('.list-assist-toggle').style.marginLeft='0';}
+    if(opt==='B'){box.insertAdjacentHTML('afterbegin',`<div class="topbar"><div class="bg-${b}" style="width:${L.pct}%"></div></div>`);tr.outerHTML=`<span class="ring" style="margin-left:auto"><span class="band-${b}">${k(L.used)} / ${k(L.max)}</span><span class="tip">${tipText(L)}</span></span>`;box.querySelector('.list-assist-toggle').style.marginLeft='0';}
+    if(opt==='C'){tt.outerHTML=`<span class="ctx-chip" data-mode="pct"><span class="dot bg-${b}"></span><span class="label">${L.pct}%</span><span class="tip">${tipText(L)}</span></span>`;const chip=box.querySelector('.ctx-chip');chip.addEventListener('click',()=>{const m=chip.dataset.mode==='pct'?'tok':'pct';chip.dataset.mode=m;chip.querySelector('.label').textContent=m==='pct'?`${L.pct}%`:`${k(L.used)} / ${k(L.max)}`;});}
+    if(opt==='D'){th.outerHTML=`<span class="hint-ctx ring"><span class="bar"><div class="bg-${b}" style="width:${L.pct}%"></div></span><span class="band-${b}">${L.pct}%</span><span class="tip">${tipText(L)}</span></span>`;document.getElementById('d-sb-text').textContent=`${L.pct}% ctx`;document.getElementById('d-sb-tip').innerHTML=tipText(L)+'<br><i>Active thread only</i>';}
+    slot.appendChild(box);
+  });
+}
+function press(ids,active){ids.forEach(id=>document.getElementById(id).setAttribute('aria-pressed',String(id===active)));}
+document.getElementById('th-light').onclick=()=>{document.documentElement.dataset.theme='light';press(['th-light','th-dark'],'th-light');};
+document.getElementById('th-dark').onclick=()=>{document.documentElement.dataset.theme='dark';press(['th-light','th-dark'],'th-dark');};
+[['lvl-low','low'],['lvl-mid','mid'],['lvl-high','high']].forEach(([id,key])=>{document.getElementById(id).onclick=()=>{level=key;press(['lvl-low','lvl-mid','lvl-high'],id);build();};});
+build();
+console.log('ready');
+</script>
+</html>

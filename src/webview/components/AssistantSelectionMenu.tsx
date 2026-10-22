@@ -66,9 +66,24 @@ export function AssistantSelectionMenu({ viewport, onQuote }: { readonly viewpor
       const rect = captured.range.getBoundingClientRect();
       setTarget({ citation: captured.citation, markdown: captured.markdown, anchor: captured.anchor, x: rect.left, y: rect.bottom + 4 });
     };
+    // A VS Code editor-tab webview panel does not forward Ctrl/Cmd+C to the OS clipboard the way the
+    // sidebar view does, so a selection there copies nothing. Doing it ourselves works on both surfaces
+    // and only fires when nothing else (an input, a textarea, an editable field) already owns the key.
+    const copy = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "c") return;
+      if (event.target instanceof Element && event.target.closest("input,textarea,[contenteditable=true]")) return;
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      if (range.collapsed || !viewport.contains(range.commonAncestorContainer)) return;
+      const text = selection.toString();
+      if (!text) return;
+      event.preventDefault();
+      void run("copyText", { text });
+    };
     document.addEventListener("selectionchange", remember); document.addEventListener("pointerdown", remember, true);
-    document.addEventListener("contextmenu", show, true); document.addEventListener("keydown", keys, true);
-    return () => { remembered.current = null; document.removeEventListener("selectionchange", remember); document.removeEventListener("pointerdown", remember, true); document.removeEventListener("contextmenu", show, true); document.removeEventListener("keydown", keys, true); };
+    document.addEventListener("contextmenu", show, true); document.addEventListener("keydown", keys, true); document.addEventListener("keydown", copy, true);
+    return () => { remembered.current = null; document.removeEventListener("selectionchange", remember); document.removeEventListener("pointerdown", remember, true); document.removeEventListener("contextmenu", show, true); document.removeEventListener("keydown", keys, true); document.removeEventListener("keydown", copy, true); };
   }, [viewport]);
   useLayoutEffect(() => {
     const element = menu.current;

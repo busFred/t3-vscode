@@ -2,7 +2,7 @@
 
 A VS Code client for a separately running [T3 Code](https://github.com/pingdotgg/t3code) server: workspace sessions and agent chat in editor tabs, beside your code instead of in a browser. Colors follow your VS Code theme.
 
-0.1.19 is on the [Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) prerelease channel; 0.1.18 remains on the release channel.
+0.2.2 is on the [Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) prerelease channel; 0.1.23 remains on the release channel.
 
 ## In the editor
 
@@ -72,5 +72,9 @@ Pairing is automatic. Running T3 as a [background service](https://github.com/pi
 - [Development and testing](docs/development.md) — build, debug, verify.
 - [Publishing](docs/publishing.md) — version policy and release procedure.
 - [Support](SUPPORT.md) — reporting bugs.
+
+### Documentation map
+
+The user guide is authoritative for current feature behavior; the feature history is authoritative for when each behavior shipped and for in-progress/unreleased work; the architecture doc is authoritative for the host/webview design and milestones. `docs/mockups/*` are design explorations made before or during implementation, not records of current behavior — each mockup file says whether and how it was implemented.
 
 [MIT licensed](LICENSE). T3-derived code keeps [its upstream notice](vendor/LICENSE.t3code); bundled dependencies keep their own.

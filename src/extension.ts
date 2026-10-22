@@ -42,6 +42,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
     worktreeRefreshMinutes: () => readRefreshSettings().worktreeIntervalMinutes,
     worktreeStorageRoot: resolve(context.globalStorageUri.fsPath, "worktrees"),
+    restoreStorageRoot: resolve(context.globalStorageUri.fsPath, "restore"),
     assertTrustedWorkspace: async () => {
       if (!vscode.workspace.isTrusted) throw new Error("Trust this workspace using Manage Workspace Trust before running worktree setup or actions.");
     },

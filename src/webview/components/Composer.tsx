@@ -304,12 +304,12 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const traits = <div className="composer-traits">
     {effort ? <label className="effort-control" title={effort.description ?? effort.label}><select aria-label="Effort level" value={effortValue} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => {
       if (effort.promptInjectedValues?.includes(event.target.value)) {
-        setText(text.trim() ? applyClaudePromptEffortPrefix(text, "ultrathink") : "Ultrathink:\n"); return;
+        setText(text.trim() ? applyClaudePromptEffortPrefix(text, "ultrathink") : "Ultrathink:\n", "take-focus"); return;
       }
       if (promptEffort) {
         const body = text.replace(/^Ultrathink:\s*/i, "");
         if (isClaudeUltrathinkPrompt(body)) return;
-        setText(body);
+        setText(body, "take-focus");
       }
       setBusy(true); void run("setModelOption", { ...target, optionId: effort.id, value: event.target.value }).finally(() => setBusy(false));
     }}>{getProviderOptionCurrentValue(effort) === undefined ? <option value="" disabled>Default</option> : null}{effort.options.map((option) => <option key={option.id} value={option.id} title={option.description}>{option.label}</option>)}</select></label> : null}
@@ -324,7 +324,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     {thread?.archived ? <div className="archived-banner">This thread is archived.<button className="text-button" onClick={() => { void run("threadAction", { threadId: thread.id, action: "unarchive" }); }}>Restore thread</button></div> : null}
     {thread?.providerNativeSubagent ? <p className="subagent-readonly" role="status">This conversation is controlled by its provider. Send instructions in the parent conversation.</p> : null}
     <div className="composer-box" onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); addFiles([...event.dataTransfer.files]); } }}>
-      <ComposerFormatting disabled={disabled || picking} listAssist={editingPreferences.listAssist} onListAssist={() => setEditingPreferences({ listAssist: !editingPreferences.listAssist })} onAttach={pickFiles} onFormat={applyFormat} onIndent={(outdent) => applyEdit(indentMarkdown(text, inputSelection(), outdent, true), true)} />
+      <ComposerFormatting disabled={disabled || picking} listAssist={editingPreferences.listAssist} contextUsage={state.contextUsage} onListAssist={() => setEditingPreferences({ listAssist: !editingPreferences.listAssist })} onAttach={pickFiles} onFormat={applyFormat} onIndent={(outdent) => applyEdit(indentMarkdown(text, inputSelection(), outdent, true), true)} />
       {suggestionsOpen ? <ComposerSuggestions items={items} selected={highlighted} pending={suggestions.pending} error={suggestions.error} onSelect={chooseSuggestion} onHighlight={setSuggestionIndex} /> : null}
       {attachments.length || visibleContexts.length ? <div className="composer-chips" role="group" aria-label="Message attachments and references">
         {attachments.map((file) => {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sessionTree, sessionShelves, statusIsWorking, subagentStatus, threadIsWorking } from "./sessionTree.js";
+import { sessionTree, sessionShelves, statusIsWorking, subagentStatus, threadIsWorking, withSubagentWorkingState } from "./sessionTree.js";
 import type { ThreadSummary, WireTurnItem } from "./bridge.js";
 
 const thread = (id: string, fields: Partial<ThreadSummary> = {}): ThreadSummary => ({ id, projectId: "project", title: id, status: "idle", modelSelection: { instanceId: "codex", model: "test" }, runtimeMode: "auto", interactionMode: "default", updatedAt: "2026-10-06T00:00:00Z", archived: false, pinned: false, activeRunId: null, ...fields });
@@ -74,6 +74,51 @@ test("The sidebar and the subagent card call the same statuses working", () => {
     assert.equal(threadIsWorking({ status: "idle", activityRunStatus: status }), true, `activity ${status} must read as working`);
   }
   for (const done of ["idle", "completed", "failed", "error", "cancelled"]) assert.equal(statusIsWorking(done), false, `${done} must not read as working`);
+});
+
+test("A parent whose own run already completed still reads as working while a delegated subagent runs", () => {
+  const threads = [thread("parent", { status: "completed", activityRunStatus: null }), child("agent", "parent", { status: "idle", activityRunStatus: "running", workingStartedAt: "2026-10-06T00:05:00Z" })];
+  const [parent, agent] = withSubagentWorkingState(threads);
+  assert.equal(threadIsWorking(parent!), true, "parent must keep reading as working while its subagent runs");
+  assert.equal(parent!.waitingOnSubagents, true);
+  assert.equal(parent!.workingStartedAt, "2026-10-06T00:05:00Z", "elapsed timer should use the subagent's start, not reset");
+  assert.equal(agent!.waitingOnSubagents, undefined, "the subagent itself is working on its own, not waiting on anything");
+});
+
+test("A steer run completing while the delegated subagent is still running leaves the parent working", () => {
+  // The steer message's own run finished, which used to overwrite activityRunStatus even though
+  // the run that spawned the subagent was still logically open.
+  const threads = [thread("parent", { status: "idle", activityRunStatus: "completed" }), child("agent", "parent", { status: "running", activityRunStatus: null })];
+  const [parent] = withSubagentWorkingState(threads);
+  assert.equal(threadIsWorking(parent!), true);
+});
+
+test("Once every subagent finishes, the parent stops reading as working", () => {
+  const threads = [thread("parent", { status: "completed", activityRunStatus: null }), child("agent", "parent", { status: "completed", activityRunStatus: null })];
+  const [parent, agent] = withSubagentWorkingState(threads);
+  assert.equal(threadIsWorking(parent!), false);
+  assert.equal(parent!.waitingOnSubagents, undefined);
+  assert.equal(threadIsWorking(agent!), false);
+});
+
+test("Working state climbs through grandchildren but ignores archived or settled descendants", () => {
+  const threads = [
+    thread("parent", { status: "completed" }),
+    child("agent", "parent", { status: "completed" }),
+    child("grandchild", "agent", { status: "running" }),
+    child("archivedAgent", "parent", { status: "running", archived: true }),
+    child("settledAgent", "parent", { status: "running", settled: true }),
+  ];
+  const [parent, agent] = withSubagentWorkingState(threads);
+  assert.equal(threadIsWorking(parent!), true, "a working grandchild must bubble up through an idle child");
+  assert.equal(threadIsWorking(agent!), true, "the idle child between parent and the working grandchild must also read as working");
+});
+
+test("A self-referencing subagent lineage cannot make withSubagentWorkingState loop forever", () => {
+  const threads = [thread("parent", { status: "completed" }), child("loop", "loop", { status: "running" })];
+  assert.doesNotThrow(() => withSubagentWorkingState(threads));
+  const [parent] = withSubagentWorkingState(threads);
+  assert.equal(threadIsWorking(parent!), false, "the unrelated self-referencing thread must not bleed into the parent's state");
 });
 
 test("Session sorting uses last activity, natural titles, pinned precedence and sibling-only ordering", () => {

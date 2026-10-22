@@ -31,8 +31,9 @@ export const Methods = {
   respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
   threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab", openSessionTab: "openSessionTab", keepTab: "keepTab", openTaskManager: "openTaskManager", closeTaskTab: "closeTaskTab",
-  searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", turnDiffSummary: "turnDiffSummary", refreshUsage: "refreshUsage",
+  searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", turnDiffSummary: "turnDiffSummary", openMergeDiff: "openMergeDiff", refreshUsage: "refreshUsage",
   queueAction: "queueAction",
+  revertConversation: "revertConversation", dismissRewindMarker: "dismissRewindMarker", restorePreview: "restorePreview", restoreFiles: "restoreFiles", openRestoreDiff: "openRestoreDiff", compareRestoredFile: "compareRestoredFile",
   openWebUi: "openWebUi", configureUsage: "configureUsage", showUsage: "showUsage",
 } as const;
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
@@ -77,6 +78,8 @@ export interface ThreadSummary {
   readonly relationshipToParent?: "fork" | "subagent" | null;
   readonly providerNativeSubagent?: boolean;
   readonly activityRunStatus?: string | null;
+  /** Set when the thread itself is idle but a visible descendant subagent is still working. */
+  readonly waitingOnSubagents?: boolean;
 }
 export type ThreadSearchMatch = OrchestrationThreadSearchMatch;
 export interface ComposerSuggestion {
@@ -108,6 +111,43 @@ export interface TranscriptItem {
   readonly needsDetail: boolean;
   readonly canFork?: boolean;
   readonly checkpointRunStatus?: string;
+  /** True on a user message when its thread supports rollback and the turn just before it has a ready checkpoint. */
+  readonly canRevert?: boolean;
+  readonly revertTurnCount?: number;
+}
+/** Kept per-thread after "Edit from here" so files can still be restored once the conversation has moved on. */
+export interface RewindMarker {
+  readonly checkpointId: string;
+  readonly scopeId: string;
+  readonly turnNumber?: number;
+  readonly rewoundAt: string;
+  readonly rewoundMessageCount: number;
+}
+export interface RestoreResultFile {
+  readonly path: string;
+  readonly outcome: "applied" | "conflict" | "kept-untracked";
+  readonly yoursPath?: string;
+}
+export interface RestoreResult {
+  readonly turnNumber?: number;
+  readonly keptCount: number;
+  readonly totalFiles: number;
+  readonly files: ReadonlyArray<RestoreResultFile>;
+  readonly restoredAt: string;
+  readonly skippedStash: boolean;
+}
+export interface RestoreAttributionFile {
+  readonly path: string;
+  readonly agent?: { readonly additions: number; readonly deletions: number };
+  readonly you?: { readonly additions: number; readonly deletions: number; readonly untracked?: boolean };
+  readonly keepVerdict?: "clean" | "conflict";
+}
+export interface RestorePreview {
+  readonly cwd: string;
+  readonly branch: string;
+  readonly turnNumber?: number;
+  readonly checkpointAt: string;
+  readonly files: ReadonlyArray<RestoreAttributionFile>;
 }
 export interface HostStateSnapshot {
   readonly worktrees?: import("./worktrees.js").WorktreesState;
@@ -117,6 +157,8 @@ export interface HostStateSnapshot {
   readonly searchPreferences?: SearchPreferences;
   readonly queue?: ConversationQueue | null;
   readonly tasks?: ConversationTasks | null;
+  /** Latest sized provider usage report for the active thread (#8144); absent or null hides the composer's context meter. */
+  readonly contextUsage?: import("./contextUsage.js").ContextUsageSnapshot | null;
   /** Monotonic within a host instance; prevents slow RPC responses replacing a newer push. */
   readonly revision: number;
   readonly phase: HostPhase;
@@ -140,6 +182,11 @@ export interface HostStateSnapshot {
   readonly providerModelPreferences?: ProviderModelPreferences;
   readonly draft: ConversationDraft;
   readonly activeThreadId?: string;
+  /** Rewind marker and most recent restore result for the active thread, if any. */
+  readonly rewindMarker?: RewindMarker | null;
+  readonly restoreResult?: RestoreResult | null;
+  /** Server-reported failure of the active thread's latest rollback request (#checkpoint.rollback.fail). */
+  readonly rollbackFailure?: string | null;
   readonly transcript: ReadonlyArray<TranscriptItem>;
   readonly pending: PendingThreadRequests;
   readonly history: { readonly hasMore: boolean; readonly loading: boolean; readonly error: string | null };
@@ -169,5 +216,9 @@ export function stringParam(raw: Record<string, unknown>, key: string): string {
 }
 
 export interface TurnDiffSummary {
+  readonly cwd: string;
+  readonly branch: string;
+  readonly worktreeName?: string;
   readonly files: ReadonlyArray<{ path: string; additions: number; deletions: number }>;
+  readonly merges?: ReadonlyArray<{ sourceThreadId: string; sourceTitle: string; sourceBranch: string; destinationBranch: string; appliedAt: string; files: ReadonlyArray<{ path: string; additions: number; deletions: number }> }>;
 }

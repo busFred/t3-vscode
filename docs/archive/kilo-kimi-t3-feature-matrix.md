@@ -1,3 +1,5 @@
+Historical decision-draft, archived; reference material only, not an approved scope checklist or a record of current behavior. See [the architecture doc](../t3-vscode-architecture.md) for what was actually built.
+
 # Kilo Code × Kimi Code × T3 Code — Feature Matrix (decision draft)
 
 Context: merged VS Code extension, T3 Code as backend (server via `t3 service`, Linux first),

@@ -22,3 +22,15 @@ test("Subagent lineage remains scoped and native children are read-only while ap
   client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
   assert.equal(host.snapshot("editor").threads.find((entry) => entry.id === "second")!.parentThreadId, null);
 });
+
+test("A parent thread reads as waiting on subagents while its delegated child is still running, and stops once the child settles", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1, threads: client.shell.threads.map((entry) => entry.id === "second" ? { ...entry, lineage: { ...entry.lineage, parentThreadId: ThreadId.make("first"), relationshipToParent: "subagent" as const }, creationSource: "provider" as const, activityRunStatus: "running" as const } : entry) };
+  client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
+  const parent = host.snapshot().threads.find((entry) => entry.id === "first")!;
+  assert.equal(parent.waitingOnSubagents, true, "an idle parent must still read as working while its delegated child runs");
+  client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1, threads: client.shell.threads.map((entry) => entry.id === "second" ? { ...entry, activityRunStatus: null, status: "completed" as const } : entry) };
+  client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
+  const settledParent = host.snapshot().threads.find((entry) => entry.id === "first")!;
+  assert.equal(settledParent.waitingOnSubagents, undefined, "once the child settles the parent must stop reading as working");
+});

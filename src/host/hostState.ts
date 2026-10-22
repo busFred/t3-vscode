@@ -1,5 +1,5 @@
 import { WorktreeCoordinator, parseWorktreeChoice, type WorktreeTransport, type WorktreeHandoff } from "./worktrees.js";
-import { repositoryIdentity, worktreeChanges, applyWorktreeFiles } from "./worktreeGit.js";
+import { repositoryIdentity, worktreeChanges, applyWorktreeFiles, currentBranch } from "./worktreeGit.js";
 import type { WorktreeChoice } from "../shared/worktrees.js";
 import { DEFAULT_REFRESH_INTERVAL_MINUTES, refreshIntervalMs } from "../shared/refreshSettings.js";
 import type { FileReference } from "../shared/composerContext.js";
@@ -10,15 +10,18 @@ import type { TextSelection } from "../shared/composerAttachments.js";
 /** Shared T3 connection and projections, with navigation and drafts owned by each webview. */
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { basename, isAbsolute, relative, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import {
   ScheduledTaskUpsertInput, type ScheduledTask, OrchestrationV2TurnItemJson, ModelSelection as ModelSelectionSchema, type ChatAttachment, getProviderAttachmentLimitError,
   ProviderApprovalDecision, ProviderInteractionMode, RuntimeMode,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadProjection, type OrchestrationV2ThreadStreamItem,
-  type OrchestrationV2TurnItem, type OrchestrationV2ThreadShell, type ServerConfig, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem,
+  type OrchestrationV2TurnItem, type OrchestrationV2ThreadShell, type OrchestrationV2Checkpoint, type ServerConfig, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem,
 } from "@t3tools/contracts";
+import { restoreAttribution, restoreDryRun, restoreExecute, execGit, nodeIo } from "./checkpointRestore.js";
 import * as ShellState from "@t3tools/client-runtime/state/shell";
 import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
 import { applyOrchestrationV2ProjectionEvent } from "@t3tools/client-runtime/state/orchestration-v2-projection";
@@ -31,12 +34,15 @@ import { turnItemNeedsDetailFetch, turnItemOutputText } from "@t3tools/client-ru
 import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
-import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch } from "../shared/bridge.js";
+import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch, RewindMarker, RestoreResult, RestorePreview } from "../shared/bridge.js";
 import { slashSuggestions } from "../shared/composerSuggestions.js";
 import { hasCompleteProviderWorkspaceSnapshot } from "@t3tools/client-runtime/providerSkills";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
+import { withSubagentWorkingState } from "../shared/sessionTree.js";
 import { turnCheckpointRange, turnDiffFiles, turnDiffFileRequest, type TurnDiff, type TurnDiffFile } from "./turnDiff.js";
+import { attachMergesToTurns, extractFilePatch, type MergeRecord } from "./mergeRecords.js";
 import { conversationActivity } from "./conversationActivity.js";
+import { latestContextUsage } from "../shared/contextUsage.js";
 import { taskEditVersion, supportedSchedule, type TaskOrigin, type ScheduledTaskEditorRequest } from "../shared/scheduledTasks.js";
 import { sessionActivityAt } from "./sessionActivity.js";
 import { pairWithServer, PairingError } from "./pairing.js";
@@ -59,6 +65,8 @@ import { defaultProviderModelPreference, getProviderModelPreference, orderedProv
 export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
   readonly worktreeStorageRoot?: string;
+  /** Where "Restore files to this point" saves kept files' pre-restore bytes, before re-applying them. */
+  readonly restoreStorageRoot?: string;
   readonly assertTrustedWorkspace?: () => Promise<void>;
   readonly taskOrigins?: () => ReadonlyArray<TaskOrigin>;
   readonly saveTaskOrigin?: (origin: TaskOrigin) => PromiseLike<void>;
@@ -156,6 +164,8 @@ export class HostState {
   private readonly workspaceRefreshes = new Map<string, Promise<unknown>>();
   private worktreeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private worktreePoll: ReturnType<typeof setTimeout> | null = null;
+  private readonly rewindMarkers = new Map<string, RewindMarker>();
+  private readonly restoreResults = new Map<string, RestoreResult>();
 
   private readonly options: HostStateOptions;
   private readonly client: HostTransport;
@@ -1168,6 +1178,143 @@ export class HostState {
       await this.syncThreadSubscriptions(); this.emit(); return targetId;
     });
   }
+  /** The checkpoint saved just before a user message's run — reused by both "Edit from here" and "Restore files". */
+  private revertTarget(projection: OrchestrationV2ThreadProjection, row: OrchestrationV2ThreadProjection["visibleTurnItems"][number]): { checkpoint: OrchestrationV2Checkpoint; turnNumber?: number } | null {
+    const item = row.item;
+    if (item.type !== "user_message") return null;
+    const run = projection.runs.find((run) => run.userMessageId === item.messageId);
+    const after = run ? projection.visibleTurnItems.find((entry) => entry.item.type === "checkpoint" && entry.item.runId === run.id) : undefined;
+    if (after?.item.type !== "checkpoint") return null;
+    let range: ReturnType<typeof turnCheckpointRange>;
+    try { range = turnCheckpointRange(projection, after.item.checkpointId); } catch { return null; }
+    const checkpoint = projection.checkpoints.find((entry) => entry.ref === range.baseRef);
+    if (!checkpoint || checkpoint.status !== "ready") return null;
+    return { checkpoint, ...(range.turnNumber !== undefined ? { turnNumber: range.turnNumber } : {}) };
+  }
+  private latestReadyCheckpoint(projection: OrchestrationV2ThreadProjection, scopeId: string): OrchestrationV2Checkpoint | undefined {
+    return projection.checkpoints.filter((entry) => entry.scopeId === scopeId && entry.status === "ready")
+      .sort((a, b) => b.ordinalWithinScope - a.ordinalWithinScope)[0];
+  }
+  private providerSupportsRollback(projection: OrchestrationV2ThreadProjection): boolean {
+    const providerThread = projection.providerThreads.find((thread) => thread.id === projection.thread.activeProviderThreadId);
+    const session = projection.providerSessions.find((session) => session.id === providerThread?.providerSessionId);
+    return !!session?.capabilities.checkpointing.providerCanRollbackConversation;
+  }
+  /** `revertTurnCount` gates "Restore files" (checkpoint-only); `canRevert` additionally gates "Edit from here" (needs rollback support and no active run). */
+  private transcriptRevertFields(projection: OrchestrationV2ThreadProjection, row: OrchestrationV2ThreadProjection["visibleTurnItems"][number], threadId: string | undefined): { canRevert?: boolean; revertTurnCount?: number } {
+    const target = this.revertTarget(projection, row);
+    if (!target) return {};
+    const canRevert = !!threadId && !this.findThread(threadId)?.activeRunId && this.providerSupportsRollback(projection);
+    return { ...(canRevert ? { canRevert: true } : {}), ...(target.turnNumber !== undefined ? { revertTurnCount: target.turnNumber } : {}) };
+  }
+  /** Rewind marker and most recent restore result for the active thread, clearing a marker once a later turn completes. */
+  private revertState(threadId: string, projection: OrchestrationV2ThreadProjection | null | undefined): { rewindMarker?: RewindMarker | null; restoreResult?: RestoreResult | null; rollbackFailure?: string | null } {
+    const marker = this.rewindMarkers.get(threadId);
+    if (marker && projection?.runs.some((run) => run.status === "completed" && run.completedAt && DateTime.toEpochMillis(run.completedAt) > Date.parse(marker.rewoundAt))) this.rewindMarkers.delete(threadId);
+    const current = this.rewindMarkers.get(threadId);
+    const restore = this.restoreResults.get(threadId);
+    return { ...(current !== undefined ? { rewindMarker: current } : {}), ...(restore !== undefined ? { restoreResult: restore } : {}),
+      ...(projection?.thread.rollbackFailure ? { rollbackFailure: projection.thread.rollbackFailure.message } : {}) };
+  }
+  /** Conversation-only rewind: `restoreFiles: false` means the server never touches the working tree; see restoreFiles() for the extension-owned file restore. */
+  revertConversation(id: string, sourceThreadId: string, itemId: string, viewId = SIDEBAR_VIEW_ID): Promise<{ text: string }> {
+    return this.enqueue(async () => {
+      this.requireView(viewId);
+      if (this.requireThread(id).activeRunId || this.requireThread(sourceThreadId).activeRunId) throw new Error("Wait for the current response to finish before rewinding.");
+      const projection = await this.client.getThreadProjection(sourceThreadId);
+      this.requireView(viewId); this.requireThread(id); this.requireThread(sourceThreadId);
+      const row = projection.visibleTurnItems.find((entry) => entry.sourceThreadId === sourceThreadId && entry.sourceItemId === itemId);
+      if (!row || row.item.type !== "user_message") throw new Error("This message cannot be rewound.");
+      const target = this.revertTarget(projection, row);
+      if (!target || !this.providerSupportsRollback(projection)) throw new Error("This conversation cannot be rewound.");
+      const messages = projection.visibleTurnItems.filter((entry) => entry.item.type === "user_message" || entry.item.type === "assistant_message");
+      const index = messages.findIndex((entry) => entry === row);
+      const rewoundMessageCount = index >= 0 ? messages.length - index : 1;
+      await this.client.dispatch({ type: "checkpoint.rollback", restoreFiles: false, commandId: randomUUID(), threadId: sourceThreadId, scopeId: target.checkpoint.scopeId, checkpointId: target.checkpoint.id });
+      this.rewindMarkers.set(id, { checkpointId: target.checkpoint.id, scopeId: target.checkpoint.scopeId, ...(target.turnNumber !== undefined ? { turnNumber: target.turnNumber } : {}), rewoundAt: new Date().toISOString(), rewoundMessageCount });
+      this.restoreResults.delete(id);
+      this.emit();
+      return { text: row.item.text };
+    });
+  }
+  dismissRewindMarker(id: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
+    return this.enqueue(async () => { this.requireView(viewId); this.requireThread(id); this.rewindMarkers.delete(id); this.emit(); });
+  }
+  /** Either the user message to restore before, or (from a rewind marker, once that message has scrolled out of the projection) a checkpoint directly. */
+  private async resolveRestoreScope(sourceThreadId: string, locator: { itemId: string } | { checkpointId: string; scopeId: string }) {
+    const projection = await this.client.getThreadProjection(sourceThreadId);
+    let target: { checkpoint: OrchestrationV2Checkpoint; turnNumber?: number } | null;
+    if ("itemId" in locator) {
+      const row = projection.visibleTurnItems.find((entry) => entry.sourceThreadId === sourceThreadId && entry.sourceItemId === locator.itemId);
+      if (!row) throw new Error("This message is no longer available.");
+      target = this.revertTarget(projection, row);
+    } else {
+      const checkpoint = projection.checkpoints.find((entry) => entry.id === locator.checkpointId && entry.scopeId === locator.scopeId);
+      target = checkpoint && checkpoint.status === "ready" ? { checkpoint } : null;
+    }
+    if (!target) throw new Error("This turn's checkpoint is not ready for a restore.");
+    const latest = this.latestReadyCheckpoint(projection, target.checkpoint.scopeId);
+    if (!latest) throw new Error("No agent checkpoint is available to restore from.");
+    const scope = projection.checkpointScopes.find((entry) => entry.id === target.checkpoint.scopeId);
+    if (!scope) throw new Error("This conversation's checkpoint scope is unavailable.");
+    return { projection, target, latest, scope };
+  }
+  /** Attribution + dry-run preview for "Restore files to this point"; never touches the working tree. */
+  async restorePreview(id: string, sourceThreadId: string, locator: { itemId: string } | { checkpointId: string; scopeId: string }, viewId = SIDEBAR_VIEW_ID): Promise<RestorePreview> {
+    this.requireView(viewId); this.requireThread(id); this.requireThread(sourceThreadId);
+    const { target, latest, scope } = await this.resolveRestoreScope(sourceThreadId, locator);
+    this.requireView(viewId); this.requireThread(id); this.requireThread(sourceThreadId);
+    const attribution = await restoreAttribution(execGit, { cwd: scope.cwd, checkpointRef: target.checkpoint.ref, latestRef: latest.ref });
+    const trackedYouPaths = attribution.filter((file) => file.you && !file.you.untracked).map((file) => file.path);
+    const verdicts = await restoreDryRun(execGit, { cwd: scope.cwd, checkpointRef: target.checkpoint.ref, latestRef: latest.ref, paths: trackedYouPaths });
+    this.requireView(viewId); this.requireThread(id);
+    const branch = await currentBranch(scope.cwd).catch(() => "");
+    return { cwd: scope.cwd, branch, ...(target.turnNumber !== undefined ? { turnNumber: target.turnNumber } : {}), checkpointAt: DateTime.formatIso(target.checkpoint.capturedAt),
+      files: attribution.map((file) => ({ ...file, ...(verdicts[file.path] ? { keepVerdict: verdicts[file.path] } : {}) })) };
+  }
+  /** Old/new contents for a single restore-preview row, opened through the same native-diff port as turn diffs. */
+  async restoreDiffFile(id: string, sourceThreadId: string, locator: { itemId: string } | { checkpointId: string; scopeId: string }, path: string, viewId = SIDEBAR_VIEW_ID): Promise<{ cwd: string; path: string; oldContents: string; newContents: string }> {
+    this.requireView(viewId); this.requireThread(id); this.requireThread(sourceThreadId);
+    const { target, scope } = await this.resolveRestoreScope(sourceThreadId, locator);
+    this.requireView(viewId); this.requireThread(id);
+    const [oldContents, newContents] = await Promise.all([
+      execGit(scope.cwd, ["cat-file", "blob", `${target.checkpoint.ref}:${path}`]).then((buffer) => buffer.toString("utf8")).catch(() => ""),
+      readFile(join(scope.cwd, path), "utf8").catch(() => ""),
+    ]);
+    return { cwd: scope.cwd, path, oldContents, newContents };
+  }
+  /** Extension-owned restore: snapshots kept files, runs `git restore` + `git clean`, then re-applies kept edits. No stash is created — see docs/feature-history.md. */
+  restoreFiles(id: string, sourceThreadId: string, locator: { itemId: string } | { checkpointId: string; scopeId: string }, keep: ReadonlyArray<string>, mode: "keep" | "everything", viewId = SIDEBAR_VIEW_ID): Promise<RestoreResult> {
+    return this.enqueue(async () => {
+      this.requireView(viewId);
+      if (this.requireThread(id).activeRunId || this.requireThread(sourceThreadId).activeRunId) throw new Error("Wait for the current response to finish before restoring files.");
+      const { target, latest, scope } = await this.resolveRestoreScope(sourceThreadId, locator);
+      this.requireView(viewId); this.requireThread(id); this.requireThread(sourceThreadId);
+      if (this.visibleThreads().some((other) => other.activeRunId && this.workspaceForThread(other.id) === scope.cwd)) throw new Error("Another conversation is actively using this checkout. Wait for it to finish before restoring files.");
+      const attribution = await restoreAttribution(execGit, { cwd: scope.cwd, checkpointRef: target.checkpoint.ref, latestRef: latest.ref });
+      const keepSet = mode === "everything" ? new Set<string>() : new Set(keep);
+      const keepTracked = attribution.filter((file) => file.you && !file.you.untracked && keepSet.has(file.path)).map((file) => file.path);
+      const keepUntracked = attribution.filter((file) => file.you?.untracked && keepSet.has(file.path)).map((file) => file.path);
+      const storageDir = join(this.options.restoreStorageRoot ?? join(tmpdir(), "t3-restore"), id, Date.now().toString(36));
+      const files = await restoreExecute(execGit, nodeIo, { cwd: scope.cwd, checkpointRef: target.checkpoint.ref, latestRef: latest.ref, keepTracked, keepUntracked, storageDir });
+      const result: RestoreResult = { ...(target.turnNumber !== undefined ? { turnNumber: target.turnNumber } : {}),
+        keptCount: keepTracked.length + keepUntracked.length, totalFiles: attribution.length, files, restoredAt: new Date().toISOString(), skippedStash: true };
+      this.restoreResults.set(id, result);
+      this.emit();
+      return result;
+    });
+  }
+  /** The restore result row's "Compare" link: both files are now plain working-tree files, not checkpoint blobs. */
+  async compareRestoredFile(id: string, path: string, yoursPath: string, viewId = SIDEBAR_VIEW_ID): Promise<{ cwd: string; path: string; oldContents: string; newContents: string }> {
+    this.requireView(viewId); this.requireThread(id);
+    const cwd = this.workspaceForThread(id);
+    if (!cwd) throw new Error("This conversation's checkout is unavailable.");
+    const [restored, yours] = await Promise.all([
+      readFile(join(cwd, path), "utf8").catch(() => ""),
+      readFile(join(cwd, yoursPath), "utf8").catch(() => ""),
+    ]);
+    return { cwd, path, oldContents: restored, newContents: yours };
+  }
   async loadHistory(id: string): Promise<void> {
     this.requireThread(id);
     const state = this.threads.get(id);
@@ -1341,7 +1488,36 @@ export class HostState {
     const patch = await this.client.getSavedTurnDiff({ ...range, baseRef: baseline });
     this.requireView(viewId); this.requireThread(id); this.requireThread(sourceId);
     const files = turnDiffFiles(patch);
-    return { ...range, baseRef: baseline, files };
+    const branch = await currentBranch(range.cwd).catch(() => "");
+    return { ...range, ...(branch ? { branch } : {}), baseRef: baseline, files };
+  }
+  /** Merges recorded against `sourceId`'s checkout, attached to the specific checkpoint being diffed. */
+  private async mergesForCheckpoint(sourceId: string, checkpointId: string): Promise<ReadonlyArray<MergeRecord>> {
+    const store = this.worktrees?.merges;
+    if (!store) return [];
+    const merges = await store.forThread(sourceId);
+    if (!merges.length) return [];
+    const projection = await this.client.getThreadProjection(sourceId);
+    const turns = projection.checkpoints.filter((checkpoint) => checkpoint.status === "ready" && checkpoint.appRunOrdinal !== null)
+      .map((checkpoint) => ({ id: checkpoint.id, capturedAtMs: DateTime.toEpochMillis(checkpoint.capturedAt) }));
+    return attachMergesToTurns(merges, turns, null).get(checkpointId) ?? [];
+  }
+  async turnDiffMerges(id: string, sourceId: string, itemId: string, viewId = SIDEBAR_VIEW_ID): Promise<ReadonlyArray<MergeRecord>> {
+    this.requireView(viewId); this.requireThread(id); this.requireThread(sourceId);
+    const row = this.threads.get(id)?.projection?.visibleTurnItems.find((row) => row.sourceThreadId === sourceId && row.sourceItemId === itemId);
+    if (row?.item.type !== "checkpoint") return [];
+    return this.mergesForCheckpoint(sourceId, row.item.checkpointId);
+  }
+  /** Fallback single-file view: no "before" snapshot is kept for a merge, only the patch that was applied. */
+  async mergePatchFile(threadId: string, appliedAt: string, path: string): Promise<{ cwd: string; sourceTitle: string; patchText: string }> {
+    this.requireThread(threadId);
+    const store = this.worktrees?.merges;
+    if (!store) throw new Error("Worktree merges are unavailable.");
+    const record = (await store.forThread(threadId)).find((entry) => entry.appliedAt === appliedAt);
+    if (!record) throw new Error("This merge record is no longer available.");
+    const section = extractFilePatch(await store.readPatch(record), path);
+    if (!section) throw new Error("This file is not part of the recorded merge patch.");
+    return { cwd: record.cwd, sourceTitle: record.sourceTitle, patchText: section };
   }
   async loadTurnDiffFile(diff: TurnDiff, file: TurnDiffFile, viewId = SIDEBAR_VIEW_ID) {
     this.requireView(viewId); this.requireThread(diff.threadId);
@@ -1414,7 +1590,7 @@ export class HostState {
         return { ...task, editVersion: taskEditVersion(task), originThreadId: association ? association.threadId : serverOrigin, originKnown: !!association || serverOrigin !== null };
       }) },
       projects: this.visibleProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })),
-      threads: threads.map((thread) => ({
+      threads: withSubagentWorkingState(threads.map((thread) => ({
         id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
         modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
         updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
@@ -1435,7 +1611,7 @@ export class HostState {
           const request = thread.pendingRuntimeRequest ?? this.threads.get(thread.id)?.projection?.runtimeRequests.find((request) => request.status === "pending");
           return request ? { id: request.id, kind: request.kind, createdAt: DateTime.formatIso(request.createdAt) } : null;
         })(),
-      })),
+      }))),
       providers: this.client.config?.providers ?? [],
       archiveLoaded: this.archive !== null, archiveLoading: this.archiveLoad !== null, ...(this.archiveError ? { archiveError: this.archiveError } : {}),
       usageLimitSources: this.client.config?.usageLimitSources ?? [],
@@ -1443,13 +1619,16 @@ export class HostState {
       providerModelPreferences: this.modelPreferences().providerModelPreferences,
       draft: this.conversationDraft(view),
       ...(activeThreadId ? { activeThreadId } : {}),
+      ...(activeThreadId ? this.revertState(activeThreadId, projection) : {}),
       ...conversationActivity(projection),
+      contextUsage: latestContextUsage(projection),
       transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => {
         const source = this.threads.get(row.sourceThreadId)?.projection ?? projection;
         const status = row.item.type === "checkpoint" ? source.runs.find(run => run.id === row.item.runId)?.status : undefined;
         return { key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId,
           ...this.presentItem(row.item), canFork: visibleThreadIds.has(row.sourceThreadId) && this.canForkRow(projection, row),
           ...(status ? { checkpointRunStatus: status } : {}),
+          ...this.transcriptRevertFields(projection, row, activeThreadId),
         };
       }) : [],
       pending: projection ? derivePendingThreadRequests(projection) : { approvals: [], userInputs: [] },

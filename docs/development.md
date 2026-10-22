@@ -125,6 +125,10 @@ For a same-version follow-up, link the exact new filename in the handoff and pre
 | `src/webview/components/AssistantSelectionMenu.tsx`, `CitationCommentEditor.tsx`, `AssistantCitationLink.tsx` | Quote selection, optional comments and saved citation/source previews |
 | `src/webview/components/TranscriptView.tsx`, `ChatMarkdown.tsx` | Virtualized typed turn items, markdown and native file/link intents |
 | `src/webview/components/PendingRequests.tsx` | Provider approval choices and question forms |
+| `src/host/checkpointRestore.ts`, `src/webview/components/RestorePreview.tsx` | Edit-from-here rewind and the guarded "Restore files to this point" Git restore and preview panel |
+| `src/host/mergeRecords.ts` | Per-destination-thread record of files merged in from a subagent checkout via Apply files |
+| `src/shared/contextUsage.ts`, `src/webview/components/ContextMeter.tsx` | Composer context-window ring/percent meter, derived from the active thread's latest provider turn usage |
+| `src/shared/selectionMarkdown.ts` | Pure escaping/blank-line helpers for Copy as Markdown, shared with `AssistantSelectionMenu.tsx` |
 | `src/webview/components/t3/` | Portable components copied from T3, retaining upstream presentation |
 | `src/webview/styles/tokens.css` | VS Code theme colors, Tailwind tokens and VS Code surface layout |
 | `vendor/` | Pinned T3 contracts and client runtime; provenance and license |
@@ -136,7 +140,7 @@ For a same-version follow-up, link the exact new filename in the handoff and pre
 
 The [feature history](feature-history.md) records introduction and change versions for every implemented feature. [AGENTS.md](../AGENTS.md) requires a separate agent with fresh context to check regressions before each VSIX is packaged.
 
-See [the architecture](t3-vscode-architecture.md) for the host/webview boundary and milestones. The [feature comparison](kilo-kimi-t3-feature-matrix.md) remains reference material.
+See [the architecture](t3-vscode-architecture.md) for the host/webview boundary and milestones. The archived [feature comparison](archive/kilo-kimi-t3-feature-matrix.md) is historical decision-draft material, not a scope checklist.
 
 
 ## Editor controls verification

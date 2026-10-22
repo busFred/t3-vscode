@@ -20,6 +20,7 @@ function git(cwd: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}, inpu
   });
 }
 const out = async (cwd: string, args: string[]) => (await git(cwd, args)).toString('utf8').trim();
+export async function currentBranch(cwd: string): Promise<string> { return out(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']); }
 
 export interface LocalWorktree { path: string; branch: string; head?: string; root: boolean; missing: boolean; locked: boolean }
 export async function repositoryIdentity(path: string): Promise<{ root: string; commonDir: string } | null> {
@@ -150,7 +151,11 @@ export async function readWorktreeDiffFile(input: { projectRoot: string; path: s
 async function checkoutStamp(path: string): Promise<string> {
   return `${await out(path, ['rev-parse', 'HEAD'])}\0${await out(path, ['symbolic-ref', '-q', 'HEAD']).catch(() => '')}\0${(await repositoryIdentity(path))?.commonDir}`;
 }
-export async function applyWorktreeFiles(input: { projectRoot: string; path: string; destination: string; baseRef?: string; files: string[]; allowAlreadyApplied?: boolean }): Promise<void> {
+/** Parse line counts straight from the patch headers; this touches no working tree. */
+export async function patchNumstat(cwd: string, patch: Buffer): Promise<string> {
+  return (await git(cwd, ['apply', '--numstat', '-z', '-'], {}, patch)).toString('utf8');
+}
+export async function applyWorktreeFiles(input: { projectRoot: string; path: string; destination: string; baseRef?: string; files: string[]; allowAlreadyApplied?: boolean }): Promise<Buffer> {
   const source = await checkout(input.projectRoot, input.path);
   const destination = await checkout(input.projectRoot, input.destination);
   if (source === destination) throw new Error('Source and destination must be distinct checkouts');
@@ -183,6 +188,7 @@ export async function applyWorktreeFiles(input: { projectRoot: string; path: str
     if (sourceStamp !== await checkoutStamp(source) || destinationStamp !== await checkoutStamp(destination)) throw new Error('Checkout branch or project changed during transfer');
     for (const file of files) { await safeFile(source, file); await safeFile(destination, file); }
     if (!alreadyApplied) await git(destination, ['apply', '--binary', '--whitespace=nowarn', '-'], {}, patch);
+    return patch;
   } finally { await rm(temporary, { recursive: true, force: true }); }
 }
 export async function readWorktreeStatus(path: string): Promise<{ tracked: boolean; untracked: boolean; ignored: boolean; dirty: boolean }> {

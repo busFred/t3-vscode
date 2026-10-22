@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Restore files — combined flow and mixed-file handling</title>
+<style>
+:root[data-theme="light"]{color-scheme:light;--background:#fcfcfc;--foreground:#27272a;--card:#ffffff;--muted:#fafafa;--muted-foreground:#505b6c;--border:#e4e4e7;--input:#929292;--primary:#1b4ed8;--primary-foreground:#fff;--destructive:#c10007;--warning:#bb4d00;--warn-tint:#fff4e5;--addition:#16a34a;--you-tint:#fdeceb;--shadow:#0002;--code:#f3f3f3}
+:root[data-theme="dark"]{color-scheme:dark;--background:#1f1f1f;--foreground:#cccccc;--card:#1f1f1f;--muted:#181818;--muted-foreground:#9d9d9d;--border:#3c3c3c;--input:#5a5a5a;--primary:#4daafc;--primary-foreground:#fff;--destructive:#f14c4c;--warning:#cca700;--warn-tint:#3a2f1a;--addition:#4ec46a;--you-tint:#3a2323;--shadow:#0007;--code:#2a2a2a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--background);color:var(--foreground);font:13px/1.55 -apple-system,"Segoe UI",system-ui,sans-serif}
+main{max-width:980px;margin:auto;padding:16px 16px 24px}
+h1{font-size:19px;margin:0 0 4px}
+h2{font-size:13.5px;margin:0}
+.lede{color:var(--muted-foreground);margin:0 0 14px;max-width:820px}
+.controls{display:flex;gap:22px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:18px}
+.controls button{font:inherit;color:var(--foreground);background:var(--muted);border:1px solid var(--border);border-radius:4px;padding:3px 9px;cursor:pointer}
+.controls button[aria-pressed=true]{border-color:var(--primary);color:var(--primary-foreground);background:var(--primary)}
+.controls b{color:var(--muted-foreground);font-weight:600;margin-right:6px}
+.step{margin-bottom:24px;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--card)}
+.step-head{padding:10px 14px;border-bottom:1px solid var(--border)}
+.tag{color:var(--primary);font-size:11px;font-weight:700;letter-spacing:.06em}
+.step-head p{margin:4px 0 0;color:var(--muted-foreground);font-size:12px}
+.pane{background:var(--background);padding:14px 20px}
+.msg-user{display:flex;flex-direction:column;align-items:flex-end;gap:4px;max-width:680px;margin:0 auto 10px}
+.user-bubble{border-radius:16px;padding:6px 14px;background:var(--code);max-width:92%;outline:1px solid var(--border)}
+.urow{display:flex;gap:2px}
+.urow-btn{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;font-size:11px;color:var(--muted-foreground);background:transparent;border:1px solid var(--border);border-radius:5px}
+.urow-btn.active{color:var(--foreground);background:var(--muted)}
+.notif{max-width:420px;margin:0 auto;border:1px solid var(--border);border-radius:6px;background:var(--card);box-shadow:0 4px 16px var(--shadow);padding:10px 12px;font-size:12px}
+.notif-head{display:flex;align-items:center;gap:7px;font-weight:600;margin-bottom:4px}
+.counts{display:flex;gap:10px;color:var(--muted-foreground);font-size:11px;margin:4px 0 8px;flex-wrap:wrap}
+.counts b{color:var(--foreground)}
+.counts .warn{color:var(--destructive);font-weight:600}
+.actions{display:flex;gap:8px;align-items:center}
+.btn{font:inherit;font-size:11.5px;padding:5px 11px;border-radius:5px;border:1px solid var(--border);background:var(--card);color:var(--foreground)}
+.btn.primary{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted-foreground)}
+.link{background:none;border:0;color:var(--primary);font-size:11.5px;padding:0;cursor:pointer}
+.link.ml{margin-left:auto}
+.panel{max-width:680px;margin:10px auto 0;border:1px solid var(--border);border-radius:7px;background:var(--card);box-shadow:0 4px 16px var(--shadow);overflow:hidden}
+.p-head{padding:9px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12px}
+.p-head strong{font-size:12.5px}
+.p-head .sub{color:var(--muted-foreground);font-size:11px;margin-left:auto}
+.sec{border-bottom:1px solid var(--border)}
+.sec:last-of-type{border-bottom:0}
+.sec-head{display:flex;align-items:center;gap:7px;padding:7px 12px;font-size:11.5px;font-weight:600}
+.sec-head .n{font-weight:400;color:var(--muted-foreground)}
+.sec.danger{background:var(--you-tint)}
+.sec.danger .sec-head{color:var(--destructive)}
+.row{display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:10px;padding:5px 12px 5px 28px;font-size:11.5px}
+.row .name{font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .cnt{display:flex;gap:7px;font-size:10.5px}
+.add{color:var(--addition)}.del{color:var(--destructive)}
+.keep{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted-foreground)}
+.keep input{margin:0}
+.sub-row{padding:0 12px 6px 28px;font-size:11px;color:var(--muted-foreground)}
+.badge{display:inline-block;font-size:9.5px;font-weight:700;border-radius:3px;padding:1px 5px;margin-left:6px;vertical-align:1px}
+.badge.agent{background:transparent;color:var(--muted-foreground);border:1px solid var(--border)}
+.badge.you{background:var(--warn-tint);color:var(--warning);border:1px solid var(--warning)}
+.badge.ok{background:transparent;color:var(--addition);border:1px solid var(--addition)}
+.badge.conf{background:var(--you-tint);color:var(--destructive);border:1px solid var(--destructive)}
+.foot{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border);background:var(--muted);align-items:center}
+.foot .btn.ghost{margin-left:auto}
+.result{max-width:680px;margin:10px auto 0;border:1px solid var(--border);border-radius:6px;background:var(--card);padding:9px 12px;font-size:12px}
+.result ul{margin:6px 0 0;padding-left:18px;color:var(--muted-foreground)}
+.result li{margin:2px 0}
+.result code{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--code);padding:0 4px;border-radius:3px}
+table.pc{width:100%;border-collapse:collapse;font-size:12px}
+table.pc th,table.pc td{border-top:1px solid var(--border);padding:7px 12px;text-align:left;vertical-align:top}
+table.pc th{color:var(--muted-foreground);font-weight:600;width:26%;background:var(--background)}
+</style>
+<main>
+<h1>Restore files — combined flow and the mixed-file case</h1>
+<p class="lede">Option 1 + 3 combined: a compact confirm first, the grouped panel on demand. One flat list; each file carries an <em>agent</em> and/or <em>you</em> tag, and files with your edits get a dry-run verdict for keeping them.</p>
+<div class="controls"><b>Theme</b><button id="th-light" aria-pressed="true">Light</button><button id="th-dark" aria-pressed="false">Dark</button></div>
+
+<section class="step">
+  <div class="step-head"><span class="tag">STEP 1 · COMPACT CONFIRM</span><h2>Appears inline under the message when you click "Restore files to this point"</h2><p>Counts are computed before showing it, including the dry-run of re-applying your edits, so the warning is already accurate.</p></div>
+  <div class="pane">
+    <div class="msg-user"><div class="user-bubble">Use the stable softmax helper in metrics.py instead of the manual exp() version.</div><div class="urow"><button class="urow-btn">↺ Edit from here</button><button class="urow-btn active">⎌ Restore files to this point</button></div></div>
+    <div class="notif">
+      <div class="notif-head">⎌ Restore files to turn 3?</div>
+      <div class="counts"><span><b>4</b> agent files</span><span class="warn"><b>3</b> files with your edits</span><span><b>1</b> untracked file</span><span class="warn">1 conflict</span></div>
+      <div class="actions"><button class="btn primary">Restore and keep my edits</button><button class="btn ghost">Cancel</button><button class="link ml">Review ▾</button></div>
+    </div>
+  </div>
+</section>
+
+<section class="step">
+  <div class="step-head"><span class="tag">STEP 2 · "REVIEW" EXPANDS IN PLACE</span><h2>Flat file list with author tags and per-file "Keep mine"</h2><p>A file edited by both shows both tags. Only rows with a <em>you</em> tag get a Keep checkbox.</p></div>
+  <div class="pane">
+    <div class="panel">
+      <div class="p-head"><strong>Restore files to turn 3</strong><span class="sub">Checkpoint from 14 minutes ago</span></div>
+      <div class="sec">
+        <div class="sec-head">Files changed since turn 3 <span class="n">(6 files · your edits in 4)</span></div>
+        <div class="row"><span class="name">src/host/hostState.ts<span class="badge agent">agent</span><span class="badge you">you</span><span class="badge ok">keeps cleanly</span></span><span class="cnt"><span class="add">+35</span><span class="del">−6</span></span><button class="link">Open diff</button><label class="keep"><input type="checkbox" checked>Keep mine</label></div>
+        <div class="sub-row">Your 6 lines are in a different region from the agent's 35; they re-apply on top of the restored file.</div>
+        <div class="row"><span class="name">docs/feature-history.md<span class="badge agent">agent</span><span class="badge you">you</span><span class="badge conf">conflicts</span></span><span class="cnt"><span class="add">+11</span><span class="del">−0</span></span><button class="link">Open diff</button><label class="keep"><input type="checkbox" checked>Keep mine</label></div>
+        <div class="sub-row">Your line sits inside the block the agent added. Kept as <code>docs/feature-history.md.yours</code> and in a git stash named <em>t3 restore turn 3</em>.</div>
+        <div class="row"><span class="name">src/shared/bridge.ts<span class="badge agent">agent</span></span><span class="cnt"><span class="add">+2</span><span class="del">−0</span></span><button class="link">Open diff</button><span></span></div>
+        <div class="row"><span class="name">src/webview/components/ThreadList.tsx<span class="badge agent">agent</span></span><span class="cnt"><span class="add">+4</span><span class="del">−2</span></span><button class="link">Open diff</button><span></span></div>
+        <div class="row"><span class="name">README.md<span class="badge you">you</span><span class="badge ok">keeps cleanly</span></span><span class="cnt"><span class="add">+3</span><span class="del">−0</span></span><button class="link">Open diff</button><label class="keep"><input type="checkbox" checked>Keep mine</label></div>
+        <div class="row"><span class="name">notes/todo.md<span class="badge you">you · new file</span></span><span class="cnt"><span class="add">+12</span></span><button class="link">Open</button><label class="keep"><input type="checkbox" checked>Keep mine</label></div>
+        <div class="sub-row">Rows tagged <em>agent</em> are reverted to the checkpoint. Rows tagged <em>you</em> are lost unless "Keep mine" stays checked. Untracked files would otherwise be deleted.</div>
+      </div>
+      <div class="foot"><button class="btn primary">Restore and keep 3 files</button><button class="btn">Restore everything</button><button class="btn ghost">Cancel</button></div>
+    </div>
+  </div>
+</section>
+
+<section class="step">
+  <div class="step-head"><span class="tag">STEP 3 · RESULT ROW IN THE TRANSCRIPT</span><h2>What happened, and where a conflicting edit went</h2></div>
+  <div class="pane">
+    <div class="result">⎌ Restored files to turn 3 · kept 3 of your files
+      <ul>
+        <li><code>src/host/hostState.ts</code> and <code>README.md</code>: your edits re-applied.</li>
+        <li><code>docs/feature-history.md</code>: conflict. Restored version is in place; your version saved as <code>docs/feature-history.md.yours</code> and stash <em>t3 restore turn 3</em>. <button class="link">Compare</button></li>
+        <li><code>notes/todo.md</code> kept.</li>
+      </ul>
+    </div>
+  </div>
+  <table class="pc">
+    <tr><th>How "both" is detected</th><td>Three snapshots per file: turn-start baseline (refs/t3/vscode/turn-start), latest agent checkpoint (refs/t3/orchestration-v2/checkpoints), live working tree. Agent hunks = baseline → checkpoint. Your hunks = checkpoint → working tree. A file with hunks in both diffs shows both tags.</td></tr>
+    <tr><th>How "Keep" works</th><td>Before restoring: write your hunks (checkpoint → working tree) to a patch per kept file. Restore to the checkpoint. Re-apply each patch with <code>git apply --3way</code>. Untracked kept files are simply excluded from the clean step.</td></tr>
+    <tr><th>How the verdict is known up front</th><td><code>git apply --check</code> of each patch against the checkpoint blob runs when the panel opens, so "keeps cleanly" vs "conflicts" is shown before you click anything.</td></tr>
+    <tr><th>Conflict fallback</th><td>Nothing is lost: the restored file wins, your version is written as <code>&lt;file&gt;.yours</code> and pushed to a named git stash. The result row offers a Compare link that opens the two in the native diff editor.</td></tr>
+  </table>
+</section>
+</main>
+<script>
+function press(a){['th-light','th-dark'].forEach(id=>document.getElementById(id).setAttribute('aria-pressed',String(id===a)));}
+document.getElementById('th-light').onclick=()=>{document.documentElement.dataset.theme='light';press('th-light');};
+document.getElementById('th-dark').onclick=()=>{document.documentElement.dataset.theme='dark';press('th-dark');};
+console.log('ready');
+</script>
+</html>

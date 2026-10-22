@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.2 — Prerelease
+
+- Copy as Markdown no longer backslash-escapes ordinary punctuation or inflates blank lines; Ctrl/Cmd+C copies the transcript selection in editor-tab chats.
+- Context window meter: a ring and percent left of "List assist" show the active thread's live provider usage with warning/error bands and a token tooltip.
+- Sessions list shows "Waiting on subagents" with a running timer while a delegated child thread is still working after the parent's own run settled.
+- "Agent needs your input" card follows the prompt font size, grows its custom answer box vertically (Enter submits, Shift+Enter newline) and collapses to one line per request.
+- Choosing Claude's Ultrathink effort no longer discards the composer's undo history.
+- Changed-files box shows the checkout's branch and a "Merged from subagent" group (source → destination) for files applied from a subagent worktree.
+- "Edit from here" rewinds the conversation only; "Restore files to this point" previews agent/your/untracked changes with per-file "Keep mine", dry-run conflict verdicts, and never invokes the server's unguarded file restore.
+- Documentation audit: stale investigation notes archived, README/SUPPORT/CHANGELOG corrected, documentation map added.
+- Fresh-context regression review found two blocking issues (glob-named kept files deleted by `git clean -e`; sibling `<div>`s joined in Copy as Markdown); both fixed with tests before packaging. A second fresh-context review covered those fixes.
+
+## 0.2.1 — Prerelease
+
+- Version-only republish of 0.2.0's worktree work; no runtime changes. Fresh-context regression review approved the version-only candidate with no findings before packaging.
+- Published to the Marketplace prerelease channel; the public listing readback had not picked it up at publish time, so indexing is pending (upload acceptance itself is confirmed).
+
+## 0.2.0 — Prerelease
+
+- Add a Worktrees sidebar beside Sessions and Tasks: create a checkout from a selected base, reuse an existing checkout/branch, or import a GitHub pull request through the T3 service; run up to four explicit model allocations in separate checkouts and compare their files or open individual chats/native diffs.
+- Add the Worktree control to the message box, immediately after permissions, to pick root, a new checkout, an existing checkout/branch or a pull request for a new conversation.
+- Review committed and local changes per checkout, apply selected files to another checkout after conflict checks, and run service-backed commit/push/PR actions; removal protects dirty/active/main checkouts and a missing checkout can be restored.
+- Read and save worktree settings (project actions, setup wait/background behavior, base/origin defaults, branch prefix, submodules, worktree directory, cleanup policy) through native T3 settings; support per-worktree Conda environments with an automatic 24-hour-grace cleanup for extension-owned environments.
+- Recognize Git common-directory identity so a linked-worktree window shows the whole project's conversations, worktrees and scheduled tasks; new chats may choose the open checkout, existing conversations keep their own.
+- Minute-based shared refresh settings for usage and worktrees, including fractional intervals, replacing the old seconds-based usage-only interval.
+- Published to the Marketplace prerelease channel with the owner's explicit authorization; prior implementation verification covered 377 deterministic tests, TypeScript, full build, three browser suites and isolated Linux VS Code checks, with a fresh-context regression review of the channel-only metadata delta before packaging.
+
 ## 0.1.23 — Release
 
 - Quote selected user or assistant message text through the recoverable right-click menu. Quote opens the optional-comment editor; remove the floating Quote button and redundant Quote with comment action. Preserve user authorship in saved and sent quotes.

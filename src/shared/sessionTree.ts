@@ -49,8 +49,47 @@ const RUNNING_STATUSES = ["preparing", "running", "starting", "waiting", "in_pro
  * `activityRunStatus` is the live signal, and the sidebar and the transcript card must agree on it.
  */
 export function statusIsWorking(status: string): boolean { return RUNNING_STATUSES.includes(status); }
-export function threadIsWorking(thread: Pick<ThreadSummary, "status" | "activityRunStatus">): boolean {
-  return statusIsWorking(thread.activityRunStatus ?? "") || statusIsWorking(thread.status);
+export function threadIsWorking(thread: Pick<ThreadSummary, "status" | "activityRunStatus" | "waitingOnSubagents">): boolean {
+  return statusIsWorking(thread.activityRunStatus ?? "") || statusIsWorking(thread.status) || !!thread.waitingOnSubagents;
+}
+
+/**
+ * The server only reports each thread's own run status, so a parent whose run already
+ * completed (or whose steer run just finished) reads as idle while a delegated subagent
+ * keeps working underneath it. Scan visible descendants and fold their working state (and
+ * earliest start time) back onto every ancestor so the sidebar badge and elapsed timer keep
+ * tracking the thread for as long as any of its subagents are still busy.
+ */
+export function withSubagentWorkingState<T extends Pick<ThreadSummary, "id" | "parentThreadId" | "relationshipToParent" | "archived" | "settled" | "status" | "activityRunStatus" | "workingStartedAt">>(
+  entries: ReadonlyArray<T>,
+): ReadonlyArray<T & { waitingOnSubagents?: boolean }> {
+  const byParent = new Map<string, T[]>();
+  for (const entry of entries) {
+    if (entry.relationshipToParent === "subagent" && entry.parentThreadId) {
+      const list = byParent.get(entry.parentThreadId);
+      if (list) list.push(entry); else byParent.set(entry.parentThreadId, [entry]);
+    }
+  }
+  if (!byParent.size) return entries;
+  return entries.map((entry) => {
+    if (threadIsWorking(entry)) return entry;
+    let earliest: string | null = null;
+    let found = false;
+    const seen = new Set<string>([entry.id]);
+    const stack = [...(byParent.get(entry.id) ?? [])];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (seen.has(node.id)) continue;
+      seen.add(node.id);
+      if (!node.archived && !node.settled && threadIsWorking(node)) {
+        found = true;
+        if (node.workingStartedAt && (!earliest || Date.parse(node.workingStartedAt) < Date.parse(earliest))) earliest = node.workingStartedAt;
+      }
+      for (const child of byParent.get(node.id) ?? []) stack.push(child);
+    }
+    if (!found) return entry;
+    return { ...entry, waitingOnSubagents: true, workingStartedAt: earliest ?? entry.workingStartedAt };
+  });
 }
 export function subagentStatus(item: Extract<WireTurnItem, { type: "subagent" }>, child?: ThreadSummary): string {
   if (child?.pendingRuntimeRequest) return "input";

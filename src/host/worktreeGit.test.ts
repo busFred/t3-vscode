@@ -5,8 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { test } from 'node:test';
-import { applyWorktreeFiles, copyWorktreeConfig, listLocalWorktrees, readWorktreeDiffFile, readWorktreeStatus, repositoryIdentity, restoreCheckout, worktreeChanges, worktreeCleanupIdentity, worktreeRemovalConfirmed } from './worktreeGit';
+import { applyWorktreeFiles, currentBranch, copyWorktreeConfig, listLocalWorktrees, readWorktreeDiffFile, readWorktreeStatus, repositoryIdentity, restoreCheckout, worktreeChanges, worktreeCleanupIdentity, worktreeRemovalConfirmed } from './worktreeGit';
 const exec = promisify(execFile);
+test('currentBranch resolves the checkpoint checkout branch, including a separate worktree', async (t) => {
+  const f = await fixture(); t.after(f.close);
+  assert.equal(await currentBranch(f.root), 'main');
+  assert.equal(await currentBranch(f.source), 'source');
+});
 async function fixture() {
   const home = await mkdtemp(join(tmpdir(), 't3-git-test-'));
   const root = join(home, 'main'); const source = join(home, 'source'); const destination = join(home, 'destination');

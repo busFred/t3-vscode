@@ -204,14 +204,28 @@ export class BridgeHandler {
         }
         case "refreshUsage": await this.hostState.refreshUsage(); break;
         case "turnDiffSummary": {
-          const diff = await this.hostState.prepareTurnDiff(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId"), viewId);
-          const summarize = (files: typeof diff.files) => files.map((file) => ({ path: file.newPath, additions: file.additions, deletions: file.deletions }));
-          return { id: message.id, result: { files: summarize(diff.files) } };
+          const sourceThreadId = stringParam(params, "sourceThreadId"), itemId = stringParam(params, "itemId");
+          const [diff, merges] = await Promise.all([
+            this.hostState.prepareTurnDiff(id(), sourceThreadId, itemId, viewId).catch(() => null),
+            this.hostState.turnDiffMerges(id(), sourceThreadId, itemId, viewId).catch(() => []),
+          ]);
+          if (!diff && !merges.length) throw new Error("This turn's diff is not available.");
+          const summarize = (files: NonNullable<typeof diff>["files"]) => files.map((file) => ({ path: file.newPath, additions: file.additions, deletions: file.deletions }));
+          return { id: message.id, result: { cwd: diff?.cwd ?? merges[0]!.cwd, branch: diff?.branch ?? "", files: diff ? summarize(diff.files) : [],
+            ...(merges.length ? { merges: merges.map((merge) => ({ sourceThreadId: merge.sourceThreadId, sourceTitle: merge.sourceTitle, sourceBranch: merge.sourceBranch, destinationBranch: merge.destinationBranch, appliedAt: merge.appliedAt, files: merge.files })) } : {}) } };
         }
         case "openTurnDiff": {
           if (params.path !== undefined && typeof params.path !== "string") throw new Error("Invalid diff path.");
           const diff = await this.hostState.prepareTurnDiff(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId"), viewId);
           await this.openDiff(diff, (file) => this.hostState.loadTurnDiffFile(diff, file, viewId), params.path as string | undefined); break;
+        }
+        case "openMergeDiff": {
+          const threadId = id(), appliedAt = stringParam(params, "appliedAt"), path = stringParam(params, "path");
+          const merge = await this.hostState.mergePatchFile(threadId, appliedAt, path);
+          const diff: TurnDiff = { threadId, title: merge.sourceTitle, turnNumber: 0, displayLabel: `Merged from ${merge.sourceTitle}`, cwd: merge.cwd, baseRef: "merge-patch", headRef: "merge-patch",
+            files: [{ additions: 0, deletions: 0, oldPath: path, newPath: path, changeType: "change" }] };
+          await this.openDiff(diff, async () => ({ oldContents: "This merge was applied to the working tree without a saved \"before\" snapshot; showing the recorded patch instead.", newContents: merge.patchText }));
+          break;
         }
         case "focusView": this.registry.focus(viewId); break;
         case "loadArchive": await this.hostState.loadArchive(); break;
@@ -259,6 +273,34 @@ export class BridgeHandler {
           if (params.title !== undefined && typeof params.title !== "string") throw new Error("Invalid thread title.");
           await this.performThreadAction(id(), stringParam(params, "action"), typeof params.title === "string" ? params.title : undefined, viewId); break;
         case "forkFromResponse": await this.hostState.forkFromResponse(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId"), viewId); break;
+        case "revertConversation": {
+          const threadId = id();
+          const { text } = await this.hostState.revertConversation(threadId, stringParam(params, "sourceThreadId"), stringParam(params, "itemId"), viewId);
+          // Attachments and inline references do not survive the rewind; the original text does.
+          this.registry.postWhenReady(viewId, Events.initializeDraft, { draftKey: threadId, draft: { text, contexts: [] } });
+          break;
+        }
+        case "dismissRewindMarker": await this.hostState.dismissRewindMarker(id(), viewId); break;
+        case "restorePreview": return { id: message.id, result: await this.hostState.restorePreview(id(), stringParam(params, "sourceThreadId"), this.restoreLocator(params), viewId) };
+        case "restoreFiles": {
+          if (!Array.isArray(params.keep) || !params.keep.every((path) => typeof path === "string")) throw new Error("Invalid files to keep.");
+          if (params.mode !== "keep" && params.mode !== "everything") throw new Error("Invalid restore mode.");
+          return { id: message.id, result: await this.hostState.restoreFiles(id(), stringParam(params, "sourceThreadId"), this.restoreLocator(params), params.keep, params.mode, viewId) };
+        }
+        case "openRestoreDiff": {
+          const result = await this.hostState.restoreDiffFile(id(), stringParam(params, "sourceThreadId"), this.restoreLocator(params), stringParam(params, "path"), viewId);
+          const file: TurnDiffFile = { additions: 0, deletions: 0, oldPath: result.path, newPath: result.path, changeType: "change" };
+          const diff: TurnDiff = { threadId: id(), title: "Restore preview", turnNumber: 0, displayLabel: `Restore preview · ${result.path}`, cwd: result.cwd, baseRef: "", headRef: "", files: [file] };
+          await this.openDiff(diff, async () => ({ oldContents: result.oldContents, newContents: result.newContents }));
+          break;
+        }
+        case "compareRestoredFile": {
+          const result = await this.hostState.compareRestoredFile(id(), stringParam(params, "path"), stringParam(params, "yoursPath"), viewId);
+          const file: TurnDiffFile = { additions: 0, deletions: 0, oldPath: result.path, newPath: result.path, changeType: "change" };
+          const diff: TurnDiff = { threadId: id(), title: "Restore comparison", turnNumber: 0, displayLabel: `Restored vs. yours · ${result.path}`, cwd: result.cwd, baseRef: "", headRef: "", files: [file] };
+          await this.openDiff(diff, async () => ({ oldContents: result.oldContents, newContents: result.newContents }));
+          break;
+        }
         case "openInTab": {
           const transfer = parseDraftTransfer(params, this.hostState.snapshot(viewId).activeThreadId ?? "new");
           if (this.viewActions.openInTab) await this.viewActions.openInTab(viewId, transfer);
@@ -283,6 +325,11 @@ export class BridgeHandler {
       }
       return { id: message.id, result: this.hostState.snapshot(viewId) };
     } catch (cause) { return { id: message.id, error: cause instanceof Error ? cause.message : String(cause) }; }
+  }
+  /** A restore target is either the hovered user message, or (from a rewind marker) a checkpoint remembered directly. */
+  private restoreLocator(params: Record<string, unknown>): { itemId: string } | { checkpointId: string; scopeId: string } {
+    if (typeof params.itemId === "string") return { itemId: params.itemId };
+    return { checkpointId: stringParam(params, "checkpointId"), scopeId: stringParam(params, "scopeId") };
   }
   private nativeWorktreePort(): WorktreeNativePort {
     return {
