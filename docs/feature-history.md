@@ -1737,3 +1737,10 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - TypeScript checking, all 443 deterministic tests and the full production build passed. Tests required an unrestricted local IPC socket; no live provider or normal VS Code/T3 profile was used.
 
 - Built and verified the stable VSIX; Marketplace accepted publication on October 22, 2026. Immediate listing still showed 0.2.2, so public propagation remains pending. See [publication details](publishing.md#023-release-channel-publication).
+
+### v0.2.4 — stable release
+
+- Owner authorized version 0.2.4 on the stable release channel (`preview: false`). Comparison revision `ff784d0` (v0.2.3). Contents: commits `da36d14` (Waiting status, icon footer, picker undo) and `9238e95` (native undo in session tabs).
+- Fresh-context Sonnet regression reviews of both commits found blocking issues that were fixed and re-reviewed; final sign-off with no blockers. A fresh-context Haiku review approved the release metadata.
+- TypeScript checking, 452 deterministic tests, the full production build and `verify-views.ts` passed. Native undo was verified in real VS Code 1.143 with `verify-edh.mjs --undo-only` against an isolated server and profile; no live provider turn.
+- Built `target-installer/t3-vscode-0.2.4.vsix` (45 files, 3.17 MB) from `c7085f4`, SHA-256 `9f4a44f8e4f6ed17240ebf6ef39d674460282806291b2220cd628f116bc9d823`; Marketplace accepted publication on October 22, 2026 (19:26 UTC). Immediate listing still showed 0.2.3. See [publication details](publishing.md#024-release-channel-publication).
