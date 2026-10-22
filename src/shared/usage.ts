@@ -46,16 +46,34 @@ export function usageAccounts(state: HostStateSnapshot): ReadonlyArray<UsageAcco
   }
   return [...accounts.values()];
 }
-export const meterKinds = ["monthly", "weekly", "session"] as const;
-export const meterLabels = ["Month", "Week", "Session"] as const;
-export function accountWindows(account: UsageAccount) {
-  // A specialised model quota (e.g. Claude Opus) must not replace the general weekly quota.
-  return meterKinds.map((kind) => account.limits.unavailable ? null : account.limits.windows.find((window) => window.kind === kind) ?? null);
+export interface MeterRow { readonly window: UsageWindow | null; readonly label: string; readonly short: string; readonly primary: boolean }
+type UsageWindow = LimitAccount["limits"]["windows"][number];
+const primaryRows = [{ kind: "session", label: "Session", short: "S" }, { kind: "weekly", label: "Week", short: "W" }, { kind: "monthly", label: "Month", short: "M" }] as const;
+// Providers name the general weekly allowance differently; anything else weekly is a model-specific quota (e.g. Claude Opus or Fable).
+const generalWeekly = (window: UsageWindow) => /^(weekly|seven_day|primary|secondary)$/i.test(window.id) || /^(weekly|week)$/i.test(window.label);
+const rank = (window: UsageWindow) => window.kind === "session" ? 0 : window.kind === "weekly" ? (generalWeekly(window) ? 1 : 2) : window.kind === "monthly" ? 3 : 4;
+/**
+ * Rows shortest to longest: session, week, model-specific weeks, month, then anything else.
+ * A specialised model quota (e.g. Claude Opus) never replaces the general quota of its kind.
+ * Only reported windows are listed; when none are, the three standard rows remain as “not reported” placeholders.
+ */
+export function accountWindows(account: UsageAccount): ReadonlyArray<MeterRow> {
+  const reported = account.limits.unavailable ? [] : account.limits.windows.map((window, index) => ({ window, index })).sort((left, right) => rank(left.window) - rank(right.window) || left.index - right.index);
+  if (!reported.length) return primaryRows.map((row) => ({ window: null, label: row.label, short: row.short, primary: true }));
+  const seen = new Set<string>();
+  // An account reporting only model-specific weeks still needs a general Week, so the first one stands in for it.
+  const standIn = reported.some(({ window }) => window.kind === "weekly" && generalWeekly(window)) ? undefined : reported.find(({ window }) => window.kind === "weekly")?.window;
+  return reported.map(({ window }) => {
+    const row = primaryRows.find((candidate) => candidate.kind === window.kind);
+    const primary = row !== undefined && (window.kind !== "weekly" || generalWeekly(window) || window === standIn) && !seen.has(row.kind);
+    if (primary) seen.add(row.kind);
+    return { window, label: primary ? row.label : window.label, short: primary ? row.short : window.label, primary };
+  });
 }
 export function meterText(account: UsageAccount): string {
-  const reported = accountWindows(account).flatMap((window, index) => window ? [{ window, index }] : []);
+  const reported = accountWindows(account).filter((row) => row.window && row.primary);
   if (!reported.length) return "Usage unavailable";
-  return reported.map(({ window, index }) => `${reported.length === 1 ? meterLabels[index] : ["M", "W", "S"][index]} ${remainingPercent(window)}%`).join(" · ");
+  return reported.map((row) => `${reported.length === 1 ? row.label : row.short} ${remainingPercent(row.window!)}%`).join(" · ");
 }
 export interface MeterPreferences { readonly followActive: boolean; readonly pinnedAccounts: ReadonlyArray<string> }
 export function selectedUsageAccounts(accounts: ReadonlyArray<UsageAccount>, preferences: MeterPreferences, instanceId?: string): ReadonlyArray<UsageAccount> {

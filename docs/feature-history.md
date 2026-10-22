@@ -37,8 +37,8 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.2.2 |
-| [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.1.21 |
-| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.2.0 |
+| [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.2.3 |
+| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.2.3 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.1.21 |
 | [Editor references](#editor-references) | Inserts file ranges with checkout-aware labels and preserved source URIs. | v0.0.4 | v0.2.0 |
@@ -901,7 +901,16 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Halve the panel to about 186px: each meter is two lines, with the reset time as a dim suffix on the value and the bar beneath, and a window the account does not report is one line rather than two.
 - Move Status meters out of its own row into an icon beside Refresh, with a deliberately different shape because it opens another view rather than acting in place.
 
+#### v0.2.3
+
+- List usage windows shortest to longest: session, week, model-specific weeks (e.g. Weekly Fable), month, then anything else. Previously the order was month, week, session with model-specific quotas appended after. Only reported windows are listed (so Codex shows just Week; an account reporting only model-specific weeks treats the first as its Week); when none are reported, the Session/Week/Month rows remain as “not reported” placeholders.
+- Status bar meter text and tooltip follow the same order (`S · W · M`); when a general Week is reported, model-specific quotas appear only in the tooltip and sidebar.
+
 ### Status bar meters
+
+#### v0.2.3
+
+- Order compact meters and tooltips by Session, Week, then Month, with model-specific weekly quotas between Week and Month in the tooltip.
 
 #### v0.0.7
 
@@ -1702,3 +1711,11 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - The owner explicitly authorized publishing the current tree as the next version on the Marketplace prerelease channel; the next available version is **0.2.2**. Source baseline is the single commit that follows `0ec8b69` (v0.2.1); every feature in this version is recorded under its own v0.2.2 entry above.
 - Validation: TypeScript, 442 deterministic tests and the full production build passed. A fresh-context regression review compared the tree with v0.2.1 and found two blocking defects, both fixed with tests (a glob-named kept untracked file was deleted by `git clean -e`; Copy as Markdown joined sibling `<div>`s); a second fresh-context review covered those fixes before packaging.
 - Packaged `target-installer/t3-vscode-0.2.2.vsix` (SHA-256 `7c411431e37630aa3db8f71d08eea64b3a2a0e5dd4dec546e696e436af5cdc68`) from `8b02ae4` and published it to the Marketplace prerelease channel on October 22, 2026 (05:34 UTC); vsce reported success. Details in docs/publishing.md.
+
+### v0.2.3 — stable release
+
+- Owner authorized version 0.2.3 on the stable release channel; set `preview: false`. Comparison revision `8cf4892` records the prior 0.2.2 prerelease publication.
+- Fresh-context GPT-6.1 Sol regression review found no blocking code regressions; clarified documentation of the specialized-only Week fallback. The reviewer inspected the final changes and validation record and approved stable packaging with no blockers.
+- TypeScript checking, all 443 deterministic tests and the full production build passed. Tests required an unrestricted local IPC socket; no live provider or normal VS Code/T3 profile was used.
+
+- Built and verified the stable VSIX; Marketplace accepted publication on October 22, 2026. Immediate listing still showed 0.2.2, so public propagation remains pending. See [publication details](publishing.md#023-release-channel-publication).

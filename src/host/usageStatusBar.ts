@@ -3,7 +3,7 @@ import { formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
 import type { HostStateSnapshot } from "../shared/bridge.js";
 import { explicitLegacyUsageSeconds, resolveRefreshSettings, type RefreshSettings } from "../shared/refreshSettings.js";
 import { UsageRefreshScheduler } from "../shared/usageRefresh.js";
-import { accountWindows, meterLabels, meterText, selectedUsageAccounts, usageAccounts, usageRefreshTarget, type UsageAccount } from "../shared/usage.js";
+import { accountWindows, meterText, selectedUsageAccounts, usageAccounts, usageRefreshTarget, type UsageAccount } from "../shared/usage.js";
 
 /** Read explicit legacy values separately so its schema default cannot mask the shared default. */
 export function readRefreshSettings(): RefreshSettings {
@@ -63,8 +63,8 @@ export class UsageStatusBar implements vscode.Disposable {
     const tooltip = new vscode.MarkdownString("", true);
     tooltip.appendText(account.label + (account.email && account.email !== account.label ? ` · ${account.email}` : "") + "\n\n");
     tooltip.appendMarkdown("| Window | Remaining | Reset |\n| :-- | --: | :-- |\n");
-    accountWindows(account).forEach((window, index) => {
-      tooltip.appendMarkdown(`| ${meterLabels[index]} | ${window ? `${remainingPercent(window)}%` : "—"} | ${window ? formatResetsIn(window, Date.now()) ?? "Not reported" : "Not reported"} |\n`);
+    accountWindows(account).forEach(({ window, label }) => {
+      tooltip.appendMarkdown(`| ${label} | ${window ? `${remainingPercent(window)}%` : "—"} | ${window ? formatResetsIn(window, Date.now()) ?? "Not reported" : "Not reported"} |\n`);
     });
     if (account.limits.unavailable?.message) tooltip.appendText(`\n${account.limits.unavailable.message}\n`);
     tooltip.appendText("\nPercentages show remaining allowance. Unreported windows are omitted from the meter.\nClick for account limits. To customize meters, open the Command Palette and run T3 VSCode: Configure Status Meters.");

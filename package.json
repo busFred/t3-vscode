@@ -2,7 +2,7 @@
   "name": "t3-vscode",
   "displayName": "T3 VSCode",
   "description": "Alpha client for local T3 Code servers: workspace sessions, editor chat, rich messages and account usage.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "hungtienhuang",
   "repository": {
     "type": "git",
@@ -265,7 +265,7 @@
             "type": "boolean",
             "default": true,
             "scope": "window",
-            "description": "Show the remaining subscription limits of the provider used by the focused conversation. Month, week and session appear in that order.",
+            "description": "Show the remaining subscription limits of the provider used by the focused conversation. Session, week and month appear in that order.",
             "order": 1
           },
           "t3-vscode.usage.pinnedAccounts": {
@@ -435,7 +435,7 @@
     "vite-plugin-css-injected-by-js": "^3.5.2"
   },
   "icon": "resources/t3-extension.png",
-  "preview": true,
+  "preview": false,
   "license": "MIT",
   "homepage": "https://github.com/busFred/t3-vscode#readme",
   "bugs": {

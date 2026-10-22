@@ -160,3 +160,11 @@ The owner reviewed these and chose to ship as they are. None is a regression aga
 - Source commit `8b02ae4` on `feat/worktrees-from-main` (first commit after `0ec8b69`). Validation: TypeScript, 442 deterministic tests and the full production build. A fresh-context regression review against v0.2.1 found two blocking defects, both fixed with tests; a second fresh-context review covered the fixes and found nothing blocking.
 - `pnpm package` built `target-installer/t3-vscode-0.2.2.vsix` (45 files, 3.17 MB). Verified version `0.2.2`, `preview: true`, `Microsoft.VisualStudio.Code.PreRelease=true` and ZIP integrity. SHA-256: `7c411431e37630aa3db8f71d08eea64b3a2a0e5dd4dec546e696e436af5cdc68`.
 - `vsce publish --packagePath target-installer/t3-vscode-0.2.2.vsix --pre-release` reported `DONE Published hungtienhuang.t3-vscode v0.2.2.` on October 22, 2026 at 05:34 UTC. The public listing can take a few minutes to update after acceptance.
+
+## 0.2.3 release-channel publication
+
+- Owner explicitly authorized version **0.2.3** on the stable release channel. Comparison revision: `8cf4892` (0.2.2 publication record).
+- Fresh-context GPT-6.1 Sol regression review approved the final changes with no blockers. TypeScript, 443 deterministic tests and the full production build passed; no live provider or normal-profile installation was performed.
+- A separate fresh-context Sonnet regression review of the same tree approved it with no blockers. Its one actionable finding (an account reporting only model-specific weeks showed "Usage unavailable" in the status bar) was fixed with a test, and the reviewer approved that follow-up delta before the VSIX was built. The `dist/webview.js` in the VSIX contains that fix.
+- Built `target-installer/t3-vscode-0.2.3.vsix` (45 files, 3.17 MB). Verified ZIP integrity, publisher `hungtienhuang`, version `0.2.3`, `preview: false`, absence of the prerelease property, and exact bundled distribution/resource/vendor assets. SHA-256: `a89e77d4a2d3ca37182ebecdb8341385f3d4dff5af9d53ec18b771b315ee0ec6` (adjacent sidecar).
+- On October 22, 2026, `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.2.3.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.2.3.` after retrying outside restricted network access. Immediate public readback still listed 0.2.2 as newest, so public indexing/validation remains pending.

@@ -4,7 +4,7 @@ import { ChevronDownIcon, RefreshCwIcon, Settings2Icon } from "lucide-react";
 import { collectExternalUsageLinks, collectLimitNotices, formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
 import type { ServerProviderUsageWindow } from "@t3tools/contracts";
 import type { HostStateSnapshot } from "../../shared/bridge";
-import { accountWindows, limitPresentations, meterLabels, usageAccounts } from "../../shared/usage";
+import { accountWindows, limitPresentations, usageAccounts } from "../../shared/usage";
 import { meterResetLabel } from "../../shared/usageMeter";
 import { ProviderIcon } from "./ProviderIcon";
 import { useActions } from "../actions";
@@ -47,8 +47,7 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
       <div className="account-usage-update"><small role="status">{refreshing ? "Refreshing limits…" : checkedAt ? <>Updated <time dateTime={checkedAt} title={dateTime(new Date(checkedAt))}>{new Date(checkedAt).toLocaleTimeString(undefined, timeOptions)}</time></> : "No update reported"}</small><button className="icon-button" aria-label="Refresh usage" title="Refresh usage" disabled={refreshing} onClick={() => { setRefreshing(true); void run("refreshUsage").finally(() => setRefreshing(false)); }}><RefreshCwIcon size={13} /></button><button className="icon-button" aria-label="Status meters" title="Status meters" onClick={() => { void run("configureUsage"); }}><Settings2Icon size={13} /></button></div>
       {account ? <>
         {account.plan ? <p className="account-plan subtle">{account.plan}</p> : null}
-        {windows.map((window, index) => limit(window, meterLabels[index]!))}
-        {!account.limits.unavailable ? account.limits.windows.filter((window) => !windows.includes(window)).map((window) => limit(window, window.label)) : null}
+        {windows.map((row) => limit(row.window, row.label))}
         {account.limits.unavailable?.message ? <p className="usage-notice">{account.limits.unavailable.message}</p> : null}
       </> : <p className="subtle">No provider accounts reported yet.</p>}
       {notices.map((notice) => <p className="usage-notice" key={notice}>{notice}</p>)}

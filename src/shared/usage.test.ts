@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ProviderInstanceId, ProviderDriverKind } from "@t3tools/contracts";
 import { harness, provider } from "../host/testing/fakeTransport.js";
-import { meterText, selectedUsageAccounts, usageAccounts, usageRefreshTarget } from "./usage.js";
+import { accountWindows, meterText, selectedUsageAccounts, usageAccounts, usageRefreshTarget } from "./usage.js";
 
 test("Meters keep subscriptions separate, deduplicate shared accounts and preserve missing quota windows", async (t) => {
   const { host } = await harness(); t.after(() => host.dispose());
@@ -16,13 +16,27 @@ test("Meters keep subscriptions separate, deduplicate shared accounts and preser
   const personal = accounts.find((account) => account.label === "Personal")!;
   const work = accounts.find((account) => account.label === "Work")!;
   assert.deepEqual(personal.instanceIds, ["codex-personal", "codex-copy"]);
-  assert.equal(meterText(personal), "W 91% · S 64%");
+  assert.equal(meterText(personal), "S 64% · W 91%");
   assert.equal(meterText(work), "Week 55%");
-  assert.equal(meterText({ ...personal, limits: { ...personal.limits, windows: [{ id: "monthly", kind: "monthly", label: "Month", usedPercent: 0 }, ...personal.limits.windows] } }), "M 100% · W 91% · S 64%");
+  assert.equal(meterText({ ...personal, limits: { ...personal.limits, windows: [{ id: "monthly", kind: "monthly", label: "Month", usedPercent: 0 }, ...personal.limits.windows] } }), "S 64% · W 91% · M 100%");
   assert.equal(meterText({ ...personal, limits: { ...personal.limits, windows: [{ id: "session", kind: "session", label: "Session", usedPercent: 100 }] } }), "Session 0%");
   assert.equal(meterText(accounts.find((account) => account.label === "Unavailable")!), "Usage unavailable");
   assert.deepEqual(selectedUsageAccounts(accounts, { followActive: true, pinnedAccounts: [personal.key, work.key] }, "codex-copy").map((account) => account.key), [personal.key, work.key]);
   assert.deepEqual(selectedUsageAccounts(accounts, { followActive: false, pinnedAccounts: [work.key] }, "codex-personal"), [work]);
+});
+
+test("Claude windows list shortest to longest, with model-specific weeks after the general week and before the month", async (t) => {
+  const { host } = await harness(); t.after(() => host.dispose());
+  const windows = [{ id: "monthly", kind: "monthly" as const, label: "Month", usedPercent: 10 }, { id: "seven_day_fable", kind: "weekly" as const, label: "Weekly Fable", usedPercent: 20 },
+    { id: "seven_day", kind: "weekly" as const, label: "Weekly", usedPercent: 30 }, { id: "five_hour", kind: "session" as const, label: "Session", usedPercent: 40 }];
+  const claude = { ...provider, instanceId: ProviderInstanceId.make("claude-order"), driver: ProviderDriverKind.make("claude"), displayName: "Order",
+    auth: { status: "authenticated" as const, email: "order@example.test" }, usageLimits: { checkedAt: "2026-10-06T00:00:00Z", windows } };
+  const [account] = usageAccounts({ ...host.snapshot(), providers: [claude] });
+  assert.deepEqual(accountWindows(account!).map((row) => row.label), ["Session", "Week", "Weekly Fable", "Month"]);
+  assert.equal(meterText(account!), "S 60% · W 70% · M 90%");
+  assert.deepEqual(accountWindows({ ...account!, limits: { ...account!.limits, windows: [windows[2]!] } }).map((row) => row.label), ["Week"]);
+  assert.equal(meterText({ ...account!, limits: { ...account!.limits, windows: [windows[1]!] } }), "Week 80%");
+  assert.deepEqual(accountWindows({ ...account!, limits: { ...account!.limits, windows: [] } }).map((row) => row.label), ["Session", "Week", "Month"]);
 });
 
 test("Background refreshes target a single displayed meter's live instance and sweep when several are shown", async (t) => {

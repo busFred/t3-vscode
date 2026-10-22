@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 — Release
+
+- Order account usage windows by Session, Week, model-specific weeks (such as Weekly Fable), then Month. Codex shows only its reported Week; unavailable accounts keep ordered placeholders.
+- Use the same order in status bar meters and tooltips.
+- Promote the extension to the stable release channel.
+
 ## 0.2.2 — Prerelease
 
 - Copy as Markdown no longer backslash-escapes ordinary punctuation or inflates blank lines; Ctrl/Cmd+C copies the transcript selection in editor-tab chats.
