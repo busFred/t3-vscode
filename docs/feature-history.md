@@ -1701,4 +1701,4 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 
 - The owner explicitly authorized publishing the current tree as the next version on the Marketplace prerelease channel; the next available version is **0.2.2**. Source baseline is the single commit that follows `0ec8b69` (v0.2.1); every feature in this version is recorded under its own v0.2.2 entry above.
 - Validation: TypeScript, 442 deterministic tests and the full production build passed. A fresh-context regression review compared the tree with v0.2.1 and found two blocking defects, both fixed with tests (a glob-named kept untracked file was deleted by `git clean -e`; Copy as Markdown joined sibling `<div>`s); a second fresh-context review covered those fixes before packaging.
-- Packaged `target-installer/t3-vscode-0.2.2.vsix`; publication details are in docs/publishing.md.
+- Packaged `target-installer/t3-vscode-0.2.2.vsix` (SHA-256 `7c411431e37630aa3db8f71d08eea64b3a2a0e5dd4dec546e696e436af5cdc68`) from `8b02ae4` and published it to the Marketplace prerelease channel on October 22, 2026 (05:34 UTC); vsce reported success. Details in docs/publishing.md.
