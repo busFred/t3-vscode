@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4 — Release
+
+- Fix Ctrl/Cmd+Z and redo doing nothing in sessions opened from the Sessions list (custom-editor tabs); native undo now works in every chat tab (verified on Linux; untested on macOS).
+- Files picked through the attach dialog stay in the composer's undo history, still land if you switch threads mid-dialog, and Send waits until they are placed.
+- Sessions show a muted "Waiting" with elapsed time while subagents, monitors or background tasks (not plain background commands) are still running after the thread's own run ends; archived and settled threads keep their label.
+- User-message footer: timestamp, pencil (edit from here), return arrow (restore files) and copy as icon buttons with tooltips.
+
 ## 0.2.3 — Release
 
 - Order account usage windows by Session, Week, model-specific weeks (such as Weekly Fable), then Month. Codex shows only its reported Week; unavailable accounts keep ordered placeholders.

@@ -18,15 +18,15 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.2.2 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
-| [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | Unreleased (after v0.2.3) |
+| [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.2.4 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
-| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | Unreleased (after v0.2.3) |
+| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.2.4 |
 | [Context window meter](#context-window-meter) | Ring + percent in the composer toolbar showing live provider usage against the model's context window. | v0.2.2 | v0.2.2 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.2.0 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.23 |
-| [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | Unreleased (after v0.2.3) |
+| [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.2.4 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.1.18 |
 | [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.1.21 |
 | [Collapsed activity](#collapsed-activity) | Timed thought/tool groups separated by visible assistant messages and steers. | v0.0.1 | v0.1.13 |
@@ -45,7 +45,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.2.2 |
 | [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.22 |
 | [Saved turn diffs](#saved-turn-diffs) | Shows agent-only response files, counts, the current checkpoint checkout branch and files merged in from a subagent checkout. | v0.0.6 | v0.2.2 |
-| [Revert and restore](#revert-and-restore) | "Edit from here" rewinds the conversation only; "Restore files to this point" is a separate, guarded extension-owned Git restore that keeps your edits where it can. | v0.2.2 | Unreleased (after v0.2.3) |
+| [Revert and restore](#revert-and-restore) | "Edit from here" rewinds the conversation only; "Restore files to this point" is a separate, guarded extension-owned Git restore that keeps your edits where it can. | v0.2.2 | v0.2.4 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.1.15 |
@@ -385,7 +385,7 @@ Session resources retain the current History selection for restoration. Opening 
 
 - Fix the sidebar Working badge disappearing from a parent thread while a delegated subagent (T3 `delegate_task` child thread) was still running: the server only reports each thread's own run status, so a parent whose run already completed, or whose steer run had just finished, read as idle even though the subagent it spawned kept going. The sidebar, the Worktrees list and anything else reading `threadIsWorking` now fold in any visible, non-archived, non-settled descendant subagent's working state and its earliest start time, so the badge and elapsed timer keep tracking the parent for as long as any descendant is busy. A parent that is only waiting on a descendant now reads "Waiting on subagents" instead of "Working", with the same icon and timer.
 
-#### Unreleased — local follow-up (after v0.2.3)
+#### v0.2.4
 
 - Fix the v0.2.2 descendant scan missing a delegated subagent once its own child thread record settles after its first run, even though the parent's transcript still shows the subagent card as "Running": the server's own post-settlement background roster (`pendingBackgroundTasks`) is now read per thread and surfaced as `backgroundWork` (subagent/monitor/task/command counts plus `holdsCompletion`), the same roster T3 Code's web sidebar already consumes. A thread whose own run is idle but whose roster holds completion, or whose own transcript still shows a running subagent turn item (a fallback for servers without a roster), now reads as a calm, muted "Waiting" state — distinct from the spinner-style "Working" badge, which is reserved for the thread's own active run. Precedence is Input/Approval > Working > Waiting > nothing, matching T3 Code's sidebar. A command left running in the background (e.g. a dev server) does not hold a thread as Waiting.
 - Waiting counts its elapsed time from when the thread's own run ended, since the roster carries no per-task timestamp; archived and settled threads keep their own label even with a stale roster. Fresh-context regression review (Sonnet) flagged both; fixed with a unit test.
@@ -414,7 +414,7 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Compact composer
 
-#### Unreleased — local follow-up (after v0.2.3)
+#### v0.2.4
 
 - Fix Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y doing nothing in any session opened from Sessions. Since v0.1.23 (`501f62e`), those tabs are custom editors, and VS Code sends their undo to the editor's own empty history instead of the webview. Only chats opened with "Open New Chat in Editor Tab" (a plain panel) still undid. Editable fields now keep the shortcut from VS Code's key forwarding, so the browser's native undo runs. Reproduced and verified in real VS Code 1.143 with `verify-edh.mjs --undo-only`: one step undone per press on both surfaces, and redo works. An earlier variant that ran `execCommand` inside the keydown made `verify-views.ts` flaky (2 of 5 runs) and was replaced; the shipped version passed 3 of 3. The fresh-context regression review (Sonnet) found no code regressions and corrected this entry's origin version. On its suggestion, non-text inputs such as checkboxes are left to VS Code as before. Typecheck clean, 452/452 unit tests. Untested on macOS.
 
@@ -602,9 +602,9 @@ Ctrl/Cmd+click (or Alt+Enter) on an inline image reference opens an image-captio
 
 - Restore the caret in the same update that inserts a reference, rather than a frame later. Typing or moving the cursor in that frame was previously undone, so text typed immediately after a paste landed back at the insertion point. Pasted images, `@` menu picks and the attachment picker share one path.
 
-#### Unreleased — local follow-up (after v0.2.3)
+#### v0.2.4
 
-- Fix: a file chosen through the attachment picker lands while the textarea is still disabled, so its reference used to replay as a plain draft write that discarded the textarea's native undo history back to the typing before it; the insertion is now deferred until the textarea re-enables and replayed with focus, matching paste and drop. Investigated and ruled out, with reproduction attempts in both the deterministic browser harness and real VS Code (including typing during a real streaming turn), a separately reported regression where Ctrl+Z stopped undoing plain typed text at all in v0.2.3 — could not be reproduced with available tooling. Added `scripts/verify-composer-undo.ts` (wired into `verify-views.ts`) covering plain-typing undo, a picked-file reference, a quoted citation, and an unrelated host-state snapshot arriving mid-typing.
+- Fix: a file chosen through the attachment picker lands while the textarea is still disabled, so its reference used to replay as a plain draft write that discarded the textarea's native undo history back to the typing before it; the insertion is now deferred until the textarea re-enables and replayed with focus, matching paste and drop. Investigated and ruled out, with reproduction attempts in both the deterministic browser harness and real VS Code (including typing during a real streaming turn), a separately reported regression where Ctrl+Z stopped undoing plain typed text in v0.2.3. Those attempts used new-chat panels, which still worked; the real cause was session custom-editor tabs, fixed under [Compact composer](#compact-composer). Added `scripts/verify-composer-undo.ts` (wired into `verify-views.ts`) covering plain-typing undo, a picked-file reference, a quoted citation, and an unrelated host-state snapshot arriving mid-typing.
 - The picked-file insertion now waits for the commit that re-enables the textarea, then replays one frame later. The first version used a single frame from the picker callback, which could fire before re-enable; the review caught the race, and an in-effect replay was rejected because React resets the controlled textarea inside its effect flush. Files picked while the composer unmounts (a thread switch) still land in the draft they were picked for, and Send stays disabled until they are placed. `verify-composer-undo.ts` runs in `verify-views.ts`; it now waits for its fixture restore to land, and the full suite passed 6 of 6 runs (it had failed or flaked 6 of 7 before). The fresh-context reviewer signed off on the final changes with no blocking findings; typecheck clean, 450/450 unit tests.
 
 ## Message rendering
@@ -1135,7 +1135,7 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 
 ### Revert and restore
 
-#### Unreleased — local follow-up (after v0.2.3)
+#### v0.2.4
 
 - Replace the two labelled "Edit from here" / "Restore files to this point" buttons under a user message with a pencil and a return-arrow icon button beside the copy icon; the labels live in tooltips. The inline confirm and the restore preview open below the footer as before.
 
