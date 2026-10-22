@@ -37,7 +37,7 @@ The sidebar has **Sessions**, **Worktrees** and **Tasks** tabs, each with its ow
 
 Use the sort button beside **+** to order sessions by last activity or title, ascending or descending. The menu floats over the list; the view remembers your choice. Pins stay first and subagents stay with their parent.
 
-Select a session to open its editor tab; if it is already open, the extension reveals that tab. Use VS Code's editor groups, group locking and tab/window movement to arrange chat beside your code. The globe opens the current session in your default browser, using localhost for a loopback server so it can reuse your paired browser session. Working sessions show a static icon and elapsed minutes; Input/Approval badges and VS Code notifications highlight sessions needing a response.
+Select a session to open its editor tab; if it is already open, the extension reveals that tab. Use VS Code's editor groups, group locking and tab/window movement to arrange chat beside your code. The globe opens the current session in your default browser, using localhost for a loopback server so it can reuse your paired browser session. Working sessions show a static icon and elapsed minutes; a session that is only waiting on delegated subagents or other background work shows a calmer, muted "Waiting" badge instead; Input/Approval badges and VS Code notifications highlight sessions needing a response.
 
 The sidebar title keeps **Open Web UI** and its overflow actions. Right-click a session to rename, pin, settle, archive, restore or delete it. The editor has its conversation breadcrumb, browser shortcut and thread actions.
 

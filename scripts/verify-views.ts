@@ -25,6 +25,7 @@ import { verifyScheduledTasks } from "./verify-scheduled-tasks.js";
 import type { TaskOrigin } from "../src/shared/scheduledTasks.js";
 import { verifyModelReordering } from "./verify-model-reordering.js";
 import { verifyComposerEditing } from "./verify-composer-editing.js";
+import { verifyComposerUndo } from "./verify-composer-undo.js";
 
 const evidence = process.env.T3_VSCODE_UI_EVIDENCE ?? "/tmp/t3-vscode-views-ui";
 await mkdir(evidence, { recursive: true });
@@ -250,6 +251,7 @@ try {
   }
   const [first, second, third] = pages; assert.ok(first && second && third);
   await verifyComposerEditing(first, second, host, evidence, selectAssistantText);
+  await verifyComposerUndo(first, host, client, "tab-one", selectAssistantText);
   await selectInView(first, "third");
   await first.locator(".chat-heading strong").filter({ hasText: "third conversation" }).waitFor();
   assert.equal(await first.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "");

@@ -49,8 +49,31 @@ const RUNNING_STATUSES = ["preparing", "running", "starting", "waiting", "in_pro
  * `activityRunStatus` is the live signal, and the sidebar and the transcript card must agree on it.
  */
 export function statusIsWorking(status: string): boolean { return RUNNING_STATUSES.includes(status); }
-export function threadIsWorking(thread: Pick<ThreadSummary, "status" | "activityRunStatus" | "waitingOnSubagents">): boolean {
-  return statusIsWorking(thread.activityRunStatus ?? "") || statusIsWorking(thread.status) || !!thread.waitingOnSubagents;
+export function threadIsWorking(thread: Pick<ThreadSummary, "status" | "activityRunStatus">): boolean {
+  return statusIsWorking(thread.activityRunStatus ?? "") || statusIsWorking(thread.status);
+}
+
+/**
+ * A thread whose own run is idle but that still has background work holding its completion
+ * (delegated subagents, monitors, or unnamed provider tasks) reads as calm "Waiting", not as
+ * actively "Working". `backgroundWork.holdsCompletion` is the server's own roster-derived
+ * signal; `waitingOnSubagents` is a descendant-scan fallback (see `withSubagentWorkingState`
+ * and the host-side transcript scan) for servers that predate the roster.
+ */
+export function threadIsWaiting(thread: Pick<ThreadSummary, "status" | "activityRunStatus" | "waitingOnSubagents" | "backgroundWork"> & Partial<Pick<ThreadSummary, "archived" | "settled">>): boolean {
+  // A stale roster must not mask an archived or settled thread's own label.
+  return !thread.archived && !thread.settled && !threadIsWorking(thread) && (!!thread.backgroundWork?.holdsCompletion || !!thread.waitingOnSubagents);
+}
+
+/** A short, human description of what a Waiting thread is still waiting on. */
+export function waitingSummary(thread: Pick<ThreadSummary, "backgroundWork">): string {
+  const work = thread.backgroundWork;
+  if (!work) return "Waiting on subagents";
+  const parts: string[] = [];
+  if (work.subagents) parts.push(`${work.subagents} subagent${work.subagents === 1 ? "" : "s"}`);
+  if (work.monitors) parts.push(`${work.monitors} monitor${work.monitors === 1 ? "" : "s"}`);
+  if (work.tasks) parts.push(`${work.tasks} task${work.tasks === 1 ? "" : "s"}`);
+  return parts.length ? `${parts.join(", ")} running` : "Waiting on subagents";
 }
 
 /**

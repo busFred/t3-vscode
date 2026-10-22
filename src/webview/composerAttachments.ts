@@ -14,13 +14,14 @@ export async function settleDraftAttachments(draftKey: string): Promise<void> { 
 export function addDraftAttachments(draftKey: string, attachments: ReadonlyArray<DraftAttachment>, selection?: TextSelection, options?: AttachmentInsertionOptions): number | undefined {
   const added = attachments.map((file) => ({ ...file, contextId: file.contextId ?? `${file.mimeType.startsWith("image/") ? "image" : "file"}_${crypto.randomUUID()}` }));
   let cursor: number | undefined;
-  // A paste or drop happens in the focused textarea, so its reference is inserted there and stays undoable; a file
-  // picked through the dialog lands while the textarea is still disabled, and keeps the plain draft write.
+  // A paste, drop or picked file all insert their reference as a direct result of the action that produced it, so
+  // taking focus (if the textarea does not already have it, e.g. a drop while focus was elsewhere, or a file picked
+  // through a dialog that disabled the textarea while open) keeps the edit in the textarea's own undo history.
   updateDraft(draftKey, (draft) => {
     const inserted = selection ? insertAttachmentReferences(draft.text, added, selection, options) : undefined;
     cursor = inserted?.cursor;
     return { ...draft, ...(inserted ? { text: inserted.text } : {}), attachments: [...(draft.attachments ?? []), ...added] };
-  }, "keep-focus");
+  }, "take-focus");
   return cursor;
 }
 export async function removeDraftAttachment(draftKey: string, key: string): Promise<void> {

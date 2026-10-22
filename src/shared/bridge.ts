@@ -80,6 +80,15 @@ export interface ThreadSummary {
   readonly activityRunStatus?: string | null;
   /** Set when the thread itself is idle but a visible descendant subagent is still working. */
   readonly waitingOnSubagents?: boolean;
+  /** The server's post-settlement background roster (subagents/monitors/tasks that still hold completion), when the server reports one. */
+  readonly backgroundWork?: {
+    readonly subagents: number;
+    readonly monitors: number;
+    readonly tasks: number;
+    readonly commands: number;
+    readonly holdsCompletion: boolean;
+    readonly startedAt: string | null;
+  };
 }
 export type ThreadSearchMatch = OrchestrationThreadSearchMatch;
 export interface ComposerSuggestion {

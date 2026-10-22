@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList, type LegendListRef, type OnViewableItemsChangedInfo } from "@legendapp/list/react";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
-import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileClockIcon, FileIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, Undo2Icon, WrenchIcon, ArrowRightLeftIcon, MinusIcon, XIcon } from "lucide-react";
+import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, PencilIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, Undo2Icon, WrenchIcon, ArrowRightLeftIcon, MinusIcon, XIcon } from "lucide-react";
 import type { HostStateSnapshot, TranscriptItem, WireTurnItem } from "../../shared/bridge";
 import { RestorePreview } from "./RestorePreview";
 import { useActions } from "../actions";
@@ -41,13 +41,15 @@ function ForkButton({ row, threadId }: { row: TranscriptItem; threadId: string }
   }}><GitForkIcon size={13} /></button>;
 }
 /** "Edit from here" (conversation-only rewind) and "Restore files to this point" (extension-owned git restore) on a user message. */
-function RevertActions({ row, threadId }: { row: TranscriptItem; threadId: string }) {
+function RevertActions({ row, threadId, timestamp, copyText }: { row: TranscriptItem; threadId: string; timestamp: string | null; copyText: string }) {
   const run = useActions();
   const [confirming, setConfirming] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (row.revertTurnCount === undefined) return null;
+  // The footer always carries the timestamp and copy; the pencil and return icons only join it when a checkpoint exists.
+  const footer = (actions: ReactNode) => <div className="response-actions user-message-footer"><MessageTimestamp value={timestamp} />{actions}<CopyButton text={copyText} /></div>;
+  if (row.revertTurnCount === undefined) return footer(null);
   const itemId = row.sourceItemId ?? row.item.id;
   const rewind = () => {
     setBusy(true); setError(null);
@@ -56,10 +58,10 @@ function RevertActions({ row, threadId }: { row: TranscriptItem; threadId: strin
       .finally(() => setBusy(false));
   };
   return <>
-    <div className="revert-actions">
-      {row.canRevert ? <button className="revert-action" aria-expanded={confirming} onClick={() => setConfirming(!confirming)}><Undo2Icon size={12} /><span>Edit from here</span></button> : null}
-      <button className="revert-action" aria-expanded={restoring} onClick={() => setRestoring(!restoring)}><FileClockIcon size={12} /><span>Restore files to this point</span></button>
-    </div>
+    {footer(<>
+      {row.canRevert ? <button className="icon-button revert-icon" title="Edit from here" aria-label="Edit from here" aria-expanded={confirming} onClick={() => setConfirming(!confirming)}><PencilIcon size={13} /></button> : null}
+      <button className="icon-button revert-icon" title="Restore files to this point" aria-label="Restore files to this point" aria-expanded={restoring} onClick={() => setRestoring(!restoring)}><Undo2Icon size={13} /></button>
+    </>)}
     {confirming ? <div className="revert-confirm">
       <strong>Edit from here?</strong>
       <p>Rewind the chat to before this message. Your prompt returns to the composer. Files are not changed.</p>
@@ -137,7 +139,7 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
   const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} assetSource={assetSource} {...(item.type === "user_message" ? { context: item.context, attachments: item.attachments, source: { environmentId, threadId: row.sourceThreadId, messageId: item.messageId, author: "user" as const } } : {})} />;
   const openThread = (id: string) => { void run("selectThread", { threadId: id }); };
   switch (item.type) {
-    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.inputIntent === "steer" ? <span className="steer-label">↪ Steer</span> : null}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{sent.text || !sent.references.length ? markdown(stripRenderedAssistantQuotes(sent.text)) : null}<MessageReferences references={sent.references} scope={row.key} threadId={threadId} /></div>{/* Copy and search keep the sent payload: a row hides the snapshot from the page, not from the user. */}<div className="response-actions user-message-footer"><MessageTimestamp value={item.startedAt} /><CopyButton text={renderedMessageText(item.text)} /></div><RevertActions row={row} threadId={threadId} /></article>;
+    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.inputIntent === "steer" ? <span className="steer-label">↪ Steer</span> : null}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{sent.text || !sent.references.length ? markdown(stripRenderedAssistantQuotes(sent.text)) : null}<MessageReferences references={sent.references} scope={row.key} threadId={threadId} /></div>{/* Copy and search keep the sent payload: a row hides the snapshot from the page, not from the user. */}<RevertActions row={row} threadId={threadId} timestamp={item.startedAt} copyText={renderedMessageText(item.text)} /></article>;
     case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}>
       {!item.runId ? <AssistantHeader /> : null}
       <ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} assetSource={assetSource} streaming={item.streaming} />

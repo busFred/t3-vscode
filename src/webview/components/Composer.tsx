@@ -62,6 +62,27 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   useEffect(() => { if (text.length || contexts.length || attachments.length) markTouched(); }, [text, contexts, attachments]);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
+  // Picked files wait here until the commit that re-enables the textarea, so their insertion replays into its undo history.
+  // The replay runs a frame later: inside React's effect flush, the controlled textarea would be reset after the input event.
+  const pickedFiles = useRef<{ draftKey: string; attachments: DraftAttachment[]; selection: { start: number; end: number } } | null>(null);
+  const [placingPicked, setPlacingPicked] = useState(false);
+  const mounted = useRef(true);
+  // A composer unmounted mid-dialog (a thread switch remounts it) still owes the files to the draft they were picked for.
+  useEffect(() => { mounted.current = true; return () => {
+    mounted.current = false;
+    const picked = pickedFiles.current; pickedFiles.current = null;
+    if (picked) addDraftAttachments(picked.draftKey, picked.attachments, picked.selection);
+  }; }, []);
+  useEffect(() => {
+    const picked = pickedFiles.current;
+    if (picking || !picked) return;
+    pickedFiles.current = null;
+    requestAnimationFrame(() => {
+      const cursor = addDraftAttachments(picked.draftKey, picked.attachments, picked.selection);
+      if (cursor !== undefined) { setCursor(cursor); placeCursor(cursor); }
+      setPlacingPicked(false);
+    });
+  }, [picking]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [modelsOpen, setModelsOpen] = useState(false);
   const [cursor, setCursor] = useState(text.length);
@@ -263,7 +284,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const shortcutHint = `${running ? `Enter to queue${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Enter to send"} · Shift+Enter for a new line`;
   const send = async (steer = false) => {
     const value = formatComposerMessage(text, contexts);
-    if ((!value && !attachments.length) || disabled || setupBlocked || !selection || picking || attachments.some((file) => file.pending || !file.attachment)) return;
+    if ((!value && !attachments.length) || disabled || setupBlocked || !selection || picking || placingPicked || attachments.some((file) => file.pending || !file.attachment)) return;
     setBusy(true);
     const mode = resolveComposerDispatchMode({ running, activeTurnDefault: "queue", alternateModifier: steer && state.queue?.canSteer === true });
     const sent = await run("sendMessage", { text: value, mode, attachmentIds: attachments.map((file) => file.attachment!.id), attachmentReferences: attachments.flatMap((file) => file.contextId ? [{ contextId: file.contextId, attachmentId: file.attachment!.id }] : []), ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
@@ -282,7 +303,11 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     const selection = { start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length };
     setPicking(true); setAttachmentError(null);
     void trackAttachmentWork(draftKey, bridge.request<{ attachments: DraftAttachment[]; errors: string[] }>("pickAttachments", undefined, 10 * 60_000).then((result) => {
-      if (result.attachments.length) { markTouched(); const cursor = addDraftAttachments(draftKey, result.attachments, selection); if (cursor !== undefined) { setCursor(cursor); placeCursor(cursor); } }
+      if (result.attachments.length) {
+        markTouched();
+        if (mounted.current) { pickedFiles.current = { draftKey, attachments: result.attachments, selection }; setPlacingPicked(true); }
+        else addDraftAttachments(draftKey, result.attachments, selection);
+      }
       setAttachmentError(result.errors.join("\n") || null);
     })).catch((cause) => setAttachmentError(cause instanceof Error ? cause.message : String(cause))).finally(() => { setPicking(false); textarea.current?.focus(); });
   };
@@ -406,7 +431,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         <div className="composer-send-controls">
           <span className="composer-shortcuts" aria-hidden="true"><span>{running ? "Enter to queue" : "Enter to send"}</span><span>{running && state.queue?.canSteer ? `${steerShortcut} to steer` : "Shift+Enter for a new line"}</span></span>
           {running && thread ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
-          <button className="send-button" aria-label="Send message" title={shortcutHint} disabled={disabled || setupBlocked || picking || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
+          <button className="send-button" aria-label="Send message" title={shortcutHint} disabled={disabled || setupBlocked || picking || placingPicked || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
         </div>
       </div>
     </div>

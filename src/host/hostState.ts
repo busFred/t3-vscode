@@ -38,7 +38,8 @@ import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, Requ
 import { slashSuggestions } from "../shared/composerSuggestions.js";
 import { hasCompleteProviderWorkspaceSnapshot } from "@t3tools/client-runtime/providerSkills";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
-import { withSubagentWorkingState } from "../shared/sessionTree.js";
+import { withSubagentWorkingState, statusIsWorking } from "../shared/sessionTree.js";
+import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { turnCheckpointRange, turnDiffFiles, turnDiffFileRequest, type TurnDiff, type TurnDiffFile } from "./turnDiff.js";
 import { attachMergesToTurns, extractFilePatch, type MergeRecord } from "./mergeRecords.js";
 import { conversationActivity } from "./conversationActivity.js";
@@ -1590,28 +1591,47 @@ export class HostState {
         return { ...task, editVersion: taskEditVersion(task), originThreadId: association ? association.threadId : serverOrigin, originKnown: !!association || serverOrigin !== null };
       }) },
       projects: this.visibleProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })),
-      threads: withSubagentWorkingState(threads.map((thread) => ({
-        id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
-        modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
-        updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
-        lastActiveAt: sessionActivityAt(thread),
-        activeRunId: thread.activeRunId,
-        workingStartedAt: thread.activityRunStartedAt !== undefined
-          ? (thread.activityRunStartedAt ? DateTime.formatIso(thread.activityRunStartedAt) : null)
-          : thread.activeRunId && thread.activeRunId === thread.latestRunId && !thread.latestRunCompletedAt
-            ? (thread.latestRunStartedAt || thread.latestRunRequestedAt ? DateTime.formatIso((thread.latestRunStartedAt ?? thread.latestRunRequestedAt)!) : null) : null,
-        settled: thread.settledOverride === "settled", searchTerms: threadPullRequestSearchTerms(thread),
-        branch: thread.branch, worktreePath: thread.worktreePath,
-        canChooseWorkspace: !thread.activeRunId && (this.emptyThreads.has(thread.id) || thread.itemCount === 0) && !thread.archivedAt,
-        parentThreadId: thread.lineage.parentThreadId && visibleThreadIds.has(thread.lineage.parentThreadId) ? thread.lineage.parentThreadId : null,
-        relationshipToParent: thread.lineage.relationshipToParent,
-        providerNativeSubagent: thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider",
-        activityRunStatus: thread.activityRunStatus ?? null,
-        pendingRuntimeRequest: (() => {
-          const request = thread.pendingRuntimeRequest ?? this.threads.get(thread.id)?.projection?.runtimeRequests.find((request) => request.status === "pending");
-          return request ? { id: request.id, kind: request.kind, createdAt: DateTime.formatIso(request.createdAt) } : null;
-        })(),
-      }))),
+      threads: withSubagentWorkingState(threads.map((thread) => {
+        // visibleTurnItems lags each thread's own settled record (#the subagent's child thread
+        // settles before the parent's turn item stops showing "Running"), so the roster above
+        // (backgroundWork) is the primary signal and this transcript scan is only a fallback for
+        // servers that predate it.
+        const projection = this.threads.get(thread.id)?.projection;
+        const hasRunningSubagentItem = !!projection?.visibleTurnItems.some((row) => row.item.type === "subagent" && statusIsWorking(row.item.status));
+        const pendingBackgroundTasks = thread.pendingBackgroundTasks ?? [];
+        return {
+          id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
+          modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
+          updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
+          lastActiveAt: sessionActivityAt(thread),
+          activeRunId: thread.activeRunId,
+          workingStartedAt: thread.activityRunStartedAt !== undefined
+            ? (thread.activityRunStartedAt ? DateTime.formatIso(thread.activityRunStartedAt) : null)
+            : thread.activeRunId && thread.activeRunId === thread.latestRunId && !thread.latestRunCompletedAt
+              ? (thread.latestRunStartedAt || thread.latestRunRequestedAt ? DateTime.formatIso((thread.latestRunStartedAt ?? thread.latestRunRequestedAt)!) : null) : null,
+          settled: thread.settledOverride === "settled", searchTerms: threadPullRequestSearchTerms(thread),
+          branch: thread.branch, worktreePath: thread.worktreePath,
+          canChooseWorkspace: !thread.activeRunId && (this.emptyThreads.has(thread.id) || thread.itemCount === 0) && !thread.archivedAt,
+          parentThreadId: thread.lineage.parentThreadId && visibleThreadIds.has(thread.lineage.parentThreadId) ? thread.lineage.parentThreadId : null,
+          relationshipToParent: thread.lineage.relationshipToParent,
+          providerNativeSubagent: thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider",
+          activityRunStatus: thread.activityRunStatus ?? null,
+          ...(hasRunningSubagentItem ? { waitingOnSubagents: true } : {}),
+          ...(pendingBackgroundTasks.length ? { backgroundWork: {
+            subagents: pendingBackgroundTasks.filter((task) => task.kind === "subagent").length,
+            monitors: pendingBackgroundTasks.filter((task) => task.kind === "monitor").length,
+            commands: pendingBackgroundTasks.filter((task) => task.kind === "command").length,
+            tasks: pendingBackgroundTasks.filter((task) => task.kind === "background_task").length,
+            holdsCompletion: backgroundWorkHoldsCompletion(pendingBackgroundTasks),
+            // The roster carries no timestamp per task, so Waiting counts from when the thread's own run ended.
+            startedAt: thread.latestRunCompletedAt ? DateTime.formatIso(thread.latestRunCompletedAt) : null,
+          } } : {}),
+          pendingRuntimeRequest: (() => {
+            const request = thread.pendingRuntimeRequest ?? projection?.runtimeRequests.find((request) => request.status === "pending");
+            return request ? { id: request.id, kind: request.kind, createdAt: DateTime.formatIso(request.createdAt) } : null;
+          })(),
+        };
+      })),
       providers: this.client.config?.providers ?? [],
       archiveLoaded: this.archive !== null, archiveLoading: this.archiveLoad !== null, ...(this.archiveError ? { archiveError: this.archiveError } : {}),
       usageLimitSources: this.client.config?.usageLimitSources ?? [],

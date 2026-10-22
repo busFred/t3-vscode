@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sessionTree, sessionShelves, statusIsWorking, subagentStatus, threadIsWorking, withSubagentWorkingState } from "./sessionTree.js";
+import { sessionTree, sessionShelves, statusIsWorking, subagentStatus, threadIsWorking, threadIsWaiting, waitingSummary, withSubagentWorkingState } from "./sessionTree.js";
 import type { ThreadSummary, WireTurnItem } from "./bridge.js";
 
 const thread = (id: string, fields: Partial<ThreadSummary> = {}): ThreadSummary => ({ id, projectId: "project", title: id, status: "idle", modelSelection: { instanceId: "codex", model: "test" }, runtimeMode: "auto", interactionMode: "default", updatedAt: "2026-10-06T00:00:00Z", archived: false, pinned: false, activeRunId: null, ...fields });
@@ -76,32 +76,39 @@ test("The sidebar and the subagent card call the same statuses working", () => {
   for (const done of ["idle", "completed", "failed", "error", "cancelled"]) assert.equal(statusIsWorking(done), false, `${done} must not read as working`);
 });
 
-test("A parent whose own run already completed still reads as working while a delegated subagent runs", () => {
+test("A parent whose own run already completed reads as calmly Waiting (not Working) while a delegated subagent runs", () => {
+  // withSubagentWorkingState's descendant scan is now a Waiting signal, not a Working one:
+  // the parent's own run is done, so the spinner-style "Working" badge no longer applies to it.
   const threads = [thread("parent", { status: "completed", activityRunStatus: null }), child("agent", "parent", { status: "idle", activityRunStatus: "running", workingStartedAt: "2026-10-06T00:05:00Z" })];
   const [parent, agent] = withSubagentWorkingState(threads);
-  assert.equal(threadIsWorking(parent!), true, "parent must keep reading as working while its subagent runs");
+  assert.equal(threadIsWorking(parent!), false, "the parent's own run is done, so it must not read as actively Working");
+  assert.equal(threadIsWaiting(parent!), true, "the parent must still read as Waiting while its subagent runs");
   assert.equal(parent!.waitingOnSubagents, true);
   assert.equal(parent!.workingStartedAt, "2026-10-06T00:05:00Z", "elapsed timer should use the subagent's start, not reset");
   assert.equal(agent!.waitingOnSubagents, undefined, "the subagent itself is working on its own, not waiting on anything");
+  assert.equal(threadIsWorking(agent!), true);
 });
 
-test("A steer run completing while the delegated subagent is still running leaves the parent working", () => {
+test("A steer run completing while the delegated subagent is still running leaves the parent Waiting, not Working", () => {
   // The steer message's own run finished, which used to overwrite activityRunStatus even though
   // the run that spawned the subagent was still logically open.
   const threads = [thread("parent", { status: "idle", activityRunStatus: "completed" }), child("agent", "parent", { status: "running", activityRunStatus: null })];
   const [parent] = withSubagentWorkingState(threads);
-  assert.equal(threadIsWorking(parent!), true);
+  assert.equal(threadIsWorking(parent!), false);
+  assert.equal(threadIsWaiting(parent!), true);
 });
 
-test("Once every subagent finishes, the parent stops reading as working", () => {
+test("Once every subagent finishes, the parent stops reading as working or waiting", () => {
   const threads = [thread("parent", { status: "completed", activityRunStatus: null }), child("agent", "parent", { status: "completed", activityRunStatus: null })];
   const [parent, agent] = withSubagentWorkingState(threads);
   assert.equal(threadIsWorking(parent!), false);
+  assert.equal(threadIsWaiting(parent!), false);
   assert.equal(parent!.waitingOnSubagents, undefined);
   assert.equal(threadIsWorking(agent!), false);
+  assert.equal(threadIsWaiting(agent!), false);
 });
 
-test("Working state climbs through grandchildren but ignores archived or settled descendants", () => {
+test("Waiting state climbs through grandchildren but ignores archived or settled descendants", () => {
   const threads = [
     thread("parent", { status: "completed" }),
     child("agent", "parent", { status: "completed" }),
@@ -110,8 +117,10 @@ test("Working state climbs through grandchildren but ignores archived or settled
     child("settledAgent", "parent", { status: "running", settled: true }),
   ];
   const [parent, agent] = withSubagentWorkingState(threads);
-  assert.equal(threadIsWorking(parent!), true, "a working grandchild must bubble up through an idle child");
-  assert.equal(threadIsWorking(agent!), true, "the idle child between parent and the working grandchild must also read as working");
+  assert.equal(threadIsWaiting(parent!), true, "a working grandchild must bubble up through an idle child as Waiting");
+  assert.equal(threadIsWaiting(agent!), true, "the idle child between parent and the working grandchild must also read as Waiting");
+  assert.equal(threadIsWorking(parent!), false);
+  assert.equal(threadIsWorking(agent!), false);
 });
 
 test("A self-referencing subagent lineage cannot make withSubagentWorkingState loop forever", () => {
@@ -119,6 +128,35 @@ test("A self-referencing subagent lineage cannot make withSubagentWorkingState l
   assert.doesNotThrow(() => withSubagentWorkingState(threads));
   const [parent] = withSubagentWorkingState(threads);
   assert.equal(threadIsWorking(parent!), false, "the unrelated self-referencing thread must not bleed into the parent's state");
+  assert.equal(threadIsWaiting(parent!), false, "the unrelated self-referencing thread must not bleed into the parent's state");
+});
+
+test("threadIsWaiting precedence: a thread's own active run always outranks any background roster", () => {
+  const working = { status: "running", activityRunStatus: null, backgroundWork: { subagents: 1, monitors: 0, tasks: 0, commands: 0, holdsCompletion: true, startedAt: null } };
+  assert.equal(threadIsWorking(working), true);
+  assert.equal(threadIsWaiting(working), false, "an active own run must read as Working, never Waiting, regardless of the roster");
+});
+
+test("threadIsWaiting reads the server's background roster directly: subagent/monitor/background_task hold, command does not", () => {
+  const idle = { status: "idle", activityRunStatus: null } as const;
+  const rosterOf = (kind: "subagent" | "monitor" | "background_task" | "command") => ({ ...idle, backgroundWork: { subagents: kind === "subagent" ? 1 : 0, monitors: kind === "monitor" ? 1 : 0, tasks: kind === "background_task" ? 1 : 0, commands: kind === "command" ? 1 : 0, holdsCompletion: kind !== "command", startedAt: null } });
+  assert.equal(threadIsWaiting(rosterOf("subagent")), true);
+  assert.equal(threadIsWaiting(rosterOf("monitor")), true);
+  assert.equal(threadIsWaiting(rosterOf("background_task")), true);
+  assert.equal(threadIsWaiting(rosterOf("command")), false, "a dev server left running by the agent must not hold the thread as Waiting");
+});
+
+test("threadIsWaiting leaves archived and settled threads to their own label, even with a stale roster", () => {
+  const roster = { status: "idle", activityRunStatus: null, backgroundWork: { subagents: 1, monitors: 0, tasks: 0, commands: 0, holdsCompletion: true, startedAt: null } } as const;
+  assert.equal(threadIsWaiting(roster), true);
+  assert.equal(threadIsWaiting({ ...roster, archived: true }), false);
+  assert.equal(threadIsWaiting({ ...roster, settled: true }), false);
+});
+
+test("waitingSummary describes the roster's work, or falls back to a generic label without one", () => {
+  assert.equal(waitingSummary({ backgroundWork: { subagents: 2, monitors: 0, tasks: 0, commands: 0, holdsCompletion: true, startedAt: null } }), "2 subagents running");
+  assert.equal(waitingSummary({ backgroundWork: { subagents: 1, monitors: 1, tasks: 0, commands: 0, holdsCompletion: true, startedAt: null } }), "1 subagent, 1 monitor running");
+  assert.equal(waitingSummary({}), "Waiting on subagents");
 });
 
 test("Session sorting uses last activity, natural titles, pinned precedence and sibling-only ordering", () => {

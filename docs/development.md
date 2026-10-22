@@ -147,6 +147,8 @@ See [the architecture](t3-vscode-architecture.md) for the host/webview boundary 
 
 `verify-views.ts` also runs `verify-composer-editing.ts` for tab-local History, independent drafts, raw Markdown formatting, native undo/redo, list continuation, automatic numbering with undo, selection wrapping, indentation, IME handling, focus traversal and dense spacing at desktop and narrow widths.
 
+It then runs `verify-composer-undo.ts` for native undo across plain typing, a picked-file reference, a quote, and a host-state snapshot mid-typing.
+
 For native editor groups and Command Palette routing, run `node scripts/verify-edh.mjs --base-dir <fresh-isolated-home> --editor-controls-only` against an explicitly isolated server with an available provider. This uses disposable VS Code user data, extensions and shared data; it checks new tabs in two editor groups, local History selection, title changes empty-chat cleanup, and close/reopen recovery of typed text and a pasted image without sending provider messages.
 
 ## Session-search verification

@@ -360,7 +360,9 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .thread.active .thread-age { color: inherit; opacity: .85; }
 .thread-working, .thread-input { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: .625rem; color: var(--primary); }
 .thread.active .thread-working { color: inherit; }
-@media (max-width: 200px) { .thread-working > span, .thread-input > span { display: none; } }
+.thread-waiting { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: .625rem; color: var(--muted-foreground); }
+.thread.active .thread-waiting { color: inherit; opacity: .85; }
+@media (max-width: 200px) { .thread-working > span, .thread-input > span, .thread-waiting > span { display: none; } }
 .provider-icon { width: 12px; height: 12px; flex-shrink: 0; }
 .thread-input { display: inline-flex; color: var(--primary); }
 .thread.active .thread-input { color: inherit; }
@@ -759,9 +761,8 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .turn-branch-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted-foreground); font-family: var(--vscode-editor-font-family, monospace); font-size: 0.625rem; }
 
 /* "Edit from here" / "Restore files to this point" (docs/mockups/revert-combined.html is the spec). */
-.revert-actions { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
-.revert-action { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: 5px; background: transparent; color: var(--muted-foreground); font-size: 0.6875rem; }
-.revert-action:hover, .revert-action[aria-expanded="true"] { color: var(--foreground); background: var(--muted); }
+.user-message-footer .revert-icon { width: 23px; height: 23px; margin-top: 0; flex-shrink: 0; }
+.user-message-footer .revert-icon[aria-expanded="true"] { color: var(--foreground); background: var(--muted); }
 .revert-confirm { max-width: 420px; margin: 6px 0 2px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: 0 4px 16px #0002; font-size: 0.75rem; }
 .revert-confirm p { margin: 4px 0 8px; color: var(--muted-foreground); }
 .revert-confirm-actions { display: flex; gap: 8px; }

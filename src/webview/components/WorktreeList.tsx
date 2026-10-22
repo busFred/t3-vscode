@@ -4,7 +4,7 @@ import type { HostStateSnapshot, ThreadSummary } from "../../shared/bridge";
 import type { WorktreeChoice } from "../../shared/worktrees";
 import { useActions } from "../actions";
 import { bridge } from "../bridge-client";
-import { sessionShelves, threadIsWorking, type SessionTreeNode } from "../../shared/sessionTree";
+import { sessionShelves, threadIsWorking, threadIsWaiting, waitingSummary, type SessionTreeNode } from "../../shared/sessionTree";
 import { checkoutForWorkingDirectory, checkoutPath, existingCheckoutChoice, worktreeRepositoryGroups, worktreeVisibilityScope, type RepositoryCheckout, type RepositoryGroup } from "../../shared/worktreeGroups";
 import { WorktreePopover } from "./WorktreePopover";
 import { WorktreeInspector } from "./WorktreeInspector";
@@ -29,7 +29,9 @@ function CheckoutSessions({ state, sessions, query, path }: { readonly state: Ho
       ?? (!thread.worktreePath ? items.find((item) => item.projectId === thread.projectId && item.projectCheckoutPath)?.projectCheckoutPath : undefined)
       ?? (effectivePath ? checkoutForWorkingDirectory(effectivePath, items.map((item) => item.path)) : undefined);
     const checkoutHint = effectivePath && checkoutPath(actualCheckout ?? effectivePath) !== checkoutPath(path) ? `Checkout: ${effectivePath}` : undefined;
-    return <button title={checkoutHint} aria-description={checkoutHint} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} data-thread-id={thread.id} aria-label={thread.title || "Untitled"} aria-current={thread.id === state.activeThreadId ? "page" : undefined} onClick={(event) => { void run("openSessionTab", { threadId: thread.id, preview: event.detail < 2 }); }} onDoubleClick={() => { void run("openSessionTab", { threadId: thread.id, preview: false }); }}><span className="thread-title-line"><span className="thread-title" title={checkoutHint ? `${thread.title || "Untitled"} · ${checkoutHint}` : thread.title || "Untitled"}>{thread.title || "Untitled"}</span></span><span className="thread-meta"><small>{thread.pendingRuntimeRequest ? "Input needed" : threadIsWorking(thread) ? (thread.waitingOnSubagents ? "Waiting on subagents" : "Working") : thread.archived ? "Archived" : thread.settled ? "Settled" : "Session"}</small>{thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : thread.settled ? <CheckIcon size={12} /> : <MessageSquareIcon size={12} />}</span></button>;
+    const isWorking = threadIsWorking(thread);
+    const isWaiting = !isWorking && threadIsWaiting(thread);
+    return <button title={checkoutHint} aria-description={checkoutHint} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} data-thread-id={thread.id} aria-label={thread.title || "Untitled"} aria-current={thread.id === state.activeThreadId ? "page" : undefined} onClick={(event) => { void run("openSessionTab", { threadId: thread.id, preview: event.detail < 2 }); }} onDoubleClick={() => { void run("openSessionTab", { threadId: thread.id, preview: false }); }}><span className="thread-title-line"><span className="thread-title" title={checkoutHint ? `${thread.title || "Untitled"} · ${checkoutHint}` : thread.title || "Untitled"}>{thread.title || "Untitled"}</span></span><span className="thread-meta"><small className={isWaiting ? "thread-waiting" : undefined} title={isWaiting ? waitingSummary(thread) : undefined}>{thread.pendingRuntimeRequest ? "Input needed" : isWorking ? "Working" : isWaiting ? "Waiting" : thread.archived ? "Archived" : thread.settled ? "Settled" : "Session"}</small>{thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : thread.settled ? <CheckIcon size={12} /> : <MessageSquareIcon size={12} />}</span></button>;
   };
   const tree = (node: SessionTreeNode, depth = 0): ReactNode => {
     const open = !!query || expanded.has(node.thread.id);
@@ -48,7 +50,7 @@ function Checkout({ state, checkout, query, actionProjectId }: { readonly state:
   const item = { ...source, active: checkout.item.active, missing: checkout.item.missing, threadIds: checkout.item.threadIds };
   const run = useActions(); const { sessions } = checkout;
   const roots = sessionShelves(sessions); const count = roots.active.length + roots.settled.length + roots.archived.length;
-  const settled = count > 0 && !roots.active.length && !item.active && !sessions.some(threadIsWorking);
+  const settled = count > 0 && !roots.active.length && !item.active && !sessions.some((thread) => threadIsWorking(thread) || threadIsWaiting(thread));
   const opened = checkout.item.openInWindow ?? state.workspaceRoots.some((root) => { const checkout = checkoutForWorkingDirectory(root, state.worktrees?.items.map((item) => item.path) ?? []); return checkout && checkoutPath(checkout) === checkoutPath(item.path); });
   const label = item.root ? `Main checkout${item.branch ? ` · ${item.branch}` : ""}` : item.branch || `Detached checkout · ${item.head ? `${item.head.slice(0, 7)} · ` : ""}${item.path}`;
   const checkoutMatch = `${label} ${item.path}`.toLowerCase().includes(query);
