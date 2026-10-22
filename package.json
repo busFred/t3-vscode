@@ -393,7 +393,7 @@
     "typecheck": "tsc --noEmit",
     "vscode:prepublish": "pnpm run build && node scripts/generate-notices.mjs",
     "package": "node scripts/package-vsix.mjs",
-    "test": "tsx --test src/host/*.test.ts src/shared/*.test.ts scripts/*.test.mjs"
+    "test": "tsx --test src/host/*.test.ts src/shared/*.test.ts src/webview/*.test.ts scripts/*.test.mjs"
   },
   "dependencies": {
     "@legendapp/list": "3.3.5",

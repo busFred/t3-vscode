@@ -151,6 +151,8 @@ It then runs `verify-composer-undo.ts` for native undo across plain typing, a pi
 
 For native editor groups and Command Palette routing, run `node scripts/verify-edh.mjs --base-dir <fresh-isolated-home> --editor-controls-only` against an explicitly isolated server with an available provider. This uses disposable VS Code user data, extensions and shared data; it checks new tabs in two editor groups, local History selection, title changes empty-chat cleanup, and close/reopen recovery of typed text and a pasted image without sending provider messages.
 
+`--undo-only` drives the composer with real workbench clicks and keystrokes, in a new chat panel and in a session opened from Sessions (a custom-editor preview tab). It checks that Ctrl+Z undoes exactly one step and that Ctrl+Shift+Z and Ctrl+Y redo. It needs the rich fixture (`prepare-rich-fixture.ts`, then `--seed`) in the same isolated home and does not call a provider.
+
 ## Session-search verification
 
 Use the [feature-history overview](feature-history.md#overview) as the regression checklist before packaging. `scripts/verify-views.ts` covers full-history search, case/word/content filters, older command reveal, math source, independent tabs and draft preservation against deterministic fixtures. Unit tests cover source occurrences, incremental updates, cancellation and incomplete history; these checks do not call a provider.

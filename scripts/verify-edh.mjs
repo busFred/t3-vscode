@@ -21,6 +21,7 @@ const referencesOnly = process.argv.includes('--references-only');
 const visualsOnly = process.argv.includes('--visuals-only');
 const cleanupOnly = process.argv.includes('--cleanup-only');
 const editorControlsOnly = process.argv.includes('--editor-controls-only');
+const undoOnly = process.argv.includes('--undo-only');
 const screenshotsOnly = process.argv.includes('--screenshots-only');
 const testModel = process.env.T3_VSCODE_TEST_MODEL || 'gpt-6-luna';
 if (!setupOnly) {
@@ -256,6 +257,10 @@ try {
   } else if (screenshotsOnly) {
     const { captureReadme } = await import('./capture-readme.mjs');
     await captureReadme({ home, workbench, sidebar, findWebview, runCommand });
+  } else if (undoOnly) {
+    const { verifyNativeUndo } = await import('./verify-native-undo.mjs');
+    await verifyNativeUndo({ home, workbench, sidebar, findWebview, runCommand });
+    console.log('PASS: Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo one step in a new chat panel and in a session custom-editor tab');
   } else if (editorControlsOnly) {
     const { verifyNativeEditorControls } = await import('./verify-native-editor-controls.mjs');
     await verifyNativeEditorControls({ evidence, workbench, sidebar, findWebview, chooseLiveTestModel, runCommand });

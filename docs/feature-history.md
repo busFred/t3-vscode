@@ -20,7 +20,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | Unreleased (after v0.2.3) |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
-| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box. | v0.0.1 | v0.2.0 |
+| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | Unreleased (after v0.2.3) |
 | [Context window meter](#context-window-meter) | Ring + percent in the composer toolbar showing live provider usage against the model's context window. | v0.2.2 | v0.2.2 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.2.0 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
@@ -413,6 +413,10 @@ Session resources retain the current History selection for restoration. Opening 
 ## Composer and attachments
 
 ### Compact composer
+
+#### Unreleased — local follow-up (after v0.2.3)
+
+- Fix Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y doing nothing in any session opened from Sessions. Since v0.1.23 (`501f62e`), those tabs are custom editors, and VS Code sends their undo to the editor's own empty history instead of the webview. Only chats opened with "Open New Chat in Editor Tab" (a plain panel) still undid. Editable fields now keep the shortcut from VS Code's key forwarding, so the browser's native undo runs. Reproduced and verified in real VS Code 1.143 with `verify-edh.mjs --undo-only`: one step undone per press on both surfaces, and redo works. An earlier variant that ran `execCommand` inside the keydown made `verify-views.ts` flaky (2 of 5 runs) and was replaced; the shipped version passed 3 of 3. The fresh-context regression review (Sonnet) found no code regressions and corrected this entry's origin version. On its suggestion, non-text inputs such as checkboxes are left to VS Code as before. Typecheck clean, 452/452 unit tests. Untested on macOS.
 
 #### v0.2.0
 

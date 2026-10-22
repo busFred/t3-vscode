@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { installNativeUndo } from "./nativeUndo";
 import "./styles/tokens.css";
 
 // Keep portable dark utility classes aligned; colors come from native VS Code variables.
@@ -10,6 +11,8 @@ const syncTheme = () => {
 };
 syncTheme();
 new MutationObserver(syncTheme).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+
+installNativeUndo(window);
 
 const container = document.getElementById("root");
 if (container) {
