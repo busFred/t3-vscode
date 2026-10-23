@@ -43,6 +43,8 @@ export interface ProjectAction {
   readonly async?: boolean;
   readonly runOnSettle?: boolean;
 }
+/** How a session reacts when its checkout is on a different branch than the session records. */
+export type SessionBranchPolicy = "follow" | "pinned";
 export interface WorktreeProjectSettings {
   readonly capabilities?: { readonly worktreesDirectory: boolean; readonly cleanupRetention: boolean; readonly runOnSettle: boolean };
   readonly projectId: string;
@@ -55,6 +57,9 @@ export interface WorktreeProjectSettings {
   readonly location: string;
   readonly submodules: "recursive" | "top-level" | "none";
   readonly copyEnv: boolean;
+  /** Extension-only project default; sessions may override it. */
+  readonly branchPolicy?: SessionBranchPolicy;
+  readonly sessionBranchPolicies?: Readonly<Record<string, SessionBranchPolicy>>;
   readonly cleanup: {
     readonly enabled: boolean;
     readonly inactiveDays: number;

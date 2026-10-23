@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile, rename, stat, rm, readdir, realpath } from "node:fs/promises";
 import { basename, isAbsolute, join, resolve, relative, sep } from "node:path";
 import type { ProjectSummary, ThreadSummary } from "../shared/bridge.js";
-import type { WorktreeChoice, WorktreeSummary, WorktreePreparation, WorktreesState, WorktreeProjectSettings, WorktreeReview } from "../shared/worktrees.js";
+import type { SessionBranchPolicy, WorktreeChoice, WorktreeSummary, WorktreePreparation, WorktreesState, WorktreeProjectSettings, WorktreeReview } from "../shared/worktrees.js";
 import type { T3Client } from "./t3Client.js";
 import { WorktreeEnvironmentManager, runEnvironmentCommand, sanitizeEnvironmentDiagnostic, acquireWorktreeLease, type EnvironmentRunner } from "./worktreeEnvironment.js";
 import { WorktreeSettingsStore, type WorktreeSettingsProject } from "./worktreeSettings.js";
@@ -194,6 +194,34 @@ export class WorktreeCoordinator {
     await this.refresh();
   }
   async settings(projectId: string) { return this.settingsStore.load(this.scope(projectId), this.project(projectId), this.options.client); }
+  branchPolicy(projectId: string, threadId: string): Promise<SessionBranchPolicy> { return this.settingsStore.branchPolicy(this.scope(projectId), this.project(projectId), threadId); }
+  async setSessionBranchPolicy(projectId: string, threadId: string, policy: SessionBranchPolicy | null): Promise<void> {
+    await this.options.assertTrusted();
+    const sessions = await this.settingsStore.setSessionBranchPolicy(this.scope(projectId), this.project(projectId), threadId, policy);
+    this.value = { ...this.value, settings: this.value.settings.map(entry => entry.projectId === projectId ? { ...entry, sessionBranchPolicies: sessions } : entry) };
+    this.options.changed();
+  }
+  /** Moves a linked checkout back to an existing local branch. Every session in the checkout sees the change. */
+  async switchBranch(projectId: string, path: string, branch: string): Promise<void> {
+    await this.options.assertTrusted();
+    if (!branch || branch.startsWith("-") || branch.includes("\0")) throw new Error("Choose a valid branch.");
+    const { project, tree } = await this.requireCheckout(projectId, path);
+    if (tree.root) throw new Error("The main checkout keeps its own branch.");
+    if (tree.branch === branch) return;
+    const checkout = await realpath(tree.path);
+    const release = await acquireWorktreeLease(this.options.storageRoot, `checkout:${checkout}`);
+    try {
+      if (this.checkoutBusy(tree.path) || [...this.attempts.values()].some(a => a.path === tree.path && this.jobs.has(a.preparation.id))) throw new Error("An agent or setup is using this checkout. Stop it before switching branches.");
+      await git(project.workspaceRoot, ["check-ref-format", "--branch", branch]);
+      await git(project.workspaceRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]).catch(() => { throw new Error(`Branch ${branch} no longer exists.`); });
+      if ((await readWorktreeStatus(tree.path)).tracked) throw new Error("This checkout has uncommitted changes. Commit or stash them before switching branches.");
+      // Commits made on a detached HEAD would only remain reachable through the reflog.
+      if (!tree.branch && !(await git(tree.path, ["for-each-ref", "--contains", "HEAD", "--format=%(refname)", "refs/heads"]))) throw new Error("This detached checkout has commits on no branch. Create a branch for them before switching.");
+      // Git refuses a branch checked out elsewhere and untracked files it would overwrite.
+      await git(tree.path, ["switch", "--no-guess", branch]);
+    } finally { await release(); }
+    await this.refresh();
+  }
   /** Invoked only by the Worktrees page opening or its explicit Refresh action. */
   async cleanupMissingEnvironments(now = Date.now()): Promise<void> {
     if (this.cleanupJob) return this.cleanupJob;

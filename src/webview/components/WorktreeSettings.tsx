@@ -4,6 +4,7 @@ import type { HostStateSnapshot } from "../../shared/bridge";
 import type { ProjectAction, WorktreeProjectSettings } from "../../shared/worktrees";
 import type { WorktreeEnvironmentProfile } from "../../shared/worktreeEnvironment";
 import { useActions } from "../actions";
+import { branchPolicyLabel } from "./WorktreeSessionBranch";
 
 export function WorktreeSettings({ state, settings, onClose }: { readonly state: HostStateSnapshot; readonly settings: WorktreeProjectSettings; readonly onClose: () => void }) {
   const [draft, setDraft] = useState(settings); const [busy, setBusy] = useState(false); const [failed, setFailed] = useState(false);
@@ -49,6 +50,10 @@ export function WorktreeSettings({ state, settings, onClose }: { readonly state:
           {!draft.capabilities?.worktreesDirectory ? <small>This server does not support changing the worktree directory.</small> : null}
           <label>Submodules<select aria-label="Worktree submodules" value={draft.submodules} onChange={(event) => patch({ submodules: event.target.value as WorktreeProjectSettings["submodules"] })}><option value="recursive">Recursive</option><option value="top-level">Top level</option><option value="none">None</option></select></label>
           <label className="task-enabled"><input type="checkbox" checked={draft.copyEnv} onChange={(event) => patch({ copyEnv: event.target.checked })} />Copy .env files (extension)</label>
+        </details>
+        <details className="task-workspace"><summary>Session branches · extension only</summary>
+          <label>When a session’s checkout changes branch<select aria-label="Default session branch policy" value={draft.branchPolicy ?? "follow"} onChange={(event) => patch({ branchPolicy: event.target.value as "follow" | "pinned" })}><option value="follow">{branchPolicyLabel("follow")}</option><option value="pinned">{branchPolicyLabel("pinned")}</option></select></label>
+          <small>Sessions stay bound to their checkout folder. Following records the checkout’s current branch when you send a message. Keeping the branch holds messages until the checkout is switched back or you use its branch. Each session can override this in Session checkout.</small>
         </details>
         <details className="task-workspace"><summary>Cleanup · synced with T3</summary>
           <label className="task-enabled"><input type="checkbox" checked={draft.cleanup.enabled} onChange={(event) => cleanup({ enabled: event.target.checked })} />Enable automatic cleanup</label>

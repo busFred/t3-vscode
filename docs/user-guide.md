@@ -61,6 +61,15 @@ Worktrees refreshes every 10 minutes by default, on page open, after checkout ch
 
 Open checkout details for setup status, logs, terminal, project actions, native diffs and selected-file transfers. Applying files asks for an explicit destination and stops on conflicts. **Continue in new worktree** moves an idle Root conversation with its history; copying uncommitted files is optional. Removing a checkout retains its branch and conversations, so it can be restored later.
 
+### Session branches
+
+A conversation stays bound to its checkout folder, not to a branch. If the checkout's branch changes, for example because an agent ran `git switch`, the session's branch policy decides what happens next:
+
+- **Follow the checkout** (default): sending a message, or retrying setup, records the checkout's current branch for the session. This matches T3 Web.
+- **Keep the session branch**: messages are held until the branches match again. Open **Session checkout** from the message box's Worktree control and choose **Use ‹branch›** to accept the new branch, or **Switch checkout to ‹branch›…** to move the checkout back. Switching asks for confirmation, affects every session sharing that checkout, and is refused if tracked files have uncommitted changes or an agent or setup is using the checkout.
+
+Set the project default under **Worktree settings → Session branches · extension only**. Override it for one session in **Session checkout**. These preferences stay in this extension and are not shared with T3 Web.
+
 ### Worktree settings and Python
 
 **Actions**, **Creation** and supported **Cleanup** settings save to the T3 service and appear in T3 Web. The worktree directory is a service-wide machine setting. Import `t3.json` actions before running them. A setup action with **Wait for setup** blocks the first message; background actions do not.

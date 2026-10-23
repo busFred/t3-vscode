@@ -363,3 +363,71 @@ test('handoff retry after host restart restores the retained copy intent and che
   assert.equal(await readFile(join(f.home, 'new-1', 'file.py'), 'utf8'), 'edited before restart\n');
   assert.equal(f.creates(), 1);
 });
+
+test('a session follows a branch switched inside its checkout by default', async t => {
+  const f = await fixture(t);
+  await f.git(f.other, 'switch', '-c', 'drifted');
+  await f.host.sendMessage('continue', 'other-session');
+  const thread = f.host.snapshot().threads.find(t => t.id === 'other-session')!;
+  assert.equal(thread.branch, 'drifted'); assert.equal(thread.worktreePath, f.other);
+  const update = f.client.commands.findLast(c => c.type === 'thread.metadata.update');
+  assert(update?.type === 'thread.metadata.update' && update.branch === 'drifted' && update.worktreePath === undefined, 'Only the branch is updated; the checkout binding stays');
+  assert.equal(f.client.commands.filter(c => c.type === 'message.dispatch').length, 1);
+  assert(!f.host.worktrees!.snapshot().preparations.some(p => p.threadId === 'other-session' && p.phase === 'failed'));
+});
+
+test('a kept session branch holds messages until the checkout is switched back or its branch is used', async t => {
+  const f = await fixture(t);
+  await f.host.setSessionBranchPolicy('other-session', 'pinned');
+  await f.host.refreshWorktrees();
+  assert.equal(f.host.worktrees!.snapshot().settings[0]?.sessionBranchPolicies?.['other-session'], 'pinned');
+  await f.git(f.other, 'switch', '-c', 'drifted');
+  await assert.rejects(f.host.sendMessage('continue', 'other-session'), /pinned to branch external.*branch drifted/);
+  assert.equal(f.client.commands.filter(c => c.type === 'message.dispatch').length, 0);
+  assert.equal(f.host.snapshot().threads.find(t => t.id === 'other-session')?.branch, 'external');
+  assert(!f.host.worktrees!.snapshot().preparations.some(p => p.threadId === 'other-session'), 'A held message must not leave a failed setup attempt');
+
+  await writeFile(join(f.other, 'file.py'), 'dirty\n');
+  await assert.rejects(f.host.switchCheckoutToSessionBranch('other-session'), /uncommitted changes/);
+  assert.equal(await f.git(f.other, 'branch', '--show-current'), 'drifted');
+  await f.git(f.other, 'checkout', '--', 'file.py');
+  await f.host.switchCheckoutToSessionBranch('other-session');
+  assert.equal(await f.git(f.other, 'branch', '--show-current'), 'external');
+  await f.host.sendMessage('continue', 'other-session');
+  assert.equal(f.client.commands.filter(c => c.type === 'message.dispatch').length, 1);
+
+  f.client.shell = { ...f.client.shell, threads: f.client.shell.threads.map(t => t.id === 'other-session' ? { ...t, activeRunId: null } : t) };
+  (f.host as any).acceptedMessages.delete('other-session'); (f.host as any).shell = await f.client.snapshotShell();
+  await f.git(f.other, 'switch', '-c', 'second');
+  await f.host.adoptCheckoutBranch('other-session');
+  assert.equal(f.host.snapshot().threads.find(t => t.id === 'other-session')?.branch, 'second');
+  await f.host.sendMessage('again', 'other-session');
+  assert.equal(f.client.commands.filter(c => c.type === 'message.dispatch').length, 2);
+});
+
+test('retrying a setup held by a kept branch succeeds after the session follows its checkout', async t => {
+  const f = await fixture(t);
+  await f.host.setSessionBranchPolicy('other-session', 'pinned');
+  await f.git(f.other, 'switch', '-c', 'drifted');
+  await assert.rejects(f.host.prepareThreadWorkspace('other-session', { type: 'existing', path: f.other }), /pinned/);
+  const failed = f.host.worktrees!.snapshot().preparations.find(p => p.threadId === 'other-session')!;
+  assert.equal(failed.phase, 'failed'); assert.equal(failed.branch, 'drifted');
+  await f.host.setSessionBranchPolicy('other-session', 'follow');
+  await f.host.retryWorktreePreparation(failed.id);
+  assert.equal(f.host.worktrees!.snapshot().preparations.find(p => p.id === failed.id)?.phase, 'ready');
+  assert.equal(f.host.snapshot().threads.find(t => t.id === 'other-session')?.branch, 'drifted');
+  await assert.rejects(f.host.setSessionBranchPolicy('other-session', 'sometimes'), /Invalid branch policy/);
+});
+
+test('switching refuses a detached checkout whose commits are on no branch', async t => {
+  const f = await fixture(t);
+  await f.host.setSessionBranchPolicy('other-session', 'pinned');
+  await f.git(f.other, 'switch', '--detach');
+  await f.git(f.other, 'config', 'user.name', 'Fixture'); await f.git(f.other, 'config', 'user.email', 'fixture@example.invalid');
+  await writeFile(join(f.other, 'file.py'), 'detached\n'); await f.git(f.other, 'commit', '-am', 'detached work');
+  await assert.rejects(f.host.switchCheckoutToSessionBranch('other-session'), /commits on no branch/);
+  assert.equal(await f.git(f.other, 'branch', '--show-current'), '');
+  await f.git(f.other, 'branch', 'saved-work');
+  await f.host.switchCheckoutToSessionBranch('other-session');
+  assert.equal(await f.git(f.other, 'branch', '--show-current'), 'external');
+});

@@ -7,7 +7,7 @@ import { ProjectId, ProjectScript, ServerSettings } from '@t3tools/contracts';
 import { resolveProjectScripts } from '@t3tools/shared/projectScripts';
 import { resolveProjectSettings, resolveWorktreeCleanup } from '@t3tools/shared/projectSettings';
 import { parseT3ProjectFile } from '@t3tools/shared/t3ProjectFile';
-import type { ProjectAction, WorktreeProjectSettings } from '../shared/worktrees';
+import type { ProjectAction, SessionBranchPolicy, WorktreeProjectSettings } from '../shared/worktrees';
 import { DEFAULT_WORKTREE_ENVIRONMENT_PROFILE } from '../shared/worktreeEnvironment';
 import { parseWorktreeEnvironmentProfile, type WorktreeEnvironmentManager } from './worktreeEnvironment';
 
@@ -17,8 +17,9 @@ export interface WorktreeSettingsClient {
   updateSettings?: (patch: unknown) => Promise<unknown>;
   readonly worktreeSettingsCapabilities?: { readonly worktreesDirectory: boolean; readonly cleanupRetention: boolean; readonly runOnSettle: boolean };
 }
-interface LocalSettings { copyEnv: boolean }
-const defaults: LocalSettings = { copyEnv: false };
+interface LocalSettings { copyEnv: boolean; branchPolicy: SessionBranchPolicy; sessions: Record<string, SessionBranchPolicy> }
+const defaults: LocalSettings = { copyEnv: false, branchPolicy: 'follow', sessions: {} };
+const MAX_SESSION_POLICIES = 1000;
 const keepWhen = { any: 'any-local-files', uncommitted: 'uncommitted-changes', tracked: 'tracked-changes' } as const;
 const capabilities = (client: WorktreeSettingsClient) => ({ worktreesDirectory: client.worktreeSettingsCapabilities?.worktreesDirectory === true,
   cleanupRetention: client.worktreeSettingsCapabilities?.cleanupRetention === true, runOnSettle: client.worktreeSettingsCapabilities?.runOnSettle === true });
@@ -44,10 +45,17 @@ function days(value: unknown, label: string): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 3650) throw new Error(`${label} must be an integer from 0 to 3650`);
   return value;
 }
+function branchPolicy(value: unknown): SessionBranchPolicy {
+  if (value !== 'follow' && value !== 'pinned') throw new Error('Invalid branch policy');
+  return value;
+}
 function localSettings(input: unknown): LocalSettings {
   const value = object(input, 'local worktree settings');
-  keys(value, ['copyEnv'], 'local worktree settings');
-  return { copyEnv: boolean(value.copyEnv, 'copyEnv') };
+  keys(value, ['copyEnv', 'branchPolicy', 'sessions'], 'local worktree settings');
+  const sessions: Record<string, SessionBranchPolicy> = {};
+  if (value.sessions !== undefined) for (const [id, policy] of Object.entries(object(value.sessions, 'session branch policies'))) sessions[string(id, 'session ID', 256)] = branchPolicy(policy);
+  // Files written before branch policies existed hold only copyEnv.
+  return { copyEnv: boolean(value.copyEnv, 'copyEnv'), branchPolicy: value.branchPolicy === undefined ? 'follow' : branchPolicy(value.branchPolicy), sessions };
 }
 function viewAction(script: typeof ProjectScript.Type): ProjectAction {
   return { id: script.id, name: script.name, command: script.command, icon: script.icon, runOnWorktreeCreate: script.runOnWorktreeCreate,
@@ -109,6 +117,7 @@ async function projectFile(root: string) {
 export class WorktreeSettingsStore {
   private readonly storageRoot: string;
   private readonly environmentManager: WorktreeEnvironmentManager;
+  private readonly localWrites = new Map<string, Promise<void>>();
   constructor(storageRoot: string, environmentManager: WorktreeEnvironmentManager) {
     this.storageRoot = storageRoot;
     this.environmentManager = environmentManager;
@@ -119,7 +128,45 @@ export class WorktreeSettingsStore {
   }
   private async local(scope: string, project: WorktreeSettingsProject): Promise<LocalSettings> {
     try { return localSettings(JSON.parse(await boundedRead(this.file(scope, project)))); }
-    catch (error) { if (code(error) === 'ENOENT') return { ...defaults }; throw error; }
+    catch (error) { if (code(error) === 'ENOENT') return { ...defaults, sessions: {} }; throw error; }
+  }
+  private async writeLocal(scope: string, project: WorktreeSettingsProject, local: LocalSettings): Promise<void> {
+    const file = this.file(scope, project);
+    await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    // Default policies are omitted so earlier builds, which accept only copyEnv, can still read the file.
+    const stored = { copyEnv: local.copyEnv, ...(local.branchPolicy !== 'follow' ? { branchPolicy: local.branchPolicy } : {}), ...(Object.keys(local.sessions).length ? { sessions: local.sessions } : {}) };
+    try { await writeFile(temporary, JSON.stringify(stored), { mode: 0o600, flag: 'wx' }); await rename(temporary, file); }
+    finally { await rm(temporary, { force: true }); }
+  }
+  /** Serializes read-modify-write cycles of one local file within this extension host. */
+  private mutateLocal<T>(scope: string, project: WorktreeSettingsProject, action: () => Promise<T>): Promise<T> {
+    const file = this.file(scope, project);
+    const result = (this.localWrites.get(file) ?? Promise.resolve()).catch(() => {}).then(action);
+    const tail = result.then(() => {}, () => {});
+    this.localWrites.set(file, tail);
+    void tail.then(() => { if (this.localWrites.get(file) === tail) this.localWrites.delete(file); });
+    return result;
+  }
+  /** Reads only extension-local state, so branch checks work without the service settings RPC. */
+  async branchPolicy(scope: string, project: WorktreeSettingsProject, threadId: string): Promise<SessionBranchPolicy> {
+    const local = await this.local(scope, project);
+    return Object.hasOwn(local.sessions, threadId) ? local.sessions[threadId]! : local.branchPolicy;
+  }
+  /** A null policy returns the session to the project default. */
+  async setSessionBranchPolicy(scope: string, project: WorktreeSettingsProject, threadId: string, policy: SessionBranchPolicy | null): Promise<Record<string, SessionBranchPolicy>> {
+    string(threadId, 'session ID', 256);
+    if (policy !== null) branchPolicy(policy);
+    return this.mutateLocal(scope, project, async () => {
+      const local = await this.local(scope, project);
+      const sessions = { ...local.sessions };
+      delete sessions[threadId];
+      if (policy !== null) sessions[threadId] = branchPolicy(policy);
+      // Oldest overrides go first; their sessions fall back to the project default.
+      for (const id of Object.keys(sessions).slice(0, Math.max(0, Object.keys(sessions).length - MAX_SESSION_POLICIES))) delete sessions[id];
+      await this.writeLocal(scope, project, { ...local, sessions });
+      return sessions;
+    });
   }
   private async native(client: WorktreeSettingsClient) {
     if (!client.getSettings) throw new Error('This T3 server does not support project settings. Reconnect to a compatible server to edit worktree settings.');
@@ -139,13 +186,14 @@ export class WorktreeSettingsStore {
     return { projectId: project.id, capabilities: capabilities(client), actions: resolveProjectScripts(native, { id, scripts: Schema.decodeUnknownSync(Schema.Array(ProjectScript))(project.scripts) }).map(viewAction), fileActions: file.fileActions,
       ...('fileError' in file ? { fileError: file.fileError } : {}), environment,
       startFromOrigin: effective.newWorktreesStartFromOrigin, branchPrefix: effective.branchNamePrefix,
-      location: native.worktreesDirectory ?? '', copyEnv: local.copyEnv, submodules: effective.worktreeSubmodules,
+      location: native.worktreesDirectory ?? '', copyEnv: local.copyEnv, branchPolicy: local.branchPolicy, sessionBranchPolicies: local.sessions, submodules: effective.worktreeSubmodules,
       cleanup: { enabled, inactiveDays: cleanup.worktreeAfterDays ?? 0, merged: cleanup.worktreeOnMerge, unchanged: cleanup.worktreeUnchanged, settledDays, keepLocalFiles: cleanup.worktreeKeepWhen === 'any-local-files' ? 'any' : cleanup.worktreeKeepWhen === 'tracked-changes' ? 'tracked' : 'uncommitted' } };
   }
   async save(scope: string, project: WorktreeSettingsProject, client: WorktreeSettingsClient, raw: unknown): Promise<WorktreeProjectSettings> {
-    const file = this.file(scope, project);
+    this.file(scope, project);
     const value = object(raw, 'worktree project settings');
-    keys(value, ['projectId', 'capabilities', 'actions', 'fileActions', 'fileError', 'environment', 'startFromOrigin', 'branchPrefix', 'location', 'submodules', 'copyEnv', 'cleanup'], 'worktree project settings');
+    // Session overrides are display-only here; they change through setSessionBranchPolicy.
+    keys(value, ['projectId', 'capabilities', 'actions', 'fileActions', 'fileError', 'environment', 'startFromOrigin', 'branchPrefix', 'location', 'submodules', 'copyEnv', 'branchPolicy', 'sessionBranchPolicies', 'cleanup'], 'worktree project settings');
     if (value.projectId !== project.id) throw new Error('Settings belong to a different project');
     if (value.capabilities !== undefined) {
       const declared = object(value.capabilities, 'display capabilities');
@@ -171,7 +219,8 @@ export class WorktreeSettingsStore {
     const settledDays = cleanup.settledDays === null ? null : days(cleanup.settledDays, 'settledDays');
     if (!Object.hasOwn(keepWhen, String(cleanup.keepLocalFiles))) throw new Error('Invalid local-file retention rule');
     const retention = cleanup.keepLocalFiles as keyof typeof keepWhen;
-    const local = localSettings({ copyEnv: value.copyEnv });
+    const copyEnv = boolean(value.copyEnv, 'copyEnv');
+    const projectBranchPolicy = value.branchPolicy === undefined ? undefined : branchPolicy(value.branchPolicy);
     if (!client.updateSettings) throw new Error('This T3 server cannot save project settings. Reconnect to a compatible server.');
     const native = await this.native(client);
     const priorOverride = native.projectSettingsOverrides[ProjectId.make(project.id)] ?? {};
@@ -188,10 +237,11 @@ export class WorktreeSettingsStore {
       worktreeCleanup: enabled ? { mode: 'custom', rules: { ...(support.cleanupRetention ? { worktreeKeepWhen: keepWhen[retention], worktreeSettledAfterDays: settledDays } : {}), worktreeAfterDays: inactiveDays || null, worktreeOnMerge: merged, worktreeOnDelete: priorCleanup.worktreeOnDelete, worktreeUnchanged: unchanged } } : { mode: 'off' },
     } } });
     await this.environmentManager.saveProfile(scope, environment);
-    await mkdir(dirname(file), { recursive: true, mode: 0o700 });
-    const temporary = `${file}.${randomUUID()}.tmp`;
-    try { await writeFile(temporary, JSON.stringify(local), { mode: 0o600, flag: 'wx' }); await rename(temporary, file); }
-    finally { await rm(temporary, { force: true }); }
+    // A malformed local file was already unusable; saving replaces it as before.
+    await this.mutateLocal(scope, project, async () => {
+      const prior = await this.local(scope, project).catch(() => ({ ...defaults, sessions: {} }));
+      await this.writeLocal(scope, project, { ...prior, copyEnv, ...(projectBranchPolicy ? { branchPolicy: projectBranchPolicy } : {}) });
+    });
     return this.load(scope, project, client);
   }
 }

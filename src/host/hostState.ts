@@ -796,6 +796,9 @@ export class HostState {
         } else if (this.worktrees && thread.worktreePath && !thread.activeRunId && !this.acceptedMessages.has(id)) {
           const tree = this.worktrees.snapshot().items.find(w => w.projectId === thread.projectId && w.path === thread.worktreePath);
           if (tree?.missing) await this.worktrees.restore(thread.projectId, thread.worktreePath);
+          // Check before preparation so a pinned mismatch does not leave a failed setup attempt behind.
+          const checkout = await this.worktrees.requireCheckout(thread.projectId, thread.worktreePath).catch(() => undefined);
+          if (checkout && !checkout.tree.root) await this.reconcileThreadBranch(id, checkout.tree.branch || null);
           await this.prepareThreadWorkspace(id, { type: "existing", path: thread.worktreePath });
         }
         const instructions = thread.worktreePath ? await this.worktrees?.environmentInstructions(thread.projectId, thread.worktreePath) : undefined;
@@ -856,14 +859,58 @@ export class HostState {
   }
   private async bindEmptyThread(id: string, path: string | null, branch: string | null): Promise<void> {
     const current = this.requireThread(id);
-    if (current.worktreePath !== path || current.branch !== branch) {
-      if (current.activeRunId || this.acceptedMessages.has(id) || (!this.emptyThreads.has(id) && current.itemCount > 0)) throw new Error("Cannot change an existing conversation’s checkout.");
+    const existing = !!(current.activeRunId || this.acceptedMessages.has(id) || (!this.emptyThreads.has(id) && current.itemCount > 0));
+    // The folder is the binding; a branch switched inside it follows the session's branch policy.
+    if (existing && path && current.worktreePath === path) await this.reconcileThreadBranch(id, branch || null);
+    else if (current.worktreePath !== path || current.branch !== branch) {
+      if (existing) throw new Error("Cannot change an existing conversation’s checkout.");
       await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, worktreePath: path, branch, expectedWorktreePath: current.worktreePath, expectedEmpty: true });
       this.shell = await this.client.snapshotShell(); await this.syncThreadSubscriptions();
     }
     // Once a checkout exists, a failed preparation retries it instead of creating another.
     for (const view of this.views.values()) if (view.activeThreadId === id) view.workspaceChoice = path ? { type: "existing", path, ...(branch ? { branch } : {}) } : { type: "root" };
     this.emit();
+  }
+  /** Applies the session branch policy when its checkout is on another branch than the session records. */
+  private async reconcileThreadBranch(id: string, branch: string | null): Promise<void> {
+    const current = this.requireThread(id);
+    if (current.branch === branch || !current.worktreePath) return;
+    if (await this.worktrees!.branchPolicy(current.projectId, id) === "pinned")
+      throw new Error(`This session is pinned to ${current.branch ? `branch ${current.branch}` : "a detached checkout"}, but its checkout is on ${branch ? `branch ${branch}` : "a detached HEAD"}. Open Session checkout to use the current branch or switch the checkout back.`);
+    // Same compare-and-set T3 uses when it renames a shared worktree branch.
+    await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, branch, expectedWorktreePath: current.worktreePath });
+    this.shell = await this.client.snapshotShell(); this.emit();
+  }
+  /** Records the checkout's current branch as this session's branch. */
+  adoptCheckoutBranch(threadId: string): Promise<void> {
+    return this.enqueue(async () => {
+      if (!this.worktrees) throw new Error("Worktree support is unavailable.");
+      const thread = this.requireThread(threadId);
+      if (!thread.worktreePath) throw new Error("This session uses the main checkout.");
+      const { tree } = await this.worktrees.requireCheckout(thread.projectId, thread.worktreePath);
+      if (thread.branch === (tree.branch || null)) return;
+      await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId, branch: tree.branch || null, expectedWorktreePath: thread.worktreePath });
+      this.shell = await this.client.snapshotShell(); this.emit();
+    });
+  }
+  /** Switches the session's checkout back to the branch the session records. */
+  switchCheckoutToSessionBranch(threadId: string): Promise<void> {
+    return this.enqueue(async () => {
+      if (!this.worktrees) throw new Error("Worktree support is unavailable.");
+      const thread = this.requireThread(threadId);
+      if (!thread.worktreePath) throw new Error("This session uses the main checkout.");
+      if (!thread.branch) throw new Error("This session does not record a branch.");
+      // Another session in the same folder may have a message accepted before its run appears.
+      if ((this.shell?.threads ?? []).some(t => t.worktreePath === thread.worktreePath && (t.activeRunId || this.acceptedMessages.has(t.id)))) throw new Error("Wait for the current run before switching branches.");
+      await this.worktrees.switchBranch(thread.projectId, thread.worktreePath, thread.branch);
+      this.emit();
+    });
+  }
+  async setSessionBranchPolicy(threadId: string, policy: unknown): Promise<void> {
+    if (!this.worktrees) throw new Error("Worktree support is unavailable.");
+    if (policy !== null && policy !== "follow" && policy !== "pinned") throw new Error("Invalid branch policy.");
+    const thread = this.requireThread(threadId);
+    await this.worktrees.setSessionBranchPolicy(thread.projectId, threadId, policy);
   }
   async prepareThreadWorkspace(id: string, choice: WorktreeChoice, group?: { groupId: string; title: string }): Promise<void> {
     if (!this.worktrees) throw new Error("Worktree support is unavailable.");

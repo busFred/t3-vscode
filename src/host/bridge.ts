@@ -131,6 +131,18 @@ export class BridgeHandler {
           } else await runWorktreeNativeAction(this.hostState.worktrees, params, this.nativeWorktreePort(), { retry: (id) => this.hostState.retryWorktreePreparation(id) });
           break;
         }
+        case "sessionBranch": {
+          const threadId = stringParam(params, "threadId");
+          if (params.action === "adopt") await this.hostState.adoptCheckoutBranch(threadId);
+          else if (params.action === "policy") await this.hostState.setSessionBranchPolicy(threadId, params.policy ?? null);
+          else if (params.action === "switch") {
+            const thread = this.hostState.snapshot(viewId).threads.find((entry) => entry.id === threadId);
+            if (!thread?.worktreePath || !thread.branch) throw new Error("This session does not record a branch for its checkout.");
+            const detail = `Checkout: ${thread.worktreePath}\n\nThe checkout switches to ${thread.branch}. Every session using this checkout sees the switch. Uncommitted tracked changes stop the switch; commits on the current branch are kept on that branch.`;
+            if (await this.nativeWorktreePort().confirm(`Switch this checkout to ${thread.branch}?`, detail, "Switch branch")) await this.hostState.switchCheckoutToSessionBranch(threadId);
+          } else throw new Error("Unsupported session branch action.");
+          break;
+        }
         case "refreshScheduledTasks": await this.hostState.refreshScheduledTasks(); break;
         case "saveScheduledTask": await this.hostState.saveScheduledTask(params); break;
         case "setScheduledTaskEnabled": await this.hostState.setScheduledTaskEnabled(stringParam(params, "taskId"), stringParam(params, "projectId"), params.enabled); break;

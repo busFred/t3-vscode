@@ -61,8 +61,8 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Markdown composer tools](#markdown-composer-tools) | Literal formatting, selection wrapping, automatic numbering, indentation and undo. | v0.1.13 | v0.1.21 |
 | [Message timestamps](#message-timestamps) | Recorded local date/time beside each message’s footer actions. | v0.1.22 | v0.1.23 |
 | [Dense transcript spacing](#dense-transcript-spacing) | Compact gaps, one author per run and unobtrusive message actions. | v0.1.13 | v0.1.22 |
-| [Worktree management](#worktree-management) | Checkout creation, import, parallel runs, review, selected-file apply and retained conversations. | v0.2.0 | v0.2.0 |
-| [Worktree environments and settings](#worktree-environments-and-settings) | Service-backed native settings and extension-owned Python environments per checkout. | v0.2.0 | v0.2.0 |
+| [Worktree management](#worktree-management) | Checkout creation, import, parallel runs, review, selected-file apply, retained conversations and session branch policies. | v0.2.0 | v0.2.6 (unpublished) |
+| [Worktree environments and settings](#worktree-environments-and-settings) | Service-backed native settings, extension-owned Python environments per checkout and a default session branch policy. | v0.2.0 | v0.2.6 (unpublished) |
 
 ## Sessions and navigation
 
@@ -801,6 +801,17 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Nest subagent conversations using the Sessions hierarchy and ordinary-conversation counts. Replace the flashing loading row with the existing refresh icon's spinner; retain rows while loading. Scan periodically at the shared minute interval and promptly for checkout changes, rather than every conversation/config update.
 - Allow conversations in the actual main checkout of a linked-root service project without running worktree setup there. Protect shared checkouts from removal, apply and environment cleanup when an agent from any visible service project is using them.
 
+#### v0.2.6 — session branch policy, unpublished
+
+- Fix existing worktree sessions that could not continue after their checkout switched branch, for example after an agent ran `git switch -c`. Every send and **Retry setup** failed with "Cannot change an existing conversation’s checkout." because the binding compared the session's recorded branch with the checkout's actual branch. Sessions are now bound to the checkout folder; changing to another folder is still refused.
+- **Follow the checkout** (default, like T3 Web): sending a message or retrying setup records the checkout's current branch (none for a detached HEAD) with a `thread.metadata.update` that changes only `branch`.
+- **Keep the session branch**: a mismatched send is held with an explanation before setup runs, so no failed preparation is left behind. **Session checkout** shows the session and checkout branches, with **Use ‹branch›** and **Switch checkout to ‹branch›…**. Switching requires native confirmation and is refused with uncommitted tracked changes, an active agent/setup, a missing branch, or a branch Git has checked out elsewhere. It holds the same checkout lease as setup and removal.
+- Policy scope: a project default (see Worktree environments and settings) and a per-session override in **Session checkout**. Overrides stay extension-local, at most 1000 per service/project, dropping the oldest first.
+- Branch-only metadata updates carry `expectedWorktreePath` as a compare-and-set guard. The installed T3 0.1.1 server bundle shows the server rejects `thread.metadata.update` only on an `expectedEmpty` or `expectedWorktreePath` mismatch. The server itself sends the same branch-only updates to threads sharing a worktree when it renames a temporary branch.
+- Local settings writes are serialized per file. Default values are omitted, so a `{copyEnv}` file stays readable by earlier builds until a non-default branch policy is saved. Switching refuses a detached checkout whose commits are on no branch, and refuses while any session in the checkout has an accepted message or active run.
+- Validation: typecheck clean; 468/468 deterministic tests, with new host tests for follow, pinned hold/switch/adopt, retry of a held setup and detached refusal, and new settings tests for persistence, legacy files, concurrency and the bound. The new follow test fails on the previous code with the original error. `scripts/verify-worktrees.mjs` (new Session checkout branch and settings checks) and `scripts/verify-ui.mjs` pass. Both fixtures gained `pending.secrets`, which they had lacked since the 0.2.5 secret card. No live provider test; the change makes no model calls.
+- Regression review: a fresh-context Sonnet reviewer found no blockers and nine non-blocking issues. Items 1–4 and 8 were fixed or verified as described above; the owner requested item 9, the 0.2.6 version bump. Items 5–7 were left as minor: the policy label can be stale when project settings fail to load, snapshots include the override map, and each send makes one extra Git listing. The final re-review approved.
+
 ### Worktree environments and settings
 
 #### v0.2.0
@@ -810,6 +821,10 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Support a directory or stable per-worktree Conda name, environment-file creation or cloning, custom setup and editable packages. Conversations sharing a checkout reuse its identity. Verify interpreter and editable source locations; block required setup on failure.
 - Project actions and the environment terminal use an explicit Conda command helper. Agent messages include that helper; arbitrary provider shell commands are not automatically activated. Root environments are never claimed, cloned source environments are never removed, and cleanup requires ownership proof.
 - T3 Web has no UI for the extension’s Python profile. Web-created checkouts can be prepared from the extension. An extension-only automatic environment cleanup setting defaults on: opening/refreshing Worktrees starts a persisted 24-hour grace period after confirmed checkout removal, then removes only owned environments on a later check. Git/parent identity, ownership, active work and shared leases are rechecked; moved, inaccessible and still-registered checkouts stay protected. Missing environments only update records. Session/branch history is retained, and older records without removal identity remain untouched. Restored checkouts reuse retained named environments or rebuild cleaned ones and rerun setup/editable verification, including when Git assigns a different administration directory.
+
+#### v0.2.6 — session branch policy, unpublished
+
+- Add **Session branches · extension only** to Worktree settings: the project default for sessions whose checkout changes branch (**Follow the checkout** or **Keep the session branch**). It is stored with the extension-local `.env` copying preference and never sent to the T3 service. Older local settings files read as Follow. Saving the form keeps per-session overrides.
 
 ## Providers and usage
 

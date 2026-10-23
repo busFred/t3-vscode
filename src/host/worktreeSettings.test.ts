@@ -163,3 +163,40 @@ test('service save failure leaves extension-local settings and profile untouched
     await assert.rejects(readdir(join(f.storage, 'worktree-settings')));
   } finally { await f.close(); }
 });
+test('branch policies stay extension-local, survive project saves and read legacy files', async () => {
+  const f = await fixture();
+  try {
+    await mkdir(join(f.storage, 'worktree-settings'), { recursive: true });
+    const loaded = await f.store.load('scope', f.project, f.client);
+    assert.equal(loaded.branchPolicy, 'follow'); assert.deepEqual(loaded.sessionBranchPolicies, {});
+    assert.equal(await f.store.branchPolicy('scope', f.project, 'thread'), 'follow');
+    assert.deepEqual(await f.store.setSessionBranchPolicy('scope', f.project, 'thread', 'pinned'), { thread: 'pinned' });
+    // Saving the project form, even with a stale session map, keeps the stored session overrides.
+    const saved = await f.store.save('scope', f.project, f.client, { ...loaded, branchPolicy: 'pinned', sessionBranchPolicies: {} });
+    assert.equal(saved.branchPolicy, 'pinned'); assert.deepEqual(saved.sessionBranchPolicies, { thread: 'pinned' });
+    assert.ok(!JSON.stringify(f.writes).includes('branchPolicy'), 'Branch policies are not sent to the service');
+    await f.store.setSessionBranchPolicy('scope', f.project, 'thread', 'follow');
+    assert.equal(await f.store.branchPolicy('scope', f.project, 'thread'), 'follow');
+    assert.equal(await f.store.branchPolicy('scope', f.project, 'other'), 'pinned');
+    await f.store.setSessionBranchPolicy('scope', f.project, 'thread', null);
+    assert.equal(await f.store.branchPolicy('scope', f.project, 'thread'), 'pinned');
+    // Concurrent overrides from different tabs must not overwrite each other.
+    await Promise.all(['a', 'b', 'c', 'd'].map((id) => f.store.setSessionBranchPolicy('scope', f.project, id, 'follow')));
+    assert.deepEqual(Object.keys((await f.store.load('scope', f.project, f.client)).sessionBranchPolicies!).sort(), ['a', 'b', 'c', 'd']);
+    await Promise.all(['a', 'b', 'c', 'd'].map((id) => f.store.setSessionBranchPolicy('scope', f.project, id, null)));
+    await assert.rejects(f.store.save('scope', f.project, f.client, { ...saved, branchPolicy: 'sometimes' }), /Invalid branch policy/);
+    await assert.rejects(f.store.setSessionBranchPolicy('scope', f.project, 'thread', 'sometimes' as never), /Invalid branch policy/);
+    const localFile = (await readdir(join(f.storage, 'worktree-settings')))[0]!;
+    await writeFile(join(f.storage, 'worktree-settings', localFile), JSON.stringify({ copyEnv: true }));
+    const legacy = await f.store.load('scope', f.project, f.client);
+    assert.equal(legacy.copyEnv, true); assert.equal(legacy.branchPolicy, 'follow'); assert.deepEqual(legacy.sessionBranchPolicies, {});
+  } finally { await f.close(); }
+});
+test('session branch overrides are bounded, dropping the oldest first', async () => {
+  const f = await fixture();
+  try {
+    for (let index = 0; index < 1001; index++) await f.store.setSessionBranchPolicy('scope', f.project, `thread-${index}`, 'pinned');
+    const sessions = (await f.store.load('scope', f.project, f.client)).sessionBranchPolicies!;
+    assert.equal(Object.keys(sessions).length, 1000); assert.equal(sessions['thread-0'], undefined); assert.equal(sessions['thread-1000'], 'pinned');
+  } finally { await f.close(); }
+});
