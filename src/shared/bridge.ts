@@ -28,7 +28,7 @@ export const Methods = {
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
   newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
   setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModelVisibility: "setModelVisibility", moveModel: "moveModel", reorderModel: "reorderModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt",
-  respondToRequest: "respondToRequest", dismissRequest: "dismissRequest",
+  respondToRequest: "respondToRequest", answerSecretRequest: "answerSecretRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
   threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab", openSessionTab: "openSessionTab", keepTab: "keepTab", openTaskManager: "openTaskManager", closeTaskTab: "closeTaskTab",
   searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", turnDiffSummary: "turnDiffSummary", openMergeDiff: "openMergeDiff", refreshUsage: "refreshUsage",
@@ -197,11 +197,15 @@ export interface HostStateSnapshot {
   /** Server-reported failure of the active thread's latest rollback request (#checkpoint.rollback.fail). */
   readonly rollbackFailure?: string | null;
   readonly transcript: ReadonlyArray<TranscriptItem>;
-  readonly pending: PendingThreadRequests;
+  readonly pending: PendingThreadRequests & { readonly secrets: ReadonlyArray<PendingSecretRequest> };
   readonly history: { readonly hasMore: boolean; readonly loading: boolean; readonly error: string | null };
   readonly threadLoading: boolean;
   readonly sending: boolean;
 }
+/** A `request_secret` the agent is waiting on. Never carries the secret value. */
+export interface PendingSecretRequest { turnItemId: string; label: string; reason: string; placeholder?: string; createdAt: string | null }
+export type SecretRequestAnswer = { readonly type: "save"; readonly secret: string } | { readonly type: "decline" };
+export interface SecretRequestAnswerParams { readonly threadId: string; readonly turnItemId: string; readonly answer: SecretRequestAnswer }
 export interface RequestResponse {
   readonly threadId: string; readonly requestId: string;
   readonly decision?: string;

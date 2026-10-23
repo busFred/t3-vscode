@@ -16,7 +16,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.23 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
-| [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.2.2 |
+| [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.2.5 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
 | [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.2.4 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
@@ -345,6 +345,15 @@ Session resources retain the current History selection for restoration. Opening 
 - Size the "Agent needs your input" card from the prompt font setting: question and option labels use the prompt size, while the heading, option descriptions and approval card body run one pixel smaller (13px by default) instead of the former 10–12px.
 - Replace the single-line custom answer field with a textarea that grows with the answer up to 220px, then scrolls. Enter submits the answers as before, Shift+Enter inserts a newline, and Enter is ignored during IME composition. The card's 42vh scroll limit still applies to very long answers.
 - Collapse the "Agent needs your input" card, approval card included, from its heading row to free space above the composer. The collapsed row shows the question header with its option count, or the approval's first command line, Enter or Space on the heading toggles it, and Escape inside the card collapses it. Each request remembers its own state, a new request always starts expanded, and re-expanding focuses the first answer control.
+
+#### v0.2.5
+
+- Fix conversations failing to load when an agent called T3's `request_secret` tool; the vendored T3 0.0.45 contracts rejected the `secret_request` transcript item sent by T3 0.1.1.
+- Add the `secret_request` turn item and `secrets.answerRequest` RPC to the vendored contracts, matched to T3 0.1.1 server source.
+- Show a docked "Agent needs your input" secret card with a masked input, Save and Decline. The transcript row reads "<label> · Saved securely and kept private", "Declined", "Request ended", "Waiting for your answer" or "Waiting for an answer in the original thread".
+- Keep the entered secret only in the card's component state; it is never logged, persisted, drafted, or included in host state or error messages.
+- Transcript items of a type this version does not know (from a newer T3) decode into a "Unsupported item (type …)" notice instead of failing the whole thread; a known type with malformed fields still fails.
+- Validation: typecheck clean; 462/462 unit tests pass (new: `src/host/secretRequest.test.ts`, `src/host/unknownTurnItem.test.ts`). Live verification against the real T3 0.1.1 server in an isolated home with GPT-6 Luna (low effort) via `scripts/verify-secret-request.ts`: secret item decoded, pending card listed, save recorded as `saved`, repeat answer rejected, agent resumed, and the secret absent from host snapshots and server logs. First fresh-context Sonnet regression review of the secret-request change: no blocking findings; two minor findings fixed (malformed-id error text, focus after a failed save). Final fresh-context Sonnet regression review of the full 0.2.5 candidate against `a9d036d`: APPROVE, no blocking findings; it also confirmed `pnpm build`, an unchanged VSIX file list (the verification script is not packaged), `preview: false`, and no measurable decode cost from the fallback. Waiting/notification status for a pending secret comes from T3 0.1.1, whose thread shell reports it as a `user_input` `pendingRuntimeRequest`.
 
 ### Message navigation rail
 

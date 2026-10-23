@@ -1,8 +1,8 @@
 /** T3's docked approval/question flow, with responses sent through the host. */
-import { type ComponentProps, type KeyboardEvent, useLayoutEffect, useRef, useState } from "react";
+import { type ComponentProps, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ThreadPendingApproval, ThreadPendingUserInput } from "@t3tools/client-runtime/state/thread-requests";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
-import type { HostStateSnapshot } from "../../shared/bridge";
+import type { HostStateSnapshot, PendingSecretRequest } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { ComposerPendingApprovalPanel } from "./t3/ComposerPendingApprovalPanel";
 
@@ -113,6 +113,50 @@ function ApprovalCard({ approval, pendingCount, threadId, open, onToggle }: { ap
   </div>;
 }
 
+/**
+ * Private entry for an agent's `request_secret`. The secret lives only in this component's state: it is never
+ * drafted, persisted, logged or echoed, and is cleared after a successful save and on unmount. The field is a
+ * text input masked with `-webkit-text-security` (as T3's web UI does; VS Code webviews are Chromium) rather than
+ * `type="password"`, so password managers and "save password" prompts leave it alone.
+ */
+function SecretRequestCard({ request, threadId, open, onToggle }: { request: PendingSecretRequest; threadId: string; open: boolean; onToggle: () => void }) {
+  const run = useActions();
+  const card = useRef<HTMLFormElement>(null);
+  const field = useRef<HTMLInputElement>(null);
+  const wasOpen = useRef(open);
+  const [secret, setSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const trimmed = secret.trim();
+  useEffect(() => () => { setSecret(""); if (field.current) field.current.value = ""; }, []);
+  const answer = (value: { type: "save"; secret: string } | { type: "decline" }) => {
+    setBusy(true); setFailed(false);
+    void run("answerSecretRequest", { threadId, turnItemId: request.turnItemId, answer: value }).then((ok) => {
+      if (ok) setSecret(""); else setFailed(true);
+    }).catch(() => setFailed(true)).finally(() => setBusy(false));
+  };
+  // The fieldset is disabled while saving, which drops focus; give it back once a failed save re-enables the field.
+  useEffect(() => { if (failed && !busy) field.current?.focus(); }, [failed, busy]);
+  useLayoutEffect(() => {
+    if (open && !wasOpen.current) field.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
+  const errorId = `secret-error-${request.turnItemId}`;
+  return <form ref={card} data-v2-item-type="secret_request" className={open ? "question-card secret-card" : "question-card secret-card collapsed"} onKeyDown={(event) => collapseOnEscape(event, open, onToggle)} onSubmit={(event) => { event.preventDefault(); if (trimmed && !busy) answer({ type: "save", secret: trimmed }); }}>
+    <RequestHeading open={open} summary={request.label} onToggle={onToggle} />
+    {open ? <>
+      <fieldset disabled={busy}>
+        <legend>{request.label}</legend>
+        {request.reason.trim() ? <p className="subtle secret-reason">{request.reason}</p> : null}
+        <input ref={field} className="question-custom secret-input" type="text" value={secret} placeholder={request.placeholder ?? "Paste the secret"} aria-label={request.label} aria-invalid={failed || undefined} aria-describedby={failed ? errorId : undefined}
+          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-1p-ignore data-lpignore="true" data-bwignore onChange={(event) => { setSecret(event.target.value); setFailed(false); }} />
+        {failed ? <p id={errorId} className="secret-error" role="alert">Could not answer the request. Try again.</p> : null}
+      </fieldset>
+      <div className="request-actions"><button type="button" className="btn" disabled={busy} onClick={() => answer({ type: "decline" })}>Decline</button><button type="submit" className="btn primary" disabled={busy || !trimmed}>{busy ? "Saving…" : "Save"}</button></div>
+    </> : null}
+  </form>;
+}
+
 export function PendingRequests({ state }: { state: HostStateSnapshot }) {
   // Keyed by requestId so each request keeps its own collapsed state; unseen requests start expanded.
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -120,9 +164,11 @@ export function PendingRequests({ state }: { state: HostStateSnapshot }) {
   if (!threadId) return null;
   const approval = state.pending.approvals[0];
   const prompt = state.pending.userInputs[0];
+  const secret = state.pending.secrets[0];
   const toggle = (requestId: string) => setCollapsed((previous) => ({ ...previous, [requestId]: !previous[requestId] }));
   return <div className="pending-requests">
     {approval ? <ApprovalCard key={approval.requestId} approval={approval} pendingCount={state.pending.approvals.length} threadId={threadId} open={!collapsed[approval.requestId]} onToggle={() => toggle(approval.requestId)} /> : null}
     {prompt ? <UserInput key={prompt.requestId} prompt={prompt} threadId={threadId} open={!collapsed[prompt.requestId]} onToggle={() => toggle(prompt.requestId)} /> : null}
+    {secret ? <SecretRequestCard key={secret.turnItemId} request={secret} threadId={threadId} open={!collapsed[secret.turnItemId]} onToggle={() => toggle(secret.turnItemId)} /> : null}
   </div>;
 }

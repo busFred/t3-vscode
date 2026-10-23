@@ -792,3 +792,4 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .restore-result ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted-foreground); }
 .restore-result li { margin: 2px 0; }
 .restore-result code { font-family: var(--vscode-editor-font-family, monospace); background: var(--code, var(--muted)); padding: 0 4px; border-radius: 3px; }
+.secret-card .secret-reason { margin: 0 0 8px; white-space: pre-wrap; }.secret-card .secret-input { margin-top: 0; -webkit-text-security: disc; }.secret-card .secret-error { margin: 6px 0 0; color: var(--destructive); }

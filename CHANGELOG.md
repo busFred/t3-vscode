@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.5 — Release
+
+- Fix conversations failing to load when an agent asks for a secret with T3's `request_secret` tool (T3 Code 0.1.1 and later).
+- Answer secret requests privately: a docked "Agent needs your input" card with a masked field, Save and Decline. The secret is sent straight to T3 and never logged, drafted, persisted or shown in the transcript; the transcript keeps a one-line status (saved, declined, ended or waiting).
+- Transcript items from a newer T3 that this version does not know now appear as "Unsupported item (type …)" instead of stopping the whole conversation from loading.
+
 ## 0.2.4 — Release
 
 - Fix Ctrl/Cmd+Z and redo doing nothing in sessions opened from the Sessions list (custom-editor tabs); native undo now works in every chat tab (verified on Linux; untested on macOS).

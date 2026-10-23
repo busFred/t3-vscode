@@ -788,6 +788,68 @@ function kindUnionWithFallback<
   return Schema.Union([...members, unknownKind]);
 }
 
+/** The literal `type` a turn item union member is stored and sent with. */
+function encodedItemType(member: Schema.Top): string {
+  const encoded = SchemaAST.toEncoded(member.ast);
+  const type = SchemaAST.isObjects(encoded)
+    ? encoded.propertySignatures.find((property) => property.name === "type")?.type
+    : undefined;
+  if (type !== undefined && SchemaAST.isLiteral(type) && typeof type.literal === "string") {
+    return type.literal;
+  }
+  throw new Error("Each member of a turn item union needs a literal string `type`.");
+}
+
+/**
+ * The turn item union, tolerant of item types this build does not know. After
+ * the known members comes a decode-only arm: an item whose base fields decode
+ * but whose `type` is unknown (or missing, or not a string) becomes a
+ * `system_notice` reading "Unsupported item (type <type>)", so a newer server
+ * can add item types without making the whole thread fail to load. A known
+ * type whose fields do not decode still fails. The arm never encodes; values
+ * always match a known member first. `Type` stays exactly the known members.
+ */
+function turnItemUnionWithFallback<
+  const Members extends ReadonlyArray<Schema.Top & { readonly Encoded: { readonly type: string } }>,
+  BaseFields extends Schema.Struct.Fields,
+>(members: Members, baseFields: BaseFields) {
+  const knownTypes: ReadonlySet<string> = new Set(members.map(encodedItemType));
+  const unknownItem = Schema.toEncoded(
+    Schema.Struct({
+      ...baseFields,
+      type: Schema.optional(
+        Schema.Unknown.check(
+          Schema.makeFilter(
+            (type: unknown) =>
+              typeof type !== "string" || !knownTypes.has(type) || "A known type must decode in full.",
+          ),
+        ),
+      ),
+    }),
+  ).pipe(
+    Schema.decodeTo(Schema.Union(members), {
+      decode: SchemaGetter.transform(
+        (item: { readonly type?: unknown }): Schema.Union<Members>["Encoded"] =>
+          ({
+            ...item,
+            type: "system_notice",
+            message: `Unsupported item (type ${typeof item.type === "string" ? item.type : "unknown"})`,
+          }) as unknown as Schema.Union<Members>["Encoded"],
+      ),
+      encode: SchemaGetter.forbidden(() => "Unsupported item types are decode-only."),
+    }),
+  );
+  // Members are tried in order, so the fallback must come last. The arm is typed
+  // as the known members so the union's `Type` and `Encoded` stay unchanged.
+  return Schema.Union([
+    ...members,
+    unknownItem as unknown as Schema.Codec<
+      Schema.Union<Members>["Type"],
+      Schema.Union<Members>["Encoded"]
+    >,
+  ]);
+}
+
 const PendingBackgroundTaskFields = {
   taskId: TrimmedNonEmptyString,
   /** The work's name: a subagent's title, a command's description, a monitor's. */
@@ -1290,7 +1352,24 @@ export const OrchestrationV2WebSearchResult = Schema.Struct({
 });
 export type OrchestrationV2WebSearchResult = typeof OrchestrationV2WebSearchResult.Type;
 
-export const OrchestrationV2TurnItem = Schema.Union([
+export const OrchestrationV2SecretRequestStatus = Schema.Literals([
+  "pending",
+  "saved",
+  "declined",
+  "cancelled",
+]);
+export type OrchestrationV2SecretRequestStatus = typeof OrchestrationV2SecretRequestStatus.Type;
+
+const OrchestrationV2SecretRequestFields = {
+  type: Schema.Literal("secret_request"),
+  label: TrimmedNonEmptyString,
+  reason: Schema.String,
+  placeholder: Schema.optional(Schema.String),
+  secretStatus: OrchestrationV2SecretRequestStatus,
+} as const;
+
+export const OrchestrationV2TurnItem = turnItemUnionWithFallback(
+  [
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
     type: Schema.Literal("notification"),
@@ -1471,6 +1550,10 @@ export const OrchestrationV2TurnItem = Schema.Union([
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
+    ...OrchestrationV2SecretRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemBaseFields,
     type: Schema.Literal("subagent"),
     subagentId: NodeId,
     origin: Schema.Literals(["provider_native", "app_owned"]),
@@ -1491,7 +1574,9 @@ export const OrchestrationV2TurnItem = Schema.Union([
     /** Set on the wire when output was withheld; fetch it with getTurnItem. */
     outputOmitted: Schema.optional(Schema.Boolean),
   }),
-]);
+  ],
+  OrchestrationV2TurnItemBaseFields,
+);
 export type OrchestrationV2TurnItem = typeof OrchestrationV2TurnItem.Type;
 
 export const OrchestrationV2ProjectedTurnItem = Schema.Struct({
@@ -2026,7 +2111,8 @@ const OrchestrationV2TurnItemJsonBaseFields = {
   updatedAt: Schema.DateTimeUtcFromString,
 } as const;
 
-export const OrchestrationV2TurnItemJson = Schema.Union([
+export const OrchestrationV2TurnItemJson = turnItemUnionWithFallback(
+  [
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
     type: Schema.Literal("notification"),
@@ -2204,6 +2290,10 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
+    ...OrchestrationV2SecretRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemJsonBaseFields,
     type: Schema.Literal("subagent"),
     subagentId: NodeId,
     origin: Schema.Literals(["provider_native", "app_owned"]),
@@ -2224,7 +2314,9 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
     /** Set on the wire when output was withheld; fetch it with getTurnItem. */
     outputOmitted: Schema.optional(Schema.Boolean),
   }),
-]);
+  ],
+  OrchestrationV2TurnItemJsonBaseFields,
+);
 export type OrchestrationV2TurnItemJson = typeof OrchestrationV2TurnItemJson.Type;
 
 export const OrchestrationV2ProjectedTurnItemJson = OrchestrationV2ProjectedTurnItem.mapFields(

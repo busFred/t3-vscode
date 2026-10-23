@@ -5,6 +5,7 @@ import {
   CommandId, ProjectId, ThreadId, TurnItemId, OrchestrationV2Command, ScheduledTaskId, ScheduledTaskUpsertInput, type ScheduledTask,
   OrchestrationV2ThreadLaunchInput, VcsCreateWorktreeInput, VcsListRefsInput, GitPreparePullRequestThreadInput, GitRunStackedActionInput, ServerSettingsPatch, type WorktreeSetupStreamEvent,
   ORCHESTRATION_V2_WS_METHODS as V2, WS_METHODS,
+  SecretRequestAnswerInput, SecretRequestError, EnvironmentAuthorizationError,
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadStreamItem, type OrchestrationV2ArchivedShellStreamItem, type ServerConfig,
@@ -203,6 +204,15 @@ export class T3Client {
     return this.run(this.requireSession().client[V2.getTurnItem]({
       threadId: threadId(id), itemId: Schema.decodeUnknownSync(TurnItemId)(itemId),
     }));
+  }
+  /** Callers must not log `input`: the save answer carries the secret. */
+  async answerSecretRequest(input: unknown): Promise<void> {
+    const session = this.requireSession();
+    let payload: SecretRequestAnswerInput;
+    // A schema failure would echo the secret in its message, so it is replaced.
+    try { payload = Schema.decodeUnknownSync(SecretRequestAnswerInput)(input); } catch { throw new Error("Invalid secret answer."); }
+    await this.run(session.client[WS_METHODS.secretsAnswerRequest](payload).pipe(Effect.mapError((error) =>
+      new Error(error instanceof SecretRequestError || error instanceof EnvironmentAuthorizationError ? error.message : "Could not answer the request. Try again."))));
   }
   listScheduledTasks() {
     return this.run(this.requireSession().client[WS_METHODS.scheduledTasksList]({}).pipe(Effect.timeout("10 seconds")));

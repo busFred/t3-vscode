@@ -99,6 +99,9 @@ export class FakeTransport implements HostTransport {
       interactionMode: thread?.interactionMode ?? v2Projection.thread.interactionMode } } });
     return async () => { this.threadStops += 1; if (this.threadHandlers.get(id) === receive) this.threadHandlers.delete(id); };
   }
+  secretAnswers: Array<unknown> = [];
+  secretAnswerError: Error | null = null;
+  async answerSecretRequest(input: unknown) { if (this.secretAnswerError) throw this.secretAnswerError; this.secretAnswers.push(input); }
   async dispatch(raw: unknown) {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(raw); this.commands.push(command);
     const queueCommand = command.type === "queued-run.cancel" || command.type === "queued-run.edit" || command.type === "queued-run.reorder" || command.type === "queued-message.promote-to-steer" || command.type === "queue.resume";

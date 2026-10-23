@@ -266,6 +266,15 @@ export class BridgeHandler {
             ...(isObject(params.answers) ? { answers: params.answers } : {}) });
           break;
         }
+        case "answerSecretRequest": {
+          // Params carry the secret: validate shape only, never echo, log or retain them.
+          const answer = params.answer;
+          if (!isObject(answer) || (answer.type !== "save" && answer.type !== "decline")) throw new Error("Invalid secret answer.");
+          if (answer.type === "save" && (typeof answer.secret !== "string" || !answer.secret.trim())) throw new Error("Enter the secret.");
+          await this.hostState.answerSecretRequest({ threadId: id(), turnItemId: stringParam(params, "turnItemId"),
+            answer: answer.type === "save" ? { type: "save", secret: (answer.secret as string).trim() } : { type: "decline" } });
+          break;
+        }
         case "dismissRequest": await this.hostState.dismissRequest(id(), stringParam(params, "requestId")); break;
         case "loadHistory": await this.hostState.loadHistory(id()); break;
         case "loadItemDetail": await this.hostState.loadItemDetail(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId")); break;

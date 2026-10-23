@@ -25,6 +25,7 @@ import { restoreAttribution, restoreDryRun, restoreExecute, execGit, nodeIo } fr
 import * as ShellState from "@t3tools/client-runtime/state/shell";
 import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
 import { applyOrchestrationV2ProjectionEvent } from "@t3tools/client-runtime/state/orchestration-v2-projection";
+import { derivePendingSecretRequests } from "./pendingSecrets.js";
 import { derivePendingThreadRequests, createQuestionHistoryProjector } from "@t3tools/client-runtime/state/thread-requests";
 import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/turn-item-presentation";
 import { canForkProjectedAssistantItem, deriveThreadQueueWorkflowState } from "@t3tools/client-runtime/state/thread-workflows";
@@ -34,7 +35,7 @@ import { turnItemNeedsDetailFetch, turnItemOutputText } from "@t3tools/client-ru
 import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
-import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch, RewindMarker, RestoreResult, RestorePreview } from "../shared/bridge.js";
+import type { HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, SecretRequestAnswerParams, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch, RewindMarker, RestoreResult, RestorePreview } from "../shared/bridge.js";
 import { slashSuggestions } from "../shared/composerSuggestions.js";
 import { hasCompleteProviderWorkspaceSnapshot } from "@t3tools/client-runtime/providerSkills";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
@@ -63,7 +64,7 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
+export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
 export interface HostStateOptions {
   readonly worktreeStorageRoot?: string;
   /** Where "Restore files to this point" saves kept files' pre-restore bytes, before re-applying them. */
@@ -1129,6 +1130,13 @@ export class HostState {
       await this.client.dispatch({ type: "runtime-request.respond", commandId: randomUUID(), ...input, ...response });
     });
   }
+  /** The secret is passed straight to T3 and is never stored, logged or echoed in errors. */
+  answerSecretRequest(input: SecretRequestAnswerParams): Promise<void> {
+    return this.enqueue(async () => {
+      this.requireThread(input.threadId);
+      await this.client.answerSecretRequest(input);
+    });
+  }
   dismissRequest(id: string, requestId: string): Promise<void> {
     return this.enqueue(async () => {
       this.requireThread(id);
@@ -1651,7 +1659,7 @@ export class HostState {
           ...this.transcriptRevertFields(projection, row, activeThreadId),
         };
       }) : [],
-      pending: projection ? derivePendingThreadRequests(projection) : { approvals: [], userInputs: [] },
+      pending: projection ? { ...derivePendingThreadRequests(projection), secrets: derivePendingSecretRequests(projection.visibleTurnItems) } : { approvals: [], userInputs: [], secrets: [] },
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
       threadLoading: state?.loading ?? false, sending: view.sending,
     };

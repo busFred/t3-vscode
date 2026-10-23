@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList, type LegendListRef, type OnViewableItemsChangedInfo } from "@legendapp/list/react";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
-import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, PencilIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, Undo2Icon, WrenchIcon, ArrowRightLeftIcon, MinusIcon, XIcon } from "lucide-react";
+import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, PencilIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, Undo2Icon, WrenchIcon, ArrowRightLeftIcon, KeyRoundIcon, MinusIcon, XIcon } from "lucide-react";
 import type { HostStateSnapshot, TranscriptItem, WireTurnItem } from "../../shared/bridge";
 import { RestorePreview } from "./RestorePreview";
 import { useActions } from "../actions";
@@ -155,6 +155,9 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
     case "web_search": return <Disclosure label={item.title ?? `Searched the web${item.patterns?.length ? `: ${item.patterns.join(", ")}` : ""}`} icon={<GlobeIcon size={14} />} row={row} threadId={threadId}>{item.results?.map((result, index) => <div className="search-result" key={index}><button className="text-button" onClick={() => { if (result.url) void run("openLink", { href: result.url }); }}>{result.title ?? result.url ?? "Search result"}</button>{result.snippet ? <p>{result.snippet}</p> : null}</div>)}</Disclosure>;
     case "approval_request": return <TimelineSystemDivider label={item.status === "waiting" || item.status === "pending" ? "Approval requested" : "Approval handled"} detail={item.prompt} />;
     case "user_input_request": return <section className="question-history">{item.questions.map((question) => <div key={question.id}><strong>{question.question}</strong>{item.questionAnswer?.answers[question.id] !== undefined ? <p>{getQuestionAnswerText(item.questionAnswer.answers[question.id])}</p> : <p className="subtle">{item.status === "pending" || item.status === "waiting" ? "Answer below to continue." : item.status}</p>}</div>)}</section>;
+    case "secret_request": return <TimelineSystemDivider icon={KeyRoundIcon} label={item.label} detail={
+      item.secretStatus === "saved" ? "Saved securely and kept private" : item.secretStatus === "declined" ? "Declined" : item.secretStatus === "cancelled" ? "Request ended"
+        : row.sourceThreadId === threadId ? "Waiting for your answer" : "Waiting for an answer in the original thread"} />;
     case "checkpoint": return <TurnChanges row={row} threadId={threadId} />;
     case "run_interrupt_request": return <TimelineSystemDivider label="Interrupt requested" detail={item.message} tone="danger" icon={XIcon} />;
     case "run_interrupt_result": return <TimelineSystemDivider label="Run interrupted" detail={item.message} tone="danger" icon={XIcon} />;
