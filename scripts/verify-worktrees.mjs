@@ -23,7 +23,7 @@ const initial = {
   favoriteModels: [],
   providers: [{ instanceId: "codex", driver: "codex", displayName: "Codex", installed: true, enabled: true, supportedRuntimeModes: ["approval-required", "auto", "full-access"], models: [{ slug: "gpt-6-astra", name: "GPT-6 Astra", isCustom: false, capabilities }] }, { instanceId: "kimi-acp", driver: "acp", displayName: "Kimi via ACP", installed: true, enabled: true, models: [{ slug: "kimi-for-coding", name: "Kimi for Coding", isCustom: false, capabilities }] }],
   draft: { projectId: "project-one", workspaceRoot: "/tmp/t3-vscode", supportsNoProject: true, modelSelection: selection, runtimeMode: "auto", interactionMode: "default" },
-  reader: { mode: "off", sensitivity: 5 }, activeThreadId: "thread-one", transcript: [user, assistant, command, diff], pending: { approvals: [], userInputs: [] }, history: { hasMore: false, loading: false, error: null }, threadLoading: false, sending: false,
+  reader: { mode: "off", sensitivity: 5 }, activeThreadId: "thread-one", transcript: [user, assistant, command, diff], pending: { approvals: [], userInputs: [], secrets: [] }, history: { hasMore: false, loading: false, error: null }, threadLoading: false, sending: false,
 };
 
 const envProfile={enabled:true,autoCleanup:true,location:'directory',directory:'.conda-env',namePrefix:'t3',seed:'file',specification:'environment.yml',cloneFrom:'cvafa',customSetup:'bash ./setup.sh',editable:[],condaExecutable:'conda'};
