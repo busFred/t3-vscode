@@ -163,7 +163,17 @@
         {
           "command": "t3-vscode.pair",
           "when": "view == t3.webview",
-          "group": "2_connection"
+          "group": "2_connection@1"
+        },
+        {
+          "command": "t3-vscode.addEnvironment",
+          "when": "view == t3.webview",
+          "group": "2_connection@2"
+        },
+        {
+          "command": "t3-vscode.manageEnvironments",
+          "when": "view == t3.webview",
+          "group": "2_connection@3"
         },
         {
           "command": "t3-vscode.openWebUi",
