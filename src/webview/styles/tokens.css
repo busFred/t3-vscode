@@ -373,6 +373,39 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .account-usage > summary > svg { transform: rotate(-90deg); }
 .account-usage[open] > summary > svg { transform: none; }
 .account-usage-body { padding: 0 10px 8px; }
+.environments { flex-shrink: 0; border-bottom: 1px solid var(--border); max-height: 50%; overflow: auto; }
+.environments > summary { display: flex; align-items: center; gap: 6px; padding: 3px 10px; font-size: .625rem; cursor: pointer; list-style: none; }
+.environments > summary > svg { transform: rotate(-90deg); }
+.environments[open] > summary > svg { transform: none; }
+.environments[open] .env-summary-dot { display: none; }
+.env-summary-dot { margin-left: auto; display: inline-flex; }
+.environments-body { padding: 2px 6px 8px; }
+.env-dot { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--vscode-testing-iconPassed, #388a34); }
+.env-dot.warn { background: var(--warning); }
+.env-dot.error { background: var(--destructive); }
+.env-dot.off { width: 5px; height: 5px; background: transparent; border: 1.5px solid var(--muted-foreground); }
+.env-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 1px 8px; align-items: center; padding: 5px 6px; border-radius: 4px; }
+.env-row:hover, .env-row:focus-within { background: var(--sidebar-row-hover); }
+.env-row > svg { grid-row: span 2; color: var(--muted-foreground); }
+.env-name { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: .75rem; }
+.env-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.env-chip { flex: none; padding: 0 5px; border-radius: 8px; font-size: .625rem; color: var(--muted-foreground); background: color-mix(in srgb, var(--foreground) 12%, transparent); white-space: nowrap; }
+.env-meta { grid-column: 2; min-width: 0; font-size: .6875rem; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.env-state { position: relative; grid-column: 3; grid-row: 1 / span 2; display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: .6875rem; color: var(--muted-foreground); white-space: nowrap; }
+.env-state > span { display: inline-flex; align-items: center; gap: 5px; }
+.env-state .env-warn { color: var(--warning); }
+.env-state .env-error { color: var(--destructive); }
+.env-row.ignored .env-state > span:not(.env-ignored):not(.env-hover-actions) { opacity: .6; }
+.env-state .text-button { font-size: .6875rem; }
+/* Faded rather than removed, so keyboard focus can reach the actions and reveal them. */
+.env-hover-actions { display: inline-flex; gap: 2px; position: absolute; right: 0; top: 50%; transform: translateY(-50%); opacity: 0; pointer-events: none; }
+.env-state.disabled .env-hover-actions { position: static; transform: none; }
+.env-hover-actions .icon-button { width: 22px; height: 22px; }
+.env-hover-actions .icon-button.danger:hover { color: var(--destructive); }
+.env-row:hover .env-hover-actions, .env-row:focus-within .env-hover-actions { opacity: 1; pointer-events: auto; }
+.env-row:hover .env-resting, .env-row:focus-within .env-resting { visibility: hidden; }
+.env-add { display: flex; align-items: center; gap: 6px; margin: 6px 6px 2px; font-size: .75rem; }
+.env-hint { margin: 4px 6px 0; font-size: .6875rem; line-height: 1.45; color: var(--muted-foreground); }
 .account-usage-update { display: flex; align-items: center; gap: 4px; color: var(--muted-foreground); font-size: .6875rem; }
 .account-usage-update > small { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-usage-update .icon-button { width: 22px; height: 22px; }
@@ -797,7 +830,6 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .thread-machine > svg { flex: none; opacity: .7; }
 .thread-machine > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thread.active .thread-machine { color: inherit; opacity: .8; }
-.remote-env-status { margin: 0; padding: 2px 8px; font-size: .625rem; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .remote-session-note { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 160px; flex-shrink: 1; font-size: .75rem; color: var(--muted-foreground); }
 .remote-session-note > svg { flex: none; }
 .remote-session-note > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

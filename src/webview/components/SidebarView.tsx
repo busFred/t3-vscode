@@ -5,6 +5,7 @@ import type { ScheduledTaskEditorRequest } from "../../shared/scheduledTasks";
 import { ThreadList } from "./ThreadList";
 import { WorktreeList } from "./WorktreeList";
 import { AccountUsage } from "./AccountUsage";
+import { EnvironmentsSection } from "./EnvironmentsSection";
 import { ProviderSetupNotice } from "./ServerSetup";
 import { ScheduledTaskList } from "./ScheduledTaskList";
 import { ScheduledTaskEditor, taskDraft, type TaskDraft } from "./ScheduledTaskEditor";
@@ -38,6 +39,7 @@ export function SidebarView({ state, onAppearance, usageRequest, taskRequest, na
   return <div className="sidebar-view">
     <div className="sidebar-front" style={{ display: draft ? "none" : "flex" }}>
       <AccountUsage state={state} request={usageRequest} />
+      <EnvironmentsSection state={state} />
       <ProviderSetupNotice state={state} />
       <div className="sidebar-tabs" ref={tabs} role="tablist" aria-label="Session, worktree and task managers" onKeyDown={(event) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault();

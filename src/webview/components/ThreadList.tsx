@@ -85,7 +85,6 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
       {compact ? null : <button ref={sortAnchor} className="icon-button sidebar-search-add" aria-label="Sort sessions" aria-haspopup="menu" aria-expanded={sortOpen} title={`Sort sessions: ${SESSION_SORTS.find(option => option.value === sort)!.label} (date uses last activity)`} onClick={() => { setSortOpen(!sortOpen); setMenu(null); }}><ArrowDownUpIcon size={15} /></button>}
       {/* Each tab renders its own +, so the name follows the visible list instead of a shared button mutating behind it. */}
       {compact ? null : <button className="icon-button sidebar-search-add" aria-label="New thread" title="Open New Chat in Editor Tab" onClick={() => { void run("newChatTab"); }}><PlusIcon size={15} /></button>}</div>
-    {state.remoteEnvironments?.filter((environment) => environment.state === "error").map((environment) => <p key={environment.environmentId} className="remote-env-status" role="status" title={environment.error}>{environment.label} disconnected — reconnecting</p>)}
     {hits.pending ? <p className="search-status" role="status">Searching messages…</p> : hits.error ? <p className="search-status turn-error" role="status">{hits.error}</p> : null}
     <div className="thread-sections"><nav className="session-list" aria-label="Active conversations">
       {active.map((node) => treeRow(node, "active"))}
