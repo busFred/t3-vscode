@@ -1,6 +1,6 @@
 import { useDateTimeFormat } from "../timeFormat";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArchiveIcon, CheckIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, SettingsIcon, RefreshCwIcon, XIcon, MessageCircleQuestionIcon, CircleDashedIcon, HourglassIcon, LoaderCircleIcon, ChevronRightIcon, BotIcon, ArrowDownUpIcon, ServerIcon } from "lucide-react";
+import { ArchiveIcon, CheckIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, SettingsIcon, RefreshCwIcon, XIcon, MessageCircleQuestionIcon, CircleDashedIcon, HourglassIcon, LoaderCircleIcon, ChevronRightIcon, CircleXIcon, BotIcon, ArrowDownUpIcon, ServerIcon } from "lucide-react";
 import type { HostStateSnapshot, ThreadSearchMatch, ThreadSummary } from "../../shared/bridge";
 import { searchThreads } from "../../shared/composerSuggestions";
 import { useActions } from "../actions";
@@ -34,7 +34,16 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   const closeSort = useCallback(() => setSortOpen(false), []);
   const [search, setSearch] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
+  const [openedGroups, setOpenedGroups] = useState<ReadonlySet<string>>(new Set());
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const watchedKey = useMemo(() => [...new Set([...expanded].map((key) => key.slice(key.indexOf(":") + 1)))].slice(0, 50).join("\n"), [expanded]);
+  const watchedSent = useRef<string | null>(null);
+  const run = useActions();
+  useEffect(() => {
+    if (watchedSent.current === watchedKey) return;
+    watchedSent.current = watchedKey;
+    void run("watchSessions", { threadIds: watchedKey ? watchedKey.split("\n") : [] });
+  }, [watchedKey, run]);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [menu, setMenu] = useState<{ threadId: string; x: number; y: number } | null>(null);
   const [now, setNow] = useState(Date.now);
@@ -46,7 +55,6 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   }, []);
   const closeMenu = useCallback(() => setMenu(null), []);
   const menuThread = state.threads.find((thread) => thread.id === menu?.threadId);
-  const run = useActions();
   const query = search.trim();
   const hits = useBridgeQuery<ReadonlyArray<ThreadSearchMatch>>("searchThreads", { query }, query.length >= 2 ? `${state.environment?.environmentId}:${state.archiveLoaded}:${state.workspaceRoots.join("\0")}:${query}` : null);
   const matching = useMemo(() => searchThreads(state.threads, query, new Set(hits.data?.map((hit) => hit.threadId))), [state.threads, query, hits.data]);
@@ -63,20 +71,29 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
       if (!compact && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }
     }} aria-label={thread.title || "Untitled"} aria-description={thread.pendingRuntimeRequest ? "Input needed" : isWorking ? "Working" : isWaiting ? waitingSummary(thread) : undefined} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>
       <span className="thread-title-line"><span className="thread-title" title={thread.title || "Untitled"}>{thread.title || "Untitled"}</span></span>
-      <span className="thread-meta">{thread.pendingRuntimeRequest ? <span className="thread-input" title={thread.pendingRuntimeRequest.kind === "user_input" ? "Input needed" : "Approval needed"} aria-label="Input needed"><MessageCircleQuestionIcon size={13} /><span>{thread.pendingRuntimeRequest.kind === "user_input" ? "Input" : "Approval"}</span></span> : isWorking ? <span className="thread-working" aria-label="Working"><CircleDashedIcon size={13} /><span>Working</span><time title={thread.workingStartedAt ?? undefined}>{elapsedLabel(thread.workingStartedAt, now)}</time></span> : isWaiting ? <span className="thread-waiting" title={waitingSummary(thread)} aria-label={waitingSummary(thread)}><HourglassIcon size={13} /><span>Waiting</span><time title={elapsedStart ?? undefined}>{elapsedLabel(elapsedStart, now)}</time></span> : null}{thread.environmentLabel ? <span className="thread-machine" title={`Runs on ${thread.environmentLabel}`}><ServerIcon size={12} /><span>{thread.environmentLabel}</span></span> : null}{match ? <small className="thread-match">{match.source === "user" ? "You" : "Assistant"}: {match.snippet}</small> : <small className="thread-branch">{thread.branch}</small>}{activity ? <time className="thread-age" dateTime={thread.lastActiveAt!} title={`Last active: ${exactActivity}`} aria-label={`Last active: ${exactActivity}`}>{activity}</time> : null}{thread.pinned ? <PinIcon size={12} /> : thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : <MessageSquareIcon size={12} />}<ProviderIcon brand={providerBrand(provider?.driver ?? "", provider?.displayName)} /></span>
+      <span className="thread-meta">{thread.pendingRuntimeRequest ? <span className="thread-input" title={thread.pendingRuntimeRequest.kind === "user_input" ? "Input needed" : "Approval needed"} aria-label="Input needed"><MessageCircleQuestionIcon size={13} /><span>{thread.pendingRuntimeRequest.kind === "user_input" ? "Input" : "Approval"}</span></span> : isWorking ? <span className="thread-working" aria-label="Working"><CircleDashedIcon size={13} /><span>Working</span><time title={thread.workingStartedAt ?? undefined}>{elapsedLabel(thread.workingStartedAt, now)}</time></span> : isWaiting ? <span className="thread-waiting" title={waitingSummary(thread)} aria-label={waitingSummary(thread)}><HourglassIcon size={13} /><span>Waiting</span><time title={elapsedStart ?? undefined}>{elapsedLabel(elapsedStart, now)}</time></span> : thread.subagentOutcome === "failed" ? <span className="thread-outcome failed" title="Subagent failed" aria-label="Subagent failed"><CircleXIcon size={13} /><span>Failed</span></span> : thread.subagentOutcome === "stopped" ? <span className="thread-outcome stopped" title="Subagent stopped" aria-label="Subagent stopped"><span>Stopped</span></span> : null}{thread.environmentLabel ? <span className="thread-machine" title={`Runs on ${thread.environmentLabel}`}><ServerIcon size={12} /><span>{thread.environmentLabel}</span></span> : null}{match ? <small className="thread-match">{match.source === "user" ? "You" : "Assistant"}: {match.snippet}</small> : <small className="thread-branch">{thread.branch}</small>}{activity ? <time className="thread-age" dateTime={thread.lastActiveAt!} title={`Last active: ${exactActivity}`} aria-label={`Last active: ${exactActivity}`}>{activity}</time> : null}{thread.pinned ? <PinIcon size={12} /> : thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : <MessageSquareIcon size={12} />}<ProviderIcon brand={providerBrand(provider?.driver ?? "", provider?.displayName)} /></span>
     </button>;
   };
   const treeRow = (node: SessionTreeNode, section: string, depth = 0): ReactNode => {
     const expansionKey = `${section}:${node.thread.id}`;
     const open = !!query || expanded.has(expansionKey);
     const tasks = state.scheduledTasks?.tasks.filter((task) => task.originThreadId === node.thread.id && task.projectId === node.thread.projectId) ?? [];
-    const group = (name: string, count: number, children: ReactNode) => <details className="session-task-group" open={!!query || !collapsedGroups.has(`${expansionKey}:${name}`)} onToggle={(event) => {
-      const isOpen = event.currentTarget.open; setCollapsedGroups((previous) => { const next = new Set(previous); const key = `${expansionKey}:${name}`; if (isOpen) next.delete(key); else next.add(key); return next; });
+    const group = (name: string, count: number, children: ReactNode, nested = false, defaultOpen = true) => <details className={`session-task-group${nested ? " nested" : ""}`} open={!!query || (defaultOpen ? !collapsedGroups.has(`${expansionKey}:${name}`) : openedGroups.has(`${expansionKey}:${name}`))} onToggle={(event) => {
+      const isOpen = event.currentTarget.open; const key = `${expansionKey}:${name}`;
+      if (defaultOpen) setCollapsedGroups((previous) => { if (previous.has(key) === !isOpen) return previous; const next = new Set(previous); if (isOpen) next.delete(key); else next.add(key); return next; });
+      else setOpenedGroups((previous) => { if (previous.has(key) === isOpen) return previous; const next = new Set(previous); if (isOpen) next.add(key); else next.delete(key); return next; });
     }}><summary>{name}<small>{count}</small></summary>{children}</details>;
+    const subagentLabel = `Subagents of ${node.thread.title || "Untitled"}`;
+    const isRunning = (child: SessionTreeNode) => working(child.thread) || waiting(child.thread) || !!child.thread.pendingRuntimeRequest;
+    const runningChildren = compact ? [] : node.children.filter(isRunning);
+    const pastChildren = compact ? [] : node.children.filter((child) => !isRunning(child));
+    const subagentRows = runningChildren.length && pastChildren.length
+      ? <div className="session-tree-children" aria-label={subagentLabel}>{group("Running", runningChildren.length, <div className="session-tree-children">{runningChildren.map((child) => treeRow(child, section, depth + 1))}</div>, true)}{group("Past", pastChildren.length, <div className="session-tree-children">{pastChildren.map((child) => treeRow(child, section, depth + 1))}</div>, true, false)}</div>
+      : <div className="session-tree-children" aria-label={subagentLabel}>{node.children.map((child) => treeRow(child, section, depth + 1))}{!node.children.length ? <p className="empty-list">No subagents.</p> : null}</div>;
     return <div className="session-tree-node" key={node.thread.id} data-session-depth={depth}>
       <div className="session-tree-row">{!compact || node.children.length || !state.archiveLoaded ? <button className="session-tree-toggle icon-button" aria-label={`${open ? "Collapse" : "Expand"} ${compact ? "subagents" : "session"} of ${node.thread.title || "Untitled"}`} aria-expanded={open} onClick={() => { if (!open && !state.archiveLoaded) void run("loadArchive"); setExpanded((previous) => { const next = new Set(previous); if (next.has(expansionKey)) next.delete(expansionKey); else next.add(expansionKey); return next; }); }}><ChevronRightIcon size={12} className={open ? "rotate-90" : ""} /></button> : <span className="session-tree-spacer" />}{row(node.thread)}</div>
       {open ? compact ? node.children.length ? <div className="session-tree-children" aria-label={`Subagents of ${node.thread.title || "Untitled"}`}>{node.children.map((child) => treeRow(child, section, depth + 1))}</div> : null
-        : <div className="session-expanded-groups">{group("Subagents", node.children.length, <div className="session-tree-children" aria-label={`Subagents of ${node.thread.title || "Untitled"}`}>{node.children.map((child) => treeRow(child, section, depth + 1))}{!node.children.length ? <p className="empty-list">No subagents.</p> : null}</div>)}{group("Scheduled tasks", tasks.length, <ScheduledTaskRows state={state} tasks={tasks} />)}</div> : null}
+        : <div className="session-expanded-groups">{group("Subagents", node.children.length, subagentRows)}{group("Scheduled tasks", tasks.length, <ScheduledTaskRows state={state} tasks={tasks} />)}</div> : null}
     </div>;
   };
   return <aside className={compact ? "compact-history" : "projects-sidebar dedicated-sessions"} aria-label={compact ? "Conversation history" : "Sessions"}>

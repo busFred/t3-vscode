@@ -362,7 +362,7 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .thread.active .thread-working { color: inherit; }
 .thread-waiting { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: .625rem; color: var(--muted-foreground); }
 .thread.active .thread-waiting { color: inherit; opacity: .85; }
-@media (max-width: 200px) { .thread-working > span, .thread-input > span, .thread-waiting > span { display: none; } }
+@media (max-width: 200px) { .thread-working > span, .thread-input > span, .thread-waiting > span, .thread-outcome > span { display: none; } }
 .provider-icon { width: 12px; height: 12px; flex-shrink: 0; }
 .thread-input { display: inline-flex; color: var(--primary); }
 .thread.active .thread-input { color: inherit; }
@@ -747,6 +747,12 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .session-task-group > summary { cursor: pointer; padding: 4px 6px; color: var(--muted-foreground); font-size: .6875rem; }
 .session-task-group > summary small { margin-left: 6px; }
 .session-task-group .session-tree-children { margin-left: 0; }
+.session-task-group.nested { margin-left: 6px; }
+.session-task-group.nested > summary { font-size: .625rem; padding: 3px 6px; opacity: .85; }
+.thread-outcome { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: .625rem; }
+.thread-outcome.failed { color: var(--destructive); }
+.thread-outcome.stopped { color: var(--muted-foreground); }
+.thread.active .thread-outcome { color: inherit; opacity: .85; }
 .session-task-group .empty-list { margin: 3px 8px; padding: 2px; font-size: .6875rem; }
 .task-project-select { display: grid; gap: 4px; margin: 8px; font-size: .6875rem; }
 .task-project-select select { min-width: 0; width: 100%; }
