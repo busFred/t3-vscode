@@ -207,7 +207,7 @@ async function main(): Promise<void> {
       must(local && local.environmentLabel === undefined, `local thread missing or labelled: ${JSON.stringify(local?.environmentLabel)}`);
       const project = state.projects.find((p) => p.id === bProject);
       must(project?.environmentLabel === labelB, `B project environmentLabel=${project?.environmentLabel}`);
-      must(state.remoteEnvironments?.some((e) => e.environmentId === record.environmentId && e.state === "connected"), "remoteEnvironments does not report B connected");
+      must(state.environments?.rows.some((e) => e.environmentId === record.environmentId && e.status === "connected"), "environments.rows does not report B connected");
     });
 
     await check("project on B with a different repository is NOT visible", async () => {
@@ -281,7 +281,8 @@ async function main(): Promise<void> {
     await check("stopping B marks it error while its threads stay listed", async () => {
       await stopServer(B);
       await until("remote state error", () => recordNow()?.state === "error", 20_000);
-      const state = await waitHost("remoteEnvironments error", (s) => s.remoteEnvironments?.find((e) => e.environmentId === record.environmentId)?.state === "error" && s, 10_000);
+      const state = await waitHost("environments reconnecting", (s) => s.environments?.rows.find((e) => e.environmentId === record.environmentId)?.status === "reconnecting" && s, 10_000);
+      must(state.environments?.indicator === "warn", `indicator=${state.environments?.indicator} while B is down`);
       must(state.threads.some((t) => t.id === bThread), "B's thread disappeared while B is down");
       must(state.phase === "ready", `local phase became ${state.phase}`);
       const error = await h.threadAction(bThread, "rename", "while down").then(() => undefined, (cause: Error) => cause);
@@ -290,7 +291,7 @@ async function main(): Promise<void> {
     await check("restarting B on the same port and base dir reconnects within 30 s", async () => {
       await startServer(B);
       await until("remote reconnected", () => recordNow()?.state === "connected", 30_000, 250);
-      const state = await waitHost("thread list after reconnect", (s) => s.threads.some((t) => t.id === bThread) && s.remoteEnvironments?.find((e) => e.environmentId === record.environmentId)?.state === "connected" && s, 10_000);
+      const state = await waitHost("thread list after reconnect", (s) => s.threads.some((t) => t.id === bThread) && s.environments?.rows.find((e) => e.environmentId === record.environmentId)?.status === "connected" && s, 10_000);
       await waitHost("active remote thread resubscribed", (s) => s.activeThreadId === bThread && !s.threadLoading && s, 15_000);
       await bClient!.disconnect().catch(() => undefined);
       const rediscovered = await discoverServer(B.home); must(rediscovered.ok, "B rediscovery failed");
