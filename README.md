@@ -56,12 +56,12 @@ T3 Code and its providers are separate applications you install and run yourself
 2. Run `t3`, then connect a provider under **Settings → Providers**.
 3. In VS Code, open the **T3 VSCode** view and choose **Retry connection**.
 
-Pairing is automatic. Running T3 as a [background service](https://github.com/pingdotgg/t3code/blob/main/docs/user/background-service.md) is optional; if connection fails, **Connection details** names the failed stage.
+Pairing with the local server is automatic. Running T3 as a [background service](https://github.com/pingdotgg/t3code/blob/main/docs/user/background-service.md) is optional; if connection fails, **Connection details** names the failed stage.
 
 ## Scope and limitations
 
 - Alpha. Linux is the first verified platform.
-- Local servers only; remote T3 servers are not supported yet.
+- Other machines can be added by pairing link (**T3 VSCode: Add Environment from Pairing Link**). Their sessions for the same repository appear in Sessions; starting sessions, checkout actions, saved-turn diffs and file restore are not yet available there. See the [user guide](docs/user-guide.md#other-machines).
 - Specialized tool previews and interactive checkpoint restore remain later work; rendering is not full web-app parity.
 - No embedded terminal, and moving a chat between windows is unverified.
 

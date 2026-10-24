@@ -6,7 +6,17 @@ Reference detail for the extension's behavior. See [README.md](../README.md) for
 
 Linux is the first verified platform. Install the T3 Code CLI using its [installation guide](https://github.com/pingdotgg/t3code/blob/main/docs/user/install.md), then run `t3` to start the server and open its web app. Open **Settings → Providers** in T3 to connect a provider. Alternatively, keep `t3 serve` running in a terminal and open the web address it prints. Return to T3 VSCode and choose **Retry connection**; the extension pairs automatically and the sidebar opens Sessions directly. If providers still need setup, guidance appears above Sessions while existing conversations remain available.
 
-Running in the background is optional. On Linux or macOS, `t3 service install` installs and starts the service; see the [service instructions](https://github.com/pingdotgg/t3code/blob/main/docs/user/background-service.md). Stop a manually started foreground server before switching. You can also install the service first and configure providers in T3's web app afterward. Use `t3 service status` to diagnose an installed service and `t3 service restart` to restart it. Remote T3 servers are not supported yet.
+Running in the background is optional. On Linux or macOS, `t3 service install` installs and starts the service; see the [service instructions](https://github.com/pingdotgg/t3code/blob/main/docs/user/background-service.md). Stop a manually started foreground server before switching. You can also install the service first and configure providers in T3's web app afterward. Use `t3 service status` to diagnose an installed service and `t3 service restart` to restart it. To use sessions from another machine, see [Other machines](#other-machines).
+
+### Other machines
+
+In T3 Code on the other machine, choose **Create link**. In VS Code, run **T3 VSCode: Add Environment from Pairing Link** and paste the link. HTTPS is required; HTTP is accepted only for loopback addresses. The local server is still found through the T3 home as above. **T3 VSCode: Manage Environments** enables, disables, reconnects or removes a paired machine; removing it here does not revoke the client in T3 Code on that machine.
+
+Paired machines and their credentials are stored once in VS Code's secret storage and shared by every profile on this computer, so pair each machine only once.
+
+A remote session appears in Sessions only when its project's Git repository (upstream or origin remote) matches a folder in the window. Its row shows the machine name. You can read, reply, queue or steer, approve, rename, archive, pin, fork and use **Edit from here**; file links open in your local checkout. A disconnected machine's sessions stay listed while it reconnects, and commands sent meanwhile report it as disconnected. Each machine uses the single address in its pairing link.
+
+Not yet available for remote sessions: starting new sessions, checkout, branch and worktree actions, saved-turn diffs and **Restore files to this point**. Local sessions are unchanged.
 
 ### Connection diagnostics
 

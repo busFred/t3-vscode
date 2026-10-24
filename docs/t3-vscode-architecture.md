@@ -9,7 +9,7 @@ Product name: **T3 VSCode**. Bring T3 Code functionality into VS Code with nativ
 - Use T3 Code’s UI, components and visual conventions as the baseline. Adapt navigation and layout to VS Code’s sidebar and editor tab; assess further visual changes after the migration.
 - Linux first. Prerequisite: `t3 service install` done and running.
 - Scope projects and threads to the opened VS Code folders, matching canonical project workspace roots. Include those projects' worktree and archived threads; an empty window can browse all projects. This supersedes the original unfiltered requirement.
-- Agents run on the T3 server (this machine, via service) — the extension is a thin client.
+- Agents run on a T3 server — the local service, or another paired machine (§3a). The extension is a thin client.
 
 ## 2. Repository layout
 
@@ -48,6 +48,14 @@ Tech: TypeScript ESM, Vite for the webview bundle, `effect` (comes with vendored
 2. Read `<home>/userdata/server-runtime.json` (or `<home>/dev/server-runtime.json` for implicit dev homes); if present, verify pid alive and probe `/.well-known/t3/environment` to confirm it's a T3 server and capture the environment descriptor.
 3. If no live server: surface a setup view — "run `t3 service install`" — do **not** auto-spawn (prerequisite model, per decision).
 4. Handle port drift: always resolve origin from runtime state, never a hardcoded port.
+
+### 3a. Remote environments
+
+- `EnvironmentCatalog` (`environmentCatalog.ts`) stores paired machines (label, URLs, bearer token, scopes, enabled flag) as one JSON entry under the SecretStorage key `t3-vscode.environments.v1`. SecretStorage is shared by all VS Code profiles, so each mutation re-reads, applies and writes (last write wins), and other windows react to its change event.
+- Pairing (`pairRemoteEnvironment`) takes a link from T3 Code's **Create link**, requires https (loopback http allowed), and exchanges the token for a bearer using the same headless flow as §8.1. `environmentCommands.ts` registers Add Environment from Pairing Link and Manage Environments.
+- `MultiEnvironmentClient` wraps the local `T3Client` (discovery via the T3 home is unchanged) plus one `T3Client` per enabled remote. Remotes connect and retry independently, merge their shells into one list and receive commands routed by thread or project. Each uses the single address from its pairing link; there is no route fallback. A disconnected remote keeps its last shell listed.
+- `hostState` lists a remote project only when its Git repository identity (upstream/origin remote) matches a window folder's remote, and tags its threads with the machine label. Remote threads support conversation actions and "Edit from here"; new sessions, checkout/worktree actions, saved-turn diffs and file restore remain local-only, and file links map into the local checkout.
+- Verified by unit tests and `scripts/verify-multi-environment.ts`, which pairs two isolated `t3 serve --base-dir` servers.
 
 ## 4. Auth
 
@@ -105,7 +113,7 @@ Migrate the core chat workflow first. The unfilled KEEP column does not define s
 3. **Item-fidelity pass** — core renderers implemented. Portable work-log, approval, system-divider and wordmark components are copied from T3. The typed timeline covers the turn-item union, with markdown, reasoning, tool output, diffs, plans and request history. Interactive checkpoint restore and specialized tool previews remain later work; core rendering is not complete web-app parity.
 4. **Subscription load** — bounded snapshots and progressive history implemented. Each distinct conversation selected by an open view has one subscription; switching or closing a view only releases conversations with no remaining views. No unselected projections remain cached. Older pages use the authenticated history endpoint and the vendored merge helper to preserve newer live items. Active shell updates and the on-demand archived shell have separate subscriptions. Bridge pushes are coalesced and carry each view's own snapshot; targeted bridge deltas remain an optimization for later profiling.
 5. **Native web pop-out feasibility** — tested against an isolated server. The original UI supports a preset project filter and independent routes/drafts across browser windows. Its filter is `sidebarProjectScopeKey` in `t3code:ui-state:v1` local storage, derived with `deriveLogicalProjectKey`; a thread URL alone does not set workspace scope. A plain iframe in a disposable VS Code editor timed out establishing the authenticated session. The native renderer also opens file links through its own right-panel store rather than the extension bridge. Reusing it inside VS Code requires a cooperative adapter for authentication, workspace scope, editor links and references; the shipped editor surface retains the host-owned connection and typed bridge.
-6. **Saved-turn file contents** — the server review API computes a merge base against HEAD and reads the new side from disk, even with `headRef`. The same-machine native editor adapter therefore reads Git blobs at the two trusted T3 checkpoint refs. The server owns the range, file list and checkpoint metadata; the adapter never compares against HEAD or writes the repository. A remote workspace would need a server API that returns both immutable file versions.
+6. **Saved-turn file contents** — the server review API computes a merge base against HEAD and reads the new side from disk, even with `headRef`. The same-machine native editor adapter therefore reads Git blobs at the two trusted T3 checkpoint refs. The server owns the range, file list and checkpoint metadata; the adapter never compares against HEAD or writes the repository. A remote session would need a server API that returns both immutable file versions.
 
 ## 9. Milestones
 

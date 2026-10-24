@@ -2,15 +2,15 @@
 
 This document tracks features by release, including how later versions changed them. Versions refer to T3 VSCode, not the separate T3 Code server. Historical entries were checked against Git and the v0.0.1–v0.0.7 release documentation; v0.0.9, v0.1.10 and v0.1.11 were local previews, and v0.1.12 is the first Marketplace alpha prerelease; v0.1.13 is published on the release channel, with same-version revisions including double-click renaming, session search, tab History, new-chat actions, Markdown composer tools, durable draft recovery, occurrence search filters, dense transcript spacing with visible assistant messages and connection onboarding that opens Sessions automatically. The Windows pairing fix was published as prerelease v0.1.14 and promoted to release v0.1.15 after the owner confirmed the preview works.
 
-The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The v0.1.17 prerelease adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly authorized publication of v0.1.17 to the Marketplace prerelease channel. v0.1.18 is published to the Marketplace release channel from `251cfec`, with the transcript resize-padding, streaming row-overlap and automatic usage-refresh changes. v0.1.19 was published to the Marketplace prerelease channel with the owner's explicit authorization, and keeps that background usage refresh from delaying sent messages. v0.1.20 reworks how file references and assistant quotes are written into and rendered from a message. It was authorized for and published to the prerelease channel, though the upload returned an outage page and was recorded as failed until a later readback showed the Marketplace had ingested it; its changes ship again in v0.1.21. The owner explicitly authorized v0.1.21 for the Marketplace prerelease channel. v0.2.0 is authorized for Marketplace prerelease publication, with its version unchanged from the reviewed candidate. v0.1.23 was published to the Marketplace stable channel on 2026-10-18; the immediate listing readback still showed v0.1.22, so public indexing is pending. v0.2.1 is a version-only republish of v0.2.0's worktree work (no runtime changes), authorized for and published to the Marketplace prerelease channel; its listing readback also lagged the upload. See the release verification entries below for earlier installers and publication history. v0.2.2 is the prerelease that follows v0.2.1 with chat copy fixes, the context window meter, subagent-aware working status, pending-request card improvements, merge-back tracking, and revert/restore.
+The published v0.1.16 includes selected-text image descriptions, local model management, compact session activity, scheduled tasks and queued-message editing. The v0.1.17 prerelease adds agent-only response diffs. Its published Git baseline is `b71e129` (manifest v0.1.16). The owner explicitly authorized publication of v0.1.17 to the Marketplace prerelease channel. v0.1.18 is published to the Marketplace release channel from `251cfec`, with the transcript resize-padding, streaming row-overlap and automatic usage-refresh changes. v0.1.19 was published to the Marketplace prerelease channel with the owner's explicit authorization, and keeps that background usage refresh from delaying sent messages. v0.1.20 reworks how file references and assistant quotes are written into and rendered from a message. It was authorized for and published to the prerelease channel, though the upload returned an outage page and was recorded as failed until a later readback showed the Marketplace had ingested it; its changes ship again in v0.1.21. The owner explicitly authorized v0.1.21 for the Marketplace prerelease channel. v0.2.0 is authorized for Marketplace prerelease publication, with its version unchanged from the reviewed candidate. v0.1.23 was published to the Marketplace stable channel on 2026-10-18; the immediate listing readback still showed v0.1.22, so public indexing is pending. v0.2.1 is a version-only republish of v0.2.0's worktree work (no runtime changes), authorized for and published to the Marketplace prerelease channel; its listing readback also lagged the upload. See the release verification entries below for earlier installers and publication history. v0.2.2 is the prerelease that follows v0.2.1 with chat copy fixes, the context window meter, subagent-aware working status, pending-request card improvements, merge-back tracking, and revert/restore. v0.3.0 adds remote environments: sessions from other machines paired by link appear beside local ones.
 
 ## Overview
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.1.23 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.3.0 |
 | [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and independent model/effort editor tabs. | v0.1.16 | v0.1.23 |
-| [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.2.0 |
+| [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
 | [Conversation management](#conversation-management) | Rename, pin, archive, restore and delete conversations. | v0.0.1 | v0.1.13 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.23 |
@@ -40,15 +40,16 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.2.3 |
 | [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.2.3 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
-| [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.1.21 |
+| [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
 | [Editor references](#editor-references) | Inserts file ranges with checkout-aware labels and preserved source URIs. | v0.0.4 | v0.2.0 |
 | [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.2.2 |
 | [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.22 |
-| [Saved turn diffs](#saved-turn-diffs) | Shows agent-only response files, counts, the current checkpoint checkout branch and files merged in from a subagent checkout. | v0.0.6 | v0.2.2 |
-| [Revert and restore](#revert-and-restore) | "Edit from here" rewinds the conversation only; "Restore files to this point" is a separate, guarded extension-owned Git restore that keeps your edits where it can. | v0.2.2 | v0.2.4 |
+| [Saved turn diffs](#saved-turn-diffs) | Shows agent-only response files, counts, the current checkpoint checkout branch and files merged in from a subagent checkout. | v0.0.6 | v0.3.0 |
+| [Revert and restore](#revert-and-restore) | "Edit from here" rewinds the conversation only; "Restore files to this point" is a separate, guarded extension-owned Git restore that keeps your edits where it can. | v0.2.2 | v0.3.0 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
-| [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.1.15 |
+| [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.0 |
+| [Remote environments](#remote-environments) | Pairs other machines by link and lists their matching-repository sessions beside local ones, with a machine badge. | v0.3.0 | v0.3.0 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
@@ -142,6 +143,11 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 - Match the Settled, Archive and settings rows to the Sessions/Tasks tab strip height, including interface font scaling.
 - Match the Sessions search row’s height and top/side spacing to Tasks, and reserve the clear control’s space so typing and clearing do not resize the field or move its buttons.
 
+#### v0.3.0
+
+- Show sessions from paired remote machines in the same lists when their repository matches an open folder. Rows carry a machine badge with the machine name; local rows are unchanged.
+- Keep a disconnected machine's sessions listed while it reconnects. See [Remote environments](#remote-environments).
+
 ### Scheduled task management
 
 #### v0.1.23 — same-version rebuild
@@ -202,6 +208,10 @@ Task entries open independent editor tabs with the same preview/keep behavior. E
 #### v0.0.8
 
 - Resolve inline media relative to the source conversation's worktree, matching native file links.
+
+#### v0.3.0
+
+- Match a remote project to the window by Git repository identity (upstream or origin remote) instead of workspace path, since remote paths differ from local ones. Local matching by canonical path is unchanged.
 
 ### Independent chat views
 
@@ -1024,6 +1034,10 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 - Leave a web link to the webview host, which prompts before opening. The link carried both a real href and a handler calling `openExternal`, so the browser opened immediately whether or not the prompt was answered, and Cancel did nothing.
 
+#### v0.3.0
+
+- Map file links in remote sessions into the matching local checkout instead of resolving them on the remote machine.
+
 ### Editor references
 
 #### v0.2.0
@@ -1164,6 +1178,10 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - Pass 200 deterministic tests, TypeScript checking, full production builds, all 49 feature-history links and the complete browser suite. Cover no manual/empty/loading box, one multi-file box for duplicate checkpoints, and run-only completion without changing checkpoint metadata; preserve navigation, forks and Queue/Steer behavior.
 - Fresh-context independent regression review against `b71e129` found no blocking regressions; see [the prerelease publication record](publishing.md#0117-prerelease-channel-publication).
 
+#### v0.3.0
+
+- Saved-turn diffs are not available for remote sessions yet; local sessions are unchanged.
+
 ### Revert and restore
 
 #### v0.2.4
@@ -1176,6 +1194,10 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - Add "Edit from here" on a user message: a compact inline confirm, then a conversation-only rewind. Dispatches T3's `checkpoint.rollback` with `restoreFiles: false`, so the server never touches the working tree; the original message text returns to the composer draft. Requires `providerCanRollbackConversation` and no active run. A dimmed "N messages rewound · Restore files to this point" row stays in the transcript until a later turn completes or it is dismissed; a reported `rollbackFailure` shows inline.
 - Add "Restore files to this point" on the same message, and on the rewind row above, independent of rewinding. Shows a grouped preview panel: every file touched since the checkpoint tagged `agent` and/or `you` (human/external edits, computed from `git diff` against the checkpoint and the latest agent checkpoint, plus untracked files), with a `git apply --check` dry-run verdict ("keeps cleanly" / "conflicts") for each file with your edits, a per-file "Keep mine" checkbox (checked by default) and an "Open diff" link. Restoring snapshots kept files, runs `git restore --source <checkpoint> --worktree --staged -- .` and `git clean -fd` with the kept untracked paths excluded, then re-applies each kept file's patch with `git apply --3way`. A patch that cannot 3-way merge leaves the checkpoint's version in place and writes the pre-restore bytes to `<path>.yours` instead of silently discarding them; the result row's "Compare" link opens that against the restored file. New host module `checkpointRestore.ts` does the attribution/dry-run/execute work with an injected Git runner.
 - Known simplification: no Git stash is created for kept/conflicting files (building one from the isolated-index technique in `turnBaseline.ts` was judged not worth the added risk for a first pass); the pre-restore bytes under the extension's global storage and the `.yours` files are the only recovery path. Draft restore from "Edit from here" carries the message text only, not attachments or inline references.
+
+#### v0.3.0
+
+- "Edit from here" works on remote sessions. "Restore files to this point" is not available for them yet, because the extension-owned Git restore only operates on a local checkout.
 
 ### Conversation tab titles
 
@@ -1237,6 +1259,23 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 #### v0.1.15
 
 - Promote the same Windows pairing runtime to the release channel after the owner confirms the v0.1.14 preview works.
+
+#### v0.3.0
+
+- Keep local discovery through the T3 home unchanged. Add pairing of other machines by link; see [Remote environments](#remote-environments).
+
+### Remote environments
+
+#### v0.3.0
+
+- Add **T3 VSCode: Add Environment from Pairing Link**: paste a link from **Create link** in T3 Code on the other machine. HTTPS is required; loopback HTTP is allowed. **T3 VSCode: Manage Environments** enables, disables, reconnects or removes a paired machine.
+- Store paired machines and credentials in one VS Code SecretStorage entry shared by every profile on this computer, so each machine is paired once. Removing a machine here does not revoke its client in T3 Code on that machine.
+- List a remote project's sessions only when its Git repository identity (upstream or origin remote) matches a window folder's remote. Rows show a machine badge.
+- Support reading, replying, Queue/Steer, approvals, rename/archive/pin, forks and "Edit from here" on remote sessions.
+- Not yet for remote sessions: starting new sessions, checkout/branch/worktree actions, saved-turn diffs and "Restore files to this point".
+- Implement with `MultiEnvironmentClient`, which wraps the local `T3Client` and one `T3Client` per remote (the same vendored T3 0.0.45 handshake: bearer token, WebSocket ticket, Effect RPC), merges shells and routes commands by thread or project. Each remote uses the single address from its pairing link; there is no route fallback yet.
+- Validation: unit tests (`multiEnvironmentClient`, `hostStateRemote`, `environmentCatalog`) and `scripts/verify-multi-environment.ts`, which pairs two isolated `t3 serve --base-dir` servers: 13/13 deterministic checks, 14/14 with the optional GPT-6 Luna live turn.
+- Regression review: an independent fresh-context review against v0.2.7 found no blocking regressions. Its non-blocking findings were fixed and re-reviewed before packaging: no lookups or extra Git calls without paired machines, a 5 s bound on waits for remote machines, remote runs no longer block a local branch switch, remote attachment cleanup failures are ignored, and connection tickets are scrubbed from error text. Final checks: typecheck, 511/511 unit tests, and 13/13 deterministic plus 14/14 live checks in `scripts/verify-multi-environment.ts`.
 
 ### Missing-server setup
 
