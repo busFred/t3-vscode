@@ -329,6 +329,10 @@ export class BridgeHandler {
           else await (await import("vscode")).commands.executeCommand("t3-vscode.openExistingChatInTab", viewId);
           break;
         }
+        case "watchSessions": {
+          const ids = Array.isArray(params.threadIds) ? params.threadIds.filter((id): id is string => typeof id === "string") : [];
+          await this.hostState.watchSessions(ids, viewId); break;
+        }
         case "environmentAction":
           if (!this.viewActions.environmentAction) throw new Error("Environments are unavailable.");
           await this.viewActions.environmentAction(stringParam(params, "action"), params.environmentId === undefined ? undefined : stringParam(params, "environmentId"));

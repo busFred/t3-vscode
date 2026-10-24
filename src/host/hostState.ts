@@ -179,6 +179,8 @@ export class HostState {
   private worktreePoll: ReturnType<typeof setTimeout> | null = null;
   private readonly rewindMarkers = new Map<string, RewindMarker>();
   private readonly restoreResults = new Map<string, RestoreResult>();
+  /** Sessions expanded in each view's Sessions list: their transcripts carry their provider subagents' live status. */
+  private readonly watchedSessions = new Map<string, ReadonlySet<string>>();
 
   private readonly options: HostStateOptions;
   private readonly client: HostTransport;
@@ -246,8 +248,17 @@ export class HostState {
     if (draft.workspace) view.workspaceChoice = draft.workspace;
     view.activeThreadId = undefined; view.chatThreadId = undefined;
   }
+  /** The Sessions list reports which sessions are expanded; their subagent rows need the parent's live status. */
+  watchSessions(threadIds: ReadonlyArray<string>, viewId = SIDEBAR_VIEW_ID): Promise<void> {
+    this.requireView(viewId);
+    const next = new Set(threadIds.slice(0, 50)), previous = this.watchedSessions.get(viewId);
+    if (previous && previous.size === next.size && [...next].every((id) => previous.has(id))) return Promise.resolve();
+    if (next.size) this.watchedSessions.set(viewId, next); else this.watchedSessions.delete(viewId);
+    return this.enqueue(async () => { await this.syncThreadSubscriptions(); this.emit(); });
+  }
   removeView(viewId: string): Promise<void> {
     this.cancelSessionSearch(viewId);
+    this.watchedSessions.delete(viewId);
     if (viewId === SIDEBAR_VIEW_ID) return Promise.resolve();
     const closedThreadId = this.views.get(viewId)?.chatThreadId;
     this.views.delete(viewId);
@@ -434,6 +445,15 @@ export class HostState {
       if (this.client.connected) await this.syncThreadSubscriptions().catch(() => undefined);
       this.emit();
     }).catch(() => undefined);
+  }
+  /** Live state of subagents, by child thread: loaded parent transcripts first, then parents' background rosters. */
+  private subagentActivity(): Map<string, { readonly status: string; readonly startedAt: string | null }> {
+    const activity = new Map<string, { status: string; startedAt: string | null }>();
+    for (const state of this.threads.values()) for (const subagent of state.projection?.subagents ?? [])
+      if (subagent.childThreadId) activity.set(subagent.childThreadId, { status: subagent.status, startedAt: subagent.startedAt ? DateTime.formatIso(subagent.startedAt) : null });
+    for (const thread of this.allThreads()) for (const task of thread.pendingBackgroundTasks ?? [])
+      if (task.kind === "subagent" && "childThreadId" in task && task.childThreadId && !activity.has(task.childThreadId)) activity.set(task.childThreadId, { status: "running", startedAt: null });
+    return activity;
   }
   private environmentsSection(): Pick<HostStateSnapshot, "environments"> {
     const statuses = this.client.remoteStatuses?.();
@@ -689,15 +709,17 @@ export class HostState {
     });
   }
   private async syncThreadSubscriptions(): Promise<void> {
+    const watched = new Set([...this.watchedSessions.values()].flatMap((ids) => [...ids]));
     const selected = new Set<string>(this.client.connected
-      ? [...this.views.values()].map((view) => this.findThread(view.activeThreadId)?.id).filter((id) => id !== undefined) : []);
+      ? [...[...this.views.values()].map((view) => view.activeThreadId), ...watched].map((id) => this.findThread(id)?.id).filter((id) => id !== undefined) : []);
     for (const [id, state] of this.threads) {
       if (selected.has(id)) continue;
       // Delete first so callbacks and history responses in flight cannot revive this projection.
       this.threads.delete(id); await state.subscription?.();
     }
     for (const id of selected) {
-      if (![...this.views.values()].some((view) => view.activeThreadId === id)) continue;
+      const open = [...this.views.values()].some((view) => view.activeThreadId === id);
+      if (!open && !watched.has(id)) continue;
       const previous = this.threads.get(id);
       // Only a remote stream that ended with its connection is resumed; local subscriptions are never duplicated.
       if (previous && (previous.subscription || !this.remoteThread(id))) continue;
@@ -710,7 +732,11 @@ export class HostState {
         });
         if (this.disposed || this.threads.get(id) !== state) await subscription();
         else state.subscription = subscription;
-      } catch (cause) { this.threads.delete(id); throw cause; }
+      } catch (cause) {
+        this.threads.delete(id);
+        // An expanded row only refines subagent status; it must not fail the conversation being opened.
+        if (open) throw cause;
+      }
     }
   }
   private handleThread(state: ThreadState, item: OrchestrationV2ThreadStreamItem): void {
@@ -1723,6 +1749,7 @@ export class HostState {
     const descriptor = this.server?.descriptor;
     const threads = this.visibleThreads();
     const visibleThreadIds = new Set(threads.map((thread) => thread.id));
+    const subagentActivity = this.subagentActivity();
     const accepted = activeThreadId ? this.acceptedMessages.get(activeThreadId) : undefined;
     const acceptedRun = accepted ? projection?.runs.find(run => run.userMessageId === accepted.messageId) : undefined;
     const observedActive = threadActiveRun(projection);
@@ -1757,6 +1784,10 @@ export class HostState {
         const hasRunningSubagentItem = !!projection?.visibleTurnItems.some((row) => row.item.type === "subagent" && statusIsWorking(row.item.status));
         const pendingBackgroundTasks = thread.pendingBackgroundTasks ?? [];
         const remote = this.remoteThread(thread.id);
+        // Provider subagents have no runs of their own; their parent records whether they are still working.
+        const subagent = subagentActivity.get(thread.id);
+        const subagentWorking = !!subagent && statusIsWorking(subagent.status) && !statusIsWorking(thread.activityRunStatus ?? "") && !statusIsWorking(thread.status);
+        const subagentOutcome = subagent && !subagentWorking ? subagent.status === "failed" ? "failed" as const : subagent.status === "cancelled" || subagent.status === "interrupted" ? "stopped" as const : undefined : undefined;
         return {
           ...(remote ? { environmentLabel: remote.label } : {}),
           id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
@@ -1789,6 +1820,8 @@ export class HostState {
             const request = thread.pendingRuntimeRequest ?? projection?.runtimeRequests.find((request) => request.status === "pending");
             return request ? { id: request.id, kind: request.kind, createdAt: DateTime.formatIso(request.createdAt) } : null;
           })(),
+          ...(subagentWorking ? { activityRunStatus: "running", workingStartedAt: subagent.startedAt } : {}),
+          ...(subagentOutcome ? { subagentOutcome } : {}),
         };
       })),
       providers: this.configForThread(activeThreadId)?.providers ?? [],

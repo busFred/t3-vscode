@@ -35,7 +35,7 @@ export const Methods = {
   queueAction: "queueAction",
   revertConversation: "revertConversation", dismissRewindMarker: "dismissRewindMarker", restorePreview: "restorePreview", restoreFiles: "restoreFiles", openRestoreDiff: "openRestoreDiff", compareRestoredFile: "compareRestoredFile",
   openWebUi: "openWebUi", configureUsage: "configureUsage", showUsage: "showUsage",
-  environmentAction: "environmentAction",
+  environmentAction: "environmentAction", watchSessions: "watchSessions",
 } as const;
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
@@ -64,6 +64,8 @@ export interface ConversationDraft {
 export interface ThreadSummary {
   /** Machine label for a session on a paired remote environment; absent for local sessions. */
   readonly environmentLabel?: string;
+  /** How a finished subagent ended, when it did not complete normally. */
+  readonly subagentOutcome?: "failed" | "stopped";
   readonly canChooseWorkspace?: boolean;
   readonly worktreePath?: string | null;
   readonly id: string; readonly projectId: string; readonly title: string; readonly status: string;
