@@ -130,7 +130,8 @@ test("A subagent without a child thread, or for a different child, does not affe
   await h.host.watchSessions([PARENT]);
   publishSubagents(h.client, PARENT, [subagent(null, "running"), subagent("first", "running")]);
   assert.equal(row(h.host, CHILD).activityRunStatus ?? null, null);
-  assert.equal(row(h.host, "first").activityRunStatus, "running", "only the listed child changes");
+  // "first" is not a provider subagent, so a parent's record never overrides its own status.
+  assert.equal(row(h.host, "first").activityRunStatus ?? null, null, "only provider subagents take the parent's status");
 });
 
 test("A child named in a parent's background roster shows as working although no projection is loaded", async (t) => {

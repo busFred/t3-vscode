@@ -1785,7 +1785,8 @@ export class HostState {
         const pendingBackgroundTasks = thread.pendingBackgroundTasks ?? [];
         const remote = this.remoteThread(thread.id);
         // Provider subagents have no runs of their own; their parent records whether they are still working.
-        const subagent = subagentActivity.get(thread.id);
+        // App-owned subagents run their own threads, whose status already wins over a lagging parent record.
+        const subagent = thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider" ? subagentActivity.get(thread.id) : undefined;
         const subagentWorking = !!subagent && statusIsWorking(subagent.status) && !statusIsWorking(thread.activityRunStatus ?? "") && !statusIsWorking(thread.status);
         const subagentOutcome = subagent && !subagentWorking ? subagent.status === "failed" ? "failed" as const : subagent.status === "cancelled" || subagent.status === "interrupted" ? "stopped" as const : undefined : undefined;
         return {
