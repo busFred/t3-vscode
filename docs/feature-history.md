@@ -18,7 +18,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.2.5 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
-| [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.2.4 |
+| [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | Unreleased |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
 | [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.2.4 |
 | [Context window meter](#context-window-meter) | Ring + percent in the composer toolbar showing live provider usage against the model's context window. | v0.2.2 | v0.2.2 |
@@ -412,6 +412,13 @@ Session resources retain the current History selection for restoration. Opening 
 
 - Fix the v0.2.2 descendant scan missing a delegated subagent once its own child thread record settles after its first run, even though the parent's transcript still shows the subagent card as "Running": the server's own post-settlement background roster (`pendingBackgroundTasks`) is now read per thread and surfaced as `backgroundWork` (subagent/monitor/task/command counts plus `holdsCompletion`), the same roster T3 Code's web sidebar already consumes. A thread whose own run is idle but whose roster holds completion, or whose own transcript still shows a running subagent turn item (a fallback for servers without a roster), now reads as a calm, muted "Waiting" state — distinct from the spinner-style "Working" badge, which is reserved for the thread's own active run. Precedence is Input/Approval > Working > Waiting > nothing, matching T3 Code's sidebar. A command left running in the background (e.g. a dev server) does not hold a thread as Waiting.
 - Waiting counts its elapsed time from when the thread's own run ended, since the roster carries no per-task timestamp; archived and settled threads keep their own label even with a stale roster. Fresh-context regression review (Sonnet) flagged both; fixed with a unit test.
+
+#### Unreleased
+
+- Provider-run subagents (for example Claude's Task tool) show **Working** with elapsed time in Sessions while they run, like their parent. Status comes from the parent session, which loads while it is expanded.
+- An expanded session lists running subagents under **Running** and folds finished ones under **Past** when it has both.
+- Failed subagents show a **Failed** marker; cancelled or interrupted ones show **Stopped**.
+- Regression review: pending.
 
 ### Untouched chat cleanup
 

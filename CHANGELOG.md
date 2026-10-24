@@ -8,6 +8,9 @@
 - T3 pairings last a fixed 30 days and are not extended by use, so pair each remote machine again with a new link about monthly. The yellow warning appears for the last 3 days.
 - If a machine rejects this computer before its pairing expires, it is treated as revoked: it is removed from the list in every profile and a notification offers **Pair again**.
 - The "‹machine› disconnected — reconnecting" line above Sessions is gone; the Environments section shows that state instead.
+- Provider-run subagents (for example Claude's Task tool) now show **Working** with elapsed time in Sessions while they run, like their parent. Their status comes from the parent session, which is loaded while it is expanded.
+- An expanded session lists running subagents under **Running** and folds finished ones under **Past** when it has both; otherwise the list is unchanged.
+- Finished subagents that failed show a **Failed** marker; cancelled or interrupted ones show **Stopped**.
 
 ## 0.3.0 — Prerelease
 
