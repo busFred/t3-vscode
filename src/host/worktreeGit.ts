@@ -4,6 +4,7 @@ import { access, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, r
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { WorktreeEnvironmentCheckoutIdentity } from '../shared/worktreeEnvironment';
+import { normalizeGitRemoteUrl } from '@t3tools/shared/git';
 
 const LIMIT = 32 * 1024 * 1024;
 function git(cwd: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}, input?: Buffer): Promise<Buffer> {
@@ -22,6 +23,11 @@ function git(cwd: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}, inpu
 const out = async (cwd: string, args: string[]) => (await git(cwd, args)).toString('utf8').trim();
 export async function currentBranch(cwd: string): Promise<string> { return out(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']); }
 
+/** Normalized `upstream` and `origin` remotes: the remotes T3 derives a project's repository identity from. */
+export async function repositoryRemoteKeys(path: string): Promise<string[]> {
+  const keys = await Promise.all(['upstream', 'origin'].map((name) => out(path, ['remote', 'get-url', name]).then(normalizeGitRemoteUrl, () => null)));
+  return keys.filter((key): key is string => !!key);
+}
 export interface LocalWorktree { path: string; branch: string; head?: string; root: boolean; missing: boolean; locked: boolean }
 export async function repositoryIdentity(path: string): Promise<{ root: string; commonDir: string } | null> {
   try {
