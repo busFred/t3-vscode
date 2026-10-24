@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 — Prerelease
+
+- Work with sessions on your other machines. Run **T3 VSCode: Add Environment from Pairing Link** and paste a link from **Create link** in T3 Code on that machine. Its sessions for the same repository (matched by Git remote) appear in Sessions, labelled with the machine name, and you can read, reply, queue, steer, approve, rename, archive and fork them.
+- Pair each machine once: paired machines are shared by every VS Code profile on this computer. **T3 VSCode: Manage Environments** enables, disables, reconnects or removes them.
+- Sessions on another machine stay listed while it reconnects. Commands sent to it meanwhile report it as disconnected.
+- Not yet available for remote sessions: starting new sessions, checkout and branch actions, saved-turn diffs and **Restore files to this point**. **Edit from here** still works. Local sessions are unchanged.
+
 ## 0.2.7 — Release
 
 - The effort selector (composer and scheduled task editor) now marks the model's default level with "(Default)", as T3 Code's own picker does.
