@@ -793,3 +793,11 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .restore-result li { margin: 2px 0; }
 .restore-result code { font-family: var(--vscode-editor-font-family, monospace); background: var(--code, var(--muted)); padding: 0 4px; border-radius: 3px; }
 .secret-card .secret-reason { margin: 0 0 8px; white-space: pre-wrap; }.secret-card .secret-input { margin-top: 0; -webkit-text-security: disc; }.secret-card .secret-error { margin: 6px 0 0; color: var(--destructive); }
+.thread-machine { display: inline-flex; align-items: center; gap: 3px; flex: 0 1 auto; min-width: 0; max-width: 45%; color: var(--muted-foreground); }
+.thread-machine > svg { flex: none; opacity: .7; }
+.thread-machine > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread.active .thread-machine { color: inherit; opacity: .8; }
+.remote-env-status { margin: 0; padding: 2px 8px; font-size: .625rem; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remote-session-note { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 160px; flex-shrink: 1; font-size: .75rem; color: var(--muted-foreground); }
+.remote-session-note > svg { flex: none; }
+.remote-session-note > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

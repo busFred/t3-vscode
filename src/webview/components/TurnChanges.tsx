@@ -3,6 +3,7 @@ import { ChevronRightIcon, FileDiffIcon, FileIcon, FolderIcon, GitBranchIcon } f
 import type { TranscriptItem, WireTurnItem, TurnDiffSummary } from "../../shared/bridge";
 import { bridge } from "../bridge-client";
 import { useActions } from "../actions";
+import { useRemoteSession } from "../remoteSession";
 import { buildTurnDiffTree, summarizeTurnDiffStats, type TurnDiffTreeNode, type TurnDiffStat } from "./t3/turnDiffTree";
 
 function Counts({ stat }: { readonly stat: TurnDiffStat | null }) {
@@ -28,10 +29,12 @@ function MergeGroup({ merge, threadId, itemId }: { readonly merge: NonNullable<T
 export function TurnChanges({ row, threadId }: { readonly row: TranscriptItem; readonly threadId: string }) {
   const item = row.item as Extract<WireTurnItem, { type: "checkpoint" }>;
   const run = useActions();
+  const remote = useRemoteSession();
   const itemId = row.sourceItemId ?? item.id;
   const key = JSON.stringify([threadId, row.sourceThreadId, itemId, item.checkpointId, item.updatedAt, row.checkpointRunStatus]);
   const [result, setResult] = useState<{ key: string; summary?: TurnDiffSummary }>();
   useEffect(() => {
+    if (remote) return; // Saved-turn diffs are unavailable for sessions on a remote machine.
     if (row.checkpointRunStatus && row.checkpointRunStatus !== "completed") return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -44,14 +47,14 @@ export function TurnChanges({ row, threadId }: { readonly row: TranscriptItem; r
     load(0);
     return () => { cancelled = true; clearTimeout(timer); };
 
-  }, [key, threadId, row.sourceThreadId, itemId, row.checkpointRunStatus]);
+  }, [key, threadId, row.sourceThreadId, itemId, row.checkpointRunStatus, remote]);
   const current = result?.key === key ? result : undefined;
   const files = current?.summary?.files ?? [];
   const merges = current?.summary?.merges ?? [];
   const tree = useMemo(() => buildTurnDiffTree(files), [files]);
   const total = useMemo(() => summarizeTurnDiffStats(files), [files]);
   const open = (path?: string) => { void run("openTurnDiff", { threadId, sourceThreadId: row.sourceThreadId, itemId, ...(path === undefined ? {} : { path }) }); };
-  if (!files.length && !merges.length) return null;
+  if (remote || (!files.length && !merges.length)) return null;
   return <div className="turn-changes" data-checkpoint-id={item.checkpointId}>
     {files.length ? <details><summary><ChevronRightIcon size={13} /><span>{files.length} changed {files.length === 1 ? "file" : "files"}</span>{current?.summary?.branch ? <span className="turn-branch-chip" title={`Diff taken in ${current.summary.cwd}. Branch is the checkout's current branch; the branch at the time of the turn is not recorded.`}><GitBranchIcon size={11} />{current.summary.branch}</span> : null}<Counts stat={total} /></summary><div className="change-tree">{tree.map((node) => <ChangeNode key={node.path} node={node} open={open} />)}</div></details> : null}
     {merges.map((merge) => <MergeGroup key={`${merge.sourceThreadId}-${merge.appliedAt}`} merge={merge} threadId={threadId} itemId={itemId} />)}

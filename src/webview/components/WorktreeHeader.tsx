@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GitBranchIcon, CircleCheckIcon, CircleAlertIcon, LoaderCircleIcon } from "lucide-react";
+import { ServerIcon, GitBranchIcon, CircleCheckIcon, CircleAlertIcon, LoaderCircleIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { WorktreePopover } from "./WorktreePopover";
@@ -19,7 +19,8 @@ export function WorktreeHeader({ state }: { readonly state: HostStateSnapshot })
       : items[0]?.projectCheckoutPath ?? checkoutForWorkingDirectory(path ?? "", items.map(item => item.path))));
   const [open, setOpen] = useState(false); const [copyEdits, setCopyEdits] = useState(false); const [busy, setBusy] = useState(false);
   const close = useCallback(() => setOpen(false), []); const anchor = useRef<HTMLButtonElement>(null); const run = useActions();
-  useEffect(() => { if (projectId && state.phase === "ready") void run("refreshWorktrees", { projectId }); }, [projectId, state.phase, run]);
+  useEffect(() => { if (projectId && state.phase === "ready" && !state.remoteSession) void run("refreshWorktrees", { projectId }); }, [projectId, state.phase, state.remoteSession, run]);
+  if (state.remoteSession) return <span className="remote-session-note" title={`Runs on ${state.remoteSession.label}; checkout, worktree and saved-turn diff actions are unavailable.`}><ServerIcon size={12} /><span>Running on {state.remoteSession.label}</span></span>;
   if (!state.worktrees || !item && !thread?.branch) return null;
   const status = item?.environment?.status;
   return <><button ref={anchor} type="button" className="worktree-control worktree-header-control" title={`${item?.path ?? thread?.worktreePath ?? "Root checkout"}${status ? ` · Environment ${status}` : ""}`} aria-label={`Checkout ${item?.branch ?? thread?.branch ?? "Root"}${status ? `, environment ${status}` : ""}`} aria-expanded={open} disabled={!item} onClick={() => setOpen(!open)}><GitBranchIcon size={12} /><span>{item?.branch || thread?.branch || "Root"}</span>{status === "ready" ? <CircleCheckIcon size={12} aria-label="Environment ready" /> : status === "preparing" ? <LoaderCircleIcon size={12} className="animate-spin" aria-label="Preparing environment" /> : status === "failed" || status === "cancelled" ? <CircleAlertIcon size={12} aria-label={`Environment ${status}`} /> : null}</button>

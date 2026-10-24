@@ -75,7 +75,7 @@ export function ServerSetup({ state }: { readonly state: HostStateSnapshot }) {
     <div className="setup-actions"><button className="btn primary" onClick={() => { void run(pairing ? "startPairing" : "reconnect"); }}><RefreshCwIcon size={14} />{pairing ? "Pair again" : "Retry connection"}</button><button className="btn" onClick={() => { void run("openSettings"); }}><SettingsIcon size={14} />Connection settings</button>{state.phase === "error" && !pairing ? <button className="text-button" onClick={() => { void run("startPairing"); }}>Pair again</button> : null}</div>
     <p className="setup-action-hint">Once T3 is running, retry here. VS Code pairs automatically and the sidebar opens Sessions.</p>
     <details className="setup-diagnostics" open={kind === "connection" || kind === "pairing"}><summary>Connection details</summary><dl><dt>Stage</dt><dd>{message.stage}</dd><dt>T3 directory</dt><dd><code>{state.home}</code></dd>{state.notice ? <><dt>Result</dt><dd>{state.notice}</dd></> : null}</dl><p>Using a custom directory? Set <code>t3-vscode.t3Home</code> to the same directory used by T3, then reload VS Code.</p></details>
-    <footer>Connects to T3 Code on this computer. Remote servers aren’t supported yet. <Guide href={install}>Setup guide</Guide></footer>
+    <footer>Connects to T3 Code on this computer. Other machines can be added after connecting. <Guide href={install}>Setup guide</Guide></footer>
   </main>;
 }
 

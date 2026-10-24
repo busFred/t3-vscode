@@ -4,6 +4,7 @@ import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, PencilIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, Undo2Icon, WrenchIcon, ArrowRightLeftIcon, KeyRoundIcon, MinusIcon, XIcon } from "lucide-react";
 import type { HostStateSnapshot, TranscriptItem, WireTurnItem } from "../../shared/bridge";
 import { RestorePreview } from "./RestorePreview";
+import { RemoteSessionContext, useRemoteSession } from "../remoteSession";
 import { useActions } from "../actions";
 import { getQuestionAnswerText } from "@t3tools/client-runtime/work-log/user-input";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -43,6 +44,7 @@ function ForkButton({ row, threadId }: { row: TranscriptItem; threadId: string }
 /** "Edit from here" (conversation-only rewind) and "Restore files to this point" (extension-owned git restore) on a user message. */
 function RevertActions({ row, threadId, timestamp, copyText }: { row: TranscriptItem; threadId: string; timestamp: string | null; copyText: string }) {
   const run = useActions();
+  const remote = useRemoteSession();
   const [confirming, setConfirming] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -60,7 +62,7 @@ function RevertActions({ row, threadId, timestamp, copyText }: { row: Transcript
   return <>
     {footer(<>
       {row.canRevert ? <button className="icon-button revert-icon" title="Edit from here" aria-label="Edit from here" aria-expanded={confirming} onClick={() => setConfirming(!confirming)}><PencilIcon size={13} /></button> : null}
-      <button className="icon-button revert-icon" title="Restore files to this point" aria-label="Restore files to this point" aria-expanded={restoring} onClick={() => setRestoring(!restoring)}><Undo2Icon size={13} /></button>
+      {remote ? null : <button className="icon-button revert-icon" title="Restore files to this point" aria-label="Restore files to this point" aria-expanded={restoring} onClick={() => setRestoring(!restoring)}><Undo2Icon size={13} /></button>}
     </>)}
     {confirming ? <div className="revert-confirm">
       <strong>Edit from here?</strong>
@@ -68,7 +70,7 @@ function RevertActions({ row, threadId, timestamp, copyText }: { row: Transcript
       {error ? <p className="turn-error">{error}</p> : null}
       <div className="revert-confirm-actions"><button className="btn primary" disabled={busy} onClick={rewind}>Rewind</button><button className="btn ghost" disabled={busy} onClick={() => setConfirming(false)}>Cancel</button></div>
     </div> : null}
-    {restoring ? <RestorePreview threadId={threadId} sourceThreadId={row.sourceThreadId} locator={{ itemId }} turnNumber={row.revertTurnCount} onClose={() => setRestoring(false)} /> : null}
+    {restoring && !remote ? <RestorePreview threadId={threadId} sourceThreadId={row.sourceThreadId} locator={{ itemId }} turnNumber={row.revertTurnCount} onClose={() => setRestoring(false)} /> : null}
   </>;
 }
 function Disclosure({ label, icon, children, row, threadId }: { label: string; icon: ReactNode; children: ReactNode; row: TranscriptItem; threadId: string }) {
@@ -178,14 +180,15 @@ function AssistantHeader({ working = false, headerKey }: { working?: boolean; he
 /** The dimmed marker left behind by "Edit from here"; its own "Restore files" link targets the remembered checkpoint directly, since the original message row is gone. */
 function RewindMarkerRow({ threadId, marker }: { threadId: string; marker: NonNullable<HostStateSnapshot["rewindMarker"]> }) {
   const run = useActions();
+  const remote = useRemoteSession();
   const [restoring, setRestoring] = useState(false);
   return <div className="timeline-row">
     <div className="rewind-marker">
-      <Undo2Icon size={12} /><span>{marker.rewoundMessageCount} message{marker.rewoundMessageCount === 1 ? "" : "s"} rewound</span><span aria-hidden="true">·</span>
-      <button className="text-button" aria-expanded={restoring} onClick={() => setRestoring(!restoring)}>Restore files to this point</button>
+      <Undo2Icon size={12} /><span>{marker.rewoundMessageCount} message{marker.rewoundMessageCount === 1 ? "" : "s"} rewound</span>{remote ? null : <><span aria-hidden="true">·</span>
+      <button className="text-button" aria-expanded={restoring} onClick={() => setRestoring(!restoring)}>Restore files to this point</button></>}
       <button className="icon-button" title="Dismiss" aria-label="Dismiss rewind notice" onClick={() => { void run("dismissRewindMarker", { threadId }); }}><XIcon size={12} /></button>
     </div>
-    {restoring ? <RestorePreview threadId={threadId} sourceThreadId={threadId} locator={{ checkpointId: marker.checkpointId, scopeId: marker.scopeId }} {...(marker.turnNumber !== undefined ? { turnNumber: marker.turnNumber } : {})} onClose={() => setRestoring(false)} /> : null}
+    {restoring && !remote ? <RestorePreview threadId={threadId} sourceThreadId={threadId} locator={{ checkpointId: marker.checkpointId, scopeId: marker.scopeId }} {...(marker.turnNumber !== undefined ? { turnNumber: marker.turnNumber } : {})} onClose={() => setRestoring(false)} /> : null}
   </div>;
 }
 function RestoreResultRow({ threadId, result }: { threadId: string; result: NonNullable<HostStateSnapshot["restoreResult"]> }) {
@@ -315,7 +318,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source message…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading && !working)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length && !working) return <div className="chat-empty"><p>Loading conversation…</p></div>;
-  return <SearchTargetContext.Provider value={searchTarget ?? null}><SubagentState value={state}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation">
+  return <SearchTargetContext.Provider value={searchTarget ?? null}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><SubagentState value={state}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation">
     {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
     {navigationNotice ? <div className="citation-source-notice" role="status">{navigationNotice}</div> : null}
     {sticky && working ? <div className="sticky-working"><AssistantHeader working /></div> : null}
@@ -333,5 +336,5 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
         {id && state.restoreResult ? <RestoreResultRow threadId={id} result={state.restoreResult} /> : null}
       </div>}
     />
-  </div></SubagentState></SearchTargetContext.Provider>;
+  </div></SubagentState></RemoteSessionContext.Provider></SearchTargetContext.Provider>;
 }

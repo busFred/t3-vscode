@@ -339,7 +339,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       setBusy(true); void run("setModelOption", { ...target, optionId: effort.id, value: event.target.value }).finally(() => setBusy(false));
     }}>{getProviderOptionCurrentValue(effort) === undefined ? <option value="" disabled>Default</option> : null}{effort.options.map((option) => <option key={option.id} value={option.id} title={option.description}>{effortOptionLabel(option)}</option>)}</select></label> : null}
     <select aria-label="Permission mode" value={runtimeMode} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => { void run("setModes", { ...target, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes ?? ["approval-required", "auto", "full-access"]).map((mode) => <option key={mode} value={mode}>{runtimeLabels[mode]}</option>)}</select>
-    <WorktreeSelector state={state} disabled={busy || state.sending || thread?.providerNativeSubagent === true} />
+    {state.remoteSession ? null : <WorktreeSelector state={state} disabled={busy || state.sending || thread?.providerNativeSubagent === true} />}
   </div>;
   return <div className="composer-area"><div className="composer-column">
     <PendingRequests state={state} />
