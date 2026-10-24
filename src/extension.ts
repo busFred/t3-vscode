@@ -43,6 +43,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Paired remote machines are shared by every profile through SecretStorage.
   const client = environments = new MultiEnvironmentClient(new T3Client());
   const catalog = new EnvironmentCatalog(context.secrets);
+  const environmentControls = registerEnvironmentCommands({ catalog, client, localEnvironmentId: () => hostState?.snapshot().environment?.environmentId });
   const modelPreferences = new ModelPreferenceStore(context.globalState);
   const taskOrigins = new TaskOriginStore(context.globalState);
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
@@ -74,6 +75,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     newWorktreeChat: (id, projectId, choice) => provider.createNewPanel(id, projectId, choice),
     editScheduledTask: (request, preview) => provider.editScheduledTask(request, preview),
     showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(),
+    environmentAction: (action, environmentId) => environmentControls.environmentAction(action, environmentId),
   });
   provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState, context.workspaceState);
   const notifications = new InputNotificationTracker();
@@ -155,9 +157,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   const syncEnvironments = () => catalog.list().then((records) => client.setRemoteEnvironments(records)).catch(() => undefined);
-  client.onRemoteStatus = () => hostState?.remoteEnvironmentsChanged();
+  client.onRemoteStatus = () => { environmentControls.clearRecoveredIgnores(); hostState?.remoteEnvironmentsChanged(); };
   context.subscriptions.push(catalog.onDidChange(() => { void syncEnvironments(); }),
-    ...registerEnvironmentCommands({ catalog, client, localEnvironmentId: () => hostState?.snapshot().environment?.environmentId }));
+    ...environmentControls.disposables);
   void syncEnvironments();
   await hostState.start();
 }

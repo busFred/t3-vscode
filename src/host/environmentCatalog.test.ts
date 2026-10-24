@@ -49,6 +49,16 @@ test("upsert appends, replaces by id; remove and setEnabled work", async () => {
   assert.deepEqual(JSON.parse(s.data.get(ENVIRONMENT_CATALOG_KEY)!).version, 1);
 });
 
+test("removeIfToken keeps a pairing that was replaced with a new token", async () => {
+  const catalog = new EnvironmentCatalog(fakeSecrets().backend);
+  await catalog.upsert(record("a"));
+  await catalog.upsert(record("a", { accessToken: "tok-repaired" }));
+  await catalog.removeIfToken("a", "tok-a");
+  assert.equal((await catalog.list())[0]?.accessToken, "tok-repaired");
+  await catalog.removeIfToken("a", "tok-repaired");
+  assert.equal((await catalog.list()).length, 0);
+});
+
 test("malformed entries are dropped silently", async () => {
   const s = fakeSecrets();
   const good = record("good", { serverVersion: "1.2.3", expiresAt: null });
@@ -58,6 +68,39 @@ test("malformed entries are dropped silently", async () => {
   }));
   const list = await new EnvironmentCatalog(s.backend).list();
   assert.deepEqual(list, [good]);
+});
+
+test("setIgnored stores, replaces and clears the ignored status", async () => {
+  const s = fakeSecrets();
+  const catalog = new EnvironmentCatalog(s.backend);
+  await catalog.upsert(record("a"));
+  await catalog.upsert(record("b"));
+  await catalog.setIgnored("a", "expiring");
+  assert.equal((await catalog.list())[0]?.ignoredStatus, "expiring");
+  assert.equal("ignoredStatus" in (await catalog.list())[1]!, false);
+  await catalog.setIgnored("a", "expired");
+  assert.equal((await catalog.list())[0]?.ignoredStatus, "expired");
+  await catalog.setIgnored("a", null);
+  assert.equal("ignoredStatus" in (await catalog.list())[0]!, false);
+  assert.deepEqual((await catalog.list())[0], record("a"));
+  await catalog.setIgnored("missing", "reconnecting");
+  assert.equal((await catalog.list()).length, 2);
+  // A fresh catalog instance over the same storage sees the persisted value.
+  await catalog.setIgnored("b", "reconnecting");
+  assert.equal((await new EnvironmentCatalog(s.backend).list())[1]?.ignoredStatus, "reconnecting");
+});
+
+test("a malformed ignoredStatus is dropped while the record is kept", async () => {
+  const s = fakeSecrets();
+  s.data.set(ENVIRONMENT_CATALOG_KEY, JSON.stringify({ version: 1, environments: [
+    { ...record("ok"), ignoredStatus: "expired" },
+    { ...record("bogus"), ignoredStatus: "connected" },
+    { ...record("num"), ignoredStatus: 3 },
+    { ...record("nul"), ignoredStatus: null },
+  ] }));
+  const list = await new EnvironmentCatalog(s.backend).list();
+  assert.deepEqual(list.map((e) => [e.environmentId, e.ignoredStatus]), [["ok", "expired"], ["bogus", undefined], ["num", undefined], ["nul", undefined]]);
+  for (const entry of list.slice(1)) assert.equal("ignoredStatus" in entry, false);
 });
 
 test("mutations re-read storage so another window's writes are kept", async () => {

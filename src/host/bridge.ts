@@ -49,7 +49,7 @@ export class BridgeHandler {
   private readonly showSettings: () => PromiseLike<unknown>;
   private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean> };
   private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
-  private readonly viewActions: { openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>; keepTab?: (viewId: string) => PromiseLike<unknown>; closeTaskTab?: (viewId: string) => void; editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown> };
+  private readonly viewActions: { openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>; keepTab?: (viewId: string) => PromiseLike<unknown>; closeTaskTab?: (viewId: string) => void; editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown>; environmentAction?: (action: string, environmentId?: string) => PromiseLike<unknown> };
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:hungtienhuang.t3-vscode"),
     prompts = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
@@ -64,6 +64,7 @@ export class BridgeHandler {
       newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown;
       showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown;
       configureUsage?: () => PromiseLike<unknown>;
+      environmentAction?: (action: string, environmentId?: string) => PromiseLike<unknown>;
     } = {}) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; this.prompts = prompts; this.openDiff = openDiff; this.viewActions = viewActions; }
   async performThreadAction(id: string, action: string, title?: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     const thread = this.hostState.snapshot(viewId).threads.find((thread) => thread.id === id);
@@ -328,6 +329,10 @@ export class BridgeHandler {
           else await (await import("vscode")).commands.executeCommand("t3-vscode.openExistingChatInTab", viewId);
           break;
         }
+        case "environmentAction":
+          if (!this.viewActions.environmentAction) throw new Error("Environments are unavailable.");
+          await this.viewActions.environmentAction(stringParam(params, "action"), params.environmentId === undefined ? undefined : stringParam(params, "environmentId"));
+          break;
         case "configureUsage":
           if (this.viewActions.configureUsage) await this.viewActions.configureUsage();
           else await (await import("vscode")).commands.executeCommand("t3-vscode.configureUsage");

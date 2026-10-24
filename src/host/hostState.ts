@@ -47,6 +47,7 @@ import { conversationActivity } from "./conversationActivity.js";
 import { latestContextUsage } from "../shared/contextUsage.js";
 import { taskEditVersion, supportedSchedule, type TaskOrigin, type ScheduledTaskEditorRequest } from "../shared/scheduledTasks.js";
 import { sessionActivityAt } from "./sessionActivity.js";
+import { environmentDisplayStatus, environmentIndicator, expiryLabel, type EnvironmentRow } from "../shared/environmentStatus.js";
 import { pairWithServer, PairingError } from "./pairing.js";
 import { connectionSetup, discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
 import type { ConnectionProblem, ConnectionSetup } from "../shared/connectionSetup.js";
@@ -125,6 +126,8 @@ interface ViewState {
 const blankView = (): ViewState => ({ activeThreadId: undefined, draftProjectId: undefined, draftWorkspaceRoot: undefined,
   draftModelSelection: undefined, draftRuntimeMode: "auto", draftInteractionMode: "default", sending: false, chatActive: false, chatThreadId: undefined });
 const describeError = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
+/** A stored address that no longer parses must not break the sidebar. */
+const hostOf = (url: string): string => { try { return new URL(url).host; } catch { return url; } };
 function authFailure(cause: unknown): boolean {
   return typeof cause === "object" && cause !== null && (
     ("reason" in cause && cause.reason === "authentication") ||
@@ -431,6 +434,19 @@ export class HostState {
       if (this.client.connected) await this.syncThreadSubscriptions().catch(() => undefined);
       this.emit();
     }).catch(() => undefined);
+  }
+  private environmentsSection(): Pick<HostStateSnapshot, "environments"> {
+    const statuses = this.client.remoteStatuses?.();
+    if (!statuses) return {};
+    const now = Date.now(), descriptor = this.server?.descriptor;
+    const rows = statuses.map((entry): EnvironmentRow => {
+      const status = environmentDisplayStatus(entry, now);
+      const detail = status === "expiring" && entry.expiresAt !== null ? expiryLabel(entry.expiresAt, now) : status === "reconnecting" || status === "expired" ? entry.error : undefined;
+      return { environmentId: entry.environmentId, label: entry.label, host: hostOf(entry.httpBaseUrl), status, expiresAt: entry.expiresAt,
+        ignored: entry.ignoredStatus === status, ...(entry.serverVersion ? { serverVersion: entry.serverVersion } : {}), ...(detail ? { detail } : {}) };
+    });
+    return { environments: { rows, indicator: environmentIndicator(rows),
+      ...(descriptor && this.server ? { local: { label: descriptor.label, host: hostOf(this.server.origin), serverVersion: descriptor.serverVersion } } : {}) } };
   }
   private remoteConnected(id: string): boolean {
     const remote = this.remoteThread(id);
@@ -1731,7 +1747,7 @@ export class HostState {
       projects: this.visibleProjects().map((project) => { const remote = this.remoteProject(project.id);
         return { id: project.id, title: project.title, workspaceRoot: project.workspaceRoot, ...(remote ? { environmentLabel: remote.label } : {}) }; }),
       ...(activeThreadId && this.remoteThread(activeThreadId) ? { remoteSession: this.remoteThread(activeThreadId)! } : {}),
-      ...(this.client.remoteStatuses?.().length ? { remoteEnvironments: this.client.remoteStatuses().map(({ environmentId, label, state, error }) => ({ environmentId, label, state, ...(error ? { error } : {}) })) } : {}),
+      ...this.environmentsSection(),
       threads: withSubagentWorkingState(threads.map((thread) => {
         // visibleTurnItems lags each thread's own settled record (#the subagent's child thread
         // settles before the parent's turn item stops showing "Running"), so the roster above

@@ -65,24 +65,26 @@ class FakeClient {
   callsNamed(name: string) { return this.calls.filter(([n]) => n === name); }
 }
 
-interface Rig { multi: MultiEnvironmentClient; primary: FakeClient; remotes: FakeClient[]; queue: FakeClient[]; items: OrchestrationV2ShellStreamItem[]; statusChanges: number; authFailures: string[] }
-async function rig(options: { primaryShell?: OrchestrationV2ShellSnapshot; reconnectDelayMs?: number; subscribe?: boolean } = {}): Promise<Rig> {
+interface Rig { multi: MultiEnvironmentClient; primary: FakeClient; remotes: FakeClient[]; queue: FakeClient[]; items: OrchestrationV2ShellStreamItem[]; statusChanges: number; revoked: string[] }
+async function rig(options: { primaryShell?: OrchestrationV2ShellSnapshot; reconnectDelayMs?: number; subscribe?: boolean; credentialValid?: boolean | null } = {}): Promise<Rig> {
   const primary = new FakeClient(options.primaryShell ?? shell([project("local-project")], [thread("local-thread", "local-project")], 7), "primary");
   const queue: FakeClient[] = [], remotes: FakeClient[] = [];
   const multi = new MultiEnvironmentClient(primary as unknown as T3Client, {
     makeClient: () => { const next = queue.shift(); if (!next) throw new Error("No remote client queued"); remotes.push(next); return next as never; },
     reconnectDelayMs: options.reconnectDelayMs ?? 5,
+    // By default the remote T3 server confirms a rejected credential is no longer signed in.
+    checkCredential: async () => options.credentialValid === undefined ? false : options.credentialValid,
   });
-  const state: Rig = { multi, primary, remotes, queue, items: [], statusChanges: 0, authFailures: [] };
+  const state: Rig = { multi, primary, remotes, queue, items: [], statusChanges: 0, revoked: [] };
   multi.onRemoteStatus = () => { state.statusChanges += 1; };
-  multi.onRemoteAuthFailure = (id) => { state.authFailures.push(id); };
+  multi.onRemoteRevoked = (revokedRecord) => { state.revoked.push(revokedRecord.environmentId); };
   if (options.subscribe !== false) { await multi.snapshotShell(); await multi.subscribeShell((item) => state.items.push(item)); }
   return state;
 }
 /** Pairs a remote whose shell is `remoteShell` and waits until it is connected. */
 async function pair(r: Rig, id: string, remoteShell: OrchestrationV2ShellSnapshot, extra: Partial<RemoteEnvironmentRecord> = {}): Promise<FakeClient> {
   const fake = new FakeClient(remoteShell, id); r.queue.push(fake);
-  await r.multi.setRemoteEnvironments([...r.multi.remoteStatuses().map((s) => record(s.environmentId, { label: s.label, enabled: s.enabled })), record(id, extra)]);
+  await r.multi.setRemoteEnvironments([...r.multi.remoteStatuses().map((s) => record(s.environmentId, { label: s.label, enabled: s.enabled, expiresAt: s.expiresAt, ...(s.ignoredStatus ? { ignoredStatus: s.ignoredStatus } : {}) })), record(id, extra)]);
   await until(() => r.multi.remoteStatuses().find((s) => s.environmentId === id)?.state === "connected", `${id} connected`);
   return fake;
 }
@@ -290,24 +292,76 @@ test("Re-enabling a disabled remote reconnects it", async () => {
   assert.ok(ids(lastSnapshot(r.items).threads).includes("t-a"));
 });
 
-test("An authentication failure marks the remote errored, clears its shell, notifies, and does not retry", async () => {
+const DAY = 24 * 60 * 60 * 1000;
+test("An auth failure on an unexpired pairing means revoked: state expired, shell cleared, onRemoteRevoked fires, no retry", async () => {
   const r = await rig({ reconnectDelayMs: 5 });
-  const a = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 1));
+  const a = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 1), { expiresAt: Date.now() + 10 * DAY });
   const rejected = new FakeClient(a.shell, "rejected");
   rejected.connectError = Object.assign(new Error("unauthorized"), { status: 401 });
   const never = new FakeClient(a.shell, "never"); r.queue.push(rejected, never);
   a.close();
-  await until(() => r.multi.remoteStatuses()[0]!.state === "connected" || r.multi.remoteStatuses()[0]!.state === "error");
-  await until(() => rejected.connects === 1 && r.authFailures.length === 1, "auth failure");
-  assert.deepEqual(r.authFailures, ["a"]);
+  await until(() => rejected.connects === 1 && r.revoked.length === 1, "revocation");
+  assert.deepEqual(r.revoked, ["a"]);
   const status = r.multi.remoteStatuses()[0]!;
-  assert.equal(status.state, "error");
-  assert.match(status.error!, /pairing was revoked or expired/);
+  assert.equal(status.state, "expired");
+  assert.match(status.error!, /revoked/);
   assert.deepEqual(ids((await r.multi.snapshotShell()).threads), ["local-thread"]);
   assert.equal(r.multi.threadEnvironment("t-a"), undefined);
   await new Promise((resolve) => setTimeout(resolve, 60));
   assert.equal(never.connects, 0);
-  assert.equal(r.authFailures.length, 1);
+  assert.equal(r.revoked.length, 1);
+});
+
+test("An auth failure the T3 server does not confirm (e.g. a proxy's 401) keeps retrying and never revokes", async () => {
+  for (const credentialValid of [null, true] as const) {
+    const r = await rig({ reconnectDelayMs: 5, credentialValid });
+    const a = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 1), { expiresAt: Date.now() + 10 * DAY });
+    const rejected = new FakeClient(a.shell, "rejected");
+    rejected.connectError = Object.assign(new Error("unauthorized"), { status: 401 });
+    const retry = new FakeClient(a.shell, "retry"); r.queue.push(rejected, retry);
+    a.close();
+    await until(() => retry.connects === 1 && r.multi.remoteStatuses()[0]!.state === "connected", "retry after unconfirmed 401");
+    assert.deepEqual(r.revoked, []);
+    await r.multi.dispose();
+  }
+});
+
+test("A credential with no recorded expiry that is rejected counts as revoked", async () => {
+  const r = await rig();
+  const fake = new FakeClient(shell([], [], 1), "x"); fake.connectError = Object.assign(new Error("unauthorized"), { status: 401 }); r.queue.push(fake);
+  await r.multi.setRemoteEnvironments([record("x", { expiresAt: null })]);
+  await until(() => r.revoked.length === 1, "revocation");
+  assert.equal(r.multi.remoteStatuses()[0]!.state, "expired");
+  assert.equal(r.multi.remoteStatuses()[0]!.expiresAt, null);
+});
+
+test("An auth failure after the pairing's expiry is an expiry: state expired, no onRemoteRevoked, no retry", async () => {
+  const r = await rig({ reconnectDelayMs: 5 });
+  const a = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 1), { expiresAt: Date.now() - DAY });
+  const rejected = new FakeClient(a.shell, "rejected");
+  rejected.connectError = Object.assign(new Error("unauthorized"), { status: 401 });
+  const never = new FakeClient(a.shell, "never"); r.queue.push(rejected, never);
+  const before = r.statusChanges;
+  a.close();
+  await until(() => rejected.connects === 1 && r.multi.remoteStatuses()[0]!.state === "expired", "expired");
+  const status = r.multi.remoteStatuses()[0]!;
+  assert.match(status.error!, /This pairing expired/);
+  assert.ok(r.statusChanges > before);
+  assert.deepEqual(ids((await r.multi.snapshotShell()).threads), ["local-thread"]);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(never.connects, 0);
+  assert.deepEqual(r.revoked, []);
+});
+
+test("The expiry grace window is 60 s: failing within it is an expiry, failing just outside it is a revocation", async () => {
+  for (const [offset, expectRevoked] of [[30_000, false], [120_000, true]] as const) {
+    const r = await rig();
+    const fake = new FakeClient(shell([], [], 1), "x"); fake.connectError = { _tag: "EnvironmentAuthInvalidError" }; r.queue.push(fake);
+    await r.multi.setRemoteEnvironments([record("x", { expiresAt: Date.now() + offset })]);
+    await until(() => r.multi.remoteStatuses()[0]!.state === "expired", "expired state");
+    assert.equal(r.revoked.length, expectRevoked ? 1 : 0, `offset ${offset}`);
+    await r.multi.dispose();
+  }
 });
 
 test("Authentication failure is also recognised from reason and error tag", async () => {
@@ -315,10 +369,58 @@ test("Authentication failure is also recognised from reason and error tag", asyn
     const r = await rig();
     const fake = new FakeClient(shell([], [], 1), "x"); fake.connectError = cause; r.queue.push(fake);
     await r.multi.setRemoteEnvironments([record("x")]);
-    await until(() => r.authFailures.length === 1, "auth failure");
-    assert.equal(r.multi.remoteStatuses()[0]!.state, "error");
+    await until(() => r.revoked.length === 1, "revocation");
+    assert.equal(r.multi.remoteStatuses()[0]!.state, "expired");
     await r.multi.dispose();
   }
+});
+
+test("remoteStatuses reports expiresAt and any ignoredStatus from the record", async () => {
+  const r = await rig();
+  await pair(r, "a", shell([], [], 1), { expiresAt: 12345, ignoredStatus: "expiring" });
+  await pair(r, "b", shell([], [], 1));
+  const [a, b] = r.multi.remoteStatuses();
+  assert.equal(a!.environmentId, "a");
+  assert.equal(a!.expiresAt, 12345);
+  assert.equal(a!.ignoredStatus, "expiring");
+  assert.equal(b!.expiresAt, null);
+  assert.equal("ignoredStatus" in b!, false);
+});
+
+test("reconnectRemote reconnects only the named enabled remote", async () => {
+  const r = await rig({ reconnectDelayMs: 5 });
+  const a = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 1));
+  const b = await pair(r, "b", shell([project("p-b")], [thread("t-b", "p-b")], 1));
+  const a2 = new FakeClient(a.shell, "a2"), b2 = new FakeClient(b.shell, "b2"); r.queue.push(a2, b2);
+  r.multi.reconnectRemote("a");
+  await until(() => a2.connects === 1 && r.multi.remoteStatuses().find((s) => s.environmentId === "a")!.state === "connected", "a reconnected");
+  assert.ok(a.disconnects >= 1);
+  assert.equal(b2.connects, 0);
+  assert.equal(b.disconnects, 0);
+  assert.equal(r.multi.remoteStatuses().find((s) => s.environmentId === "b")!.state, "connected");
+});
+
+test("reconnectRemote ignores unknown and disabled remotes", async () => {
+  const r = await rig();
+  const a = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 1));
+  r.multi.reconnectRemote("missing");
+  await r.multi.setRemoteEnvironments([record("a", { enabled: false })]);
+  const spare = new FakeClient(a.shell, "spare"); r.queue.push(spare);
+  r.multi.reconnectRemote("a");
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(spare.connects, 0);
+  assert.equal(r.multi.remoteStatuses()[0]!.state, "disabled");
+});
+
+test("reconnectRemote retries an expired remote", async () => {
+  const r = await rig();
+  const bad = new FakeClient(shell([], [], 1), "bad"); bad.connectError = Object.assign(new Error("unauthorized"), { status: 401 }); r.queue.push(bad);
+  await r.multi.setRemoteEnvironments([record("x", { expiresAt: Date.now() - DAY })]);
+  await until(() => r.multi.remoteStatuses()[0]!.state === "expired", "expired");
+  const good = new FakeClient(shell([project("p-x")], [thread("t-x", "p-x")], 1), "good"); r.queue.push(good);
+  r.multi.reconnectRemote("x");
+  await until(() => r.multi.remoteStatuses()[0]!.state === "connected", "reconnected");
+  assert.equal(good.connects, 1);
 });
 
 test("A non-authentication connect failure is retried until it succeeds", async () => {
@@ -328,7 +430,7 @@ test("A non-authentication connect failure is retried until it succeeds", async 
   await r.multi.setRemoteEnvironments([record("a")]);
   await until(() => r.multi.remoteStatuses()[0]!.state === "connected", "eventual connection");
   assert.equal(failing.connects, 1); assert.equal(good.connects, 1);
-  assert.equal(r.authFailures.length, 0);
+  assert.equal(r.revoked.length, 0);
 });
 
 test("searchThreads merges remote matches after local ones and tolerates a failing remote", async () => {

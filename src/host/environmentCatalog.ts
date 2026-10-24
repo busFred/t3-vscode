@@ -22,7 +22,11 @@ export interface RemoteEnvironmentRecord {
   readonly enabled: boolean;
   readonly addedAt: string;
   readonly serverVersion?: string;
+  /** A problem the user chose to ignore; it stays quiet until the machine reconnects or is paired again. */
+  readonly ignoredStatus?: IgnorableEnvironmentStatus;
 }
+export type IgnorableEnvironmentStatus = "reconnecting" | "expiring" | "expired";
+const IGNORABLE = new Set<unknown>(["reconnecting", "expiring", "expired"]);
 
 /** Subset of vscode.SecretStorage (keeps this module free of the vscode import). */
 export interface SecretBackend {
@@ -50,6 +54,7 @@ const parseRecord = (raw: unknown): RemoteEnvironmentRecord | null => {
     accessToken: r.accessToken, expiresAt: r.expiresAt as number | null, scopes: [...r.scopes as string[]],
     enabled: r.enabled, addedAt: r.addedAt,
     ...(isString(r.serverVersion) ? { serverVersion: r.serverVersion } : {}),
+    ...(IGNORABLE.has(r.ignoredStatus) ? { ignoredStatus: r.ignoredStatus as IgnorableEnvironmentStatus } : {}),
   };
 };
 
@@ -93,8 +98,27 @@ export class EnvironmentCatalog {
     return this.mutate((all) => all.filter((e) => e.environmentId !== environmentId));
   }
 
+  /** Removes a pairing only while it still holds `accessToken`, so a fresh re-pair from another window survives. */
+  async removeIfToken(environmentId: string, accessToken: string): Promise<boolean> {
+    let removed = false;
+    await this.mutate((all) => {
+      const next = all.filter((e) => e.environmentId !== environmentId || e.accessToken !== accessToken);
+      removed = next.length !== all.length;
+      return next;
+    });
+    return removed;
+  }
+
   setEnabled(environmentId: string, enabled: boolean): Promise<void> {
     return this.mutate((all) => all.map((e) => (e.environmentId === environmentId ? { ...e, enabled } : e)));
+  }
+
+  setIgnored(environmentId: string, status: IgnorableEnvironmentStatus | null): Promise<void> {
+    return this.mutate((all) => all.map((e) => {
+      if (e.environmentId !== environmentId) return e;
+      const { ignoredStatus: _previous, ...rest } = e;
+      return status ? { ...rest, ignoredStatus: status } : rest;
+    }));
   }
 
   /** Fires for this key only; VS Code also fires it for other windows/profiles. */

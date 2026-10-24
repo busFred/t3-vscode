@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { ProjectId, ThreadId, type OrchestrationV2ShellSnapshot } from "@t3tools/contracts";
 import { v2Project, v2ThreadShell, v2ShellSnapshot } from "../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 import { HostState, type HostTransport } from "./hostState.js";
+import type { RemoteConnectionState } from "../shared/environmentStatus.js";
 import { FakeTransport, provider, server, credentials, publishText } from "./testing/fakeTransport.js";
 
 const run = promisify(execFile);
@@ -21,7 +22,7 @@ class RemoteTransport extends FakeTransport {
   threadOwners = new Map<string, { environmentId: string; label: string }>();
   projectOwners = new Map<string, { environmentId: string; label: string }>();
   remoteProviders = { providers: [{ ...provider, displayName: "Remote Kimi" }] };
-  statuses: Array<{ environmentId: string; label: string; httpBaseUrl: string; enabled: boolean; state: "connecting" | "connected" | "error" | "disabled"; error?: string }> = [];
+  statuses: Array<{ environmentId: string; label: string; httpBaseUrl: string; enabled: boolean; state: RemoteConnectionState; error?: string; serverVersion?: string; expiresAt: number | null; ignoredStatus?: "reconnecting" | "expiring" | "expired" }> = [];
   remoteUploads: Array<{ name: string; environmentId: string | undefined }> = [];
   remoteDeletes: Array<{ id: string; environmentId: string | undefined }> = [];
   baselines: string[] = [];
@@ -71,7 +72,7 @@ async function fixture(options: { remoteWorkspaceRoot?: (repo: string) => string
   client.shell = shell as never;
   client.projectOwners.set("remote-match", REMOTE); client.projectOwners.set("remote-other", REMOTE_OTHER);
   client.threadOwners.set("remote-thread", REMOTE); client.threadOwners.set("other-thread", REMOTE_OTHER);
-  client.statuses = [{ ...REMOTE, httpBaseUrl: "https://studio.example", enabled: true, state: "connected" }];
+  client.statuses = [{ ...REMOTE, httpBaseUrl: "https://studio.example", enabled: true, state: "connected", expiresAt: null }];
   const host = new HostState({ home: "/tmp/fake-t3-remote-test", credentials, discover: async () => ({ ok: true, server }), reconnectDelayMs: 0,
     workspaceRoots: () => [repo], workspaceRoot: () => repo,
     ...(options.withWorktrees ? { worktreeStorageRoot: join(root, "worktree-storage") } : {}) }, client);
@@ -131,19 +132,97 @@ test("The active remote thread exposes remoteSession and its own providers; loca
   assert.equal(state.activeThreadId, "remote-thread");
   assert.deepEqual(state.remoteSession, REMOTE);
   assert.equal(state.providers[0]!.displayName, "Remote Kimi");
-  assert.deepEqual(state.remoteEnvironments, [{ environmentId: "studio", label: "Studio Mac", state: "connected" }]);
+  assert.deepEqual(state.environments?.rows, [{ environmentId: "studio", label: "Studio Mac", host: "studio.example", status: "connected", expiresAt: null, ignored: false }]);
   await f.host.selectThread("local-thread");
   state = f.host.snapshot();
   assert.equal(state.remoteSession, undefined);
   assert.equal(state.providers[0]!.displayName, provider.displayName);
 });
 
-test("remoteEnvironments is omitted when none are paired and includes errors when present", async (t) => {
+const STUDIO = { ...REMOTE, httpBaseUrl: "https://studio.example:8443", enabled: true, expiresAt: null } as const;
+const DAY = 24 * 60 * 60 * 1000;
+
+test("environments is omitted without remoteStatuses, and present with empty rows when none are paired", async (t) => {
   const f = await fixture(); t.after(f.cleanup);
   f.client.statuses = [];
+  const empty = f.host.snapshot().environments;
+  assert.deepEqual(empty?.rows, []);
+  assert.equal(empty?.indicator, "ok");
   assert.equal("remoteEnvironments" in f.host.snapshot(), false);
-  f.client.statuses = [{ ...REMOTE, httpBaseUrl: "https://studio.example", enabled: true, state: "error", error: "Connection lost." }];
-  assert.deepEqual(f.host.snapshot().remoteEnvironments, [{ environmentId: "studio", label: "Studio Mac", state: "error", error: "Connection lost." }]);
+  Object.assign(f.client, { remoteStatuses: undefined });
+  assert.equal("environments" in f.host.snapshot(), false);
+});
+
+test("environments.local describes this computer's server", async (t) => {
+  const f = await fixture(); t.after(f.cleanup);
+  const local = f.host.snapshot().environments?.local;
+  assert.equal(local?.label, "Audit");
+  assert.equal(local?.host, "audit.invalid");
+  assert.equal(local?.serverVersion, undefined);
+});
+
+test("environments rows carry host, status, detail, version and expiry for each machine state", async (t) => {
+  const f = await fixture(); t.after(f.cleanup);
+  const soon = Date.now() + 1.5 * DAY;
+  f.client.statuses = [
+    { ...STUDIO, state: "connected", serverVersion: "1.2.3" },
+    { ...STUDIO, environmentId: "b", label: "B", state: "connecting" },
+    { ...STUDIO, environmentId: "c", label: "C", state: "error", error: "Connection lost." },
+    { ...STUDIO, environmentId: "d", label: "D", state: "connected", expiresAt: soon },
+    { ...STUDIO, environmentId: "e", label: "E", state: "expired", error: "This pairing expired. Pair the machine again with a new link." },
+    { ...STUDIO, environmentId: "f", label: "F", state: "disabled", enabled: false, error: "ignored text" },
+    { ...STUDIO, environmentId: "g", label: "G", state: "connected", enabled: false },
+  ];
+  const { rows, indicator } = f.host.snapshot().environments!;
+  const byId = Object.fromEntries(rows.map((r) => [r.environmentId, r]));
+  assert.deepEqual(byId.studio, { environmentId: "studio", label: "Studio Mac", host: "studio.example:8443", serverVersion: "1.2.3", status: "connected", expiresAt: null, ignored: false });
+  assert.equal(byId.b!.status, "connecting"); assert.equal(byId.b!.detail, undefined);
+  assert.equal(byId.c!.status, "reconnecting"); assert.equal(byId.c!.detail, "Connection lost.");
+  assert.equal(byId.d!.status, "expiring"); assert.equal(byId.d!.detail, "Expires in 1 day"); assert.equal(byId.d!.expiresAt, soon);
+  assert.equal(byId.e!.status, "expired"); assert.match(byId.e!.detail!, /pairing expired/);
+  assert.equal(byId.f!.status, "disabled"); assert.equal(byId.f!.detail, undefined);
+  assert.equal(byId.g!.status, "disabled");
+  assert.equal(indicator, "error");
+});
+
+test("environments indicator follows the worst open problem", async (t) => {
+  const f = await fixture(); t.after(f.cleanup);
+  assert.equal(f.host.snapshot().environments?.indicator, "ok");
+  f.client.statuses = [{ ...STUDIO, state: "error", error: "Connection lost." }];
+  assert.equal(f.host.snapshot().environments?.indicator, "warn");
+  f.client.statuses = [{ ...STUDIO, state: "error", error: "x" }, { ...STUDIO, environmentId: "b", label: "B", state: "expired" }];
+  assert.equal(f.host.snapshot().environments?.indicator, "error");
+});
+
+test("a row is ignored only when ignoredStatus equals its current status", async (t) => {
+  const f = await fixture(); t.after(f.cleanup);
+  const ignoredOf = (status: Partial<(typeof f.client.statuses)[number]>) => {
+    f.client.statuses = [{ ...STUDIO, state: "error", error: "x", ...status }];
+    return f.host.snapshot().environments!;
+  };
+  let env = ignoredOf({ ignoredStatus: "reconnecting" });
+  assert.equal(env.rows[0]!.status, "reconnecting");
+  assert.equal(env.rows[0]!.ignored, true);
+  assert.equal(env.indicator, "ok");
+  // A different problem than the one ignored still counts.
+  env = ignoredOf({ ignoredStatus: "expiring" });
+  assert.equal(env.rows[0]!.ignored, false);
+  assert.equal(env.indicator, "warn");
+  env = ignoredOf({ state: "expired", ignoredStatus: "reconnecting" });
+  assert.equal(env.rows[0]!.status, "expired");
+  assert.equal(env.rows[0]!.ignored, false);
+  assert.equal(env.indicator, "error");
+  env = ignoredOf({ state: "expired", ignoredStatus: "expired" });
+  assert.equal(env.rows[0]!.ignored, true);
+  assert.equal(env.indicator, "ok");
+  // Ignored expiring, then the machine reconnects normally with a far expiry: nothing to ignore.
+  env = ignoredOf({ state: "connected", expiresAt: Date.now() + 10 * DAY, ignoredStatus: "expiring" });
+  assert.equal(env.rows[0]!.status, "connected");
+  assert.equal(env.rows[0]!.ignored, false);
+  env = ignoredOf({ state: "connected", expiresAt: Date.now() + DAY, ignoredStatus: "expiring" });
+  assert.equal(env.rows[0]!.status, "expiring");
+  assert.equal(env.rows[0]!.ignored, true);
+  assert.equal(env.indicator, "ok");
 });
 
 test("New threads cannot start in a remote project", async (t) => {

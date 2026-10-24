@@ -9,12 +9,17 @@ import type {
 import * as ShellState from "@t3tools/client-runtime/state/shell";
 import { T3Client, type Subscription } from "./t3Client.js";
 import type { DiscoveredServer } from "./serverDiscovery.js";
-import type { RemoteEnvironmentRecord } from "./environmentCatalog.js";
+import type { IgnorableEnvironmentStatus, RemoteEnvironmentRecord } from "./environmentCatalog.js";
+import type { RemoteConnectionState } from "../shared/environmentStatus.js";
+import * as RemoteAuth from "@t3tools/client-runtime/authorization";
+import * as Effect from "effect/Effect";
+import { FetchHttpClient } from "effect/unstable/http";
 
-export type RemoteConnectionState = "connecting" | "connected" | "error" | "disabled";
+export type { RemoteConnectionState };
 export interface RemoteEnvironmentStatus {
   readonly environmentId: string; readonly label: string; readonly httpBaseUrl: string;
   readonly enabled: boolean; readonly state: RemoteConnectionState; readonly error?: string; readonly serverVersion?: string;
+  readonly expiresAt: number | null; readonly ignoredStatus?: IgnorableEnvironmentStatus;
 }
 export interface ThreadEnvironment { readonly environmentId: string; readonly label: string }
 type RemoteClient = Pick<T3Client, "connect" | "disconnect" | "connected" | "onClose" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
@@ -33,6 +38,11 @@ const withTimeout = <A>(promise: Promise<A>, ms: number): Promise<A> => new Prom
 });
 const authFailure = (cause: unknown): boolean => typeof cause === "object" && cause !== null && (
   ("reason" in cause && cause.reason === "authentication") || ("_tag" in cause && cause._tag === "EnvironmentAuthInvalidError") || ("status" in cause && cause.status === 401));
+/** Asks the T3 server itself whether a credential still works: true, false, or null when no T3 server answered (e.g. a proxy). */
+export type CredentialCheck = (record: RemoteEnvironmentRecord) => Promise<boolean | null>;
+const checkCredential: CredentialCheck = (record) => Effect.runPromise(Effect.provide(
+  RemoteAuth.fetchRemoteSessionState({ httpBaseUrl: record.httpBaseUrl, bearerToken: record.accessToken, timeoutMs: 10_000 }), FetchHttpClient.layer))
+  .then((state) => state.authenticated, () => null);
 /** T3Client reads only the origin and the environment identity from a discovered server. */
 const remoteServer = (record: RemoteEnvironmentRecord): DiscoveredServer => ({
   origin: record.httpBaseUrl,
@@ -47,14 +57,16 @@ export class MultiEnvironmentClient {
   private shellHandler: ((item: OrchestrationV2ShellStreamItem) => void) | null = null;
   private readonly makeClient: () => RemoteClient;
   private readonly reconnectDelayMs: number;
+  private readonly checkCredential: CredentialCheck;
   private disposed = false;
   readonly primary: T3Client;
   /** Fired when remote connection states change, for status UI. */
   onRemoteStatus: (() => void) | null = null;
-  /** Fired when a paired remote rejects its credential; the catalog entry should be re-paired. */
-  onRemoteAuthFailure: ((environmentId: string) => void) | null = null;
-  constructor(primary: T3Client, options: { makeClient?: () => RemoteClient; reconnectDelayMs?: number } = {}) {
+  /** Fired when a remote rejects an unexpired credential: that machine revoked this client, so its entry should go. */
+  onRemoteRevoked: ((record: RemoteEnvironmentRecord) => void) | null = null;
+  constructor(primary: T3Client, options: { makeClient?: () => RemoteClient; reconnectDelayMs?: number; checkCredential?: CredentialCheck } = {}) {
     this.primary = primary; this.makeClient = options.makeClient ?? (() => new T3Client()); this.reconnectDelayMs = options.reconnectDelayMs ?? 2000;
+    this.checkCredential = options.checkCredential ?? checkCredential;
   }
   get connected(): boolean { return this.primary.connected; }
   get onClose(): (() => void) | null { return this.primary.onClose; }
@@ -67,7 +79,8 @@ export class MultiEnvironmentClient {
   // ---- Remote environments ----
   remoteStatuses(): ReadonlyArray<RemoteEnvironmentStatus> {
     return [...this.remotes.values()].map(({ record, state, error }) => ({ environmentId: record.environmentId, label: record.label, httpBaseUrl: record.httpBaseUrl,
-      enabled: record.enabled, state, ...(error ? { error } : {}), ...(record.serverVersion ? { serverVersion: record.serverVersion } : {}) }));
+      enabled: record.enabled, state, expiresAt: record.expiresAt, ...(error ? { error } : {}), ...(record.serverVersion ? { serverVersion: record.serverVersion } : {}),
+      ...(record.ignoredStatus ? { ignoredStatus: record.ignoredStatus } : {}) }));
   }
   /** Reconciles live connections with the catalog: removed or disabled entries disconnect, new or re-paired ones connect. */
   async setRemoteEnvironments(records: ReadonlyArray<RemoteEnvironmentRecord>): Promise<void> {
@@ -116,9 +129,15 @@ export class MultiEnvironmentClient {
       } catch (cause) {
         if (!current()) return;
         await client.disconnect().catch(() => undefined);
-        if (authFailure(cause)) {
-          remote.client = null; remote.shell = null; remote.state = "error"; remote.error = "The pairing was revoked or expired. Add this environment again with a new link.";
-          this.emitMerged(); this.onRemoteStatus?.(); this.onRemoteAuthFailure?.(remote.record.environmentId);
+        // Only the T3 server's own "not signed in" ends a pairing; a bare 401 from a proxy keeps retrying.
+        if (authFailure(cause) && await this.checkCredential(remote.record).catch(() => null) === false) {
+          if (!current()) return;
+          // T3 pairings last a fixed term, so a rejection before it ends means that machine revoked this client.
+          const expired = remote.record.expiresAt !== null && Date.now() >= remote.record.expiresAt - 60_000;
+          remote.client = null; remote.shell = null; remote.state = "expired";
+          remote.error = expired ? "This pairing expired. Pair the machine again with a new link." : "This machine revoked access.";
+          this.emitMerged(); this.onRemoteStatus?.();
+          if (!expired) this.onRemoteRevoked?.(remote.record);
           return;
         }
         await this.remoteClosed(remote, generation, describeError(cause));
@@ -146,6 +165,17 @@ export class MultiEnvironmentClient {
     if (client) client.onClose = null;
     await subscription?.().catch(() => undefined);
     await client?.disconnect().catch(() => undefined);
+  }
+  /** Reconnects one enabled remote now. */
+  reconnectRemote(environmentId: string): void {
+    const remote = this.remotes.get(environmentId);
+    if (!remote?.record.enabled || remote.state === "connecting") return;
+    // Its sessions stay listed while the new connection starts, as after a dropped connection.
+    const shell = remote.shell, generation = remote.generation + 1;
+    void this.stopRemote(remote).then(() => {
+      if (this.disposed || remote.generation !== generation || !remote.record.enabled || this.remotes.get(environmentId) !== remote) return;
+      remote.shell = shell; this.startRemote(remote); this.onRemoteStatus?.();
+    });
   }
   /** Reconnects every enabled remote now, e.g. after the user asks to reconnect. */
   reconnectRemotes(): void {

@@ -35,6 +35,7 @@ export const Methods = {
   queueAction: "queueAction",
   revertConversation: "revertConversation", dismissRewindMarker: "dismissRewindMarker", restorePreview: "restorePreview", restoreFiles: "restoreFiles", openRestoreDiff: "openRestoreDiff", compareRestoredFile: "compareRestoredFile",
   openWebUi: "openWebUi", configureUsage: "configureUsage", showUsage: "showUsage",
+  environmentAction: "environmentAction",
 } as const;
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
@@ -184,8 +185,8 @@ export interface HostStateSnapshot {
   readonly environment?: { readonly environmentId: string; readonly label: string; readonly serverVersion?: string };
   /** Set when the active session runs on a paired remote machine: checkout actions, saved-turn diffs and file restores are unavailable. */
   readonly remoteSession?: { readonly environmentId: string; readonly label: string };
-  /** Paired remote machines and their connection states. */
-  readonly remoteEnvironments?: ReadonlyArray<{ readonly environmentId: string; readonly label: string; readonly state: "connecting" | "connected" | "error" | "disabled"; readonly error?: string }>;
+  /** The sidebar's Environments section: this computer, paired machines and the collapsed status dot. */
+  readonly environments?: { readonly local?: { readonly label: string; readonly host: string; readonly serverVersion?: string }; readonly rows: ReadonlyArray<import("./environmentStatus.js").EnvironmentRow>; readonly indicator: import("./environmentStatus.js").EnvironmentIndicator };
   readonly projects: ReadonlyArray<ProjectSummary>;
   readonly threads: ReadonlyArray<ThreadSummary>;
   readonly archiveLoaded?: boolean;
