@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- The sidebar "…" menu now offers **Add Environment from Pairing Link** and **Manage Environments** under **Pair with T3 Server**.
+- New foldable **Environments** section below Account & Usage lists this computer and your paired machines with their state (Connected, Connecting…, Reconnecting…, Expires in N days, Expired, Disabled). Hover a machine to reconnect, disable or remove it; other actions are Enable, Pair again, Ignore and Add machine….
+- Folded, the section title shows one dot: green when everything is fine, yellow when a machine is reconnecting or its pairing expires within 3 days, red when a pairing has expired. **Ignore** silences a machine's current problem until it reconnects or is paired again; ignores are shared by every profile.
+- T3 pairings last a fixed 30 days and are not extended by use, so pair each remote machine again with a new link about monthly. The yellow warning appears for the last 3 days.
+- If a machine rejects this computer before its pairing expires, it is treated as revoked: it is removed from the list in every profile and a notification offers **Pair again**.
+- The "‹machine› disconnected — reconnecting" line above Sessions is gone; the Environments section shows that state instead.
+
 ## 0.3.0 — Prerelease
 
 - Work with sessions on your other machines. Run **T3 VSCode: Add Environment from Pairing Link** and paste a link from **Create link** in T3 Code on that machine. Its sessions for the same repository (matched by Git remote) appear in Sessions, labelled with the machine name, and you can read, reply, queue, steer, approve, rename, archive and fork them.

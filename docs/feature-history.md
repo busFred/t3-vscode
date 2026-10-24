@@ -8,7 +8,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.3.0 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | Unreleased |
 | [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and independent model/effort editor tabs. | v0.1.16 | v0.1.23 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
@@ -49,7 +49,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.0 |
-| [Remote environments](#remote-environments) | Pairs other machines by link and lists their matching-repository sessions beside local ones, with a machine badge. | v0.3.0 | v0.3.0 |
+| [Remote environments](#remote-environments) | Pairs other machines by link and lists their matching-repository sessions beside local ones, with a machine badge. | v0.3.0 | Unreleased |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
@@ -147,6 +147,10 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 
 - Show sessions from paired remote machines in the same lists when their repository matches an open folder. Rows carry a machine badge with the machine name; local rows are unchanged.
 - Keep a disconnected machine's sessions listed while it reconnects. See [Remote environments](#remote-environments).
+
+#### Unreleased
+
+- Remove the "‹machine› disconnected — reconnecting" line above Sessions; the Environments section shows that state. See [Remote environments](#remote-environments).
 
 ### Scheduled task management
 
@@ -1276,6 +1280,15 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - Implement with `MultiEnvironmentClient`, which wraps the local `T3Client` and one `T3Client` per remote (the same vendored T3 0.0.45 handshake: bearer token, WebSocket ticket, Effect RPC), merges shells and routes commands by thread or project. Each remote uses the single address from its pairing link; there is no route fallback yet.
 - Validation: unit tests (`multiEnvironmentClient`, `hostStateRemote`, `environmentCatalog`) and `scripts/verify-multi-environment.ts`, which pairs two isolated `t3 serve --base-dir` servers: 13/13 deterministic checks, 14/14 with the optional GPT-6 Luna live turn.
 - Regression review: an independent fresh-context review against v0.2.7 found no blocking regressions. Its non-blocking findings were fixed and re-reviewed before packaging: no lookups or extra Git calls without paired machines, a 5 s bound on waits for remote machines, remote runs no longer block a local branch switch, remote attachment cleanup failures are ignored, and connection tickets are scrubbed from error text. Final checks: typecheck, 511/511 unit tests, and 13/13 deterministic plus 14/14 live checks in `scripts/verify-multi-environment.ts`.
+
+#### Unreleased
+
+- Add **Add Environment from Pairing Link** and **Manage Environments** to the sidebar "…" menu, under **Pair with T3 Server**.
+- Add a foldable **Environments** section below Account & Usage. It lists this computer and each paired machine with its state: Connected, Connecting…, Reconnecting…, Expires in N days, Expired or Disabled. Hover actions: reconnect, disable, remove. Row actions: Enable, Pair again, Ignore; **Add machine…** pairs another.
+- Show one dot on the folded title: green when everything is fine, yellow when a machine is reconnecting or its pairing expires within 3 days, red when a pairing expired (red wins). Disabled machines never count. **Ignore** silences a machine's current problem until it reconnects or is paired again; ignores are shared across profiles.
+- T3 pairings last a fixed 30 days (T3 Code 0.1.2) and are not extended by use, so remote machines need a new link about monthly; the warning starts in the last 3 days.
+- Treat a machine that rejects this computer before the pairing's expiry as revoked: remove it from every profile and offer **Pair again** in a notification.
+- Regression review: an independent fresh-context review against v0.3.0 found no blocking regressions. Its findings were fixed and re-reviewed: automatic removal happens only when the remote T3 server confirms the credential is signed out (a proxy 401 keeps retrying), and only while the stored token is unchanged; Reconnect keeps a machine's sessions listed; row actions are reachable by keyboard; ignores clear only when this window sees the machine recover; malformed stored addresses no longer break the sidebar. Checks: typecheck, 535 unit tests, 13/13 checks in `scripts/verify-multi-environment.ts`, and real VS Code screenshots of the section folded and open.
 
 ### Missing-server setup
 
