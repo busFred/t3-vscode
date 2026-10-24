@@ -2,7 +2,7 @@
 
 Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner authorized the stable release upload of **0.1.16** on October 8, 2026, explicitly authorized prerelease **0.1.17** on October 9, 2026, explicitly authorized stable release-channel publication of **0.1.18** on October 10, 2026, and explicitly authorized prerelease-channel publication of **0.1.19** on October 10, 2026 (“bump version to 0.1.19 and publish to pre-release”). That authorization covers 0.1.19 on the prerelease channel only. The owner explicitly authorized prerelease-channel publication of **0.1.21** on October 12, 2026 (“publish this new version to pre-release channel”); that authorization covers 0.1.21 on the prerelease channel only and does not extend to the stable release channel. The owner explicitly authorized prerelease-channel publication of **0.1.20** on October 11, 2026 (“publish it to pre-release”); that authorization covers 0.1.20 on the prerelease channel only and does not extend to the stable release channel.
 
-Current release checkpoint: v0.2.6 is published to the stable release channel from `d7b390b` (October 24, 2026). Earlier checkpoints are recorded in the sections below.
+Current release checkpoint: v0.2.7 is published to the stable release channel from `dc775df` (October 24, 2026). Earlier checkpoints are recorded in the sections below.
 
 ## Version policy
 
@@ -191,3 +191,11 @@ The owner reviewed these and chose to ship as they are. None is a regression aga
 - Fresh-context Sonnet regression review returned no blockers and approved the final changes on re-review. TypeScript, 468 deterministic tests, the full production build and both browser UI verification scripts passed. The suite and build were also rerun on Node 24.22.1 with pnpm 11.28.8 before publication. No live provider test was run; deterministic fixtures do not call a model.
 - Built `target-installer/t3-vscode-0.2.6.vsix` (45 files, 3.18 MB). Before upload, the adjacent SHA-256 sidecar verified `c95f4864aa6fb220e85fcf1201582ba6876c270fc22937f72ae6fe2a0ee34e09`, and the packaged manifest showed version 0.2.6, publisher `hungtienhuang` and no prerelease flag.
 - On October 24, 2026 (00:03 UTC), `vsce publish --packagePath target-installer/t3-vscode-0.2.6.vsix` (vsce 4.0.0) reported `DONE Published hungtienhuang.t3-vscode v0.2.6.` Immediate `vsce show` readback still listed 0.2.5 as newest, so public indexing is pending. No Marketplace installation was attempted.
+
+## 0.2.7 release-channel publication
+
+- Owner explicitly authorized commit, push and publication of **0.2.7** to the stable release channel on October 24, 2026. Version 0.2.6 had already been published from another machine (`31296db`), so this change was merged onto it and bumped to 0.2.7. Comparison revision: `31296db`. Source commit `dc775df`, pushed to `main`.
+- Scope: the effort selector in the composer and scheduled task editor labels the server-advertised default level "(Default)", also on the closed control by owner choice.
+- Fresh-context Sonnet regression reviews of the change and of the merged candidate: APPROVE, no blockers. TypeScript and 469 deterministic tests passed; `scripts/verify-views.ts` passed on the pre-merge tree. Native/e2e scripts were not rerun after the merge.
+- Built `target-installer/t3-vscode-0.2.7.vsix` (45 files, 3.18 MB): version `0.2.7`, `preview: false`. SHA-256: `42646ee33772a6fd211686e32647e41f1f8148ae54aaa6f96d28cf1e11de4669`.
+- On October 24, 2026 (05:13 UTC), `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.2.7.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.2.7.` No Marketplace installation was attempted.
