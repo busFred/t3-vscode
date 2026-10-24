@@ -1,5 +1,6 @@
-import { getProviderAttachmentLimitError } from "@t3tools/contracts";
+import { getProviderAttachmentLimitError, type AttachmentCreateUploadUrlInput } from "@t3tools/contracts";
 import { attachmentUploadInput, insertAttachmentReferences, type TextSelection, type DraftAttachment, type AttachmentInsertionOptions } from "../shared/composerAttachments";
+import { planComposerPaste, type ComposerClipboardPayload } from "../shared/composerClipboard";
 import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 import { bridge } from "./bridge-client";
 import { readDraft, updateDraft } from "./composerDrafts";
@@ -32,28 +33,45 @@ export async function removeDraftAttachment(draftKey: string, key: string): Prom
 const dataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
   const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error(`Could not read '${file.name}'.`)); reader.readAsDataURL(file);
 });
+interface UploadSlot { readonly key: string; readonly input: AttachmentCreateUploadUrlInput; readonly encode: () => Promise<string> }
+const existingTypes = (draftKey: string) => (readDraft(draftKey).attachments ?? []).map((file) => ({ ...file, type: file.attachment?.type ?? (file.mimeType.startsWith("image/") ? "image" : "file") }));
+async function uploadSlots(draftKey: string, slots: ReadonlyArray<UploadSlot>, threadId?: string): Promise<void> {
+  for (const { key, input, encode } of slots) {
+    try {
+      const encoded = await encode();
+      updateDraft(draftKey, (draft) => ({ ...draft, attachments: (draft.attachments ?? []).map((attachment) => attachment.key === key && input.type === "image" ? { ...attachment, previewUrl: encoded } : attachment) }));
+      if (!readDraft(draftKey).attachments?.some((attachment) => attachment.key === key)) continue;
+      const ready = await bridge.request<DraftAttachment>("uploadAttachment", { slotKey: key, name: input.name, mimeType: input.mimeType, base64: encoded.slice(encoded.indexOf(",") + 1), ...(threadId ? { threadId } : {}) }, 6 * 60_000);
+      if (!readDraft(draftKey).attachments?.some((attachment) => attachment.key === key)) { if (ready.attachment) await bridge.request("releaseAttachment", { attachmentId: ready.attachment.id }); continue; }
+      updateDraft(draftKey, (draft) => ({ ...draft, attachments: (draft.attachments ?? []).map((attachment) => attachment.key === key ? { ...ready, key, ...(attachment.contextId ? { contextId: attachment.contextId } : {}) } : attachment) }));
+    } catch (cause) {
+      updateDraft(draftKey, (draft) => ({ ...draft, attachments: (draft.attachments ?? []).map((attachment) => attachment.key === key ? { ...attachment, pending: false, error: cause instanceof Error ? cause.message : String(cause) } : attachment) }));
+    }
+  }
+}
 export function pasteAttachments(draftKey: string, files: ReadonlyArray<File>, threadId?: string, selection?: TextSelection, onInsert?: (cursor: number) => void, options?: AttachmentInsertionOptions): Promise<void> {
   return trackAttachmentWork(draftKey, (async () => {
     const inputs = files.map((file) => attachmentUploadInput(file.name || "image.png", file.type, file.size));
-    const existing = (readDraft(draftKey).attachments ?? []).map((file) => ({ ...file, type: file.attachment?.type ?? (file.mimeType.startsWith("image/") ? "image" : "file") }));
-    const error = getProviderAttachmentLimitError([...existing, ...inputs.map((input) => ({ ...input, type: input.type ?? "image" }))]);
+    const error = getProviderAttachmentLimitError([...existingTypes(draftKey), ...inputs.map((input) => ({ ...input, type: input.type ?? "image" }))]);
     if (error) throw new Error(error);
     const added = inputs.map((input) => ({ key: crypto.randomUUID(), name: input.name, mimeType: input.mimeType, sizeBytes: input.sizeBytes, pending: true }));
     // Insert the entire batch before reading/uploading so later typing cannot move image positions.
     const cursor = addDraftAttachments(draftKey, added, selection, options);
     if (cursor !== undefined) onInsert?.(cursor);
-    for (const [index, file] of files.entries()) {
-      const input = inputs[index]!; const key = added[index]!.key;
-      try {
-        const encoded = await dataUrl(file);
-        updateDraft(draftKey, (draft) => ({ ...draft, attachments: (draft.attachments ?? []).map((attachment) => attachment.key === key && input.type === "image" ? { ...attachment, previewUrl: encoded } : attachment) }));
-        if (!readDraft(draftKey).attachments?.some((attachment) => attachment.key === key)) continue;
-        const ready = await bridge.request<DraftAttachment>("uploadAttachment", { slotKey: key, name: input.name, mimeType: input.mimeType, base64: encoded.slice(encoded.indexOf(",") + 1), ...(threadId ? { threadId } : {}) }, 6 * 60_000);
-        if (!readDraft(draftKey).attachments?.some((attachment) => attachment.key === key)) { if (ready.attachment) await bridge.request("releaseAttachment", { attachmentId: ready.attachment.id }); continue; }
-        updateDraft(draftKey, (draft) => ({ ...draft, attachments: (draft.attachments ?? []).map((attachment) => attachment.key === key ? { ...ready, key, ...(attachment.contextId ? { contextId: attachment.contextId } : {}) } : attachment) }));
-      } catch (cause) {
-        updateDraft(draftKey, (draft) => ({ ...draft, attachments: (draft.attachments ?? []).map((attachment) => attachment.key === key ? { ...attachment, pending: false, error: cause instanceof Error ? cause.message : String(cause) } : attachment) }));
-      }
-    }
+    await uploadSlots(draftKey, files.map((file, index) => ({ key: added[index]!.key, input: inputs[index]!, encode: () => dataUrl(file) })), threadId);
+  })());
+}
+/** Pastes what a copy in another composer (or this one) carried. Over the attachment limit the text still lands, with the images as their names. */
+export function pasteComposerClipboard(draftKey: string, payload: ComposerClipboardPayload, threadId: string | undefined, selection: TextSelection, onInsert?: (cursor: number) => void): Promise<void> {
+  return trackAttachmentWork(draftKey, (async () => {
+    const draft = readDraft(draftKey);
+    let plan = planComposerPaste(payload, draft, selection, () => crypto.randomUUID());
+    const error = plan.uploads.length ? getProviderAttachmentLimitError([...existingTypes(draftKey), ...plan.uploads.map(({ input }) => ({ ...input, type: input.type ?? "image" }))]) : undefined;
+    if (error) plan = planComposerPaste(payload, draft, selection, () => crypto.randomUUID(), false);
+    // Like a typed paste, the insertion takes focus so the textarea's own undo history records it.
+    updateDraft(draftKey, (current) => ({ ...current, text: plan.text, contexts: plan.contexts, attachments: [...(current.attachments ?? []), ...plan.attachments] }), "take-focus");
+    onInsert?.(plan.cursor);
+    await uploadSlots(draftKey, plan.uploads.map(({ key, input, dataUrl: source }) => ({ key, input, encode: async () => source })), threadId);
+    if (error) throw new Error(error);
   })());
 }

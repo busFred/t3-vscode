@@ -17,7 +17,9 @@ import { useBridgeQuery } from "../useBridgeQuery";
 import { ComposerSuggestions } from "./ComposerSuggestions";
 import { ConversationActivity } from "./ConversationActivity";
 import { resolveComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
-import { addDraftAttachments, pasteAttachments, removeDraftAttachment, trackAttachmentWork } from "../composerAttachments";
+import { addDraftAttachments, pasteAttachments, pasteComposerClipboard, removeDraftAttachment, trackAttachmentWork } from "../composerAttachments";
+import { buildComposerClipboard, parseComposerClipboardHtml, type ComposerClipboardPayload } from "../../shared/composerClipboard";
+import { writeComposerClipboard } from "../composerClipboard";
 import type { DraftAttachment, TextSelection } from "../../shared/composerAttachments";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { openVisual } from "./ChatMedia";
@@ -299,6 +301,20 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       setCursor(cursor); placeCursor(cursor);
     }, { useSelectedTextAsImageDescription }).catch((cause) => setAttachmentError(cause instanceof Error ? cause.message : String(cause)));
   };
+  const pasteClipboard = (payload: ComposerClipboardPayload) => {
+    if (disabled) return;
+    markTouched(); setAttachmentError(null);
+    void pasteComposerClipboard(draftKey, payload, state.activeThreadId, inputSelection(), (cursor) => {
+      setCursor(cursor); placeCursor(cursor);
+    }).catch((cause) => setAttachmentError(cause instanceof Error ? cause.message : String(cause)));
+  };
+  // A selection holding references is copied with what backs them; anything else is left to the browser.
+  const copySelection = (event: React.ClipboardEvent<HTMLTextAreaElement>, cut: boolean) => {
+    const input = event.currentTarget;
+    const clip = buildComposerClipboard({ text: input.value, contexts, attachments }, { start: input.selectionStart, end: input.selectionEnd }, state.clipboardNonce);
+    if (!clip || !writeComposerClipboard(event.nativeEvent, clip)) return;
+    if (cut) applyEdit({ start: clip.range.start, end: clip.range.end, text: "", selection: { start: clip.range.start, end: clip.range.start } });
+  };
   const pickFiles = () => {
     const selection = { start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length };
     setPicking(true); setAttachmentError(null);
@@ -381,7 +397,12 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
           // list will never offer, such as one that is gitignored. Ctrl/Cmd+click opens it instead.
           if (event.ctrlKey || event.metaKey) activateInlineReference(event.currentTarget.selectionStart);
         }}
+        onCopy={(event) => copySelection(event, false)} onCut={(event) => copySelection(event, true)}
         onPaste={(event) => {
+          // Our own HTML carries the references, so it wins over the bitmap a single copied image also puts on the clipboard.
+          const html = event.clipboardData.types.includes("text/html") ? event.clipboardData.getData("text/html") : "";
+          const payload = html.includes("data-t3-composer=") ? parseComposerClipboardHtml(html, state.clipboardNonce) : undefined;
+          if (payload) { event.preventDefault(); pasteClipboard(payload); return; }
           const files = event.clipboardData.files.length ? [...event.clipboardData.files] : [...event.clipboardData.items].map((item) => item.kind === "file" ? item.getAsFile() : null).filter((file): file is File => file !== null);
           if (files.length) { event.preventDefault(); addFiles(files, true); }
         }}

@@ -175,6 +175,8 @@ export interface HostStateSnapshot {
   readonly contextUsage?: import("./contextUsage.js").ContextUsageSnapshot | null;
   /** Monotonic within a host instance; prevents slow RPC responses replacing a newer push. */
   readonly revision: number;
+  /** Per-session secret marking composer clipboard payloads copied from this extension; see parseComposerClipboardHtml. */
+  readonly clipboardNonce?: string;
   readonly phase: HostPhase;
   readonly home: string;
   readonly workspaceRoots: ReadonlyArray<string>;

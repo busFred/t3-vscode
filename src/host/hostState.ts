@@ -172,6 +172,7 @@ export class HostState {
   private revision = 0;
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
   private emitting: Map<string, HostStateSnapshot> | null = null;
+  private readonly clipboardNonce = randomUUID();
   private readonly retainedHistory = new Map<string, { projection: OrchestrationV2ThreadProjection; history: ThreadHistoryMeta }>();
   private readonly listeners = new Map<(state: HostStateSnapshot) => void, string>();
   private readonly encodedItems = new WeakMap<OrchestrationV2TurnItem, Omit<TranscriptItem, "key" | "sourceThreadId">>();
@@ -1798,7 +1799,7 @@ export class HostState {
     return {
       ...(acknowledgedWorking ? { acknowledgedWorking } : {}),
       ...(this.worktrees ? { worktrees: this.worktrees.snapshot() } : {}),
-      revision: this.revision, phase: this.phase, home: this.options.home,
+      revision: this.revision, clipboardNonce: this.clipboardNonce, phase: this.phase, home: this.options.home,
       connectionSetup: { ...this.setup, ...(this.connectionProblem ? { problem: this.connectionProblem } : {}) },
       searchPreferences: this.searchPreferences,
       ...(this.sessionSearches.get(viewId) ? { sessionSearch: this.sessionSearches.get(viewId)!.state } : {}),
