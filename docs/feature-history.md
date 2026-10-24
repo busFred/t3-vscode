@@ -8,7 +8,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | Unreleased |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times and chat in editor tabs. | v0.0.7 | v0.3.1 |
 | [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and independent model/effort editor tabs. | v0.1.16 | v0.1.23 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
@@ -18,7 +18,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.2.5 |
 | [Message navigation rail](#message-navigation-rail) | Previews and jumps between exchanges in the current conversation. | v0.0.8 | v0.0.8 |
-| [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | Unreleased |
+| [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.1 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
 | [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.2.4 |
 | [Context window meter](#context-window-meter) | Ring + percent in the composer toolbar showing live provider usage against the model's context window. | v0.2.2 | v0.2.2 |
@@ -49,7 +49,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.0 |
-| [Remote environments](#remote-environments) | Pairs other machines by link and lists their matching-repository sessions beside local ones, with a machine badge. | v0.3.0 | Unreleased |
+| [Remote environments](#remote-environments) | Pairs other machines by link and lists their matching-repository sessions beside local ones, with a machine badge. | v0.3.0 | v0.3.1 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
@@ -148,7 +148,7 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 - Show sessions from paired remote machines in the same lists when their repository matches an open folder. Rows carry a machine badge with the machine name; local rows are unchanged.
 - Keep a disconnected machine's sessions listed while it reconnects. See [Remote environments](#remote-environments).
 
-#### Unreleased
+#### v0.3.1
 
 - Remove the "‹machine› disconnected — reconnecting" line above Sessions; the Environments section shows that state. See [Remote environments](#remote-environments).
 
@@ -413,12 +413,12 @@ Session resources retain the current History selection for restoration. Opening 
 - Fix the v0.2.2 descendant scan missing a delegated subagent once its own child thread record settles after its first run, even though the parent's transcript still shows the subagent card as "Running": the server's own post-settlement background roster (`pendingBackgroundTasks`) is now read per thread and surfaced as `backgroundWork` (subagent/monitor/task/command counts plus `holdsCompletion`), the same roster T3 Code's web sidebar already consumes. A thread whose own run is idle but whose roster holds completion, or whose own transcript still shows a running subagent turn item (a fallback for servers without a roster), now reads as a calm, muted "Waiting" state — distinct from the spinner-style "Working" badge, which is reserved for the thread's own active run. Precedence is Input/Approval > Working > Waiting > nothing, matching T3 Code's sidebar. A command left running in the background (e.g. a dev server) does not hold a thread as Waiting.
 - Waiting counts its elapsed time from when the thread's own run ended, since the roster carries no per-task timestamp; archived and settled threads keep their own label even with a stale roster. Fresh-context regression review (Sonnet) flagged both; fixed with a unit test.
 
-#### Unreleased
+#### v0.3.1
 
 - Provider-run subagents (for example Claude's Task tool) show **Working** with elapsed time in Sessions while they run, like their parent. Status comes from the parent session, which loads while it is expanded.
 - An expanded session lists running subagents under **Running** and folds finished ones under **Past** when it has both.
 - Failed subagents show a **Failed** marker; cancelled or interrupted ones show **Stopped**.
-- Regression review: pending.
+- Regression review: an independent fresh-context review of v0.3.0..v0.3.1 found no blocking regressions. Its findings were fixed and re-reviewed: only provider subagents take their status from the parent (app-owned subagents keep their own run status), only expanded sessions with subagents are watched, a closed chat-tab history releases its watches, and Failed/Stopped are announced to screen readers. Checks: typecheck and 549 unit tests.
 
 ### Untouched chat cleanup
 
@@ -1288,7 +1288,7 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - Validation: unit tests (`multiEnvironmentClient`, `hostStateRemote`, `environmentCatalog`) and `scripts/verify-multi-environment.ts`, which pairs two isolated `t3 serve --base-dir` servers: 13/13 deterministic checks, 14/14 with the optional GPT-6 Luna live turn.
 - Regression review: an independent fresh-context review against v0.2.7 found no blocking regressions. Its non-blocking findings were fixed and re-reviewed before packaging: no lookups or extra Git calls without paired machines, a 5 s bound on waits for remote machines, remote runs no longer block a local branch switch, remote attachment cleanup failures are ignored, and connection tickets are scrubbed from error text. Final checks: typecheck, 511/511 unit tests, and 13/13 deterministic plus 14/14 live checks in `scripts/verify-multi-environment.ts`.
 
-#### Unreleased
+#### v0.3.1
 
 - Add **Add Environment from Pairing Link** and **Manage Environments** to the sidebar "…" menu, under **Pair with T3 Server**.
 - Add a foldable **Environments** section below Account & Usage. It lists this computer and each paired machine with its state: Connected, Connecting…, Reconnecting…, Expires in N days, Expired or Disabled. Hover actions: reconnect, disable, remove. Row actions: Enable, Pair again, Ignore; **Add machine…** pairs another.

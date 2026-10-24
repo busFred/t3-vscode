@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 — Prerelease
 
 - The sidebar "…" menu now offers **Add Environment from Pairing Link** and **Manage Environments** under **Pair with T3 Server**.
 - New foldable **Environments** section below Account & Usage lists this computer and your paired machines with their state (Connected, Connecting…, Reconnecting…, Expires in N days, Expired, Disabled). Hover a machine to reconnect, disable or remove it; other actions are Enable, Pair again, Ignore and Add machine….
