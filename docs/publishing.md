@@ -2,7 +2,7 @@
 
 Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner authorized the stable release upload of **0.1.16** on October 8, 2026, explicitly authorized prerelease **0.1.17** on October 9, 2026, explicitly authorized stable release-channel publication of **0.1.18** on October 10, 2026, and explicitly authorized prerelease-channel publication of **0.1.19** on October 10, 2026 (“bump version to 0.1.19 and publish to pre-release”). That authorization covers 0.1.19 on the prerelease channel only. The owner explicitly authorized prerelease-channel publication of **0.1.21** on October 12, 2026 (“publish this new version to pre-release channel”); that authorization covers 0.1.21 on the prerelease channel only and does not extend to the stable release channel. The owner explicitly authorized prerelease-channel publication of **0.1.20** on October 11, 2026 (“publish it to pre-release”); that authorization covers 0.1.20 on the prerelease channel only and does not extend to the stable release channel.
 
-Current release checkpoint: v0.3.0 is published to the prerelease channel from `f9ffb9b` (October 24, 2026); v0.2.7 remains the stable release from `dc775df`. Earlier checkpoints are recorded in the sections below.
+Current release checkpoint: v0.3.1 is published to the prerelease channel from `549d871` (October 24, 2026); v0.2.7 remains the stable release from `dc775df`. Earlier checkpoints are recorded in the sections below.
 
 ## Version policy
 
@@ -207,3 +207,15 @@ The owner reviewed these and chose to ship as they are. None is a regression aga
 - Fresh-context Opus regression review against `842e482`: no blocking regressions. All six non-blocking findings were fixed and confirmed in a second review. TypeScript and 511 deterministic tests passed. `scripts/verify-multi-environment.ts` passed 13/13 deterministic checks and 14/14 with the GPT-6 Luna low-effort live turn.
 - Set `preview: true` with the bump, so `scripts/package-vsix.mjs` passes `--pre-release`. Built `target-installer/t3-vscode-0.3.0.vsix` (45 files, 3.19 MB) from the clean commit. The packaged manifest has version `0.3.0`, publisher `hungtienhuang` and `preview: true`, and `extension.vsixmanifest` has `PreRelease` `true`. SHA-256: `d1593033359e31c155439b5eeaba7c39bed87cbf5505a8314d8324a8f74fb604`.
 - On October 24, 2026 (about 07:10 UTC), `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.0.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.0.` An immediate `vsce show` readback listed 0.2.7 as the latest version. This listing lag matches earlier uploads, so the listed channel is not yet confirmed by readback. No Marketplace installation was attempted.
+
+## 0.3.1 prerelease-channel publication
+
+- On October 24, 2026, the owner asked to commit per feature, merge to `main` and publish a prerelease "with the next available version number". The Marketplace listed 0.3.0 as its latest version and 0.3.1 was unused, so 0.3.1 was chosen. The authorization covers 0.3.1 on the prerelease channel only. Comparison revision: `0c85077` (v0.3.0). Source commit: `549d871`, fast-forwarded onto `main` and pushed to `origin/main`.
+- Scope:
+  - Add Environment from Pairing Link and Manage Environments in the sidebar "…" menu.
+  - A foldable Environments section with one status dot, plus expiry, revocation and ignore handling.
+  - Provider subagents show Working while they run.
+  - Running and Past subagent groups, with Failed and Stopped markers.
+- Fresh-context Opus regression reviews of both feature sets reported no blocking regressions. All findings were fixed and re-reviewed. TypeScript and 549 deterministic tests passed. `scripts/verify-multi-environment.ts` passed 13/13 for the Environments changes. The Environments section was captured in a real isolated VS Code window. The subagent changes are covered by unit tests only; a live provider-subagent run was not repeated.
+- Built `target-installer/t3-vscode-0.3.1.vsix` from the clean commit. The packaged manifest has version `0.3.1`, publisher `hungtienhuang` and `preview: true`, and `extension.vsixmanifest` has `PreRelease` `true`. SHA-256: `4d4e19f14856abaf69a7dfbf6ac5c820869856c51cec6f42ba0bb94caa47ebcf`.
+- At 09:45 UTC, `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.1.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.1.` The Marketplace package endpoint then served 0.3.1 with the same SHA-256 and `PreRelease` `true`. No Marketplace installation was attempted.
