@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 — Prerelease
 
 - Fix: repeatedly choosing **Load earlier messages** on a long conversation no longer ends in "Reconnecting…" and loses the loaded messages. Long conversations update far faster and send only changed messages to each view; history you already loaded is kept if the connection does drop.
 - The image preview has zoom in/out, fit, `+`/`-`/`0`, Ctrl/Cmd+scroll zoom and drag to pan, plus **Copy image** (or Ctrl/Cmd+C) to paste the picture into Word, PowerPoint, Paint and similar apps.

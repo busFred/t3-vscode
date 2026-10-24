@@ -26,9 +26,9 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.23 |
-| [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | Unreleased |
-| [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | Unreleased |
-| [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | Unreleased |
+| [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.3.2 |
+| [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.3.2 |
+| [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.3.2 |
 | [Collapsed activity](#collapsed-activity) | Timed thought/tool groups separated by visible assistant messages and steers. | v0.0.1 | v0.1.13 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
@@ -637,7 +637,7 @@ Ctrl/Cmd+click (or Alt+Enter) on an inline image reference opens an image-captio
 - Fix: a file chosen through the attachment picker lands while the textarea is still disabled, so its reference used to replay as a plain draft write that discarded the textarea's native undo history back to the typing before it; the insertion is now deferred until the textarea re-enables and replayed with focus, matching paste and drop. Investigated and ruled out, with reproduction attempts in both the deterministic browser harness and real VS Code (including typing during a real streaming turn), a separately reported regression where Ctrl+Z stopped undoing plain typed text in v0.2.3. Those attempts used new-chat panels, which still worked; the real cause was session custom-editor tabs, fixed under [Compact composer](#compact-composer). Added `scripts/verify-composer-undo.ts` (wired into `verify-views.ts`) covering plain-typing undo, a picked-file reference, a quoted citation, and an unrelated host-state snapshot arriving mid-typing.
 - The picked-file insertion now waits for the commit that re-enables the textarea, then replays one frame later. The first version used a single frame from the picker callback, which could fire before re-enable; the review caught the race, and an in-effect replay was rejected because React resets the controlled textarea inside its effect flush. Files picked while the composer unmounts (a thread switch) still land in the draft they were picked for, and Send stays disabled until they are placed. `verify-composer-undo.ts` runs in `verify-views.ts`; it now waits for its fixture restore to land, and the full suite passed 6 of 6 runs (it had failed or flaked 6 of 7 before). The fresh-context reviewer signed off on the final changes with no blocking findings; typecheck clean, 450/450 unit tests.
 
-#### Unreleased
+#### v0.3.2
 
 - Fix: copying or cutting composer text that contains image references put only `t3-context` markdown on the clipboard, so the images were lost when pasted into another tab or app. The copy now carries readable plain text (references become their labels), HTML with images embedded as data URLs, and, for a lone image, a PNG. Another tab's composer recognises its own payload, validates it like a draft transfer and re-uploads each image with a fresh id at the caret; a cut pasted into the same tab reuses its attachment. Non-image files cross tabs only as their names, since the renderer holds no bytes for them.
 
@@ -708,7 +708,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Keep transcript rows from drawing over each other while replies stream; earlier responses with images, media or diagrams no longer overlap the next change card, question or response header.
 - Keep Markdown element renderers stable so host updates no longer remount media into a loading placeholder that the virtualized list measured as the row's height; the local LegendList patch is unchanged.
 
-#### Unreleased
+#### v0.3.2
 
 - Fix: scrolling up and repeatedly choosing "Load earlier messages" on a long conversation eventually showed "Reconnecting…" and lost every loaded message. Each state update (about every 32 ms while a reply streams) rebuilt the whole transcript with per-row searches over all rows, runs and threads, then posted all of it to every view, several times over. At 12,000 items that was about 1 s and 17 MB per update, enough to block the extension host until the T3 socket's ping timed out.
 - Transcript rows now resolve runs, checkpoints and threads through cached lookups (about 25 ms at 12,000 items) and keep their object identity while unchanged. Each view receives the row order plus only new or changed rows (about 0.23 MB per streaming update at 12,000 items); a reloaded webview, or one missing a row, asks for the whole transcript again. Listeners of one update share each view's snapshot.
@@ -747,7 +747,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Render fenced code with a line-number gutter, an optional soft wrap and a copy button. One grid row per logical line keeps a wrapped line's single number and starts the next line below the whole wrapped block, with nothing measured; the gutter is generated content, so copying or quoting code never picks up the numbers.
 - Keep each block's wrap choice while the virtualized transcript unmounts and remounts its row, and name the language in full, or Plain text for an unnamed fence.
 
-#### Unreleased
+#### v0.3.2
 
 - The image preview (composer attachments, sent attachments and agent images) adds zoom in/out with a percentage, fit, keys `+`/`-`/`0`, Ctrl/Cmd+wheel zoom around the cursor and drag-to-pan beyond fit. Copy image (button, or Ctrl/Cmd+C with no text selected) writes `image/png` through the webview clipboard API, which VS Code's webview frame permits; other formats are converted through a canvas. Images from hosts without CORS still display but cannot be copied. Mermaid and equation previews are unchanged.
 
