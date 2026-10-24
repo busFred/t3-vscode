@@ -15,6 +15,9 @@ import { HostState, SIDEBAR_VIEW_ID } from "./host/hostState.js";
 import { resolveT3Home } from "./host/serverDiscovery.js";
 import { SecretCredentialStore } from "./host/sessionStore.js";
 import { T3Client } from "./host/t3Client.js";
+import { MultiEnvironmentClient } from "./host/multiEnvironmentClient.js";
+import { EnvironmentCatalog } from "./host/environmentCatalog.js";
+import { registerEnvironmentCommands } from "./host/environmentCommands.js";
 import { getWorkspaceContext } from "./host/workspaceContext.js";
 import { Events, type ProjectSelection, type ProjectSummary } from "./shared/bridge.js";
 import { resolveMessageNavigation } from "./shared/messageNavigation.js";
@@ -27,6 +30,7 @@ import { TaskOriginStore } from "./host/taskOrigins.js";
 import { ModelPreferenceStore } from "./host/modelPreferenceStore.js";
 
 let hostState: HostState | null = null;
+let environments: MultiEnvironmentClient | null = null;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const config = vscode.workspace.getConfiguration("t3-vscode");
@@ -36,7 +40,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ? "This F5 session uses an isolated development server. In the original VS Code window, run Terminal → Run Task → T3 VSCode: start isolated server. Leave its terminal running, then retry the connection."
     : undefined;
 
-  const client = new T3Client();
+  // Paired remote machines are shared by every profile through SecretStorage.
+  const client = environments = new MultiEnvironmentClient(new T3Client());
+  const catalog = new EnvironmentCatalog(context.secrets);
   const modelPreferences = new ModelPreferenceStore(context.globalState);
   const taskOrigins = new TaskOriginStore(context.globalState);
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
@@ -93,7 +99,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("t3-vscode.openInTab", () => provider.createNewPanel()),
     vscode.commands.registerCommand("t3-vscode.openExistingChatInTab", (viewId?: string) => provider.createPanel(viewId ?? registry.focusedViewId)),
     vscode.commands.registerCommand("t3-vscode.pair", () => hostState?.pairNow()),
-    vscode.commands.registerCommand("t3-vscode.reconnect", () => hostState?.reconnect()),
+    vscode.commands.registerCommand("t3-vscode.reconnect", () => { client.reconnectRemotes(); return hostState?.reconnect(); }),
     vscode.commands.registerCommand("t3-vscode.newThread", () => provider.createNewPanel()),
     vscode.commands.registerCommand("t3-vscode.showThreads", () => provider.showThreads()),
     vscode.commands.registerCommand("t3-vscode.showUsage", (accountKey?: string) => provider.showUsage(accountKey)),
@@ -148,12 +154,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
+  const syncEnvironments = () => catalog.list().then((records) => client.setRemoteEnvironments(records)).catch(() => undefined);
+  client.onRemoteStatus = () => hostState?.remoteEnvironmentsChanged();
+  context.subscriptions.push(catalog.onDidChange(() => { void syncEnvironments(); }),
+    ...registerEnvironmentCommands({ catalog, client, localEnvironmentId: () => hostState?.snapshot().environment?.environmentId }));
+  void syncEnvironments();
   await hostState.start();
 }
 
 export async function deactivate(): Promise<void> {
   await hostState?.dispose();
-  hostState = null;
+  await environments?.dispose();
+  hostState = null; environments = null;
 }
 
 function readAppearance(): AppearanceSettings {

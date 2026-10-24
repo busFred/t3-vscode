@@ -5,7 +5,8 @@ import { readFile } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url);
 const manifest = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
-const source = await readFile(new URL("src/extension.ts", root), "utf8");
+// Environment commands register from their own module.
+const source = (await Promise.all(["src/extension.ts", "src/host/environmentCommands.ts"].map((file) => readFile(new URL(file, root), "utf8")))).join("\n");
 
 test("Contributed commands are registered, including the usage refresh", () => {
   const declared = manifest.contributes.commands.map((command) => command.command);

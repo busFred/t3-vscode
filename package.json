@@ -91,6 +91,18 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "t3-vscode.addEnvironment",
+        "title": "Add Environment from Pairing Link",
+        "category": "T3 VSCode",
+        "icon": "$(remote)"
+      },
+      {
+        "command": "t3-vscode.manageEnvironments",
+        "title": "Manage Environments",
+        "category": "T3 VSCode",
+        "icon": "$(server-environment)"
+      },
+      {
         "command": "t3-vscode.openWebUi",
         "title": "Open Web UI",
         "category": "T3 VSCode",
