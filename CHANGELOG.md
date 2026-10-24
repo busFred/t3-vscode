@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.6 — Unreleased
+## 0.2.6 — Release
 
 - Fix worktree sessions that could not continue after their checkout switched branch (for example after an agent ran `git switch -c`). Sending and Retry setup failed with "Cannot change an existing conversation’s checkout."
 - Sessions stay bound to their checkout folder. By default they follow the checkout's current branch, as T3 Web does. Choose **Keep the session branch** to hold messages until the branches match. **Session checkout** then offers **Use ‹branch›** or **Switch checkout to ‹branch›…**.
