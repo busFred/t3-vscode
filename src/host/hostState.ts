@@ -1,5 +1,5 @@
 import { WorktreeCoordinator, parseWorktreeChoice, type WorktreeTransport, type WorktreeHandoff } from "./worktrees.js";
-import { repositoryIdentity, worktreeChanges, applyWorktreeFiles, currentBranch } from "./worktreeGit.js";
+import { repositoryIdentity, repositoryRemoteKeys, worktreeChanges, applyWorktreeFiles, currentBranch } from "./worktreeGit.js";
 import type { WorktreeChoice } from "../shared/worktrees.js";
 import { DEFAULT_REFRESH_INTERVAL_MINUTES, refreshIntervalMs } from "../shared/refreshSettings.js";
 import type { FileReference } from "../shared/composerContext.js";
@@ -19,7 +19,7 @@ import {
   ProviderApprovalDecision, ProviderInteractionMode, RuntimeMode,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadProjection, type OrchestrationV2ThreadStreamItem,
-  type OrchestrationV2TurnItem, type OrchestrationV2ThreadShell, type OrchestrationV2Checkpoint, type ServerConfig, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem,
+  type OrchestrationV2TurnItem, type OrchestrationV2ThreadShell, type OrchestrationV2Checkpoint, type ServerConfig, type AssetResource, type AttachmentCreateUploadUrlInput, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem,
 } from "@t3tools/contracts";
 import { restoreAttribution, restoreDryRun, restoreExecute, execGit, nodeIo } from "./checkpointRestore.js";
 import * as ShellState from "@t3tools/client-runtime/state/shell";
@@ -52,6 +52,7 @@ import { connectionSetup, discoverServer, type DiscoveredServer } from "./server
 import type { ConnectionProblem, ConnectionSetup } from "../shared/connectionSetup.js";
 import type { CredentialStore } from "./sessionStore.js";
 import type { T3Client, Subscription } from "./t3Client.js";
+import type { MultiEnvironmentClient } from "./multiEnvironmentClient.js";
 import { DEFAULT_APPEARANCE, resolveAppearance, type AppearanceSettings } from "../shared/appearance.js";
 import { ThreadId } from "@t3tools/contracts";
 import { htmlVisual, type ChatAssetReference, type ChatAssetSource } from "../shared/chatVisuals.js";
@@ -64,7 +65,12 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "createAssetUrl" | "uploadAttachment" | "deleteAttachment"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null };
+export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null }
+  // Remote environments: assets and attachments live on the server that owns the conversation.
+  & { createAssetUrl(resource: AssetResource, threadId?: string): ReturnType<T3Client["createAssetUrl"]>;
+    uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array, environmentId?: string): ReturnType<T3Client["uploadAttachment"]>;
+    deleteAttachment(attachmentId: string, environmentId?: string): Promise<void> }
+  & Partial<Pick<MultiEnvironmentClient, "threadEnvironment" | "projectEnvironment" | "configForThread" | "remoteStatuses">>;
 export interface HostStateOptions {
   readonly worktreeStorageRoot?: string;
   /** Where "Restore files to this point" saves kept files' pre-restore bytes, before re-applying them. */
@@ -129,6 +135,8 @@ function authFailure(cause: unknown): boolean {
 export class HostState {
   readonly worktrees: WorktreeCoordinator | null;
   private readonly repositoryIdentities = new Map<string, string>();
+  /** Remote URLs of the window's folders, matched against remote environments' repository identities. */
+  private workspaceRemoteKeys = new Map<string, ReadonlySet<string>>();
   private readonly acceptedMessages = new Map<string, { messageId: string; startedAt: string }>();
   private readonly composerDrafts: ComposerDraftStore;
   private readonly draftUploads = new Set<string>();
@@ -174,8 +182,8 @@ export class HostState {
   constructor(options: HostStateOptions, client: HostTransport) {
     this.options = options; this.client = client; this.composerDrafts = options.draftStore ?? new ComposerDraftStore();
     this.worktrees = options.worktreeStorageRoot ? new WorktreeCoordinator({ storageRoot: options.worktreeStorageRoot, client,
-      scope: () => this.draftScope(), projects: () => this.visibleProjects().map(p => ({ id: p.id, title: p.title, workspaceRoot: p.workspaceRoot, scripts: p.scripts })),
-      threads: () => this.visibleThreads().map(t => ({ id: t.id, projectId: t.projectId, title: t.title, status: t.status,
+      scope: () => this.draftScope(), projects: () => this.visibleLocalProjects().map(p => ({ id: p.id, title: p.title, workspaceRoot: p.workspaceRoot, scripts: p.scripts })),
+      threads: () => this.visibleThreads().filter(t => !this.remoteThread(t.id)).map(t => ({ id: t.id, projectId: t.projectId, title: t.title, status: t.status,
         modelSelection: t.modelSelection, runtimeMode: t.runtimeMode, interactionMode: t.interactionMode,
         branch: t.branch, worktreePath: t.worktreePath, activeRunId: t.activeRunId ?? (this.acceptedMessages.has(t.id) ? "pending" : null),
         updatedAt: DateTime.formatIso(t.updatedAt), archived: t.archivedAt !== null, pinned: t.pinnedAt != null, settled: t.settledOverride === "settled" })),
@@ -277,6 +285,22 @@ export class HostState {
     return view;
   }
   private draftScope(): string { return `${this.options.home}:${this.server?.descriptor.environmentId ?? ""}`; }
+  /** The paired remote environment that runs a conversation; undefined for local conversations. */
+  private remoteThread(id: string | undefined) { return id && id !== "new" ? this.client.threadEnvironment?.(id) : undefined; }
+  private remoteProject(id: string | undefined) { return id ? this.client.projectEnvironment?.(id) : undefined; }
+  /** Attachments live on the server of the conversation that receives them; new conversations start locally. */
+  private attachmentEnvironment(threadId: string | undefined): string | undefined {
+    return this.remoteThread(threadId)?.environmentId ?? this.server?.descriptor.environmentId;
+  }
+  private remoteTarget(environmentId: string | undefined): string | undefined {
+    return environmentId && environmentId !== this.server?.descriptor.environmentId ? environmentId : undefined;
+  }
+  /** Checkouts, saved-turn files and restores read the local filesystem, which a remote session does not share. */
+  private assertLocalThread(id: string | undefined, action: string): void {
+    const remote = this.remoteThread(id);
+    if (remote) throw new Error(`${action} is not available for sessions on ${remote.label} yet.`);
+  }
+  private configForThread(id: string | undefined) { return this.client.configForThread ? this.client.configForThread(id) : this.client.config; }
   async restoreComposerDraft(threadId: string, viewId = SIDEBAR_VIEW_ID): Promise<{ draft: ViewDraft; selection?: TextSelection | undefined }> {
     this.requireView(viewId);
     if (!this.client.connected || !this.server) throw new Error("Reconnect to T3 to recover this draft.");
@@ -286,7 +310,7 @@ export class HostState {
       let restored = file;
       const bytes = this.composerDrafts.file(record, file.key);
       if ((!file.attachment || !this.uploads.has(file.attachment.id)) && bytes && !this.draftUploads.has(`${record.id}:${file.key}`)) {
-        try { restored = await this.completeDraftUpload(record, file, bytes, viewId); }
+        try { restored = await this.completeDraftUpload(record, file, bytes, viewId, threadId); }
         catch (cause) { if (!this.client.connected) throw cause; restored = { ...file, pending: true, error: describeError(cause) }; }
       } else if (file.pending && !this.draftUploads.has(`${record.id}:${file.key}`)) restored = { ...file, pending: false, error: "Upload was interrupted before its file reached the extension. Attach it again." };
       // A recovery upload can finish after the user has removed a slot or attached another file.
@@ -296,7 +320,7 @@ export class HostState {
       }, record.selection);
       const current = record.draft.attachments?.find(current => current.key === file.key);
       if (!current || current.pending || current.attachment?.id !== restored.attachment?.id) continue;
-      if (restored.attachment && restored.environmentId === this.server?.descriptor.environmentId) {
+      if (restored.attachment && restored.environmentId === this.attachmentEnvironment(threadId)) {
         const upload = this.uploads.get(restored.attachment.id);
         if (upload) { upload.owners.add(viewId); upload.owners.add(`draft:${record.id}`); }
         else this.uploads.set(restored.attachment.id, { attachment: restored.attachment, environmentId: restored.environmentId!, owners: new Set([viewId, `draft:${record.id}`]), sent: false });
@@ -320,7 +344,7 @@ export class HostState {
       if (file.pending && previous?.attachment) return { ...previous, ...(file.contextId ? { contextId: file.contextId } : {}) };
       if (!file.attachment) return file;
       const upload = this.uploads.get(file.attachment.id);
-      if (!upload || !upload.owners.has(viewId) || upload.environmentId !== this.server?.descriptor.environmentId) throw new Error("Cannot save an attachment owned by another chat.");
+      if (!upload || !upload.owners.has(viewId) || upload.environmentId !== this.attachmentEnvironment(threadId)) throw new Error("Cannot save an attachment owned by another chat.");
       this.composerDrafts.copyAttachmentFile(record, file.key, file.attachment.id);
       return { ...file, attachment: upload.attachment, environmentId: upload.environmentId, ...((file.previewUrl ?? previous?.previewUrl) ? { previewUrl: (file.previewUrl ?? previous?.previewUrl)! } : {}) };
     });
@@ -331,15 +355,15 @@ export class HostState {
     }
     this.composerDrafts.save(record, { ...draft, ...(attachments ? { attachments } : {}) }, selection);
   }
-  private async completeDraftUpload(record: StoredComposerDraft, file: DraftAttachment, bytes: Uint8Array, viewId: string): Promise<DraftAttachment> {
-    const key = `${record.id}:${file.key}`, environmentId = this.server!.descriptor.environmentId;
+  private async completeDraftUpload(record: StoredComposerDraft, file: DraftAttachment, bytes: Uint8Array, viewId: string, threadId: string): Promise<DraftAttachment> {
+    const key = `${record.id}:${file.key}`, environmentId = this.attachmentEnvironment(threadId)!, target = this.remoteTarget(environmentId);
     this.draftUploads.add(key);
     const releaseLease = this.composerDrafts.retain(record);
     try {
-      const attachment = await this.client.uploadAttachment(attachmentUploadInput(file.name, file.mimeType, bytes.byteLength), bytes);
+      const attachment = await this.client.uploadAttachment(attachmentUploadInput(file.name, file.mimeType, bytes.byteLength), bytes, target);
       const stillAttached = record.draft.attachments?.some(current => current.key === file.key);
-      if (!stillAttached || this.server?.descriptor.environmentId !== environmentId) {
-        await this.client.deleteAttachment(attachment.id).catch(() => undefined); throw new Error("The file was removed before its upload finished.");
+      if (!stillAttached || this.attachmentEnvironment(threadId) !== environmentId) {
+        await this.client.deleteAttachment(attachment.id, target).catch(() => undefined); throw new Error("The file was removed before its upload finished.");
       }
       const { error: _error, ...source } = file;
       const ready: DraftAttachment = { ...source, pending: false, attachment, environmentId,
@@ -356,18 +380,19 @@ export class HostState {
     if (threadId && view.activeThreadId !== threadId) throw new Error("The conversation changed before the file could be attached.");
     if (view.activeThreadId) this.emptyThreads.delete(view.activeThreadId);
     const input = attachmentUploadInput(name, mimeType, bytes.byteLength);
-    const environmentId = this.server.descriptor.environmentId;
-    const record = this.composerDrafts.owned(this.draftScope(), threadId ?? view.activeThreadId ?? "new", viewId);
+    const draftThreadId = threadId ?? view.activeThreadId ?? "new";
+    const environmentId = this.attachmentEnvironment(draftThreadId)!, target = this.remoteTarget(environmentId);
+    const record = this.composerDrafts.owned(this.draftScope(), draftThreadId, viewId);
     if (record) {
       const key = slotKey ?? randomUUID();
       const file: DraftAttachment = record.draft.attachments?.find(file => file.key === key) ?? { key, name: input.name, mimeType: input.mimeType, sizeBytes: input.sizeBytes, pending: true, contextId: `${input.type === "image" ? "image" : "file"}_${randomUUID()}` };
       if (!record.draft.attachments?.some(file => file.key === key)) this.composerDrafts.save(record, { ...record.draft, attachments: [...(record.draft.attachments ?? []), file] }, record.selection);
       this.composerDrafts.keepFile(record, key, bytes); this.composerDrafts.flush();
-      return this.completeDraftUpload(record, file, bytes, viewId);
+      return this.completeDraftUpload(record, file, bytes, viewId, draftThreadId);
     }
-    const attachment = await this.client.uploadAttachment(input, bytes);
-    if (!this.views.has(viewId) || this.server?.descriptor.environmentId !== environmentId) {
-      await this.client.deleteAttachment(attachment.id).catch(() => undefined); throw new Error("The chat closed before its file could be attached.");
+    const attachment = await this.client.uploadAttachment(input, bytes, target);
+    if (!this.views.has(viewId) || this.attachmentEnvironment(draftThreadId) !== environmentId) {
+      await this.client.deleteAttachment(attachment.id, target).catch(() => undefined); throw new Error("The chat closed before its file could be attached.");
     }
     this.uploads.set(attachment.id, { attachment, environmentId, owners: new Set([viewId]), sent: false });
     return { key: attachment.id, name: attachment.name, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes, attachment, environmentId,
@@ -376,7 +401,10 @@ export class HostState {
   async releaseAttachment(id: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     const upload = this.uploads.get(id); if (!upload?.owners.delete(viewId) || upload.owners.size) return;
     this.uploads.delete(id);
-    if (!upload.sent && this.client.connected && upload.environmentId === this.server?.descriptor.environmentId) await this.client.deleteAttachment(id);
+    const local = upload.environmentId === this.server?.descriptor.environmentId;
+    if (!upload.sent && this.client.connected && local) await this.client.deleteAttachment(id);
+    // The remote may be disconnected or unpaired; a failed cleanup must not fail the caller.
+    else if (!upload.sent && this.remoteTarget(upload.environmentId)) await this.client.deleteAttachment(id, upload.environmentId).catch(() => undefined);
   }
   private enqueue<T>(action: () => Promise<T>): Promise<T> {
     const next = this.chain.then(() => {
@@ -390,6 +418,24 @@ export class HostState {
   reconnect(): Promise<void> { return this.enqueue(() => this.connect(false)); }
   pairNow(): Promise<void> { return this.enqueue(() => this.connect(true)); }
   refreshAppearance(): void { this.emit(); }
+  /** Remote connection states changed; their sessions arrive through the merged shell stream. */
+  remoteEnvironmentsChanged(): void {
+    if (this.disposed) return;
+    void this.enqueue(async () => {
+      // A lost remote ends its thread streams; keep the last transcript and resubscribe once it reconnects.
+      // Window remotes are only resolved once a machine is paired.
+      if (!this.workspaceRemoteKeys.size && this.client.remoteStatuses?.().length) await this.refreshRepositoryIdentities().catch(() => undefined);
+      for (const [id, state] of this.threads) if (state.subscription && this.remoteThread(id) && !this.remoteConnected(id)) {
+        const subscription = state.subscription; state.subscription = null; await subscription().catch(() => undefined);
+      }
+      if (this.client.connected) await this.syncThreadSubscriptions().catch(() => undefined);
+      this.emit();
+    }).catch(() => undefined);
+  }
+  private remoteConnected(id: string): boolean {
+    const remote = this.remoteThread(id);
+    return !remote || this.client.remoteStatuses?.().some(status => status.environmentId === remote.environmentId && status.state === "connected") === true;
+  }
 
   private async stopSubscriptions(): Promise<void> {
     this.archiveGeneration += 1; this.archiveLoad = null; this.archiveError = undefined;
@@ -537,16 +583,38 @@ export class HostState {
     return !roots.length || roots.some((root) => this.pathIdentity(root) === this.pathIdentity(path));
   }
   private async refreshRepositoryIdentities(): Promise<void> {
-    const paths = [...new Set([...this.workspaceRoots(), ...(this.shell?.projects.map(p => p.workspaceRoot) ?? [])])];
+    const paths = [...new Set([...this.workspaceRoots(), ...this.localProjects().map(p => p.workspaceRoot)])];
     await Promise.all(paths.map(async path => { const identity = await repositoryIdentity(path); if (identity) this.repositoryIdentities.set(this.pathIdentity(path), identity.commonDir); else this.repositoryIdentities.delete(this.pathIdentity(path)); }));
+    if (this.client.remoteStatuses?.().length) this.workspaceRemoteKeys = new Map(await Promise.all(this.workspaceRoots().map(async root => [root, new Set(await repositoryRemoteKeys(root).catch(() => []))] as const)));
   }
-  private projectContainsWorkspace(project: { id: string; workspaceRoot: string }): boolean {
+  private projectContainsWorkspace(project: { id: string; workspaceRoot: string; repositoryIdentity?: { readonly canonicalKey: string } | null | undefined }): boolean {
+    // A remote project's paths name another machine's disk, so only its Git remote can match this window.
+    if (this.remoteProject(project.id)) {
+      return !this.workspaceRoots().length || this.repositoryRoot(project) !== undefined;
+    }
     if (this.pathInWorkspace(project.workspaceRoot)) return true;
     const common = this.repositoryIdentities.get(this.pathIdentity(project.workspaceRoot));
     return this.workspaceRoots().some(root => common && this.repositoryIdentities.get(this.pathIdentity(root)) === common
       || this.allThreads().some(t => t.projectId === project.id && t.worktreePath && this.pathIdentity(t.worktreePath) === this.pathIdentity(root)));
   }
+  /** The window folder whose Git remote matches a remote project's repository. */
+  private repositoryRoot(project: { repositoryIdentity?: { readonly canonicalKey: string } | null | undefined }): string | undefined {
+    const key = project.repositoryIdentity?.canonicalKey.toLowerCase();
+    return key ? this.workspaceRoots().find(root => this.workspaceRemoteKeys.get(root)?.has(key)) : undefined;
+  }
+  /** A remote session names paths on its own machine; one inside its checkout opens the same file in this window's checkout. */
+  localPathForThread(threadId: string | undefined, path: string): string {
+    if (!this.remoteThread(threadId)) return path;
+    const thread = this.findThread(threadId), project = this.visibleProjects().find(item => item.id === thread?.projectId);
+    const remoteRoot = thread?.worktreePath ?? project?.workspaceRoot, localRoot = project && this.repositoryRoot(project);
+    if (!remoteRoot || !localRoot) return path;
+    const inside = relative(remoteRoot, path);
+    return inside === "" ? localRoot : !inside.startsWith("..") && !isAbsolute(inside) ? join(localRoot, inside) : path;
+  }
   private visibleProjects() { return this.shell?.projects.filter(project => this.projectContainsWorkspace(project)) ?? []; }
+  private localProjects() { return this.shell?.projects.filter(project => !this.remoteProject(project.id)) ?? []; }
+  /** Projects new conversations, checkouts and file references can use: remote environments are browse-and-reply only. */
+  private visibleLocalProjects() { return this.visibleProjects().filter(project => !this.remoteProject(project.id)); }
   private visibleThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
     const projects = new Set(this.visibleProjects().map((project) => project.id));
     return this.allThreads().filter((thread) => !thread.deletedAt && projects.has(thread.projectId));
@@ -614,8 +682,11 @@ export class HostState {
     }
     for (const id of selected) {
       if (![...this.views.values()].some((view) => view.activeThreadId === id)) continue;
-      if (this.threads.has(id)) continue;
-      const state = blankThread(); this.threads.set(id, state);
+      const previous = this.threads.get(id);
+      // Only a remote stream that ended with its connection is resumed; local subscriptions are never duplicated.
+      if (previous && (previous.subscription || !this.remoteThread(id))) continue;
+      if (!this.remoteConnected(id)) continue;
+      const state: ThreadState = previous ? { ...blankThread(), projection: previous.projection } : blankThread(); this.threads.set(id, state);
       try {
         const subscription = await this.client.subscribeThread(id, (item) => {
           if (this.disposed || this.threads.get(id) !== state) return;
@@ -671,7 +742,7 @@ export class HostState {
     const chosenRoot = view.draftWorkspaceRoot === undefined ? roots[0] ?? null : view.draftWorkspaceRoot;
     const root = roots.length && (!chosenRoot || !this.pathInWorkspace(chosenRoot)) ? roots[0]! : chosenRoot;
     const active = this.findThread(view.activeThreadId);
-    const projects = this.visibleProjects();
+    const projects = this.visibleLocalProjects();
     const project = projects.find((item) => item.id === view.draftProjectId)
       ?? (root ? projects.find((item) => this.pathIdentity(item.workspaceRoot) === this.pathIdentity(root) || this.repositoryIdentities.get(this.pathIdentity(root)) !== undefined && this.repositoryIdentities.get(this.pathIdentity(item.workspaceRoot)) === this.repositoryIdentities.get(this.pathIdentity(root)) || this.allThreads().some(t => t.projectId === item.id && t.worktreePath && this.pathIdentity(t.worktreePath) === this.pathIdentity(root)))
         : view.draftWorkspaceRoot === null ? undefined : projects.find((item) => item.id === active?.projectId));
@@ -697,8 +768,8 @@ export class HostState {
       if (!this.conversationDraft(view).supportsNoProject) throw new Error("This server requires a project. Choose a project folder.");
       view.draftProjectId = undefined; view.draftWorkspaceRoot = null;
     } else if ("projectId" in selection) {
-      const project = this.visibleProjects().find((item) => item.id === selection.projectId);
-      if (!project) throw new Error("Project not found in the current workspace.");
+      const project = this.visibleLocalProjects().find((item) => item.id === selection.projectId);
+      if (!project) throw new Error(this.remoteProject(selection.projectId) ? "Starting sessions on other machines is not supported yet." : "Project not found in the current workspace.");
       view.draftProjectId = project.id; view.draftWorkspaceRoot = project.workspaceRoot;
     } else {
       if (!isAbsolute(selection.workspaceRoot)) throw new Error("Choose an absolute project folder.");
@@ -708,7 +779,7 @@ export class HostState {
   }
   private async pickDraftProject(viewId: string): Promise<boolean> {
     const view = this.requireView(viewId);
-    const projects = this.visibleProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot }));
+    const projects = this.visibleLocalProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot }));
     const selected = await this.options.pickProject?.(projects, this.conversationDraft(view).supportsNoProject, this.workspaceRoots());
     if (!selected) return false;
     this.applyProjectSelection(this.requireView(viewId), selected);
@@ -720,6 +791,7 @@ export class HostState {
     this.chooseModel();
     let draft = this.conversationDraft(view);
     let projectId = requestedProjectId ?? draft.projectId ?? undefined;
+    if (projectId && this.remoteProject(projectId)) throw new Error("Starting sessions on other machines is not supported yet.");
     if (projectId && !this.visibleProjects().some((project) => project.id === projectId)) throw new Error("Project not found in the current workspace.");
     if (!projectId && !draft.workspaceRoot) {
       if (draft.supportsNoProject) projectId = await this.client.ensureScratchProject();
@@ -732,7 +804,7 @@ export class HostState {
     if (!projectId) {
       const root = draft.workspaceRoot;
       if (root) {
-        projectId = this.visibleProjects().find((project) => this.pathIdentity(project.workspaceRoot) === this.pathIdentity(root))?.id;
+        projectId = this.visibleLocalProjects().find((project) => this.pathIdentity(project.workspaceRoot) === this.pathIdentity(root))?.id;
         if (!projectId) projectId = await this.client.createProject(root, basename(root));
       }
     }
@@ -766,7 +838,7 @@ export class HostState {
       if (new Set(attachmentIds).size !== attachmentIds.length) throw new Error("Duplicate attachments are not allowed.");
       const attachments = attachmentIds.map((id) => {
         const upload = this.uploads.get(id);
-        if (!upload?.owners.has(viewId) || upload.environmentId !== this.server?.descriptor.environmentId) throw new Error("This attachment is not available in the current chat. Remove it and attach it again.");
+        if (!upload?.owners.has(viewId) || upload.environmentId !== this.attachmentEnvironment(targetThreadId)) throw new Error("This attachment is not available in the current chat. Remove it and attach it again.");
         return upload.attachment;
       });
       const limitError = getProviderAttachmentLimitError(attachments); if (limitError) throw new Error(limitError);
@@ -779,8 +851,11 @@ export class HostState {
       if (thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") throw new Error("This subagent conversation is controlled by its provider. Return to the parent conversation to send instructions.");
       view.sending = true; this.emit();
       try {
+        // A remote session's checkout is on its own machine; its server prepares the workspace.
+        const local = !this.remoteThread(id);
         const choice = view.workspaceChoice ?? this.conversationDraft(view).workspace;
-        if (this.worktrees && choice && (this.emptyThreads.has(id) || thread.itemCount === 0)) {
+        if (!local) delete view.workspaceChoice;
+        else if (this.worktrees && choice && (this.emptyThreads.has(id) || thread.itemCount === 0)) {
           const allocations = choice.runs?.flatMap(run => Array.from({ length: run.count }, () => run.modelSelection)) ?? [thread.modelSelection];
           for (const model of allocations) this.assertWorktreeModel(model);
           if (allocations.length > 1) {
@@ -801,10 +876,10 @@ export class HostState {
           if (checkout && !checkout.tree.root) await this.reconcileThreadBranch(id, checkout.tree.branch || null);
           await this.prepareThreadWorkspace(id, { type: "existing", path: thread.worktreePath });
         }
-        const instructions = thread.worktreePath ? await this.worktrees?.environmentInstructions(thread.projectId, thread.worktreePath) : undefined;
+        const instructions = local && thread.worktreePath ? await this.worktrees?.environmentInstructions(thread.projectId, thread.worktreePath) : undefined;
         const dispatchText = instructions ? `${text}\n\n<worktree_environment>\n${instructions}\n</worktree_environment>` : text;
         const messageId = randomUUID(), alreadyWorking = !!thread.activeRunId || !!(this.threads.get(id)?.projection && deriveThreadQueueWorkflowState(this.threads.get(id)!.projection!).activeRun) || this.acceptedMessages.has(id);
-        const cwd = this.workspaceForThread(id);
+        const cwd = local ? this.workspaceForThread(id) : null;
         // Queued/steered runs have no reliable pre-execution boundary on the client.
         // Failure to capture must never prevent sending a message.
         if (!alreadyWorking && mode === "auto" && cwd)
@@ -837,6 +912,7 @@ export class HostState {
   async configureWorktree(input: unknown, projectId: string | undefined, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     if (!this.worktrees) throw new Error("Worktree support is unavailable.");
     const choice = parseWorktreeChoice(input), view = this.requireView(viewId), thread = this.findThread(view.activeThreadId);
+    this.assertLocalThread(thread?.id, "Choosing a checkout");
     if (thread && !this.emptyThreads.has(thread.id) && thread.itemCount > 0) throw new Error("An existing conversation keeps its checkout. Start a new conversation or use Continue in worktree.");
     if (thread?.activeRunId || view.sending) throw new Error("Wait for the current operation before changing the workspace.");
     if (projectId && thread && thread.projectId !== projectId) throw new Error("Open a new chat for another project.");
@@ -886,6 +962,7 @@ export class HostState {
     return this.enqueue(async () => {
       if (!this.worktrees) throw new Error("Worktree support is unavailable.");
       const thread = this.requireThread(threadId);
+      this.assertLocalThread(threadId, "Checkout actions");
       if (!thread.worktreePath) throw new Error("This session uses the main checkout.");
       const { tree } = await this.worktrees.requireCheckout(thread.projectId, thread.worktreePath);
       if (thread.branch === (tree.branch || null)) return;
@@ -898,10 +975,11 @@ export class HostState {
     return this.enqueue(async () => {
       if (!this.worktrees) throw new Error("Worktree support is unavailable.");
       const thread = this.requireThread(threadId);
+      this.assertLocalThread(threadId, "Checkout actions");
       if (!thread.worktreePath) throw new Error("This session uses the main checkout.");
       if (!thread.branch) throw new Error("This session does not record a branch.");
       // Another session in the same folder may have a message accepted before its run appears.
-      if ((this.shell?.threads ?? []).some(t => t.worktreePath === thread.worktreePath && (t.activeRunId || this.acceptedMessages.has(t.id)))) throw new Error("Wait for the current run before switching branches.");
+      if ((this.shell?.threads ?? []).some(t => t.worktreePath === thread.worktreePath && !this.remoteThread(t.id) && (t.activeRunId || this.acceptedMessages.has(t.id)))) throw new Error("Wait for the current run before switching branches.");
       await this.worktrees.switchBranch(thread.projectId, thread.worktreePath, thread.branch);
       this.emit();
     });
@@ -910,11 +988,13 @@ export class HostState {
     if (!this.worktrees) throw new Error("Worktree support is unavailable.");
     if (policy !== null && policy !== "follow" && policy !== "pinned") throw new Error("Invalid branch policy.");
     const thread = this.requireThread(threadId);
+    this.assertLocalThread(threadId, "Checkout actions");
     await this.worktrees.setSessionBranchPolicy(thread.projectId, threadId, policy);
   }
   async prepareThreadWorkspace(id: string, choice: WorktreeChoice, group?: { groupId: string; title: string }): Promise<void> {
     if (!this.worktrees) throw new Error("Worktree support is unavailable.");
     const thread = this.requireThread(id);
+    this.assertLocalThread(id, "Checkout actions");
     // A preparation attempt represents user work even when setup fails before a run starts.
     this.emptyThreads.delete(id);
     await this.worktrees.prepare(thread.projectId, id, choice, (path, branch) => this.bindEmptyThread(id, path, branch), group);
@@ -951,6 +1031,7 @@ export class HostState {
       const view = this.requireView(viewId), id = view.activeThreadId;
       if (!id) throw new Error("Open a conversation first.");
       const thread = this.requireThread(id);
+      this.assertLocalThread(id, "Checkout actions");
       if (thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") throw new Error("This subagent conversation is controlled by its provider. Continue from its parent conversation.");
       if (thread.worktreePath || thread.activeRunId || thread.archivedAt || this.acceptedMessages.has(id) || view.sending) throw new Error("Only an idle conversation in the main checkout can continue in a new worktree.");
       const root = this.workspaceForThread(id)!;
@@ -1037,7 +1118,7 @@ export class HostState {
   private async applyModelSelection(id: string | undefined, input: unknown, viewId: string): Promise<void> {
       const view = this.requireView(viewId);
       const selection = Schema.decodeUnknownSync(ModelSelectionSchema)(input);
-      const provider = this.client.config?.providers.find((item) => item.instanceId === selection.instanceId);
+      const provider = this.configForThread(id)?.providers.find((item) => item.instanceId === selection.instanceId);
       if (!provider?.enabled || !provider.installed || provider.availability === "unavailable" || !provider.models.some((model) => model.slug === selection.model)) throw new Error("This model is unavailable.");
       if (id === undefined) {
         view.draftModelSelection = selection;
@@ -1053,7 +1134,7 @@ export class HostState {
       const view = this.requireView(viewId);
       const selection = id === undefined ? this.conversationDraft(view).modelSelection : this.requireThread(id).modelSelection;
       if (!selection) throw new Error("Choose a model first.");
-      const model = this.client.config?.providers.find((provider) => provider.instanceId === selection.instanceId)?.models.find((model) => model.slug === selection.model);
+      const model = this.configForThread(id)?.providers.find((provider) => provider.instanceId === selection.instanceId)?.models.find((model) => model.slug === selection.model);
       const descriptor = model?.capabilities?.optionDescriptors?.find((option) => option.id === optionId);
       if (!descriptor || (descriptor.type === "boolean" ? typeof value !== "boolean" : typeof value !== "string" || !descriptor.options.some((option) => option.id === value))) throw new Error("This model does not support that option value.");
       if (descriptor.type === "select" && typeof value === "string" && descriptor.promptInjectedValues?.includes(value)) throw new Error("This effort is controlled by the message text.");
@@ -1140,7 +1221,7 @@ export class HostState {
       const thread = this.requireThread(id);
       if (input.runtimeMode !== undefined) {
         const mode = Schema.decodeUnknownSync(RuntimeMode)(input.runtimeMode);
-        const supported = this.client.config?.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId)?.supportedRuntimeModes;
+        const supported = this.configForThread(id)?.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId)?.supportedRuntimeModes;
         if (supported && !supported.includes(mode)) throw new Error("This provider does not support that permission mode.");
         await this.client.dispatch({ type: "thread.runtime-mode.set", commandId: randomUUID(), threadId: id, runtimeMode: mode });
       }
@@ -1298,6 +1379,7 @@ export class HostState {
   }
   /** Either the user message to restore before, or (from a rewind marker, once that message has scrolled out of the projection) a checkpoint directly. */
   private async resolveRestoreScope(sourceThreadId: string, locator: { itemId: string } | { checkpointId: string; scopeId: string }) {
+    this.assertLocalThread(sourceThreadId, "Restoring files");
     const projection = await this.client.getThreadProjection(sourceThreadId);
     let target: { checkpoint: OrchestrationV2Checkpoint; turnNumber?: number } | null;
     if ("itemId" in locator) {
@@ -1346,7 +1428,7 @@ export class HostState {
       if (this.requireThread(id).activeRunId || this.requireThread(sourceThreadId).activeRunId) throw new Error("Wait for the current response to finish before restoring files.");
       const { target, latest, scope } = await this.resolveRestoreScope(sourceThreadId, locator);
       this.requireView(viewId); this.requireThread(id); this.requireThread(sourceThreadId);
-      if (this.visibleThreads().some((other) => other.activeRunId && this.workspaceForThread(other.id) === scope.cwd)) throw new Error("Another conversation is actively using this checkout. Wait for it to finish before restoring files.");
+      if (this.visibleThreads().some((other) => other.activeRunId && !this.remoteThread(other.id) && this.workspaceForThread(other.id) === scope.cwd)) throw new Error("Another conversation is actively using this checkout. Wait for it to finish before restoring files.");
       const attribution = await restoreAttribution(execGit, { cwd: scope.cwd, checkpointRef: target.checkpoint.ref, latestRef: latest.ref });
       const keepSet = mode === "everything" ? new Set<string>() : new Set(keep);
       const keepTracked = attribution.filter((file) => file.you && !file.you.untracked && keepSet.has(file.path)).map((file) => file.path);
@@ -1362,7 +1444,7 @@ export class HostState {
   }
   /** The restore result row's "Compare" link: both files are now plain working-tree files, not checkpoint blobs. */
   async compareRestoredFile(id: string, path: string, yoursPath: string, viewId = SIDEBAR_VIEW_ID): Promise<{ cwd: string; path: string; oldContents: string; newContents: string }> {
-    this.requireView(viewId); this.requireThread(id);
+    this.requireView(viewId); this.requireThread(id); this.assertLocalThread(id, "Restoring files");
     const cwd = this.workspaceForThread(id);
     if (!cwd) throw new Error("This conversation's checkout is unavailable.");
     const [restored, yours] = await Promise.all([
@@ -1531,7 +1613,7 @@ export class HostState {
     });
   }
   async prepareTurnDiff(id: string, sourceId: string, itemId: string, viewId = SIDEBAR_VIEW_ID): Promise<TurnDiff> {
-    this.requireView(viewId); this.requireThread(id); this.requireThread(sourceId);
+    this.requireView(viewId); this.requireThread(id); this.requireThread(sourceId); this.assertLocalThread(sourceId, "Saved turn diffs");
     const row = this.threads.get(id)?.projection?.visibleTurnItems.find((row) => row.sourceThreadId === sourceId && row.sourceItemId === itemId);
     if (row?.item.type !== "checkpoint") throw new Error("The selected item is not a saved turn checkpoint.");
     const projection = await this.client.getThreadProjection(sourceId);
@@ -1560,13 +1642,14 @@ export class HostState {
   }
   async turnDiffMerges(id: string, sourceId: string, itemId: string, viewId = SIDEBAR_VIEW_ID): Promise<ReadonlyArray<MergeRecord>> {
     this.requireView(viewId); this.requireThread(id); this.requireThread(sourceId);
+    if (this.remoteThread(sourceId)) return [];
     const row = this.threads.get(id)?.projection?.visibleTurnItems.find((row) => row.sourceThreadId === sourceId && row.sourceItemId === itemId);
     if (row?.item.type !== "checkpoint") return [];
     return this.mergesForCheckpoint(sourceId, row.item.checkpointId);
   }
   /** Fallback single-file view: no "before" snapshot is kept for a merge, only the patch that was applied. */
   async mergePatchFile(threadId: string, appliedAt: string, path: string): Promise<{ cwd: string; sourceTitle: string; patchText: string }> {
-    this.requireThread(threadId);
+    this.requireThread(threadId); this.assertLocalThread(threadId, "Worktree merges");
     const store = this.worktrees?.merges;
     if (!store) throw new Error("Worktree merges are unavailable.");
     const record = (await store.forThread(threadId)).find((entry) => entry.appliedAt === appliedAt);
@@ -1576,7 +1659,7 @@ export class HostState {
     return { cwd: record.cwd, sourceTitle: record.sourceTitle, patchText: section };
   }
   async loadTurnDiffFile(diff: TurnDiff, file: TurnDiffFile, viewId = SIDEBAR_VIEW_ID) {
-    this.requireView(viewId); this.requireThread(diff.threadId);
+    this.requireView(viewId); this.requireThread(diff.threadId); this.assertLocalThread(diff.threadId, "Saved turn diffs");
     const result = await this.client.getDiffFileContents(turnDiffFileRequest(diff, file));
     this.requireView(viewId); this.requireThread(diff.threadId);
     return result;
@@ -1604,7 +1687,7 @@ export class HostState {
       if (media._tag !== "WorkspaceFile") throw new Error("Unsupported local media reference.");
       resource = { _tag: "media-file", threadId: ThreadId.make(source.sourceThreadId), path: media.path };
     }
-    const result = await this.client.createAssetUrl(resource);
+    const result = await this.client.createAssetUrl(resource, source.sourceThreadId);
     this.requireView(viewId); this.requireThread(id);
     return result;
   }
@@ -1645,7 +1728,10 @@ export class HostState {
         const serverOrigin = typeof task.originThreadId === "string" && this.findThread(task.originThreadId)?.projectId === task.projectId ? task.originThreadId : null;
         return { ...task, editVersion: taskEditVersion(task), originThreadId: association ? association.threadId : serverOrigin, originKnown: !!association || serverOrigin !== null };
       }) },
-      projects: this.visibleProjects().map((project) => ({ id: project.id, title: project.title, workspaceRoot: project.workspaceRoot })),
+      projects: this.visibleProjects().map((project) => { const remote = this.remoteProject(project.id);
+        return { id: project.id, title: project.title, workspaceRoot: project.workspaceRoot, ...(remote ? { environmentLabel: remote.label } : {}) }; }),
+      ...(activeThreadId && this.remoteThread(activeThreadId) ? { remoteSession: this.remoteThread(activeThreadId)! } : {}),
+      ...(this.client.remoteStatuses?.().length ? { remoteEnvironments: this.client.remoteStatuses().map(({ environmentId, label, state, error }) => ({ environmentId, label, state, ...(error ? { error } : {}) })) } : {}),
       threads: withSubagentWorkingState(threads.map((thread) => {
         // visibleTurnItems lags each thread's own settled record (#the subagent's child thread
         // settles before the parent's turn item stops showing "Running"), so the roster above
@@ -1654,7 +1740,9 @@ export class HostState {
         const projection = this.threads.get(thread.id)?.projection;
         const hasRunningSubagentItem = !!projection?.visibleTurnItems.some((row) => row.item.type === "subagent" && statusIsWorking(row.item.status));
         const pendingBackgroundTasks = thread.pendingBackgroundTasks ?? [];
+        const remote = this.remoteThread(thread.id);
         return {
+          ...(remote ? { environmentLabel: remote.label } : {}),
           id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
           modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
           updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
@@ -1687,7 +1775,7 @@ export class HostState {
           })(),
         };
       })),
-      providers: this.client.config?.providers ?? [],
+      providers: this.configForThread(activeThreadId)?.providers ?? [],
       archiveLoaded: this.archive !== null, archiveLoading: this.archiveLoad !== null, ...(this.archiveError ? { archiveError: this.archiveError } : {}),
       usageLimitSources: this.client.config?.usageLimitSources ?? [],
       favoriteModels: this.modelPreferences().favoriteModels,
@@ -1810,7 +1898,9 @@ export class HostState {
     // Browser pairing cookies belong to localhost, independently of the RPC origin.
     if (["127.0.0.1", "[::1]"].includes(url.hostname)) url.hostname = "localhost";
     const threadId = this.snapshot(viewId).activeThreadId;
-    url.pathname = threadId ? `/${encodeURIComponent(this.server.descriptor.environmentId)}/${encodeURIComponent(threadId)}` : "/";
+    // The local web UI routes by environment, so a remote session opens there when that browser has paired the machine too.
+    const environmentId = this.remoteThread(threadId)?.environmentId ?? this.server.descriptor.environmentId;
+    url.pathname = threadId ? `/${encodeURIComponent(environmentId)}/${encodeURIComponent(threadId)}` : "/";
     url.search = ""; url.hash = "";
     return url.href;
   }

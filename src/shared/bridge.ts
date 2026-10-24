@@ -49,7 +49,7 @@ export interface ModelSelection {
 }
 export interface FavoriteModel { readonly instanceId: string; readonly model: string }
 export type HostPhase = "discovering" | "no-server" | "pairing" | "connecting" | "ready" | "error";
-export interface ProjectSummary { readonly id: string; readonly title: string; readonly workspaceRoot: string }
+export interface ProjectSummary { readonly id: string; readonly title: string; readonly workspaceRoot: string; /** Machine label for a project on a paired remote environment. */ readonly environmentLabel?: string }
 export type ProjectSelection = { readonly projectId: string } | { readonly workspaceRoot: string } | { readonly noProject: true };
 export interface ConversationDraft {
   readonly workspace?: import("./worktrees.js").WorktreeChoice;
@@ -61,6 +61,8 @@ export interface ConversationDraft {
   readonly interactionMode: ProviderInteractionMode;
 }
 export interface ThreadSummary {
+  /** Machine label for a session on a paired remote environment; absent for local sessions. */
+  readonly environmentLabel?: string;
   readonly canChooseWorkspace?: boolean;
   readonly worktreePath?: string | null;
   readonly id: string; readonly projectId: string; readonly title: string; readonly status: string;
@@ -180,6 +182,10 @@ export interface HostStateSnapshot {
   readonly notice?: string;
   readonly connectionSetup?: ConnectionSetup;
   readonly environment?: { readonly environmentId: string; readonly label: string; readonly serverVersion?: string };
+  /** Set when the active session runs on a paired remote machine: checkout actions, saved-turn diffs and file restores are unavailable. */
+  readonly remoteSession?: { readonly environmentId: string; readonly label: string };
+  /** Paired remote machines and their connection states. */
+  readonly remoteEnvironments?: ReadonlyArray<{ readonly environmentId: string; readonly label: string; readonly state: "connecting" | "connected" | "error" | "disabled"; readonly error?: string }>;
   readonly projects: ReadonlyArray<ProjectSummary>;
   readonly threads: ReadonlyArray<ThreadSummary>;
   readonly archiveLoaded?: boolean;

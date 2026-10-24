@@ -363,7 +363,8 @@ export class BridgeHandler {
   private async openLink(href: string, threadId?: string): Promise<void> {
     const vscode = await import("vscode");
     if (/^https?:\/\//i.test(href)) { await vscode.env.openExternal(vscode.Uri.parse(href)); return; }
-    const target = resolveChatFileLink(href, this.hostState.workspaceForThread(threadId));
+    const link = resolveChatFileLink(href, this.hostState.workspaceForThread(threadId));
+    const target = { ...link, path: this.hostState.localPathForThread(threadId, link.path) };
     const uri = vscode.Uri.file(target.path);
     // The @ menu offers directories beside files, and a directory has no document to show. A link
     // that names a position is already known to be a file, so it never pays for the extra stat.
