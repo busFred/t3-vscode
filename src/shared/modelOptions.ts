@@ -12,6 +12,11 @@ export function effortDescriptor(model: ServerProviderModel | undefined, selecti
   return undefined;
 }
 
+/** Option label, marked when the server advertises it as the model's default. */
+export function effortOptionLabel(option: { label: string; isDefault?: boolean | undefined }): string {
+  return option.isDefault ? `${option.label} (Default)` : option.label;
+}
+
 /** Carry explicit options only when the new model advertises the same values. */
 export function selectionForModel(instanceId: string, model: ServerProviderModel, previous: ModelSelection | null | undefined): ModelSelection {
   const descriptors = model.capabilities?.optionDescriptors ?? [];

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.7 — Release
+
+- The effort selector (composer and scheduled task editor) now marks the model's default level with "(Default)", as T3 Code's own picker does.
+
 ## 0.2.6 — Release
 
 - Fix worktree sessions that could not continue after their checkout switched branch (for example after an agent ran `git switch -c`). Sending and Retry setup failed with "Cannot change an existing conversation’s checkout."

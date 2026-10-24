@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getProviderOptionCurrentValue } from "@t3tools/shared/model";
-import { effortDescriptor, selectionForModel } from "./modelOptions.js";
+import { effortDescriptor, effortOptionLabel, selectionForModel } from "./modelOptions.js";
 import { scoreModelPickerSearch } from "../webview/components/t3/modelPickerSearch.js";
 
 const model = { slug: "test", name: "Test", isCustom: false, capabilities: { optionDescriptors: [
@@ -12,6 +12,10 @@ test("Effort follows advertised defaults and explicit selections without inventi
   assert.equal(getProviderOptionCurrentValue(effortDescriptor(model, null)), "max");
   assert.equal(getProviderOptionCurrentValue(effortDescriptor(model, { instanceId: "provider", model: "test", options: [{ id: "effort", value: "high" }] })), "high");
   assert.equal(effortDescriptor({ ...model, capabilities: null }, null), undefined);
+});
+test("Effort labels mark only the advertised default", () => {
+  const labels = effortDescriptor(model, null)?.options.map(effortOptionLabel);
+  assert.deepEqual(labels, ["High", "Max (Default)"]);
 });
 test("Changing models preserves compatible explicit options and drops incompatible or cross-provider options", () => {
   const previous = { instanceId: "provider", model: "old", options: [{ id: "effort", value: "high" }, { id: "fastMode", value: true }, { id: "other", value: "discard" }] };

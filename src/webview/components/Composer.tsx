@@ -9,7 +9,7 @@ import { clearDraft, readDraftSelection, registerDraftTextEditor, rememberDraftS
 import { assistantQuoteLabel, assistantQuoteNumbers, contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, insertFileReference, removeContextReference, syncAssistantQuoteLabels, type FileReference } from "../../shared/composerContext";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
-import { effortDescriptor } from "../../shared/modelOptions";
+import { effortDescriptor, effortOptionLabel } from "../../shared/modelOptions";
 import { ModelPicker } from "./ModelPicker";
 import { detectComposerTrigger } from "../../shared/composerSuggestions";
 import { replaceTextRange } from "@t3tools/shared/composerTrigger";
@@ -337,7 +337,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         setText(body, "take-focus");
       }
       setBusy(true); void run("setModelOption", { ...target, optionId: effort.id, value: event.target.value }).finally(() => setBusy(false));
-    }}>{getProviderOptionCurrentValue(effort) === undefined ? <option value="" disabled>Default</option> : null}{effort.options.map((option) => <option key={option.id} value={option.id} title={option.description}>{option.label}</option>)}</select></label> : null}
+    }}>{getProviderOptionCurrentValue(effort) === undefined ? <option value="" disabled>Default</option> : null}{effort.options.map((option) => <option key={option.id} value={option.id} title={option.description}>{effortOptionLabel(option)}</option>)}</select></label> : null}
     <select aria-label="Permission mode" value={runtimeMode} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => { void run("setModes", { ...target, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes ?? ["approval-required", "auto", "full-access"]).map((mode) => <option key={mode} value={mode}>{runtimeLabels[mode]}</option>)}</select>
     <WorktreeSelector state={state} disabled={busy || state.sending || thread?.providerNativeSubagent === true} />
   </div>;

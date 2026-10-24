@@ -4,7 +4,7 @@ import { ArrowLeftIcon, ChevronDownIcon } from "lucide-react";
 import type { HostStateSnapshot, ModelSelection } from "../../shared/bridge";
 import type { ScheduledTask } from "@t3tools/contracts";
 import { newTaskModel, supportedSchedule, type ScheduledTaskEditorRequest, type ScheduledTaskView } from "../../shared/scheduledTasks";
-import { effortDescriptor } from "../../shared/modelOptions";
+import { effortDescriptor, effortOptionLabel } from "../../shared/modelOptions";
 import { ModelPicker } from "./ModelPicker";
 import { useActions } from "../actions";
 
@@ -71,7 +71,7 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
       {unavailable ? <small className="turn-error">Choose an available model before saving.</small> : null}</div>
       {effort && draft.modelSelection ? <label>{effort.label}<select aria-label="Task effort" value={String(effortValue)} onChange={(event) => patch({ modelSelection: { ...draft.modelSelection!, options: [...(draft.modelSelection?.options ?? []).filter((option) => option.id !== effort.id), { id: effort.id, value: event.target.value }] } })}>
         {!effortChoices.some((option) => option.id === effortValue) ? <option value={String(effortValue)}>Saved: {String(effortValue)}</option> : null}
-        {effortChoices.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+        {effortChoices.map((option) => <option key={option.id} value={option.id}>{effortOptionLabel(option)}</option>)}
       </select></label> : null}
       <label>Schedule<select aria-label="Task schedule" value={draft.scheduleType} disabled={draft.scheduleType === "unsupported"} onChange={(event) => patch({ scheduleType: event.target.value as "interval" | "fixed_time" })}>
         <option value="interval">Every interval</option><option value="fixed_time">At a time</option>{draft.scheduleType === "unsupported" ? <option value="unsupported">Newer schedule — edit in T3 Web</option> : null}

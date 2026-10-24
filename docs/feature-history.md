@@ -36,7 +36,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Math rendering and copying](#math-rendering-and-copying) | Renders KaTeX with scrolling, floating previews and copy actions. | v0.0.8 | v0.0.9 |
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
-| [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.2.2 |
+| [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.2.7 |
 | [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.2.3 |
 | [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.2.3 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
@@ -884,6 +884,12 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Replace browser-copy instructions with the extension's local model controls. Validation is recorded below before the removal commit.
 
 ### Effort and permission controls
+
+#### v0.2.7
+
+- Mark the effort level the server advertises as the model's default with "(Default)" in the composer's effort selector and the scheduled task editor, matching T3 Code's own picker. The marker comes from the descriptor's `isDefault` flag; nothing is inferred or hard-coded.
+- The tag also shows on the closed selector by owner choice: an open-list-only variant (a hook tracking native popup state) made the label jump when the list opened and was dropped.
+- Validation: typecheck clean; 469/469 unit tests pass on the merged tree (new: default-label test in `src/shared/modelOptions.test.ts`). Fresh-context Sonnet regression reviews of the change (against `5f6a63f`, and again of the merged candidate against `31296db`): APPROVE, no findings; it confirmed no script or test selects effort options by label text and option values are unchanged. Native/e2e verify scripts were checked statically, not run. Merged onto upstream 0.2.6 (`31296db`): only version, CHANGELOG and feature-history needed manual resolution.
 
 #### v0.2.2
 
