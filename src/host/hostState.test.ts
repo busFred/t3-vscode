@@ -389,6 +389,25 @@ test("An older history response preserves newer live text while the page is in f
   assert.equal(host.snapshot().history.loading, false);
 });
 
+test("Loaded history survives a reconnect and unchanged transcript rows keep their identity", async (t) => {
+  const { host, client } = await harness(); t.after(() => host.dispose());
+  const recent = message("recent", "latest window", 1);
+  client.threadHandlers.get(v2ThreadShell.id)!({ kind: "snapshot", snapshotSequence: 1, projection: { ...v2Projection, turnItems: [recent], visibleTurnItems: [projected(recent, 0)] }, historyCursor: "older-page", hasMoreHistory: true });
+  client.getHistory = async () => ({ snapshotSequence: 1, items: [projected(message("old", "earlier message"), 0)], nextCursor: "oldest-page", hasMoreHistory: true });
+  await host.loadHistory(v2ThreadShell.id);
+  const before = host.snapshot().transcript;
+  assert.deepEqual(before.map((row) => row.sourceItemId), ["old", "recent"]);
+  assert.equal(host.snapshot().transcript[0], before[0]);
+  const ready = waitFor(host, (state) => state.phase === "ready" && client.connections === 2 && state.transcript.length > 0);
+  client.connected = false; client.onClose?.(); await ready;
+  assert.deepEqual(host.snapshot().transcript.map((row) => row.sourceItemId), ["old", "recent"]);
+  assert.equal(host.snapshot().history.hasMore, true);
+  let cursor: string | undefined;
+  client.getHistory = async (_id, next) => { cursor = next; return { snapshotSequence: 1, items: [], nextCursor: null, hasMoreHistory: false }; };
+  await host.loadHistory(v2ThreadShell.id);
+  assert.equal(cursor, "oldest-page");
+});
+
 test("Approvals validate pending and resumable state before dispatching a response", async (t) => {
   const { host, client } = await harness(); t.after(() => host.dispose());
   const handler = client.threadHandlers.get(v2ThreadShell.id)!;

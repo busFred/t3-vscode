@@ -14,12 +14,15 @@ import { readFile, stat } from "node:fs/promises";
 import { basename } from "node:path";
 import { PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
 import { searchPreferencePatch } from "../shared/sessionSearchPresentation.js";
+import { TranscriptEncoder, type WireState } from "../shared/transcriptWire.js";
 
 export class WebviewRegistry {
   private readonly webviews = new Map<string, vscode.Webview>();
   private readonly chatViews = new Set<string>();
   private readonly ready = new Set<string>();
   private readonly pending = new Map<string, Array<{ event: BridgeEvent; data: unknown }>>();
+  /** Keyed by webview, not view id: a view re-resolved under the same id gets a fresh webview and a late reply for the old one must not advance it. */
+  private readonly encoders = new WeakMap<vscode.Webview, TranscriptEncoder>();
   private focused = SIDEBAR_VIEW_ID;
   private readonly focusListeners = new Set<() => void>();
   get focusedViewId(): string { return this.chatViews.has(this.focused) ? this.focused : SIDEBAR_VIEW_ID; }
@@ -39,8 +42,15 @@ export class WebviewRegistry {
   }
   pushStates(stateForView: (viewId: string) => HostStateSnapshot): void {
     for (const [viewId, webview] of this.webviews) {
-      void webview.postMessage({ event: Events.stateChanged, data: stateForView(viewId) });
+      void webview.postMessage({ event: Events.stateChanged, data: this.encodeState(webview, stateForView(viewId)) });
     }
+  }
+  /** Call immediately before posting, so each webview decodes states in the order they were encoded. */
+  encodeState(webview: vscode.Webview, state: HostStateSnapshot, whole = false): WireState {
+    let encoder = this.encoders.get(webview);
+    if (!encoder) this.encoders.set(webview, encoder = new TranscriptEncoder());
+    if (whole) encoder.reset();
+    return encoder.encode(state);
   }
 }
 export class BridgeHandler {
@@ -75,23 +85,25 @@ export class BridgeHandler {
     }
     if (action === "delete" && !await this.prompts.confirmDelete(thread.title)) return;
     // A native prompt may stay open after its originating chat tab has closed.
-    this.hostState.snapshot(viewId);
+    this.hostState.assertView(viewId);
     await this.hostState.threadAction(id, action, title);
   }
   attach(webview: vscode.Webview, viewId: string): void {
     webview.onDidReceiveMessage((raw: unknown) => {
-      void this.handle(raw, viewId).then(async (result) => {
-        await webview.postMessage(result);
+      void this.handle(raw, viewId).then(async (handled) => {
+        const { state, ...result } = handled;
+        // A (re)loaded webview starts with getState and holds no rows yet.
+        await webview.postMessage(state ? { ...result, result: this.registry.encodeState(webview, state, isObject(raw) && raw.method === "getState") } : result);
         if (!result.error && isObject(raw) && raw.method === "getState") this.registry.markReady(viewId);
       });
     });
   }
-  private async handle(raw: unknown, viewId: string): Promise<RpcResult> {
+  private async handle(raw: unknown, viewId: string): Promise<RpcResult & { readonly state?: HostStateSnapshot }> {
     const message = validateRpcMessage(raw);
     if (!message) return { id: isObject(raw) && typeof raw.id === "string" ? raw.id : "", error: "Invalid bridge request." };
     try {
       // Identity is captured by the host, never supplied by a renderer.
-      this.hostState.snapshot(viewId);
+      this.hostState.assertView(viewId);
       const params = message.params === undefined ? {} : paramsObject(message.params);
       const id = () => stringParam(params, "threadId");
       switch (message.method) {
@@ -353,7 +365,7 @@ export class BridgeHandler {
         }
         case "openLink": await this.openLink(stringParam(params, "href"), typeof params.threadId === "string" ? params.threadId : this.hostState.snapshot(viewId).activeThreadId ?? undefined); break;
       }
-      return { id: message.id, result: this.hostState.snapshot(viewId) };
+      return { id: message.id, state: this.hostState.snapshot(viewId) };
     } catch (cause) { return { id: message.id, error: cause instanceof Error ? cause.message : String(cause) }; }
   }
   /** A restore target is either the hovered user message, or (from a rewind marker) a checkpoint remembered directly. */

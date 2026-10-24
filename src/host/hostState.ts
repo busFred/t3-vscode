@@ -41,6 +41,7 @@ import { hasCompleteProviderWorkspaceSnapshot } from "@t3tools/client-runtime/pr
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import { withSubagentWorkingState, statusIsWorking } from "../shared/sessionTree.js";
 import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import { indexBy } from "./projectionIndex.js";
 import { turnCheckpointRange, turnDiffFiles, turnDiffFileRequest, type TurnDiff, type TurnDiffFile } from "./turnDiff.js";
 import { attachMergesToTurns, extractFilePatch, type MergeRecord } from "./mergeRecords.js";
 import { conversationActivity } from "./conversationActivity.js";
@@ -170,8 +171,11 @@ export class HostState {
   private readonly uploads = new Map<string, { attachment: ChatAttachment; environmentId: string; owners: Set<string>; sent: boolean }>();
   private revision = 0;
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
+  private emitting: Map<string, HostStateSnapshot> | null = null;
+  private readonly retainedHistory = new Map<string, { projection: OrchestrationV2ThreadProjection; history: ThreadHistoryMeta }>();
   private readonly listeners = new Map<(state: HostStateSnapshot) => void, string>();
   private readonly encodedItems = new WeakMap<OrchestrationV2TurnItem, Omit<TranscriptItem, "key" | "sourceThreadId">>();
+  private readonly transcriptRows = new WeakMap<TranscriptItem["item"], TranscriptItem>();
   private readonly projectQuestionHistory = createQuestionHistoryProjector();
   private readonly pathIdentities = new Map<string, string>();
   private readonly workspaceRefreshes = new Map<string, Promise<unknown>>();
@@ -293,6 +297,8 @@ export class HostState {
     this.emptyThreads.delete(id); this.shell = await this.client.snapshotShell();
     await this.reconcileViews();
   }
+  /** Throws for a closed tab without building its (possibly large) snapshot. */
+  assertView(viewId: string): void { this.requireView(viewId); }
   private requireView(viewId: string): ViewState {
     const view = this.views.get(viewId);
     if (!view) throw new Error("This conversation tab has been closed.");
@@ -481,6 +487,7 @@ export class HostState {
     this.scheduledTasks = []; this.scheduledTasksLoading = true; this.scheduledTaskError = undefined;
     const shell = this.shellSubscription; const archive = this.archiveSubscription;
     const threads = [...this.threads.values()]; this.threads.clear();
+    for (const state of threads) this.retainHistory(state);
     this.archiveSubscription = null;
     this.shellSubscription = null;
     await shell?.();
@@ -497,6 +504,7 @@ export class HostState {
       this.shell = null; this.archive = null;
       this.repositoryIdentities.clear();
       for (const view of this.views.values()) { delete view.workspaceChoice; Object.assign(view, blankView()); }
+      this.retainedHistory.clear();
     }
     this.server = discovered.server;
     try {
@@ -712,10 +720,12 @@ export class HostState {
     const watched = new Set([...this.watchedSessions.values()].flatMap((ids) => [...ids]));
     const selected = new Set<string>(this.client.connected
       ? [...[...this.views.values()].map((view) => view.activeThreadId), ...watched].map((id) => this.findThread(id)?.id).filter((id) => id !== undefined) : []);
+    // History kept across a reconnect is only for conversations that are open again.
+    if (this.client.connected) for (const id of this.retainedHistory.keys()) if (!selected.has(id)) this.retainedHistory.delete(id);
     for (const [id, state] of this.threads) {
       if (selected.has(id)) continue;
       // Delete first so callbacks and history responses in flight cannot revive this projection.
-      this.threads.delete(id); await state.subscription?.();
+      this.threads.delete(id); this.retainedHistory.delete(id); await state.subscription?.();
     }
     for (const id of selected) {
       const open = [...this.views.values()].some((view) => view.activeThreadId === id);
@@ -724,6 +734,7 @@ export class HostState {
       // Only a remote stream that ended with its connection is resumed; local subscriptions are never duplicated.
       if (previous && (previous.subscription || !this.remoteThread(id))) continue;
       if (!this.remoteConnected(id)) continue;
+      if (previous) this.retainHistory(previous);
       const state: ThreadState = previous ? { ...blankThread(), projection: previous.projection } : blankThread(); this.threads.set(id, state);
       try {
         const subscription = await this.client.subscribeThread(id, (item) => {
@@ -739,11 +750,25 @@ export class HostState {
       }
     }
   }
+  /** Earlier pages a user loaded survive a resubscribe; the new snapshot carries only the latest window. */
+  private retainHistory(state: ThreadState): void {
+    if (state.projection && state.history.expanded) this.retainedHistory.set(state.projection.thread.id, { projection: state.projection, history: state.history });
+  }
   private handleThread(state: ThreadState, item: OrchestrationV2ThreadStreamItem): void {
     if (item.kind === "snapshot") {
+      const id = item.projection.thread.id;
+      const loaded = state.history.expanded && state.projection ? { projection: state.projection, history: state.history } : this.retainedHistory.get(id);
+      this.retainedHistory.delete(id);
       state.projection = item.projection; state.sequence = item.snapshotSequence; state.loading = false;
       state.history = { ...EMPTY_THREAD_HISTORY_META, historyCursor: item.historyCursor ?? null,
         hasMoreHistory: item.hasMoreHistory ?? false, latestLocalTurnOrdinal: item.latestLocalTurnOrdinal ?? null };
+      const first = item.projection.visibleTurnItems[0];
+      const overlap = first && state.history.hasMoreHistory && loaded ? loaded.projection.visibleTurnItems.findIndex((row) => row.sourceThreadId === first.sourceThreadId && row.sourceItemId === first.sourceItemId) : -1;
+      // Only a contiguous window can be stitched; otherwise "Load earlier" starts again from the snapshot's cursor.
+      if (loaded && overlap > 0) {
+        state.projection = mergeOlderHistoryIntoProjection(state.projection, loaded.projection.visibleTurnItems.slice(0, overlap));
+        state.history = { ...state.history, historyCursor: loaded.history.historyCursor, hasMoreHistory: loaded.history.hasMoreHistory, expanded: true };
+      }
     } else if (item.kind === "event" && item.sequence > state.sequence) {
       state.projection = applyOrchestrationV2ProjectionEvent(state.projection, item.event, {
         partialTimeline: state.history.hasMoreHistory || state.history.expanded,
@@ -1331,14 +1356,15 @@ export class HostState {
       await this.reconcileViews();
     });
   }
-  private canForkRow(projection: OrchestrationV2ThreadProjection, row: OrchestrationV2ThreadProjection["visibleTurnItems"][number]): boolean {
+  /** `threads` lets a whole-transcript pass resolve visible threads once instead of per row. */
+  private canForkRow(projection: OrchestrationV2ThreadProjection, row: OrchestrationV2ThreadProjection["visibleTurnItems"][number], threads?: ReadonlyMap<string, OrchestrationV2ThreadShell>): boolean {
     if (row.item.type !== "assistant_message" || row.item.runId === null || row.item.status !== "completed") return false;
-    const run = projection.runs.find(run => run.id === row.item.runId);
-    if (run && !["completed", "failed", "cancelled", "interrupted", "rolled_back"].includes(run.status) || this.findThread(row.sourceThreadId)?.activeRunId === row.item.runId) return false;
-    const last = projection.visibleTurnItems.findLast(item => item.sourceThreadId === row.sourceThreadId && item.item.runId === row.item.runId && item.item.type === "assistant_message");
+    const run = indexBy(projection.runs, "id", (run) => run.id as string).get(row.item.runId);
+    if (run && !["completed", "failed", "cancelled", "interrupted", "rolled_back"].includes(run.status) || (threads ? threads.get(row.sourceThreadId) : this.findThread(row.sourceThreadId))?.activeRunId === row.item.runId) return false;
+    const last = indexBy(projection.visibleTurnItems, "lastAssistantOfRun", (item) => item.item.type === "assistant_message" ? `${item.sourceThreadId}\0${item.item.runId}` : null, true).get(`${row.sourceThreadId}\0${row.item.runId}`);
     if (last && last.sourceItemId !== row.sourceItemId) return false;
-    const providerThread = projection.providerThreads.find((thread) => thread.id === row.item.providerThreadId);
-    const session = projection.providerSessions.find((session) => session.id === providerThread?.providerSessionId);
+    const providerThread = row.item.providerThreadId ? indexBy(projection.providerThreads, "id", (thread) => thread.id as string).get(row.item.providerThreadId) : undefined;
+    const session = providerThread?.providerSessionId ? indexBy(projection.providerSessions, "id", (session) => session.id as string).get(providerThread.providerSessionId) : undefined;
     return canForkProjectedAssistantItem({ projectedItem: row, capabilities: session?.capabilities });
   }
   forkFromResponse(id: string, sourceThreadId: string, itemId: string, viewId = SIDEBAR_VIEW_ID): Promise<string> {
@@ -1361,12 +1387,12 @@ export class HostState {
   private revertTarget(projection: OrchestrationV2ThreadProjection, row: OrchestrationV2ThreadProjection["visibleTurnItems"][number]): { checkpoint: OrchestrationV2Checkpoint; turnNumber?: number } | null {
     const item = row.item;
     if (item.type !== "user_message") return null;
-    const run = projection.runs.find((run) => run.userMessageId === item.messageId);
-    const after = run ? projection.visibleTurnItems.find((entry) => entry.item.type === "checkpoint" && entry.item.runId === run.id) : undefined;
+    const run = indexBy(projection.runs, "userMessageId", (run) => run.userMessageId as string | null).get(item.messageId);
+    const after = run ? indexBy(projection.visibleTurnItems, "checkpointOfRun", (entry) => entry.item.type === "checkpoint" ? entry.item.runId as string | null : null).get(run.id) : undefined;
     if (after?.item.type !== "checkpoint") return null;
     let range: ReturnType<typeof turnCheckpointRange>;
     try { range = turnCheckpointRange(projection, after.item.checkpointId); } catch { return null; }
-    const checkpoint = projection.checkpoints.find((entry) => entry.ref === range.baseRef);
+    const checkpoint = indexBy(projection.checkpoints, "ref", (entry) => entry.ref as string).get(range.baseRef);
     if (!checkpoint || checkpoint.status !== "ready") return null;
     return { checkpoint, ...(range.turnNumber !== undefined ? { turnNumber: range.turnNumber } : {}) };
   }
@@ -1380,10 +1406,10 @@ export class HostState {
     return !!session?.capabilities.checkpointing.providerCanRollbackConversation;
   }
   /** `revertTurnCount` gates "Restore files" (checkpoint-only); `canRevert` additionally gates "Edit from here" (needs rollback support and no active run). */
-  private transcriptRevertFields(projection: OrchestrationV2ThreadProjection, row: OrchestrationV2ThreadProjection["visibleTurnItems"][number], threadId: string | undefined): { canRevert?: boolean; revertTurnCount?: number } {
+  private transcriptRevertFields(projection: OrchestrationV2ThreadProjection, row: OrchestrationV2ThreadProjection["visibleTurnItems"][number], threadId: string | undefined, threads?: ReadonlyMap<string, OrchestrationV2ThreadShell>): { canRevert?: boolean; revertTurnCount?: number } {
     const target = this.revertTarget(projection, row);
     if (!target) return {};
-    const canRevert = !!threadId && !this.findThread(threadId)?.activeRunId && this.providerSupportsRollback(projection);
+    const canRevert = !!threadId && !(threads ? threads.get(threadId) : this.findThread(threadId))?.activeRunId && this.providerSupportsRollback(projection);
     return { ...(canRevert ? { canRevert: true } : {}), ...(target.turnNumber !== undefined ? { revertTurnCount: target.turnNumber } : {}) };
   }
   /** Rewind marker and most recent restore result for the active thread, clearing a marker once a later turn completes. */
@@ -1741,14 +1767,28 @@ export class HostState {
       output: turnItemOutputText(item), needsDetail: turnItemNeedsDetailFetch(item) };
     this.encodedItems.set(item, result); return result;
   }
+  /** Reuses the previous row object when nothing in it changed, so the bridge can send only changed rows. */
+  private stableRow(row: TranscriptItem): TranscriptItem {
+    const previous = this.transcriptRows.get(row.item);
+    if (previous && (Object.keys(row) as Array<keyof TranscriptItem>).every((key) => previous[key] === row[key]) && Object.keys(previous).length === Object.keys(row).length) return previous;
+    this.transcriptRows.set(row.item, row); return row;
+  }
   snapshot(viewId = SIDEBAR_VIEW_ID): HostStateSnapshot {
+    // Listeners of one emit (bridge push, tab titles, status bar) share each view's snapshot.
+    const cached = this.emitting?.get(viewId);
+    if (cached) return cached;
+    const state = this.buildSnapshot(viewId);
+    this.emitting?.set(viewId, state); return state;
+  }
+  private buildSnapshot(viewId: string): HostStateSnapshot {
     const view = this.requireView(viewId);
     const activeThreadId = this.findThread(view.activeThreadId)?.id;
     const state = activeThreadId ? this.threads.get(activeThreadId) : undefined;
     const projection = state?.projection;
     const descriptor = this.server?.descriptor;
     const threads = this.visibleThreads();
-    const visibleThreadIds = new Set(threads.map((thread) => thread.id));
+    const threadById = new Map<string, OrchestrationV2ThreadShell>(threads.map((thread) => [thread.id, thread]));
+    const visibleThreadIds = new Set(threadById.keys());
     const subagentActivity = this.subagentActivity();
     const accepted = activeThreadId ? this.acceptedMessages.get(activeThreadId) : undefined;
     const acceptedRun = accepted ? projection?.runs.find(run => run.userMessageId === accepted.messageId) : undefined;
@@ -1837,12 +1877,12 @@ export class HostState {
       contextUsage: latestContextUsage(projection),
       transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => {
         const source = this.threads.get(row.sourceThreadId)?.projection ?? projection;
-        const status = row.item.type === "checkpoint" ? source.runs.find(run => run.id === row.item.runId)?.status : undefined;
-        return { key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId,
-          ...this.presentItem(row.item), canFork: visibleThreadIds.has(row.sourceThreadId) && this.canForkRow(projection, row),
+        const status = row.item.type === "checkpoint" && row.item.runId ? indexBy(source.runs, "id", (run) => run.id as string).get(row.item.runId)?.status : undefined;
+        return this.stableRow({ key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId,
+          ...this.presentItem(row.item), canFork: visibleThreadIds.has(row.sourceThreadId) && this.canForkRow(projection, row, threadById),
           ...(status ? { checkpointRunStatus: status } : {}),
-          ...this.transcriptRevertFields(projection, row, activeThreadId),
-        };
+          ...this.transcriptRevertFields(projection, row, activeThreadId, threadById),
+        });
       }) : [],
       pending: projection ? { ...derivePendingThreadRequests(projection), secrets: derivePendingSecretRequests(projection.visibleTurnItems) } : { approvals: [], userInputs: [], secrets: [] },
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
@@ -1964,7 +2004,9 @@ export class HostState {
   private emit(): void {
     if (this.disposed) return;
     this.revision += 1;
-    for (const [listener, viewId] of this.listeners) listener(this.snapshot(viewId));
+    const outer = this.emitting; this.emitting = new Map();
+    try { for (const [listener, viewId] of this.listeners) listener(this.snapshot(viewId)); }
+    finally { this.emitting = outer; }
   }
   async dispose(): Promise<void> {
     if (this.worktreeRefreshTimer) clearTimeout(this.worktreeRefreshTimer);

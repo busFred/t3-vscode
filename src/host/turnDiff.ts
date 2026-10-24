@@ -2,6 +2,7 @@
 import type { OrchestrationV2ThreadProjection, ReviewDiffFileContentsInput } from "@t3tools/contracts";
 import { parsePatchFiles } from "@pierre/diffs";
 import { unquoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
+import { indexBy } from "./projectionIndex.js";
 
 export interface TurnDiffFile {
   readonly additions: number;
@@ -22,15 +23,16 @@ export interface TurnDiff {
   readonly files: ReadonlyArray<TurnDiffFile>;
 }
 export function turnCheckpointRange(projection: OrchestrationV2ThreadProjection, checkpointId: string): Omit<TurnDiff, "files"> {
-  const checkpoint = projection.checkpoints.find((checkpoint) => checkpoint.id === checkpointId);
-  const run = projection.runs.find((run) => run.id === checkpoint?.runId);
+  const checkpoints = indexBy(projection.checkpoints, "id", (entry) => entry.id as string);
+  const checkpoint = checkpoints.get(checkpointId);
+  const run = checkpoint?.runId ? indexBy(projection.runs, "id", (run) => run.id as string).get(checkpoint.runId) : undefined;
   if (!checkpoint || checkpoint.status !== "ready" || checkpoint.appRunOrdinal === null || run?.status !== "completed") throw new Error("This turn's checkpoint is not ready for a diff.");
-  const scope = projection.checkpointScopes.find((scope) => scope.id === checkpoint.scopeId);
+  const scope = indexBy(projection.checkpointScopes, "id", (scope) => scope.id as string).get(checkpoint.scopeId);
   // A cancelled run can materialize a baseline without an app run number.
   // Follow the saved parent; older projections use the preceding scope ordinal.
   const previous = checkpoint.parentCheckpointId !== null
-    ? projection.checkpoints.find((entry) => entry.id === checkpoint.parentCheckpointId)
-    : projection.checkpoints.find((entry) => entry.scopeId === checkpoint.scopeId && entry.ordinalWithinScope === checkpoint.ordinalWithinScope - 1);
+    ? checkpoints.get(checkpoint.parentCheckpointId)
+    : indexBy(projection.checkpoints, "scopeOrdinal", (entry) => `${entry.scopeId}\0${entry.ordinalWithinScope}`).get(`${checkpoint.scopeId}\0${checkpoint.ordinalWithinScope - 1}`);
   if (!scope || !previous || previous.status !== "ready" || previous.scopeId !== checkpoint.scopeId || previous.ordinalWithinScope >= checkpoint.ordinalWithinScope) throw new Error("The previous turn's saved checkpoint is unavailable.");
   return { threadId: projection.thread.id, title: projection.thread.title, turnNumber: checkpoint.appRunOrdinal, cwd: scope.cwd, baseRef: previous.ref, headRef: checkpoint.ref };
 }

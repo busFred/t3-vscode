@@ -88,6 +88,7 @@ test("Bridge replies and state pushes are scoped to each originating webview", a
     assert.equal(message.data.activeThreadId, host.snapshot(id).activeThreadId);
     assert.deepEqual(message.data.transcript, host.snapshot(id).transcript);
     assert.equal(message.data.projects.length, 1);
+    assert.equal(view.incomplete, 0);
   }
   assert.equal(host.snapshot("tab-one").draft.interactionMode, "plan");
   assert.equal(host.snapshot("tab-two").draft.interactionMode, "default");
@@ -101,4 +102,15 @@ test("Bridge replies and state pushes are scoped to each originating webview", a
   await assert.rejects(second.request("selectThread", { threadId: "outside-thread" }), /current workspace/);
   registry.remove("tab-one"); await host.removeView("tab-one");
   await assert.rejects(first.request("newThread"), /tab has been closed/);
+});
+
+test("A view re-resolved under the same id starts whole; replies encoded for its old webview cannot advance the new one", async (t) => {
+  const { host } = await viewsHarness(); t.after(() => host.dispose());
+  const registry = new WebviewRegistry(), old = new FakeWebview(), current = new FakeWebview();
+  registry.add(SIDEBAR_VIEW_ID, old.webview);
+  assert.ok("transcript" in registry.encodeState(old.webview, host.snapshot()));
+  registry.add(SIDEBAR_VIEW_ID, current.webview);
+  assert.ok("transcript" in registry.encodeState(current.webview, host.snapshot()));
+  assert.ok("transcriptPatch" in registry.encodeState(old.webview, host.snapshot()));
+  assert.ok("transcriptPatch" in registry.encodeState(current.webview, host.snapshot()));
 });

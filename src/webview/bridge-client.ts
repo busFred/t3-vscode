@@ -5,6 +5,7 @@
  */
 
 import { Events, Methods, type BridgeEvent, type RpcMethod, type RpcResult } from "../shared/bridge";
+import { isWireState, TranscriptDecoder, type WireState } from "../shared/transcriptWire";
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -26,6 +27,8 @@ class Bridge {
     { resolve: (value: unknown) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }
   >();
   private readonly eventHandlers = new Map<string, Set<(data: unknown) => void>>();
+  private readonly transcript = new TranscriptDecoder();
+  private resyncing = false;
 
   constructor() {
     window.addEventListener("message", this.handleMessage);
@@ -39,7 +42,12 @@ class Bridge {
       // Child graphics are never bridge senders, including same-origin fixtures.
       if ([...document.querySelectorAll("iframe")].some((frame) => frame.contentWindow === event.source)) return;
     }
-    const msg = event.data as RpcResult & { event?: BridgeEvent; data?: unknown };
+    let msg = event.data as RpcResult & { event?: BridgeEvent; data?: unknown };
+    // Decoded on arrival, including late or ignored replies, so the row cache mirrors the host's.
+    if (msg && typeof msg === "object") {
+      if (isWireState(msg.result)) msg = { ...msg, result: this.decodeState(msg.result) };
+      else if (isWireState(msg.data)) msg = { ...msg, data: this.decodeState(msg.data) };
+    }
     if (msg && typeof msg === "object" && typeof msg.id === "string" && this.pending.has(msg.id)) {
       const entry = this.pending.get(msg.id)!;
       this.pending.delete(msg.id);
@@ -71,6 +79,17 @@ class Bridge {
       });
       api.postMessage({ id, method, params } as { id: string; method: string; params?: unknown });
     });
+  }
+
+  private decodeState(wire: WireState) {
+    const { state, complete } = this.transcript.decode(wire);
+    if (!complete && !this.resyncing) {
+      // getState makes the host send every row again.
+      this.resyncing = true;
+      void this.request(Methods.getState).then((whole) => this.eventHandlers.get(Events.stateChanged)?.forEach((handler) => handler(whole)), () => undefined)
+        .finally(() => { this.resyncing = false; });
+    }
+    return state;
   }
 
   on(event: BridgeEvent, handler: (data: unknown) => void): () => void {
