@@ -540,6 +540,18 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .math-context-menu button { display: block; width: 100%; padding: 5px 8px; border: 0; background: transparent; color: inherit; text-align: left; }
 .math-context-menu button:hover, .math-context-menu button:focus { background: var(--vscode-menu-selectionBackground, var(--sidebar-row-active)); color: var(--vscode-menu-selectionForeground, var(--foreground)); }
 .visual-expanded-content { width: min(900px, 100%); }
+.visual-expanded-content.image-viewer { display: flex; flex-direction: column; width: min(1200px, 100%); height: min(90vh, 100%); padding: 0; overflow: hidden; }
+.image-viewer-tools { display: flex; align-items: center; gap: 3px; flex: none; min-height: 35px; padding: 3px 38px 3px 6px; border-bottom: 1px solid var(--border); }
+.image-viewer-tools .icon-button { color: var(--foreground); }
+.image-viewer-tools .icon-button:disabled { opacity: 0.4; }
+.image-zoom-label { min-width: 4ch; text-align: center; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--foreground); }
+.image-copy-status { margin-left: 6px; font-size: 11px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.image-copy-status.failed { color: var(--destructive); }
+.image-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; background: var(--card); }
+.image-stage.pannable { cursor: grab; }
+.image-stage.dragging { cursor: grabbing; }
+.image-stage > img { position: absolute; left: 50%; top: 50%; max-width: none; max-height: none; user-select: none; -webkit-user-drag: none; visibility: hidden; }
+.image-stage > img.ready { visibility: visible; }
 
 /* Attachments use the same compact thumbnails in drafts and sent messages. */
 /* One wrapping row of uniform chips for everything attached to or referenced by the draft. */
