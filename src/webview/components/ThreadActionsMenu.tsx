@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArchiveIcon, PencilIcon, PinIcon, Trash2Icon, CheckIcon, RotateCcwIcon } from "lucide-react";
+import { ArchiveIcon, PencilIcon, PinIcon, Trash2Icon, CheckIcon, RotateCcwIcon, WandSparklesIcon } from "lucide-react";
 import type { ThreadSummary } from "../../shared/bridge";
 import { useActions } from "../actions";
 
@@ -33,6 +33,7 @@ export function ThreadActionsMenu({ thread, position, onClose }: { readonly thre
     if (next !== null) { event.preventDefault(); buttons[next]?.focus(); }
   }}>
     <button role="menuitem" onClick={() => choose("rename")}><PencilIcon size={14} />Rename thread</button>
+    {thread.canRegenerateTitle ? <button role="menuitem" onClick={() => choose(thread.titleRegenerating ? "stop-title-regeneration" : "regenerate-title")}><WandSparklesIcon size={14} />{thread.titleRegenerating ? "Stop regenerating title" : "Regenerate title"}</button> : null}
     <button role="menuitem" onClick={() => choose(thread.pinned ? "unpin" : "pin")}><PinIcon size={14} />{thread.pinned ? "Unpin" : "Pin"} thread</button>
     {!thread.archived ? <button role="menuitem" disabled={!thread.settled && Boolean(thread.activeRunId)} onClick={() => choose(thread.settled ? "unsettle" : "settle")}>{thread.settled ? <RotateCcwIcon size={14} /> : <CheckIcon size={14} />}{thread.settled ? "Un-settle" : "Settle"} thread</button> : null}
     <button role="menuitem" disabled={!thread.archived && Boolean(thread.activeRunId)} onClick={() => choose(thread.archived ? "unarchive" : "archive")}><ArchiveIcon size={14} />{thread.archived ? "Restore" : "Archive"} thread</button>

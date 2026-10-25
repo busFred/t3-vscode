@@ -68,7 +68,7 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> | null }
+export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment">> | null }
   // Remote environments: assets and attachments live on the server that owns the conversation.
   & { createAssetUrl(resource: AssetResource, threadId?: string): ReturnType<T3Client["createAssetUrl"]>;
     uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array, environmentId?: string): ReturnType<T3Client["uploadAttachment"]>;
@@ -327,6 +327,8 @@ export class HostState {
     if (remote) throw new Error(`${action} is not available for sessions on ${remote.label} yet.`);
   }
   private configForThread(id: string | undefined) { return this.client.configForThread ? this.client.configForThread(id) : this.client.config; }
+  /** Older servers omit the capability, so the action stays hidden rather than failing. */
+  private canRegenerateTitle(id: string): boolean { return this.configForThread(id)?.environment?.capabilities?.threadTitleRegeneration === true; }
   async restoreComposerDraft(threadId: string, viewId = SIDEBAR_VIEW_ID): Promise<{ draft: ViewDraft; selection?: TextSelection | undefined }> {
     this.requireView(viewId);
     if (!this.client.connected || !this.server) throw new Error("Reconnect to T3 to recover this draft.");
@@ -1351,6 +1353,12 @@ export class HostState {
       if (action === "rename") {
         if (!title?.trim()) throw new Error("Enter a thread title.");
         await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, title });
+      } else if (action === "regenerate-title" || action === "stop-title-regeneration") {
+        // T3 generates the title asynchronously, as for a first message; the shell's marker reports it until the title lands.
+        if (!this.canRegenerateTitle(id)) throw new Error("This T3 server cannot regenerate titles. Update T3 Code, then retry.");
+        const thread = this.requireThread(id);
+        if (thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") throw new Error("This subagent conversation is controlled by its provider.");
+        await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, regenerateTitle: action === "regenerate-title" });
       } else if (["archive", "unarchive", "pin", "unpin", "delete", "settle", "unsettle"].includes(action)) {
         await this.client.dispatch({ type: `thread.${action}`, commandId: randomUUID(), threadId: id, ...(action === "unsettle" ? { reason: "user" } : {}) });
       } else throw new Error("Unknown thread action.");
@@ -1846,6 +1854,9 @@ export class HostState {
           modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
           updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
           lastActiveAt: sessionActivityAt(thread),
+          // A provider-run subagent's conversation is the provider's, like sending to it.
+          ...(!(thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") && this.canRegenerateTitle(thread.id) ? { canRegenerateTitle: true } : {}),
+          ...(thread.titleRegeneration ? { titleRegenerating: true } : {}),
           activeRunId: thread.activeRunId,
           workingStartedAt: thread.activityRunStartedAt !== undefined
             ? (thread.activityRunStartedAt ? DateTime.formatIso(thread.activityRunStartedAt) : null)

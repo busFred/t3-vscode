@@ -138,6 +138,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (!thread || !hostState) return;
       const choice = await vscode.window.showQuickPick([
         { label: "$(edit) Rename thread", action: "rename" },
+        ...(thread.canRegenerateTitle ? [{ label: thread.titleRegenerating ? "$(sparkle) Stop regenerating title" : "$(sparkle) Regenerate title", action: thread.titleRegenerating ? "stop-title-regeneration" : "regenerate-title" }] : []),
         { label: thread.pinned ? "$(pinned) Unpin thread" : "$(pin) Pin thread", action: thread.pinned ? "unpin" : "pin" },
         ...(!thread.archived ? [{ label: thread.settled ? "$(debug-restart) Unsettle thread" : "$(check) Settle thread", action: thread.settled ? "unsettle" : "settle" }] : []),
         { label: thread.archived ? "$(archive) Restore thread" : "$(archive) Archive thread", action: thread.archived ? "unarchive" : "archive" },

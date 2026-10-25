@@ -353,6 +353,7 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .thread.active .thread-branch { color: inherit; opacity: .8; }
 .thread-title-line, .thread-meta { display: flex; align-items: center; min-width: 0; gap: 6px; }
 .thread-title-line .thread-title, .thread-meta > small { flex: 1; min-width: 0; }
+.thread-retitling { display: inline-flex; flex: none; color: var(--muted-foreground); }
 /* Line two keeps its height with or without a badge: rows that resize as runs start and stop are worse than the space. */
 .thread-meta { font-size: .625rem; line-height: 1.2; min-height: max(13px, 1.3em); }
 .thread-branch { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

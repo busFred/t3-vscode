@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProviderInstanceId, ProviderDriverKind, ThreadId, ProjectId, TurnItemId, EventId, RuntimeRequestId, NodeId, ProviderSessionId, type OrchestrationV2ThreadStreamItem, type OrchestrationV2TurnItem, type OrchestrationV2ProjectedTurnItem, type OrchestrationV2RuntimeRequest } from "@t3tools/contracts";
+import { CommandId, ProviderInstanceId, ProviderDriverKind, ThreadId, ProjectId, TurnItemId, EventId, RuntimeRequestId, NodeId, ProviderSessionId, type OrchestrationV2ThreadStreamItem, type OrchestrationV2TurnItem, type OrchestrationV2ProjectedTurnItem, type OrchestrationV2RuntimeRequest } from "@t3tools/contracts";
 import { v2Now, v2Project, v2ThreadShell, v2Projection } from "../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 import { HostState, type HostTransport } from "./hostState.js";
 import { FakeTransport, provider, server, credentials, harness } from "./testing/fakeTransport.js";
@@ -312,6 +312,26 @@ test("Automatic reconnect recreates shell and thread subscriptions", async (t) =
   client.connected = false; client.onClose?.(); await ready;
   assert.equal(client.shellStarts, 2); assert.ok(client.threadStops >= 1);
 });
+test("Regenerate title is offered only by capable servers and reports T3's in-flight marker", async (t) => {
+  const { host, client } = await harness(); t.after(() => host.dispose());
+  assert.equal(host.snapshot().threads[0]!.canRegenerateTitle, undefined);
+  await assert.rejects(host.threadAction(v2ThreadShell.id, "regenerate-title"), /cannot regenerate titles/);
+  assert.equal(client.commands.some((command) => command.type === "thread.metadata.update"), false);
+  client.config = { ...client.config, environment: { capabilities: { threadTitleRegeneration: true } } as NonNullable<typeof client.config.environment> };
+  assert.equal(host.snapshot().threads[0]!.canRegenerateTitle, true);
+  await host.threadAction(v2ThreadShell.id, "regenerate-title");
+  assert.deepEqual(client.commands.filter((command) => command.type === "thread.metadata.update").map((command) => ({ threadId: command.threadId, regenerateTitle: command.regenerateTitle, title: command.title })), [{ threadId: v2ThreadShell.id, regenerateTitle: true, title: undefined }]);
+  client.shellHandler?.({ kind: "thread.updated", sequence: 1, location: "active", thread: { ...v2ThreadShell, titleRegeneration: { requestId: CommandId.make("request"), startedAt: v2Now } } });
+  assert.equal(host.snapshot().threads[0]!.titleRegenerating, true);
+  await host.threadAction(v2ThreadShell.id, "stop-title-regeneration");
+  assert.equal(client.commands.findLast((command) => command.type === "thread.metadata.update")?.regenerateTitle, false);
+  client.shellHandler?.({ kind: "thread.updated", sequence: 2, location: "active", thread: { ...v2ThreadShell, title: "Generated title", titleRegeneration: null } });
+  assert.deepEqual([host.snapshot().threads[0]!.title, host.snapshot().threads[0]!.titleRegenerating], ["Generated title", undefined]);
+  client.shellHandler?.({ kind: "thread.updated", sequence: 3, location: "active", thread: { ...v2ThreadShell, creationSource: "provider", lineage: { ...v2ThreadShell.lineage, relationshipToParent: "subagent" } } });
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === v2ThreadShell.id)?.canRegenerateTitle, undefined);
+  await assert.rejects(host.threadAction(v2ThreadShell.id, "regenerate-title"), /controlled by its provider/);
+});
+
 test("Direct thread.updated shell deltas update the shared list", async (t) => {
   const { host, client } = await harness(); t.after(() => host.dispose());
   client.shellHandler?.({ kind: "thread.updated", sequence: 1, location: "active", thread: { ...v2ThreadShell, title: "Updated elsewhere" } });

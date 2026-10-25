@@ -73,6 +73,9 @@ export interface ThreadSummary {
   readonly runtimeMode: RuntimeMode; readonly interactionMode: ProviderInteractionMode;
   readonly updatedAt: string; readonly archived: boolean; readonly pinned: boolean;
   readonly lastActiveAt?: string | null;
+  /** The thread's server can regenerate its title, and one is being generated now. */
+  readonly canRegenerateTitle?: boolean;
+  readonly titleRegenerating?: boolean;
   readonly activeRunId: string | null;
   readonly workingStartedAt?: string | null;
   readonly settled?: boolean;
