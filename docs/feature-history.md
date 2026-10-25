@@ -12,7 +12,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and independent model/effort editor tabs. | v0.1.16 | v0.1.23 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
-| [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | Unreleased |
+| [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | v0.3.5 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.23 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
@@ -37,7 +37,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.2.7 |
-| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | Unreleased |
+| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.5 |
 | [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.3 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
@@ -301,10 +301,10 @@ Session resources retain the current History selection for restoration. Opening 
 - **Mark unread** appears only once the thread has a finished response: T3 rewinds the read watermark to just before the latest run's completion and rejects the command otherwise (found in the live check below).
 - Each new item appears only when the thread's own server advertises the matching capability (`threadSnooze`, `threadVisitedTracking`, `threadAutoSettleOptOut`); the host rejects the command otherwise. The native Thread actions quick pick offers the same actions, with second steps for Snooze and Copy.
 
-#### Unreleased — auto-settle follows each machine's settings
+#### v0.3.5 — auto-settle follows each machine's settings
 
-- **Auto-settle ›** (and the quick pick's auto-settle action) is now hidden when the thread's machine never auto-settles that project: both `sidebarAutoSettleAfterDays` (null) and `sidebarAutoSettleOnMerge` are off after that machine's per-project overrides. This resolves them the way T3's settlement service does, via `resolveProjectSettings`. The settings come from each server's own config stream, paired machines included, and changes apply live. Owner request: the per-thread "Enabled" check read as auto-settle being on while every machine had it off. T3 Code's own menu still shows the opt-out in that case; the server's behaviour is unchanged.
-- Validation: typecheck and 605/605 unit tests, including project-override cases and a paired machine's config change reaching the redraw listener. Against an isolated T3 0.1.1 server with one GPT-6 Luna (low) turn, `verify-thread-attention-live.ts` passed 7/7; its new step turns auto-settle off and back on in that server's settings and checks the item hides and returns.
+- **Auto-settle ›** (and the quick pick's auto-settle action) is now hidden when the thread's machine never auto-settles anything: `sidebarAutoSettleAfterDays` is null, `sidebarAutoSettleOnMerge` is off, and no project override turns either on. This mirrors T3's `autoSettlementConfigured` gate (`apps/server/src/orchestration-v2/ThreadSettlementService.ts`). It is machine-wide, not per project, because once T3's sweep runs it also settles threads whose pull request was closed whatever their own project's settings. The settings come from each server's own config stream, paired machines included, and changes apply live. Owner request: the per-thread "Enabled" check read as auto-settle being on while every machine had it off. T3 Code's own menu still shows the opt-out in that case; the server's behaviour is unchanged.
+- Validation: typecheck and 605/605 unit tests, including override cases and a paired machine's config change reaching the redraw listener. Against an isolated T3 0.1.1 server with one GPT-6 Luna (low) turn, `verify-thread-attention-live.ts` passed 7/7; its new step turns auto-settle off and back on in that server's settings and checks the item hides and returns. The release regression review blocked a first per-project version, which hid the choice for threads T3 still settles on a closed pull request; fixed as above.
 
 ### Settled and Archive
 
@@ -1048,10 +1048,11 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Split the plan line in two: the plan (`Claude Subscription ×3`) on its own line, and the hub it is pooled from (`CLI Proxy`, or a machine address) on a second, right-aligned line without "via".
 - Move the folded-section chevron and title to where a native view pane draws its twistie and title (4 px inset, 4 px gap; previously 10 px and 6 px). This applies to Account & Usage and Environments.
 
-#### Unreleased — compact header
+#### v0.3.5 — compact header
 
 - Compact the header to three rows, superseding the v0.3.4 two-line plan split: the Pooled/Per account choice sits beside the provider dropdown at its height; the hub or machine sits beside Refresh and Status meters at the update time's size; the plan shares a row with the update time, which is right-aligned and moved up into the buttons' empty padding. The first window follows directly. Font sizes are unchanged. Bar tracks use 36% of the text colour instead of the input border colour, which was nearly invisible on light themes. Mockup: `docs/mockups/account-usage-compact.html`, three revisions reviewed with the owner.
 - Without a plan, the update time joins the actions row (beside the hub, or alone on the left as before) instead of sitting by itself on its own line. `verify-views.ts` checks this in the plan-less Codex case.
+- Refresh and Status meters stay pinned to the right edge when a provider has a plan but no hub or machine, the usual local sign-in. The previous change left nothing before them in that case, so they slid left. The 0.3.5 release regression review found it; `verify-views.ts` now checks the buttons' right edge with and without a plan.
 - Validation: typecheck, 605/605 unit tests, `pnpm build`; `verify-views.ts` PASS, with row-alignment, font-size and right-alignment assertions replacing the old right-aligned source line check (screenshots match the mockup); an earlier run stopped at the known resize flake after the usage checks passed.
 
 ### Status bar meters

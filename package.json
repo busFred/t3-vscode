@@ -2,7 +2,7 @@
   "name": "t3-vscode",
   "displayName": "T3 VSCode",
   "description": "Alpha client for local T3 Code servers: workspace sessions, editor chat, rich messages and account usage.",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "publisher": "hungtienhuang",
   "repository": {
     "type": "git",
@@ -505,7 +505,7 @@
     "vite-plugin-css-injected-by-js": "^3.5.2"
   },
   "icon": "resources/t3-extension.png",
-  "preview": true,
+  "preview": false,
   "license": "MIT",
   "homepage": "https://github.com/busFred/t3-vscode#readme",
   "bugs": {

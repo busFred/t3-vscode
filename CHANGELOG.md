@@ -1,8 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.5 — Release
 
-- **Auto-settle ›** is hidden for sessions on a machine whose T3 settings never auto-settle that project, instead of always showing "Enabled". It follows each machine's own settings, project overrides included, and updates when they change.
+- Stable release of everything in the 0.3.4 prerelease below: conversations on other machines (the **Run on** chip and **Add to another machine**), the T3-style thread menu with Snooze, Duplicate, Mark unread, Auto-settle and Copy, unread dots, the Snoozed shelf, and the rail and project chip changes.
+- **Auto-settle ›** is hidden for sessions on a machine whose T3 settings never auto-settle (off globally and in every project), instead of always showing "Enabled". It follows each machine's own settings and updates when they change.
+- **Account & Usage** has a more compact header: Pooled/Per account sits beside the provider picker, the hub or machine beside Refresh and Status meters, and the plan on the same row as the update time. Usage bar tracks are easier to see on light themes.
+- Thread menu submenus (Snooze, Auto-settle, Copy) always open beside the menu instead of folding inline in narrow sidebars.
 
 ## 0.3.4 — Prerelease
 
