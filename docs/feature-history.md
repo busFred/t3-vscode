@@ -12,12 +12,12 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and independent model/effort editor tabs. | v0.1.16 | v0.1.23 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
-| [Conversation management](#conversation-management) | Rename or regenerate titles, pin, archive, restore and delete conversations. | v0.0.1 | Unreleased |
+| [Conversation management](#conversation-management) | Rename or regenerate titles, pin, archive, restore and delete conversations. | v0.0.1 | v0.3.3 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.23 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.2.5 |
-| [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation. | v0.0.8 | Unreleased |
+| [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation. | v0.0.8 | v0.3.3 |
 | [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.1 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
 | [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.2.4 |
@@ -37,8 +37,8 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.2.7 |
-| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | Unreleased |
-| [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | Unreleased |
+| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.3 |
+| [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.3 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
 | [Editor references](#editor-references) | Inserts file ranges with checkout-aware labels and preserved source URIs. | v0.0.4 | v0.2.0 |
@@ -60,7 +60,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.22 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.2.0 |
 | [Markdown composer tools](#markdown-composer-tools) | Literal formatting, selection wrapping, automatic numbering, indentation and undo. | v0.1.13 | v0.1.21 |
-| [Message timestamps](#message-timestamps) | Recorded local date/time beside each message’s footer actions; extension-wide Date Format and Time Format settings. | v0.1.22 | Unreleased |
+| [Message timestamps](#message-timestamps) | Recorded local date/time beside each message’s footer actions; extension-wide Date Format and Time Format settings. | v0.1.22 | v0.3.3 |
 | [Dense transcript spacing](#dense-transcript-spacing) | Compact gaps, one author per run and unobtrusive message actions. | v0.1.13 | v0.1.22 |
 | [Worktree management](#worktree-management) | Checkout creation, import, parallel runs, review, selected-file apply, retained conversations and session branch policies. | v0.2.0 | v0.2.6 |
 | [Worktree environments and settings](#worktree-environments-and-settings) | Service-backed native settings, extension-owned Python environments per checkout and a default session branch policy. | v0.2.0 | v0.2.6 |
@@ -275,10 +275,10 @@ Session resources retain the current History selection for restoration. Opening 
 
 - Double-click the conversation title in the chat header to open the native Rename dialog; saved changes also update the session list and editor tab.
 
-#### Unreleased
+#### v0.3.3
 
 - Add **Regenerate title** below Rename in the session and header actions menus and the native Thread actions quick pick. It asks T3 to generate a new title from the conversation, as it does after the first message (`thread.metadata.update` with `regenerateTitle`). While T3 works, the session row and chat header show a sparkle marker and the item becomes **Stop regenerating title**; the marker clears when the new title lands. The item appears only when the conversation's own server, local or remote, advertises the `threadTitleRegeneration` capability, so older servers keep just Rename; provider-run subagent conversations never offer it, as they also refuse sends.
-- Validation: host test for capability gating, the dispatched command and the in-flight marker; an isolated T3 0.1.1 server (temporary base directory and port) advertised the capability. No live regeneration was run, since it calls the server's configured title model. Typecheck clean; 576/576 unit tests; `verify-views.ts` 16/16 PASS on 2 of 4 runs; the failing runs stop in the find-in-session or session-search steps, and committed `e93e17a` fails the same way on 1 of 3 runs, so this is a pre-existing flake. Fresh-context Sonnet regression review against `e93e17a`: APPROVE WITH NITS; applied all three (hide for provider subagents, add the quick-pick entry, show the marker in the chat header).
+- Validation: host test for capability gating, the dispatched command and the in-flight marker; an isolated T3 0.1.1 server (temporary base directory and port) advertised the capability. No live regeneration was run, since it calls the server's configured title model. Typecheck clean; 577/577 unit tests; `verify-views.ts` 16/16 PASS on 2 of 4 runs; the failing runs stop in the find-in-session or session-search steps, and committed `e93e17a` fails the same way on 1 of 3 runs, so this is a pre-existing flake. Fresh-context Sonnet regression review against `e93e17a`: APPROVE WITH NITS; applied all three (hide for provider subagents, add the quick-pick entry, show the marker in the chat header).
 
 ### Settled and Archive
 
@@ -382,7 +382,7 @@ Session resources retain the current History selection for restoration. Opening 
 - Default to the left rail and offer Left, Right and Off in native Settings.
 - Preserve drafts, history pagination and reading position while replies stream.
 
-#### Unreleased
+#### v0.3.3
 
 - Show when each prompt was sent in the top-right of the hover preview: Today, Yesterday or "N days ago" (by calendar day) for a week, then the full date in the configured date format, each with the time in the configured 12/24-hour style; hovering it shows the exact time.
 - Centre the rail vertically in the transcript with equal top and bottom insets; it previously sat 30px below the top and 44px above the bottom, below the "load earlier" button.
@@ -682,7 +682,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 - Add Automatic / 12-hour / 24-hour time format in native settings, applied live across message times, tooltips, search results, task next-run dates and usage updates. Automatic retains the webview locale default; 24-hour midnight is 00.
 
-#### Unreleased
+#### v0.3.3
 
 - Add four Date Format choices: 05/04/2017 (`dd/MM/yyyy`), 05.04.2017 (`dd.MM.yyyy`), Apr 5, 2017 (`MMM d, yyyy`) and 5 Apr 2017 (`d MMM yyyy`). Month names stay English, like the existing `dd-MMM-yy`.
 - Audit every displayed date and time against the Date Format and Time Format settings. Native VS Code surfaces (status bar meters, environment expiry) show only durations. The one webview gap, the Restore files preview's checkpoint age, now switches to the selected date after a week and shows the exact date and time in a tooltip; the navigation rail preview already used both settings. The Sessions age label no longer has a locale-default fallback: callers must pass the formatter built from both settings.
@@ -1004,7 +1004,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - List usage windows shortest to longest: session, week, model-specific weeks (e.g. Weekly Fable), month, then anything else. Previously the order was month, week, session with model-specific quotas appended after. Only reported windows are listed (so Codex shows just Week; an account reporting only model-specific weeks treats the first as its Week); when none are reported, the Session/Week/Month rows remain as “not reported” placeholders.
 - Status bar meter text and tooltip follow the same order (`S · W · M`); when a general Week is reported, model-specific quotas appear only in the tooltip and sidebar.
 
-#### Unreleased
+#### v0.3.3
 
 - List providers, not accounts. Each provider merges its harness account with every account T3's usage hubs (`usageLimitSources`, e.g. CLI Proxy) report, using T3's own account identity and freshest-read merge (`collectLimitAccounts`), so the hub configured in T3 needs no setup here. The title reads `Claude · 3 accounts`, `Claude · <email>` for one, or `Claude` when nothing reports; the plan line reads `Claude Subscription ×3 · via CLI Proxy`.
 - With several reporting accounts, a compact dropdown beside Refresh chooses **Pooled** (default; each window's average used share via T3's `collectLimitPools`, resetting with the soonest account, named on hover) or **Per account** (one equal-length bar per account in each window, accounts in the same soonest-session-reset order everywhere, email and reset on hover). It is stored in `t3-vscode.usage.panelAccounts`.
@@ -1014,7 +1014,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Status bar meters
 
-#### Unreleased
+#### v0.3.3
 
 - Configure Status Meters is two steps: **Pooled** (one meter per provider, average remaining) or **Per account** (`t3-vscode.usage.statusBarAccounts`), then the providers (`t3-vscode.usage.pinnedProviders`) or accounts to pin, Follow the active conversation, and the windows shown (`t3-vscode.usage.statusBarWindows`: Session, Week, model weeks, Month; default Session, Week, Month). Accounts pinned before pooling still pin their provider, and unpinning the provider releases them.
 - A pooled meter's tooltip gives the average remaining per window, the soonest-resetting account, and each account's own figures.

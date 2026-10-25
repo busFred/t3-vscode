@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.3 — Release
 
+- First stable release since 0.2.7. It also brings the 0.3.0–0.3.2 prerelease changes below to the release channel: remote environments, the Environments section, provider subagent status, the long-history connection fix, image preview zoom and Copy image, and composer image copy.
+- Upgrading from 0.2.7: status bar meters now default to one **pooled** meter per provider, and their status bar position and hidden state start fresh. To keep a meter per account, choose **Per account** in **T3 VSCode: Configure Status Meters**.
 - **Account & Usage** now lists providers rather than accounts. Every Claude (or Codex) account a T3 usage hub such as CLI Proxy reports joins its provider: **Pooled** shows each window's average remaining with the soonest reset, and **Per account** shows one equal-length bar per account, with the email on hover. No setup is needed in T3 VSCode.
 - Several instances of one provider (for example Codex Personal and Work) now share one Account & Usage entry and, when pooled, one status meter; choose **Per account** to see them separately.
 - A harness signed in with an API key now reads “unavailable” instead of showing errors such as `Codex could not read usage (JSON-RPC -32600)`.
