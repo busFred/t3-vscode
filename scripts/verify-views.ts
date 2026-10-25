@@ -683,7 +683,15 @@ try {
   assert.equal(await accountSidebar.locator(".account-usage .usage-notice").filter({ hasText: "-32600" }).count(), 0, "An API-key probe error stays silent");
   await accountSidebar.getByRole("combobox", { name: "Usage provider" }).selectOption({ label: "Claude · 3 accounts" });
   await accountSidebar.getByText("Claude Subscription ×3", { exact: true }).waitFor();
-  assert.equal(await accountSidebar.locator(".account-source").evaluate((node) => [node.textContent, getComputedStyle(node).textAlign].join("|")), "CLI Proxy|right");
+  // Both choices share a row, the hub sits beside Refresh at the update time's size, and the update time is right-aligned beside the plan.
+  const middle = async (selector: string) => { const box = await accountSidebar.locator(selector).first().boundingBox(); assert.ok(box, selector); return box.y + box.height / 2; };
+  assert.ok(Math.abs(await middle("[aria-label='Usage provider']") - await middle("[aria-label='Multiple accounts']")) <= 1, "Provider and display choices share a row");
+  assert.ok(Math.abs(await middle(".account-source") - await middle("[aria-label='Refresh usage']")) <= 1, "The hub sits beside Refresh");
+  assert.ok(Math.abs(await middle(".account-plan > p") - await middle(".account-plan > [role=status]")) <= 2, "The update time shares the plan's row");
+  assert.deepEqual(await accountSidebar.evaluate(() => {
+    const source = document.querySelector(".account-source")!, status = document.querySelector(".account-plan > [role=status]")!, plan = document.querySelector(".account-plan")!;
+    return [source.textContent, getComputedStyle(source).fontSize === getComputedStyle(status).fontSize, Math.round(plan.getBoundingClientRect().right - status.getBoundingClientRect().right)];
+  }), ["CLI Proxy", true, 0]);
   // The folded chevron and title sit where a native view pane draws its twistie and title.
   const summaryBox = await accountSidebar.locator(".account-usage > summary").boundingBox(), titleBox = await accountSidebar.locator(".account-usage > summary > strong").boundingBox();
   assert.ok(summaryBox && titleBox && titleBox.x - summaryBox.x === 20, `Account & Usage title inset ${titleBox && summaryBox ? titleBox.x - summaryBox.x : "?"}px`);

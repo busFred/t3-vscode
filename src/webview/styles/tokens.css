@@ -457,7 +457,7 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .account-usage-update { display: flex; align-items: center; gap: 4px; color: var(--muted-foreground); font-size: .6875rem; }
 .account-usage-update > small { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-usage-update .icon-button { width: 22px; height: 22px; }
-.usage-account-choice { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 4px 0 6px; }
+.usage-account-choice { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 4px 0 2px; }
 .usage-account-choice select { flex: 1; min-width: 0; max-width: 100%; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); padding: 3px; font-size: .75rem; }
 .account-limit { margin: 6px 0 0; }
 .account-limit > div:first-child { display: flex; justify-content: space-between; gap: 5px; min-width: 0; font-size: .6875rem; }
@@ -466,11 +466,12 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .account-limit-value { flex: none; }
 .account-limit-value { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
 .account-limit-missing { color: var(--muted-foreground); }
-.account-limit-bar { height: 4px; border-radius: 2px; background: var(--input); margin: 2px 0 0; overflow: hidden; }
+/* The track follows the text colour; the input border colour was indistinguishable on light themes. */
+.account-limit-bar { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--foreground) 36%, transparent); margin: 2px 0 0; overflow: hidden; }
 .account-limit-bar i { display: block; height: 100%; background: var(--vscode-progressBar-background, var(--primary)); }
 .account-limit small { color: var(--muted-foreground); font-size: .5625rem; white-space: nowrap; }
-/* Same size as the refresh button row, so switching modes never shifts the panel. */
-.usage-display-choice { flex: none; height: 20px; max-width: 92px; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); border-radius: 3px; padding: 0 2px; font-size: .625rem; }
+/* Shares the provider row at that select's height, keeping its own width and font. */
+.usage-account-choice .usage-display-choice { flex: none; align-self: stretch; max-width: 92px; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); border-radius: 3px; padding: 0 2px; font-size: .625rem; }
 .account-limit-accounts { margin: 2px 0 0 8px; }
 /* A fixed value column keeps every account's bar the same length within and across windows. */
 .account-limit-account { display: grid; grid-template-columns: minmax(0, 1fr) 72px; gap: 6px; align-items: center; font-size: .625rem; margin: 2px 0; }
@@ -673,10 +674,10 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .subagent-readonly { margin: 8px 0; font-size: .85rem; }
 
 .account-usage .usage-notice, .account-plan { font-size: .6875rem; line-height: 1.5; overflow-wrap: anywhere; }
-.account-plan { margin-block: 1em; }
-.account-plan > p { margin: 0; }
-/* The plan reads first; the machine it is pooled from sits under it, right-aligned. */
-.account-plan > .account-source { text-align: right; }
+/* Tucked into the actions row's empty button padding above; the update time stays right-aligned without a plan. */
+.account-plan { display: flex; align-items: baseline; gap: 6px; margin-block: -4px 0; }
+.account-plan > p { min-width: 0; margin: 0; }
+.account-plan > small { flex: none; margin-left: auto; white-space: nowrap; }
 .provider-usage-link { display: block; font-size: .6875rem; margin-bottom: 8px; }
 
 .inline-attachment { display: inline-flex; align-items: center; gap: 4px; font-size: .85em; line-height: 1.5; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--message-surface); color: var(--foreground); vertical-align: baseline; cursor: pointer; }

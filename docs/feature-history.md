@@ -37,7 +37,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.2.7 |
-| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.4 |
+| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | Unreleased |
 | [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.3 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
@@ -1042,6 +1042,11 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 - Split the plan line in two: the plan (`Claude Subscription ×3`) on its own line, and the hub it is pooled from (`CLI Proxy`, or a machine address) on a second, right-aligned line without "via".
 - Move the folded-section chevron and title to where a native view pane draws its twistie and title (4 px inset, 4 px gap; previously 10 px and 6 px). This applies to Account & Usage and Environments.
+
+#### Unreleased — compact header
+
+- Compact the header to three rows, superseding the v0.3.4 two-line plan split: the Pooled/Per account choice sits beside the provider dropdown at its height; the hub or machine sits beside Refresh and Status meters at the update time's size; the plan shares a row with the update time, which is right-aligned and moved up into the buttons' empty padding. The first window follows directly. Font sizes are unchanged. Bar tracks use 36% of the text colour instead of the input border colour, which was nearly invisible on light themes. Mockup: `docs/mockups/account-usage-compact.html`, three revisions reviewed with the owner.
+- Validation: typecheck, 605/605 unit tests, `pnpm build`; `verify-views.ts` PASS, with row-alignment, font-size and right-alignment assertions replacing the old right-aligned source line check (screenshots match the mockup); an earlier run stopped at the known resize flake after the usage checks passed.
 
 ### Status bar meters
 

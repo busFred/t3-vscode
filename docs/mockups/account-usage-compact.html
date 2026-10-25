@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Account & usage: compact layout</title>
+<style>
+/* Page chrome only. */
+body.page { margin: 0; font: 13px/1.5 var(--font-sans, system-ui, sans-serif); }
+.page .lede { margin: 0 0 12px; max-width: 70ch; }
+.controls { display: flex; gap: 16px; margin-bottom: 16px; }
+.controls b { margin-right: 6px; }
+.controls button { font: inherit; padding: 2px 10px; border: 1px solid #888; background: transparent; color: inherit; border-radius: 4px; cursor: pointer; }
+.controls button[aria-pressed="true"] { background: #005fb8; border-color: #005fb8; color: #fff; }
+.grid { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.card > h2 { font-size: 13px; margin: 0 0 2px; }
+.card > p { margin: 0 0 8px; font-size: 12px; opacity: .75; max-width: 300px; }
+
+/* VS Code theme variables (Light Modern / Dark Modern approximations). */
+.pane {
+  --vscode-font-family: "Segoe UI", system-ui, sans-serif;
+  --vscode-editor-background: #ffffff; --vscode-editor-foreground: #3b3b3b; --vscode-descriptionForeground: #717171;
+  --vscode-input-border: #cecece; --vscode-dropdown-background: #ffffff; --vscode-dropdown-border: #cecece; --vscode-dropdown-foreground: #3b3b3b;
+  --vscode-panel-border: #e5e5e5; --vscode-sideBar-background: #f8f8f8; --vscode-progressBar-background: #005fb8;
+}
+.dark .pane {
+  --vscode-editor-background: #1f1f1f; --vscode-editor-foreground: #cccccc; --vscode-descriptionForeground: #9d9d9d;
+  --vscode-input-border: #3c3c3c; --vscode-dropdown-background: #313131; --vscode-dropdown-border: #3c3c3c; --vscode-dropdown-foreground: #cccccc;
+  --vscode-panel-border: #2b2b2b; --vscode-sideBar-background: #181818; --vscode-progressBar-background: #0078d4;
+}
+.pane {
+  --background: var(--vscode-editor-background); --foreground: var(--vscode-editor-foreground); --muted: var(--vscode-sideBar-background);
+  --muted-foreground: var(--vscode-descriptionForeground); --border: var(--vscode-panel-border); --input: var(--vscode-input-border); --primary: #005fb8;
+  width: 300px; font-family: var(--vscode-font-family); font-size: .8125rem; line-height: 1.55; color: var(--foreground); background: var(--background); border: 1px solid var(--border);
+}
+.pane * { box-sizing: border-box; }
+.pane select, .pane button { font-family: inherit; }
+.pane .icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 27px; height: 27px; color: var(--muted-foreground); background: transparent; border: 0; border-radius: 6px; }
+.pane .icon-button:hover { color: var(--foreground); background: var(--muted); }
+.pane .provider-icon { width: 12px; height: 12px; flex-shrink: 0; }
+
+/* ===== Copied unchanged from src/webview/styles/tokens.css ===== */
+/* tokens.css:82 precedes the account rules, so .account-plan overrides its size. */
+.subtle { color: var(--muted-foreground); font-size: 0.75rem; }
+.account-usage { flex-shrink: 0; border-bottom: 1px solid var(--border); max-height: 50%; overflow: auto; }
+.account-usage > summary { display: flex; align-items: center; gap: 4px; padding: 3px 10px 3px 4px; font-size: .625rem; cursor: pointer; list-style: none; }
+.account-usage-body { padding: 0 10px 8px; }
+.account-usage-update { display: flex; align-items: center; gap: 4px; color: var(--muted-foreground); font-size: .6875rem; }
+.account-usage-update > small { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-usage-update .icon-button { width: 22px; height: 22px; }
+.usage-account-choice { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 4px 0 6px; }
+.usage-account-choice select { flex: 1; min-width: 0; max-width: 100%; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); padding: 3px; font-size: .75rem; }
+.account-limit { margin: 6px 0 0; }
+.account-limit > div:first-child { display: flex; justify-content: space-between; gap: 5px; min-width: 0; font-size: .6875rem; }
+.account-limit > div:first-child > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-limit-value { flex: none; }
+.account-limit-value { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.account-limit-missing { color: var(--muted-foreground); }
+.account-limit-bar { height: 4px; border-radius: 2px; background: var(--input); margin: 2px 0 0; overflow: hidden; }
+.account-limit-bar i { display: block; height: 100%; background: var(--vscode-progressBar-background, var(--primary)); }
+.account-limit small { color: var(--muted-foreground); font-size: .5625rem; white-space: nowrap; }
+.usage-display-choice { flex: none; height: 20px; max-width: 92px; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); border-radius: 3px; padding: 0 2px; font-size: .625rem; }
+.account-limit-accounts { margin: 2px 0 0 8px; }
+.account-limit-account { display: grid; grid-template-columns: minmax(0, 1fr) 72px; gap: 6px; align-items: center; font-size: .625rem; margin: 2px 0; }
+.account-limit-account .account-limit-bar { margin: 0; height: 3px; }
+.account-limit-account .account-limit-value { justify-content: flex-end; }
+.account-usage .usage-notice, .account-plan { font-size: .6875rem; line-height: 1.5; overflow-wrap: anywhere; }
+.account-plan { margin-block: 1em; }
+.account-plan > p { margin: 0; }
+.account-plan > .account-source { text-align: right; }
+
+/* ===== Proposed overrides (the only diff) ===== */
+/* Display choice joins the provider row and takes its height; font sizes unchanged. */
+.proposed .usage-account-choice { margin: 4px 0 2px; }
+/* Keeps its own width and font; the provider select rule would otherwise widen it. */
+.proposed .usage-account-choice .usage-display-choice { flex: none; align-self: stretch; height: auto; padding: 0 2px; font-size: .625rem; }
+/* Plan shares a row with the right-aligned timestamp, tucked under the refresh row's empty button padding. */
+.proposed .account-plan { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-block: -4px 0; }
+.proposed .account-plan > p { min-width: 0; }
+.proposed .account-plan > small { flex: none; white-space: nowrap; }
+/* Track derived from the text color so consumed usage reads in every theme. */
+.proposed .account-limit-bar { background: color-mix(in srgb, var(--foreground) 36%, transparent); }
+</style>
+<body class="page">
+<p class="lede">Left: current code (CSS copied from <code>tokens.css</code>). Right: dropdowns on one row; machine name beside refresh at the timestamp size; plan beside the right-aligned timestamp; stronger bar track. Fonts unchanged.</p>
+<div class="controls">
+  <div><b>Theme</b><button data-theme="light" aria-pressed="true">Light</button> <button data-theme="dark" aria-pressed="false">Dark</button></div>
+  <div><b>Accounts</b><button data-mode="perAccount" aria-pressed="true">Per account</button> <button data-mode="pooled" aria-pressed="false">Pooled</button></div>
+</div>
+<section class="grid">
+  <article class="card"><h2>Current</h2><p>Track uses <code>--input</code> (input border colour).</p><div class="pane" data-variant="current"></div></article>
+  <article class="card"><h2>Proposed</h2><p>Bar track 36% of the text colour.</p><div class="pane proposed" data-variant="proposed"></div></article>
+</section>
+<script>
+const claude = '<svg class="provider-icon" viewBox="0 0 24 24" fill="#d97757"><path d="M12 1.5l1.6 7.1 6.2-3.9-3.9 6.2 7.1 1.6-7.1 1.6 3.9 6.2-6.2-3.9L12 22.5l-1.6-7.1-6.2 3.9 3.9-6.2L1 11.5l7.1-1.6-3.9-6.2 6.2 3.9z"/></svg>';
+const refresh = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>';
+const settings = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>';
+const chevron = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>';
+const rows = [
+  { label: "Session", cols: [[98, "now"], [0, "4h 7m"], [61, "2h 12m"]] },
+  { label: "Week", cols: [[3, "4d 23h"], [90, "6d 3h"], [38, "5d 1h"]] },
+  { label: "Week (Opus)", cols: [[54, "4d 23h"], [100, "6d 3h"], [72, "5d 1h"]] },
+];
+const pooled = [["Session", 53, "now"], ["Week", 44, "4d 23h"], ["Week (Opus)", 75, "4d 23h"]];
+const bar = (v) => `<div class="account-limit-bar"><i style="width:${v}%"></i></div>`;
+let mode = "perAccount";
+function render(el) {
+  const proposed = el.dataset.variant === "proposed";
+  const display = `<select class="usage-display-choice" aria-label="Multiple accounts"><option ${mode === "pooled" ? "selected" : ""}>Pooled</option><option ${mode === "perAccount" ? "selected" : ""}>Per account</option></select>`;
+  const choice = `<label class="usage-account-choice">${claude}<select aria-label="Usage provider"><option>Claude · 3 accounts</option></select>${proposed ? display : ""}</label>`;
+  const machine = "hungtien-x1yg5.tailc051e5.ts.net:8317";
+  const buttons = `<button class="icon-button">${refresh}</button><button class="icon-button">${settings}</button>`;
+  const update = proposed
+    ? `<div class="account-usage-update"><small title="${machine}">${machine}</small>${buttons}</div>`
+    : `<div class="account-usage-update"><small>Updated 16:27:16</small>${display}${buttons}</div>`;
+  const plan = proposed
+    ? `<div class="account-plan subtle"><p>Claude Subscription ×3</p><small>Updated 16:27:16</small></div>`
+    : `<div class="account-plan subtle"><p>Claude Subscription ×3</p><p class="account-source">${machine}</p></div>`;
+  const limits = mode === "perAccount"
+    ? rows.map((r) => `<div class="account-limit"><div><span>${r.label}</span></div><div class="account-limit-accounts">${r.cols.map(([v, reset]) => `<div class="account-limit-account">${bar(v)}<span class="account-limit-value">${v}%<small>${reset}</small></span></div>`).join("")}</div></div>`).join("")
+    : pooled.map(([label, v, reset]) => `<div class="account-limit"><div><span>${label}</span><span class="account-limit-value"><span>${v}% left</span><small>${reset}</small></span></div>${bar(v)}</div>`).join("");
+  el.innerHTML = `<details class="account-usage" open><summary>${chevron}<strong>ACCOUNT &amp; USAGE</strong></summary><div class="account-usage-body">${choice}${update}${plan}${limits}</div></details>`;
+}
+const renderAll = () => document.querySelectorAll(".pane").forEach(render);
+document.querySelectorAll("[data-theme]").forEach((b) => b.onclick = () => {
+  document.body.classList.toggle("dark", b.dataset.theme === "dark");
+  document.querySelectorAll("[data-theme]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+});
+document.querySelectorAll("[data-mode]").forEach((b) => b.onclick = () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll("[data-mode]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  renderAll();
+});
+renderAll();
+</script>
+</body>
+</html>

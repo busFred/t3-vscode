@@ -57,17 +57,16 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
         <span className="account-limit-value">{window ? <>{remainingPercent(window)}%{reset ? <small>{reset}</small> : null}</> : <span className="account-limit-missing">—</span>}</span>
       </div>;
     })}</div></div>;
+  // Rows: provider and display choice; source machine beside the actions; plan beside the update time.
   return <details className="account-usage" ref={details}>
     <summary><ChevronDownIcon size={12} /><strong>ACCOUNT & USAGE</strong></summary>
     <div className="account-usage-body">
-      {group ? <>
-        <label className="usage-account-choice"><ProviderIcon brand={group.brand} /><select aria-label="Usage provider" value={group.key} onChange={(event) => setKey(event.target.value)}>{groups.map((group) => <option value={group.key} key={group.key}>{groupTitle(group)}</option>)}</select></label>
-      </> : null}
-      <div className="account-usage-update"><small role="status">{refreshing ? "Refreshing limits…" : checkedAt ? <>Updated <time dateTime={checkedAt} title={dateTime(new Date(checkedAt))}>{new Date(checkedAt).toLocaleTimeString(undefined, timeOptions)}</time></> : "No update reported"}</small>
-        {several ? <select className="usage-display-choice" aria-label="Multiple accounts" title="How to show several accounts" value={display} onChange={(event) => chooseDisplay(event.target.value as AccountsDisplay)}><option value="pooled">Pooled</option><option value="perAccount">Per account</option></select> : null}
+      {group ? <div className="usage-account-choice"><ProviderIcon brand={group.brand} /><select aria-label="Usage provider" value={group.key} onChange={(event) => setKey(event.target.value)}>{groups.map((group) => <option value={group.key} key={group.key}>{groupTitle(group)}</option>)}</select>
+        {several ? <select className="usage-display-choice" aria-label="Multiple accounts" title="How to show several accounts" value={display} onChange={(event) => chooseDisplay(event.target.value as AccountsDisplay)}><option value="pooled">Pooled</option><option value="perAccount">Per account</option></select> : null}</div> : null}
+      <div className="account-usage-update"><small className="account-source" title={group?.source || undefined}>{group?.source}</small>
         <button className="icon-button" aria-label="Refresh usage" title="Refresh usage" disabled={refreshing} onClick={() => { setRefreshing(true); void run("refreshUsage").finally(() => setRefreshing(false)); }}><RefreshCwIcon size={13} /></button><button className="icon-button" aria-label="Status meters" title="Status meters" onClick={() => { void run("configureUsage"); }}><Settings2Icon size={13} /></button></div>
+      <div className="account-plan subtle">{group?.plan ? <p>{group.plan}</p> : null}<small role="status">{refreshing ? "Refreshing limits…" : checkedAt ? <>Updated <time dateTime={checkedAt} title={dateTime(new Date(checkedAt))}>{new Date(checkedAt).toLocaleTimeString(undefined, timeOptions)}</time></> : "No update reported"}</small></div>
       {group && account ? <>
-        {group.plan || group.source ? <div className="account-plan subtle">{group.plan ? <p>{group.plan}</p> : null}{group.source ? <p className="account-source" title={group.source}>{group.source}</p> : null}</div> : null}
         {perAccount ? perAccountRows(group, now).map(accountRows) : accountWindows(account).map((row) => limit(group, row.window, row.label))}
       </> : <p className="subtle">No provider accounts reported yet.</p>}
       {notices.map((notice) => <p className="usage-notice" key={notice}>{notice}</p>)}
