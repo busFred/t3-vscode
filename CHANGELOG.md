@@ -6,6 +6,9 @@
 - Several instances of one provider (for example Codex Personal and Work) now share one Account & Usage entry and, when pooled, one status meter; choose **Per account** to see them separately.
 - A harness signed in with an API key now reads “unavailable” instead of showing errors such as `Codex could not read usage (JSON-RPC -32600)`.
 - **Status meters** can show one pooled meter per provider or one per chosen account, pin providers, and choose which windows (Session, Week, model weeks, Month) appear.
+- Session actions add **Regenerate title**, which asks T3 for a fresh title, as after the first message. A sparkle marks the session until it lands, and the item turns into **Stop regenerating title** meanwhile.
+- **Date Format** adds 05/04/2017, 05.04.2017, Apr 5, 2017 and 5 Apr 2017. The Restore files preview now follows your date and time settings too.
+- The message navigation rail's hover preview shows when the prompt was sent (Today, Yesterday, N days ago, then the full date), and the rail is now centred vertically.
 
 ## 0.3.2 — Prerelease
 
