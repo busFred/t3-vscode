@@ -3,15 +3,17 @@ import { GitBranchIcon } from "lucide-react";
 import type { RestorePreview as RestorePreviewData } from "../../shared/bridge";
 import { bridge } from "../bridge-client";
 import { useActions } from "../actions";
+import { useDateTimeFormat } from "../timeFormat";
 
-function relativeTime(iso: string): string {
+/** Relative for a week, then the user's date format; the exact time is in the tooltip. */
+function relativeTime(iso: string, date: (value: Date) => string): string {
   const minutes = Math.round((Date.now() - Date.parse(iso)) / 60_000);
   if (!Number.isFinite(minutes) || minutes < 1) return "just now";
   if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
   const days = Math.round(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+  return days <= 7 ? `${days} day${days === 1 ? "" : "s"} ago` : date(new Date(iso));
 }
 
 export type RestoreLocator = { readonly itemId: string } | { readonly checkpointId: string; readonly scopeId: string };
@@ -19,7 +21,7 @@ export type RestoreLocator = { readonly itemId: string } | { readonly checkpoint
 export function RestorePreview({ threadId, sourceThreadId, locator, turnNumber, onClose }: {
   readonly threadId: string; readonly sourceThreadId: string; readonly locator: RestoreLocator; readonly turnNumber?: number; readonly onClose: () => void;
 }) {
-  const run = useActions();
+  const run = useActions(); const { date, dateTime } = useDateTimeFormat();
   const [preview, setPreview] = useState<RestorePreviewData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [keep, setKeep] = useState<ReadonlySet<string>>(new Set());
@@ -47,7 +49,7 @@ export function RestorePreview({ threadId, sourceThreadId, locator, turnNumber, 
     <div className="restore-preview-head">
       <strong>{shownTurn !== undefined ? `Restore files to turn ${shownTurn}` : "Restore files to this point"}</strong>
       {preview.branch ? <span className="turn-branch-chip"><GitBranchIcon size={11} />{preview.branch}</span> : null}
-      <span className="restore-preview-sub">Checkpoint from {relativeTime(preview.checkpointAt)}</span>
+      <span className="restore-preview-sub">Checkpoint from <time dateTime={preview.checkpointAt} title={dateTime(new Date(preview.checkpointAt))}>{relativeTime(preview.checkpointAt, date)}</time></span>
     </div>
     {preview.files.length ? <div className="restore-preview-section">
       <div className="restore-preview-section-head">Files changed{shownTurn !== undefined ? ` since turn ${shownTurn}` : ""} <span className="restore-preview-count">({preview.files.length} {preview.files.length === 1 ? "file" : "files"} · your edits in {youCount})</span></div>

@@ -16,6 +16,6 @@ test("Time overrides work across locales and preserve automatic defaults and mid
 
 test("Date dropdown formats use local calendar fields and exact example order", () => {
   const date = new Date(2017, 3, 5, 16, 3, 22);
-  assert.deepEqual(DATE_FORMATS.map(format => formatDate(date, format)), ["4/5/2017", "4/5/17", "04/05/17", "04/05/2017", "17/04/05", "2017-04-05", "05-Apr-17"]);
+  assert.deepEqual(DATE_FORMATS.map(format => formatDate(date, format)), ["4/5/2017", "4/5/17", "04/05/17", "04/05/2017", "17/04/05", "2017-04-05", "05-Apr-17", "05/04/2017", "05.04.2017", "Apr 5, 2017", "5 Apr 2017"]);
   assert.equal(resolveDateFormat("invalid"), "yyyy-MM-dd");
 });
