@@ -666,6 +666,8 @@ try {
   assert.equal(client.providerRefreshes.length, refreshesBefore + 1);
   await accountSidebar.locator('.account-usage time[datetime="2026-10-06T12:01:00Z"]').waitFor();
   assert.equal(await accountSidebar.locator(".account-usage").getByRole("button", { name: "Refresh usage", exact: true }).isEnabled(), true);
+  // With no plan or source the update time joins the actions row rather than sitting alone.
+  assert.deepEqual(await accountSidebar.evaluate(() => [document.querySelectorAll(".account-plan").length, document.querySelector(".account-usage [role=status]")?.parentElement?.className]), [0, "account-usage-update"]);
   await accountSidebar.screenshot({ path: `${evidence}/sessions-usage-refresh.png` });
   // Hub accounts join their provider: pooled by default, equal per-account bars on request, API-key probe errors silent.
   const hubWindow = (session: number, week: number, reset: string) => [{ id: "five_hour", kind: "session" as const, label: "Session", usedPercent: session, resetsAt: reset }, { id: "seven_day", kind: "weekly" as const, label: "Weekly", usedPercent: week, resetsAt: "2026-10-12T12:00:00Z" }];

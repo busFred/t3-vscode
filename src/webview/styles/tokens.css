@@ -457,6 +457,8 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .account-usage-update { display: flex; align-items: center; gap: 4px; color: var(--muted-foreground); font-size: .6875rem; }
 .account-usage-update > small { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-usage-update .icon-button { width: 22px; height: 22px; }
+/* With a source beside it, the update time keeps its width and sits by the actions. */
+.account-usage-update > .account-source + small { flex: none; }
 .usage-account-choice { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 4px 0 2px; }
 .usage-account-choice select { flex: 1; min-width: 0; max-width: 100%; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); padding: 3px; font-size: .75rem; }
 .account-limit { margin: 6px 0 0; }
@@ -674,10 +676,10 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .subagent-readonly { margin: 8px 0; font-size: .85rem; }
 
 .account-usage .usage-notice, .account-plan { font-size: .6875rem; line-height: 1.5; overflow-wrap: anywhere; }
-/* Tucked into the actions row's empty button padding above; the update time stays right-aligned without a plan. */
-.account-plan { display: flex; align-items: baseline; gap: 6px; margin-block: -4px 0; }
+/* Tucked into the actions row's empty button padding above, with the update time right-aligned. */
+.account-plan { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-block: -4px 0; }
 .account-plan > p { min-width: 0; margin: 0; }
-.account-plan > small { flex: none; margin-left: auto; white-space: nowrap; }
+.account-plan > small { flex: none; white-space: nowrap; }
 .provider-usage-link { display: block; font-size: .6875rem; margin-bottom: 8px; }
 
 .inline-attachment { display: inline-flex; align-items: center; gap: 4px; font-size: .85em; line-height: 1.5; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--message-surface); color: var(--foreground); vertical-align: baseline; cursor: pointer; }

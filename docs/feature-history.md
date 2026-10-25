@@ -1051,6 +1051,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 #### Unreleased — compact header
 
 - Compact the header to three rows, superseding the v0.3.4 two-line plan split: the Pooled/Per account choice sits beside the provider dropdown at its height; the hub or machine sits beside Refresh and Status meters at the update time's size; the plan shares a row with the update time, which is right-aligned and moved up into the buttons' empty padding. The first window follows directly. Font sizes are unchanged. Bar tracks use 36% of the text colour instead of the input border colour, which was nearly invisible on light themes. Mockup: `docs/mockups/account-usage-compact.html`, three revisions reviewed with the owner.
+- Without a plan, the update time joins the actions row (beside the hub, or alone on the left as before) instead of sitting by itself on its own line. `verify-views.ts` checks this in the plan-less Codex case.
 - Validation: typecheck, 605/605 unit tests, `pnpm build`; `verify-views.ts` PASS, with row-alignment, font-size and right-alignment assertions replacing the old right-aligned source line check (screenshots match the mockup); an earlier run stopped at the known resize flake after the usage checks passed.
 
 ### Status bar meters
