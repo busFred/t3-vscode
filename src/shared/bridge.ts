@@ -34,7 +34,7 @@ export const Methods = {
   searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", turnDiffSummary: "turnDiffSummary", openMergeDiff: "openMergeDiff", refreshUsage: "refreshUsage",
   queueAction: "queueAction",
   revertConversation: "revertConversation", dismissRewindMarker: "dismissRewindMarker", restorePreview: "restorePreview", restoreFiles: "restoreFiles", openRestoreDiff: "openRestoreDiff", compareRestoredFile: "compareRestoredFile",
-  openWebUi: "openWebUi", configureUsage: "configureUsage", showUsage: "showUsage",
+  openWebUi: "openWebUi", configureUsage: "configureUsage", setUsagePanelAccounts: "setUsagePanelAccounts", showUsage: "showUsage",
   environmentAction: "environmentAction", watchSessions: "watchSessions",
 } as const;
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
@@ -184,6 +184,8 @@ export interface HostStateSnapshot {
   readonly dateFormat?: DateFormat;
   readonly appearance: AppearanceSettings;
   readonly messageNavigation?: MessageNavigationPlacement;
+  /** How Account & Usage shows a provider with several accounts. */
+  readonly usagePanelAccounts?: import("./usage.js").AccountsDisplay;
   readonly notice?: string;
   readonly connectionSetup?: ConnectionSetup;
   readonly environment?: { readonly environmentId: string; readonly label: string; readonly serverVersion?: string };

@@ -582,7 +582,7 @@ try {
   await accountSidebar.locator(".dedicated-sessions").waitFor();
   assert.equal(await accountSidebar.locator(".account-usage").evaluate(element => (element as HTMLDetailsElement).open), false);
   await accountSidebar.locator(".account-usage > summary").click();
-  await accountSidebar.getByRole("combobox", { name: "Usage account" }).selectOption({ label: "Codex Personal" });
+  await accountSidebar.getByRole("combobox", { name: "Usage provider" }).selectOption("group:codex");
   await accountSidebar.locator('.account-usage time[datetime="2026-10-06T12:00:00Z"]').waitFor();
   client.config = { ...client.config, providers: client.config.providers.map(provider => provider.instanceId === "codex-personal" ? { ...provider, usageLimits: { ...provider.usageLimits!, checkedAt: "2026-10-06T12:01:00Z" } } : provider) };
   const refreshesBefore = client.providerRefreshes.length;
@@ -592,6 +592,35 @@ try {
   await accountSidebar.locator('.account-usage time[datetime="2026-10-06T12:01:00Z"]').waitFor();
   assert.equal(await accountSidebar.locator(".account-usage").getByRole("button", { name: "Refresh usage", exact: true }).isEnabled(), true);
   await accountSidebar.screenshot({ path: `${evidence}/sessions-usage-refresh.png` });
+  // Hub accounts join their provider: pooled by default, equal per-account bars on request, API-key probe errors silent.
+  const hubWindow = (session: number, week: number, reset: string) => [{ id: "five_hour", kind: "session" as const, label: "Session", usedPercent: session, resetsAt: reset }, { id: "seven_day", kind: "weekly" as const, label: "Weekly", usedPercent: week, resetsAt: "2026-10-12T12:00:00Z" }];
+  const configBeforeHub = client.config;
+  client.config = { ...client.config, providers: [...client.config.providers.map((provider) => provider.instanceId === "codex-personal" ? { ...provider, usageLimits: { checkedAt: "2026-10-06T12:01:00Z", windows: [], unavailable: { reason: "probeFailed" as const, message: "Codex could not read usage (JSON-RPC -32600)." } } } : provider)],
+    usageLimitSources: [{ id: "hub" as never, kind: "cliproxy", label: "CLI Proxy", checkedAt: "2026-10-06T12:01:00Z", accounts: [
+      { id: "a.json", driver: ProviderDriverKind.make("claudeAgent"), email: "a@example.test", plan: "Claude Subscription", usageLimits: { checkedAt: "2026-10-06T12:01:00Z", windows: hubWindow(28, 60, "2026-10-06T14:00:00Z") } },
+      { id: "b.json", driver: ProviderDriverKind.make("claudeAgent"), email: "b@example.test", plan: "Claude Subscription", usageLimits: { checkedAt: "2026-10-06T12:01:00Z", windows: hubWindow(72, 91, "2026-10-06T15:00:00Z") } },
+      { id: "c.json", driver: ProviderDriverKind.make("claudeAgent"), email: "c@example.test", plan: "Claude Subscription", usageLimits: { checkedAt: "2026-10-06T12:01:00Z", windows: hubWindow(17, 8, "2026-10-06T16:00:00Z") } },
+    ] }] } as typeof client.config;
+  client.onConfig?.(client.config as Parameters<NonNullable<typeof client.onConfig>>[0]);
+  await accountSidebar.locator(".account-usage").getByText("unavailable").first().waitFor();
+  assert.equal(await accountSidebar.locator(".account-usage .usage-notice").filter({ hasText: "-32600" }).count(), 0, "An API-key probe error stays silent");
+  await accountSidebar.getByRole("combobox", { name: "Usage provider" }).selectOption({ label: "Claude · 3 accounts" });
+  await accountSidebar.getByText("Claude Subscription ×3 · via CLI Proxy", { exact: true }).waitFor();
+  await accountSidebar.getByText("61% left", { exact: true }).waitFor();
+  await accountSidebar.screenshot({ path: `${evidence}/usage-hub-pooled.png` });
+  await accountSidebar.getByRole("combobox", { name: "Multiple accounts" }).selectOption("perAccount");
+  await accountSidebar.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some((entry) => entry.method === "setUsagePanelAccounts"));
+  assert.equal(host.snapshot(SIDEBAR_VIEW_ID).usagePanelAccounts, "perAccount");
+  const bars = accountSidebar.locator(".account-limit-account .account-limit-bar");
+  assert.equal(await bars.count(), 6);
+  const widths = await bars.evaluateAll((elements) => elements.map((element) => Math.round(element.getBoundingClientRect().width)));
+  assert.equal(new Set(widths).size, 1, `Per-account bars share one length: ${widths}`);
+  assert.match((await accountSidebar.locator(".account-limit-account").first().getAttribute("title")) ?? "", /^a@example\.test · 72% left/);
+  await accountSidebar.screenshot({ path: `${evidence}/usage-hub-per-account.png` });
+  await accountSidebar.getByRole("combobox", { name: "Multiple accounts" }).selectOption("pooled");
+  client.config = configBeforeHub;
+  client.onConfig?.(client.config as Parameters<NonNullable<typeof client.onConfig>>[0]);
+  await accountSidebar.getByRole("combobox", { name: "Usage provider" }).selectOption("group:codex");
   await accountSidebar.locator(".account-usage > summary").click();
   client.pathEntries = { entries: [{ path: "src/example.ts", kind: "file" }, { path: "src/utils", kind: "directory" }], truncated: false };
   const input = second.getByRole("textbox", { name: "Message", exact: true });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ProviderInstanceId, ProviderDriverKind } from "@t3tools/contracts";
 import { harness, provider } from "../host/testing/fakeTransport.js";
-import { accountWindows, meterText, selectedUsageAccounts, usageAccounts, usageRefreshTarget } from "./usage.js";
+import { accountWindows, groupOf, groupTitle, meterText, perAccountRows, pooledAccount, resolveMeterWindows, selectedUsageAccounts, soonestReset, usageAccounts, usageGroups, usageNotices, usageRefreshTarget } from "./usage.js";
 
 test("Meters keep subscriptions separate, deduplicate shared accounts and preserve missing quota windows", async (t) => {
   const { host } = await harness(); t.after(() => host.dispose());
@@ -62,4 +62,40 @@ test("Background refreshes target a single displayed meter's live instance and s
   assert.equal(usageRefreshTarget([personal, work], providers, "codex-live"), undefined, "Several meters sweep, so a pinned account for another provider still advances");
   assert.equal(usageRefreshTarget([], providers, "codex-live"), undefined);
   assert.equal(usageRefreshTarget([{ ...work, instanceIds: [] }], providers), undefined, "An account with no instance left has nothing to target");
+});
+
+test("Hub accounts group under their provider, pool by average with the soonest reset, and API-key harnesses stay silent", async (t) => {
+  const { host } = await harness(); t.after(() => host.dispose());
+  const now = Date.parse("2026-10-24T12:00:00Z");
+  const at = (hours: number) => new Date(now + hours * 3_600_000).toISOString();
+  const claudeKey = { ...provider, instanceId: ProviderInstanceId.make("claude"), driver: ProviderDriverKind.make("claudeAgent"), displayName: "Claude",
+    auth: { status: "authenticated" as const, type: "apiKey", label: "Claude API Key" }, usageLimits: { checkedAt: at(0), windows: [], unavailable: { reason: "probeFailed" as const, message: "Could not read usage." } } };
+  const codexKey = { ...provider, instanceId: ProviderInstanceId.make("codex"), driver: ProviderDriverKind.make("codex"), displayName: "Codex",
+    auth: { status: "authenticated" as const }, usageLimits: { checkedAt: at(0), windows: [], unavailable: { reason: "probeFailed" as const, message: "Codex could not read usage (JSON-RPC -32600)." } } };
+  const hubAccount = (email: string, session: number, sessionReset: number, week: number) => ({ id: `${email}.json`, driver: ProviderDriverKind.make("claudeAgent"), email, plan: "Claude Subscription",
+    usageLimits: { checkedAt: at(0), windows: [{ id: "five_hour", kind: "session" as const, label: "Session", usedPercent: session, resetsAt: at(sessionReset) }, { id: "seven_day", kind: "weekly" as const, label: "Weekly", usedPercent: week, resetsAt: at(100) }] } });
+  const hub = { id: "hub" as never, kind: "cliproxy" as const, label: "CLI Proxy", checkedAt: at(0),
+    accounts: [hubAccount("late@example.test", 17, 4, 8), hubAccount("soon@example.test", 28, 2, 60), hubAccount("mid@example.test", 72, 3, 91)] };
+  const state = { ...host.snapshot(), providers: [claudeKey, codexKey], usageLimitSources: [hub] };
+  const groups = usageGroups(state, now);
+  assert.deepEqual(groups.map(groupTitle), ["Claude · 3 accounts", "Codex"]);
+  const claude = groups[0]!;
+  assert.equal(claude.plan, "Claude Subscription ×3 · via CLI Proxy");
+  assert.deepEqual(claude.reporting.map((account) => account.email), ["soon@example.test", "mid@example.test", "late@example.test"]);
+  assert.equal(groupOf(groups, claude.reporting[1]!.key), claude);
+  const pooled = pooledAccount(claude, now);
+  // Remaining 72 / 28 / 83 average to 61; the week to 47.
+  assert.equal(meterText(pooled), "S 61% · W 47%");
+  assert.equal(accountWindows(pooled)[0]!.window!.resetsAt, at(2));
+  assert.equal(soonestReset(claude, accountWindows(pooled)[0]!.window!, now)?.email, "soon@example.test");
+  const rows = perAccountRows(claude, now);
+  assert.deepEqual(rows.map((row) => row.label), ["Session", "Week"]);
+  assert.deepEqual(rows[1]!.columns.map(({ window }) => window?.usedPercent), [60, 91, 8]);
+  const codex = groups[1]!;
+  assert.deepEqual(accountWindows(pooledAccount(codex, now)).map((row) => row.window), [null, null, null]);
+  assert.deepEqual(usageNotices(state), []);
+  assert.deepEqual(usageNotices({ ...state, usageLimitSources: [{ ...hub, accounts: [], error: "HTTP 401" }] }), ["CLI Proxy: HTTP 401"]);
+  assert.deepEqual(usageNotices({ ...state, providers: [{ ...codexKey, usageLimits: { ...codexKey.usageLimits, unavailable: { reason: "probeFailed" as const, message: "Timed out." } } }] }), ["Codex: Timed out."]);
+  assert.equal(meterText(pooled, resolveMeterWindows(["week"])), "Week 47%");
+  assert.equal(meterText(pooled, resolveMeterWindows([])), "No selected window");
 });

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Account & Usage** now lists providers rather than accounts. Every Claude (or Codex) account a T3 usage hub such as CLI Proxy reports joins its provider: **Pooled** shows each window's average remaining with the soonest reset, and **Per account** shows one equal-length bar per account, with the email on hover. No setup is needed in T3 VSCode.
+- Several instances of one provider (for example Codex Personal and Work) now share one Account & Usage entry and, when pooled, one status meter; choose **Per account** to see them separately.
+- A harness signed in with an API key now reads “unavailable” instead of showing errors such as `Codex could not read usage (JSON-RPC -32600)`.
+
 ## 0.3.2 — Prerelease
 
 - Fix: repeatedly choosing **Load earlier messages** on a long conversation no longer ends in "Reconnecting…" and loses the loaded messages. Long conversations update far faster and send only changed messages to each view; history you already loaded is kept if the connection does drop.

@@ -37,8 +37,8 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.2.7 |
-| [Account usage](#account-usage) | Collapsed sidebar limits, refresh time and Status meters action. | v0.0.6 | v0.2.3 |
-| [Status bar meters](#status-bar-meters) | Shows provider/account usage with configurable account selection and automatic refresh. | v0.0.7 | v0.2.3 |
+| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | Unreleased |
+| [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | Unreleased |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
 | [Editor references](#editor-references) | Inserts file ranges with checkout-aware labels and preserved source URIs. | v0.0.4 | v0.2.0 |
@@ -987,7 +987,19 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - List usage windows shortest to longest: session, week, model-specific weeks (e.g. Weekly Fable), month, then anything else. Previously the order was month, week, session with model-specific quotas appended after. Only reported windows are listed (so Codex shows just Week; an account reporting only model-specific weeks treats the first as its Week); when none are reported, the Session/Week/Month rows remain as “not reported” placeholders.
 - Status bar meter text and tooltip follow the same order (`S · W · M`); when a general Week is reported, model-specific quotas appear only in the tooltip and sidebar.
 
+#### Unreleased
+
+- List providers, not accounts. Each provider merges its harness account with every account T3's usage hubs (`usageLimitSources`, e.g. CLI Proxy) report, using T3's own account identity and freshest-read merge (`collectLimitAccounts`), so the hub configured in T3 needs no setup here. The title reads `Claude · 3 accounts`, `Claude · <email>` for one, or `Claude` when nothing reports; the plan line reads `Claude Subscription ×3 · via CLI Proxy`.
+- With several reporting accounts, a compact dropdown beside Refresh chooses **Pooled** (default; each window's average used share via T3's `collectLimitPools`, resetting with the soonest account, named on hover) or **Per account** (one equal-length bar per account in each window, accounts in the same soonest-session-reset order everywhere, email and reset on hover). It is stored in `t3-vscode.usage.panelAccounts`.
+- Treat an API-key harness (`auth.type` `apiKey`, an “API Key” auth label, or, heuristically, a Codex JSON-RPC -32600 probe failure with no signed-in address on servers that predate T3 marking API keys unsupported) as unavailable: its windows read “unavailable” and its probe error is no longer listed. Hub errors and other probe failures still show, scoped to the selected provider plus hub notices.
+- Mockups: two revisions reviewed with the owner before implementation (pooled/per-account panel, API-key state, hub failure, status-bar options).
+
 ### Status bar meters
+
+#### Unreleased
+
+- Configure Status Meters is two steps: **Pooled** (one meter per provider, average remaining) or **Per account** (`t3-vscode.usage.statusBarAccounts`), then the providers (`t3-vscode.usage.pinnedProviders`) or accounts to pin, Follow the active conversation, and the windows shown (`t3-vscode.usage.statusBarWindows`: Session, Week, model weeks, Month; default Session, Week, Month). Accounts pinned before pooling still pin their provider, and unpinning the provider releases them.
+- A pooled meter's tooltip gives the average remaining per window, the soonest-resetting account, and each account's own figures.
 
 #### v0.2.3
 

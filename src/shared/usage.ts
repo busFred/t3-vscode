@@ -1,5 +1,5 @@
 import type { EnvironmentId, ServerProvider } from "@t3tools/contracts";
-import { collectLimitAccounts, remainingPercent, type LimitAccount, type LimitPresentations } from "@t3tools/shared/usageLimits";
+import { collectLimitAccounts, collectLimitNotices, collectLimitPools, remainingPercent, type LimitAccount, type LimitPresentations } from "@t3tools/shared/usageLimits";
 import type { HostStateSnapshot } from "./bridge.js";
 
 export type ProviderBrand = "codex" | "claude" | "kimi" | "other";
@@ -70,9 +70,21 @@ export function accountWindows(account: UsageAccount): ReadonlyArray<MeterRow> {
     return { window, label: primary ? row.label : window.label, short: primary ? row.short : window.label, primary };
   });
 }
-export function meterText(account: UsageAccount): string {
-  const reported = accountWindows(account).filter((row) => row.window && row.primary);
-  if (!reported.length) return "Usage unavailable";
+/** Windows a status meter may show; model weeks are the specialised weekly quotas such as Claude Fable. */
+export type MeterWindow = "session" | "week" | "modelWeeks" | "month";
+export const DEFAULT_METER_WINDOWS: ReadonlyArray<MeterWindow> = ["session", "week", "month"];
+const meterWindow = (row: MeterRow): MeterWindow | undefined => !row.window ? undefined : !row.primary ? (row.window.kind === "weekly" ? "modelWeeks" : undefined)
+  : row.window.kind === "session" ? "session" : row.window.kind === "weekly" ? "week" : row.window.kind === "monthly" ? "month" : undefined;
+export function resolveMeterWindows(value: unknown): ReadonlyArray<MeterWindow> {
+  if (!Array.isArray(value)) return DEFAULT_METER_WINDOWS;
+  return (["session", "week", "modelWeeks", "month"] as const).filter((window) => value.includes(window));
+}
+export function meterText(account: UsageAccount, windows: ReadonlyArray<MeterWindow> = DEFAULT_METER_WINDOWS): string {
+  // Windows no meter can show (kind "other") leave the account as unavailable rather than deselected.
+  const all = accountWindows(account).filter((row) => meterWindow(row) !== undefined);
+  if (!all.length) return "Usage unavailable";
+  const reported = all.filter((row) => windows.includes(meterWindow(row)!));
+  if (!reported.length) return "No selected window";
   return reported.map((row) => `${reported.length === 1 ? row.label : row.short} ${remainingPercent(row.window!)}%`).join(" · ");
 }
 export interface MeterPreferences { readonly followActive: boolean; readonly pinnedAccounts: ReadonlyArray<string> }
@@ -95,4 +107,91 @@ export function usageRefreshTarget(selected: ReadonlyArray<UsageAccount>, provid
   // A disabled or uninstalled instance never reports a fresh read, which would leave the meter pinned to an older one.
   const live = account.instanceIds.find((id) => providers.some((provider) => provider.instanceId === id && provider.enabled && provider.installed));
   return live ?? account.instanceIds[0];
+}
+
+/** How several accounts of one provider are shown: one averaged meter, or one bar per account. */
+export type AccountsDisplay = "pooled" | "perAccount";
+export const resolveAccountsDisplay = (value: unknown): AccountsDisplay => value === "perAccount" ? "perAccount" : "pooled";
+
+/**
+ * A harness that can never report subscription limits (API key) is “unavailable”, not failing.
+ * Codex answers an API-key read with JSON-RPC -32600 on servers that predate its `unsupported` marking.
+ */
+export function apiKeyProvider(provider: ServerProvider): boolean {
+  const message = provider.usageLimits?.unavailable?.reason === "probeFailed" ? provider.usageLimits.unavailable.message ?? "" : "";
+  // Heuristic: only a Codex harness without a signed-in ChatGPT address, so a real invalid request still shows.
+  const codexWithoutAccount = provider.driver === "codex" && !provider.auth?.email && /-32600\b/.test(message);
+  return provider.auth?.type === "apiKey" || /\bapi key\b/i.test(provider.auth?.label ?? "") || codexWithoutAccount;
+}
+
+/** Hub failures and real probe failures for the panel; API-key harnesses stay silent. */
+export function usageNotices(state: HostStateSnapshot, driver?: string): ReadonlyArray<string> {
+  const providers = state.providers.filter((provider) => !apiKeyProvider(provider) && (driver === undefined || provider.driver === driver));
+  return collectLimitNotices(limitPresentations({ ...state, providers }));
+}
+
+export interface UsageGroup {
+  readonly key: string;
+  readonly driver: string;
+  readonly brand: ProviderBrand;
+  readonly label: string;
+  /** Accounts with reported windows, soonest session reset first; every per-account row keeps this order. */
+  readonly reporting: ReadonlyArray<UsageAccount>;
+  /** Every account, including API-key harnesses that report nothing. */
+  readonly accounts: ReadonlyArray<UsageAccount>;
+  /** `Claude Subscription ×3 · via CLI Proxy`, or the harness's own label when nothing reports. */
+  readonly plan: string | undefined;
+}
+const BRAND_LABELS: Partial<Record<ProviderBrand, string>> = { claude: "Claude", codex: "Codex", kimi: "Kimi" };
+const reports = (account: UsageAccount) => !account.limits.unavailable && account.limits.windows.length > 0;
+export const groupKey = (driver: string) => `group:${driver}`;
+
+/** One entry per provider: its native harness and every hub account, merged by T3's own account identity. */
+export function usageGroups(state: HostStateSnapshot, now = Date.now()): ReadonlyArray<UsageGroup> {
+  const byDriver = new Map<string, UsageAccount[]>();
+  for (const account of usageAccounts(state)) byDriver.set(account.driver, [...byDriver.get(account.driver) ?? [], account]);
+  return [...byDriver].map(([driver, accounts]) => {
+    const reporting = (collectLimitPools(accounts.filter(reports), now)[0]?.accounts ?? []) as ReadonlyArray<UsageAccount>;
+    const plans = [...new Set(reporting.flatMap((account) => account.plan ? [account.plan] : []))];
+    const sources = [...new Set(reporting.flatMap((account) => account.sourceLabel ? [account.sourceLabel] : []))];
+    const plan = reporting.length
+      ? [plans.length === 1 && reporting.length > 1 ? `${plans[0]} ×${reporting.length}` : plans.join(", "), sources.length ? `via ${sources.join(", ")}` : ""].filter(Boolean).join(" · ") || undefined
+      : accounts.find((account) => account.plan)?.plan;
+    const brand = accounts[0]!.brand;
+    return { key: groupKey(driver), driver, brand, label: BRAND_LABELS[brand] ?? accounts[0]!.label, reporting, accounts, plan };
+  });
+}
+export const groupOf = (groups: ReadonlyArray<UsageGroup>, key: string | undefined) =>
+  key ? groups.find((group) => group.key === key || group.accounts.some((account) => account.key === key)) : undefined;
+
+/** `Claude · 3 accounts`, `Claude · me@example.com`, or just `Claude` when nothing reports. */
+export function groupTitle(group: UsageGroup): string {
+  if (group.reporting.length > 1) return `${group.label} · ${group.reporting.length} accounts`;
+  const only = group.reporting[0];
+  return only ? `${group.label} · ${only.email || only.label}` : group.label;
+}
+
+/**
+ * The group as one account: each window's average share used across the reporting accounts, resetting when
+ * the soonest of them does. A single reporting account is returned as is; none leaves the harness placeholder.
+ */
+export function pooledAccount(group: UsageGroup, now = Date.now()): UsageAccount {
+  if (group.reporting.length <= 1) return group.reporting[0] ?? group.accounts[0]!;
+  const [pool] = collectLimitPools(group.reporting, now);
+  const checkedAt = group.reporting.map((account) => account.limits.checkedAt).sort().at(-1)!;
+  const windows = (pool?.windows ?? []).map((window) => ({ ...(window.resets[0]?.member.window ?? window.members[0]!.window), id: window.id, kind: window.kind, label: window.label, usedPercent: window.usedPercent }));
+  return { ...group.reporting[0]!, key: group.key, label: group.label, email: undefined, plan: group.plan, sourceLabel: null,
+    instanceIds: group.accounts.flatMap((account) => account.instanceIds), limits: { checkedAt, windows } };
+}
+/** The reporting account whose window resets first, to name it on hover. */
+export function soonestReset(group: UsageGroup, window: UsageWindow, now = Date.now()): UsageAccount | undefined {
+  const pool = collectLimitPools(group.reporting, now)[0]?.windows.find((candidate) => candidate.kind === window.kind && candidate.id === window.id);
+  return pool?.resets[0]?.member.account as UsageAccount | undefined;
+}
+
+export interface AccountRow extends MeterRow { readonly columns: ReadonlyArray<{ readonly account: UsageAccount; readonly window: UsageWindow | null }> }
+/** Per-account rows: the pooled row order, one slot per reporting account in the group's fixed order. */
+export function perAccountRows(group: UsageGroup, now = Date.now()): ReadonlyArray<AccountRow> {
+  return accountWindows(pooledAccount(group, now)).map((row) => ({ ...row, columns: group.reporting.map((account) => ({ account,
+    window: row.window ? account.limits.windows.find((window) => window.kind === row.window!.kind && window.id === row.window!.id) ?? null : null })) }));
 }

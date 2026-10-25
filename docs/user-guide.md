@@ -37,7 +37,11 @@ Settings live in **Preferences → Settings → Extensions → T3 VSCode**, grou
 | Font Size: Code | `t3-vscode.fontSizeCode` | `13` | Code blocks, diffs and tool output, 10–18 px. |
 | Message Navigation | `t3-vscode.messageNavigation` | `left` | Rail placement: `left`, `right` or `off`. |
 | Usage: Follow Active Conversation | `t3-vscode.usage.followActiveConversation` | `true` | Status meters track the focused chat's provider. |
-| Usage: Pinned Accounts | `t3-vscode.usage.pinnedAccounts` | `[]` | Accounts always shown in the status bar. |
+| Usage: Pinned Accounts | `t3-vscode.usage.pinnedAccounts` | `[]` | Accounts always shown in the status bar (per-account meters); when pooled, each pins its provider. |
+| Usage: Panel Accounts | `t3-vscode.usage.panelAccounts` | `pooled` | Account & Usage shows a provider's accounts averaged (`pooled`) or as one bar each (`perAccount`). |
+| Usage: Status Bar Accounts | `t3-vscode.usage.statusBarAccounts` | `pooled` | One status meter per provider (`pooled`) or per pinned account (`perAccount`). |
+| Usage: Pinned Providers | `t3-vscode.usage.pinnedProviders` | `[]` | Provider drivers always shown in the status bar when pooled, such as `claudeAgent`. |
+| Usage: Status Bar Windows | `t3-vscode.usage.statusBarWindows` | `["session", "week", "month"]` | Windows the status meters show; add `modelWeeks` for quotas such as Weekly Fable. |
 | Refresh: Default Interval Minutes | `t3-vscode.refresh.defaultIntervalMinutes` | `10` | Shared periodic refresh interval for usage and worktrees. Fractional minutes are supported; `0` disables periodic refresh. |
 | Refresh: Usage Interval Minutes | `t3-vscode.refresh.usageIntervalMinutes` | `null` | Inherit the default unless overridden. Usage adds up to 20% jitter. Explicit legacy seconds settings remain effective until overridden or reset. |
 | Refresh: Worktree Interval Minutes | `t3-vscode.refresh.worktreeIntervalMinutes` | `null` | Inherit the default unless overridden. Manual refresh and checkout-changing actions still update immediately. |
@@ -100,9 +104,11 @@ An already-missing environment only updates its record; it never causes checkout
 
 ## Account and usage meters
 
-**Account & Usage** starts collapsed. Expand it to refresh limits and see the selected account's reported update time.
+**Account & Usage** starts collapsed. Expand it to refresh limits and see the selected provider's reported update time.
 
-The status bar shows a small provider icon followed by reported month/week/session percentages, such as `M 72% · W 77% · S 94%`. Unreported windows are omitted; a single window uses its full name, such as `Week 77%`, and no reported windows show `Usage unavailable`. Hover for all windows and reset times, or click to expand Account & Usage for that account. Use the Command Palette's **T3 VSCode: Configure Status Meters** command or **Status meters** in Account & Usage to follow the focused chat and/or pin individual accounts. **T3 VSCode: Refresh Usage Meters** refreshes the figures immediately rather than waiting for the interval.
+The dropdown lists providers (Claude, Codex…). Each combines its own harness account with every account a usage hub configured in T3 (**Settings → Usage providers**, such as CLI Proxy) reports for it; T3 VSCode needs no setup of its own. With several accounts, a small dropdown beside Refresh switches between **Pooled** (each window's average remaining, with the soonest account's reset; hover the reset to see which account) and **Per account** (one equal-length bar per account in every window; hover a bar for its email). A harness signed in with an API key reports no limits, so its windows read “unavailable” without an error; a hub that cannot be read still shows its error.
+
+The status bar shows a small provider icon followed by reported month/week/session percentages, such as `M 72% · W 77% · S 94%`. Unreported windows are omitted; a single window uses its full name, such as `Week 77%`, and no reported windows show `Usage unavailable`. Hover for all windows and reset times, or click to expand Account & Usage for that provider. Use the Command Palette's **T3 VSCode: Configure Status Meters** command or **Status meters** in Account & Usage to choose pooled or per-account meters, follow the focused chat, pin providers or accounts, and pick which windows appear. A pooled meter's tooltip lists each account. **T3 VSCode: Refresh Usage Meters** refreshes the figures immediately rather than waiting for the interval.
 
 ### Automatic refresh
 

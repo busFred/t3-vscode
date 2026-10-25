@@ -59,6 +59,7 @@ import { DEFAULT_APPEARANCE, resolveAppearance, type AppearanceSettings } from "
 import { ThreadId } from "@t3tools/contracts";
 import { htmlVisual, type ChatAssetReference, type ChatAssetSource } from "../shared/chatVisuals.js";
 import { resolveMessageNavigation, type MessageNavigationPlacement } from "../shared/messageNavigation.js";
+import { resolveAccountsDisplay, type AccountsDisplay } from "../shared/usage.js";
 import { classifyMarkdownImageSource } from "@t3tools/client-runtime/markdown-images";
 import { attachmentMessageContext, attachmentUploadInput, type AttachmentReference, type DraftAttachment } from "../shared/composerAttachments.js";
 
@@ -90,6 +91,8 @@ export interface HostStateOptions {
   readonly dateFormat?: () => DateFormat;
   readonly appearance?: () => AppearanceSettings;
   readonly messageNavigation?: () => MessageNavigationPlacement;
+  readonly usagePanelAccounts?: () => unknown;
+  readonly saveUsagePanelAccounts?: (value: AccountsDisplay) => PromiseLike<void>;
   readonly favoriteModels?: () => ReadonlyArray<FavoriteModel>;
   readonly saveFavoriteModels?: (favorites: ReadonlyArray<FavoriteModel>) => PromiseLike<void>;
   readonly modelPreferences?: () => ModelPickerPreferences;
@@ -146,6 +149,8 @@ export class HostState {
   private readonly draftUploads = new Set<string>();
   private readonly sessionSearches = new Map<string, SessionSearchJob>();
   private searchPreferences: SearchPreferences;
+  /** Panel display chosen in a renderer, for hosts that do not persist it in settings. */
+  private usagePanelAccounts: AccountsDisplay = "pooled";
   private phase: HostPhase = "discovering";
   private notice: string | undefined;
   private connectionProblem: ConnectionProblem | undefined;
@@ -1570,6 +1575,11 @@ export class HostState {
     this.sessionSearches.get(viewId)?.cancel();
     this.sessionSearches.delete(viewId);
   }
+  async setUsagePanelAccounts(value: AccountsDisplay): Promise<void> {
+    this.usagePanelAccounts = value;
+    await this.options.saveUsagePanelAccounts?.(value);
+    this.emit();
+  }
   async setSearchPreferences(patch: Partial<SearchPreferences>): Promise<void> {
     this.searchPreferences = resolveSearchPreferences({ ...this.searchPreferences, ...patch });
     this.emit();
@@ -1803,7 +1813,7 @@ export class HostState {
       connectionSetup: { ...this.setup, ...(this.connectionProblem ? { problem: this.connectionProblem } : {}) },
       searchPreferences: this.searchPreferences,
       ...(this.sessionSearches.get(viewId) ? { sessionSearch: this.sessionSearches.get(viewId)!.state } : {}),
-      workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()),
+      workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()), usagePanelAccounts: resolveAccountsDisplay(this.options.usagePanelAccounts?.() ?? this.usagePanelAccounts),
       dateFormat: resolveDateFormat(this.options.dateFormat?.()), timeFormat: resolveTimeFormat(this.options.timeFormat?.()), appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
       ...(this.notice ? { notice: this.notice } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),

@@ -57,6 +57,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     workspaceRoots: () => getWorkspaceContext().roots, pickProject: pickConversationProject,
     dateFormat: () => resolveDateFormat(vscode.workspace.getConfiguration("t3-vscode").get("dateFormat")),
     timeFormat: () => resolveTimeFormat(vscode.workspace.getConfiguration("t3-vscode").get("timeFormat")), appearance: readAppearance, messageNavigation: () => resolveMessageNavigation(vscode.workspace.getConfiguration("t3-vscode").get("messageNavigation")),
+    usagePanelAccounts: () => vscode.workspace.getConfiguration("t3-vscode").get("usage.panelAccounts"),
+    saveUsagePanelAccounts: (value) => {
+      // Write where the effective value lives, or a workspace value would hide the choice.
+      const config = vscode.workspace.getConfiguration("t3-vscode");
+      return config.update("usage.panelAccounts", value, config.inspect("usage.panelAccounts")?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global);
+    },
     modelPreferences: () => modelPreferences.read(),
     searchPreferences: context.workspaceState.get("sessionSearchPreferences", {}),
     saveSearchPreferences: (preferences) => context.workspaceState.update("sessionSearchPreferences", preferences),
@@ -141,7 +147,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await bridge.performThreadAction(thread.id, choice.action);
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("t3-vscode.dateFormat") || event.affectsConfiguration("t3-vscode.timeFormat") || event.affectsConfiguration("t3-vscode.messageNavigation") || FONT_SIZE_KEYS.some((key) => event.affectsConfiguration(`t3-vscode.${key}`))) hostState?.refreshAppearance();
+      if (event.affectsConfiguration("t3-vscode.dateFormat") || event.affectsConfiguration("t3-vscode.timeFormat") || event.affectsConfiguration("t3-vscode.messageNavigation") || event.affectsConfiguration("t3-vscode.usage.panelAccounts") || FONT_SIZE_KEYS.some((key) => event.affectsConfiguration(`t3-vscode.${key}`))) hostState?.refreshAppearance();
       if (event.affectsConfiguration("t3-vscode.usage") || event.affectsConfiguration("t3-vscode.refresh")) meters.update();
       if (event.affectsConfiguration("t3-vscode.refresh.defaultIntervalMinutes") || event.affectsConfiguration("t3-vscode.refresh.worktreeIntervalMinutes")) hostState?.refreshIntervalsChanged();
       if (event.affectsConfiguration("t3-vscode.t3Home")) {

@@ -349,6 +349,10 @@ export class BridgeHandler {
           if (!this.viewActions.environmentAction) throw new Error("Environments are unavailable.");
           await this.viewActions.environmentAction(stringParam(params, "action"), params.environmentId === undefined ? undefined : stringParam(params, "environmentId"));
           break;
+        case "setUsagePanelAccounts": {
+          if (params.value !== "pooled" && params.value !== "perAccount") throw new Error("Invalid usage display.");
+          await this.hostState.setUsagePanelAccounts(params.value); break;
+        }
         case "configureUsage":
           if (this.viewActions.configureUsage) await this.viewActions.configureUsage();
           else await (await import("vscode")).commands.executeCommand("t3-vscode.configureUsage");

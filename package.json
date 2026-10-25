@@ -297,8 +297,48 @@
             },
             "default": [],
             "scope": "window",
-            "markdownDescription": "Accounts to keep in the status bar alongside the active conversation. Use [Configure Status Meters](command:t3-vscode.configureUsage) to choose accounts. Each account has its own meter; only reported quota windows are shown.",
+            "markdownDescription": "Accounts to keep in the status bar alongside the active conversation when `#t3-vscode.usage.statusBarAccounts#` is `perAccount`; when pooled, each pins its provider. Use [Configure Status Meters](command:t3-vscode.configureUsage) to choose accounts. Only reported quota windows are shown.",
             "order": 2
+          },
+          "t3-vscode.usage.panelAccounts": {
+            "type": "string",
+            "enum": ["pooled", "perAccount"],
+            "enumDescriptions": ["One bar per window: the average remaining across the provider's accounts, resetting when the soonest account does.", "One equal-length bar per account in every window; hover a bar for its account."],
+            "default": "pooled",
+            "scope": "window",
+            "markdownDescription": "How Account & Usage shows a provider with several accounts, such as the Claude accounts a T3 usage hub reports. Also switchable from the dropdown in the panel.",
+            "order": 3
+          },
+          "t3-vscode.usage.statusBarAccounts": {
+            "type": "string",
+            "enum": ["pooled", "perAccount"],
+            "enumDescriptions": ["One meter per provider: the average remaining across its accounts.", "One meter for each account in `#t3-vscode.usage.pinnedAccounts#`."],
+            "default": "pooled",
+            "scope": "window",
+            "markdownDescription": "How the status bar shows providers with several accounts. Use [Configure Status Meters](command:t3-vscode.configureUsage) to choose.",
+            "order": 4
+          },
+          "t3-vscode.usage.pinnedProviders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "scope": "window",
+            "markdownDescription": "Provider drivers (for example `claudeAgent`, `codex`) to keep in the status bar when meters are pooled. Use [Configure Status Meters](command:t3-vscode.configureUsage) to choose.",
+            "order": 5
+          },
+          "t3-vscode.usage.statusBarWindows": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["session", "week", "modelWeeks", "month"]
+            },
+            "uniqueItems": true,
+            "default": ["session", "week", "month"],
+            "scope": "window",
+            "markdownDescription": "Quota windows the status bar meters show. `modelWeeks` adds model-specific weekly quotas such as Claude Fable or Opus.",
+            "order": 6
           },
           "t3-vscode.usage.refreshIntervalSeconds": {
             "type": "number",
@@ -306,7 +346,7 @@
             "minimum": 0,
             "scope": "window",
             "markdownDescription": "How often, in seconds, to refresh provider usage for the status bar meters while connected. Each wait adds up to 20% random jitter, so the default 600 means 600 to 720 seconds. Usage is also refreshed once when T3 VSCode connects. A refresh that falls due while a message is being sent or a response is running waits for the session to go idle, so it is far less likely to delay your messages; one is forced through once the meters are five intervals stale. Automatic refreshes also pause while no meter is displayed, and the waiting refresh runs as soon as one appears. Values from 1 to 14 are raised to 15; `0` disables periodic refresh. Changes apply immediately.",
-            "order": 3,
+            "order": 7,
             "included": false,
             "markdownDeprecationMessage": "Use `#t3-vscode.refresh.usageIntervalMinutes#` (in minutes). Explicit legacy values remain active until a usage override is set."
           }

@@ -421,6 +421,13 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .account-limit-bar { height: 4px; border-radius: 2px; background: var(--input); margin: 2px 0 0; overflow: hidden; }
 .account-limit-bar i { display: block; height: 100%; background: var(--vscode-progressBar-background, var(--primary)); }
 .account-limit small { color: var(--muted-foreground); font-size: .5625rem; white-space: nowrap; }
+/* Same size as the refresh button row, so switching modes never shifts the panel. */
+.usage-display-choice { flex: none; height: 20px; max-width: 92px; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); border-radius: 3px; padding: 0 2px; font-size: .625rem; }
+.account-limit-accounts { margin: 2px 0 0 8px; }
+/* A fixed value column keeps every account's bar the same length within and across windows. */
+.account-limit-account { display: grid; grid-template-columns: minmax(0, 1fr) 72px; gap: 6px; align-items: center; font-size: .625rem; margin: 2px 0; }
+.account-limit-account .account-limit-bar { margin: 0; height: 3px; }
+.account-limit-account .account-limit-value { justify-content: flex-end; }
 .composer-box { background: var(--vscode-input-background, var(--card)); color: var(--vscode-input-foreground, var(--foreground)); border-radius: 3px; }
 .composer-box textarea::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted-foreground)); }
 .thread-search { background: var(--vscode-input-background, var(--card)); color: var(--vscode-input-foreground, var(--foreground)); border-radius: 3px; }
