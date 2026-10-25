@@ -208,6 +208,21 @@ The owner reviewed these and chose to ship as they are. None is a regression aga
 - Set `preview: true` with the bump, so `scripts/package-vsix.mjs` passes `--pre-release`. Built `target-installer/t3-vscode-0.3.0.vsix` (45 files, 3.19 MB) from the clean commit. The packaged manifest has version `0.3.0`, publisher `hungtienhuang` and `preview: true`, and `extension.vsixmanifest` has `PreRelease` `true`. SHA-256: `d1593033359e31c155439b5eeaba7c39bed87cbf5505a8314d8324a8f74fb604`.
 - On October 24, 2026 (about 07:10 UTC), `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.0.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.0.` An immediate `vsce show` readback listed 0.2.7 as the latest version. This listing lag matches earlier uploads, so the listed channel is not yet confirmed by readback. No Marketplace installation was attempted.
 
+## 0.3.5 release-channel publication
+
+- On October 25, 2026, the owner asked to "build and publish to stable channel and then push", and chose version 0.3.5 when asked; 0.3.4 was already published as a prerelease. The authorization covers 0.3.5 on the stable release channel only. Comparison revisions: `1009345` (prerelease 0.3.4) and `68a1105` (stable 0.3.3). Source commit: `e3688b2`, pushed to `origin/main` together with another session's Account & Usage commits (`3f0e485`, `053d19f`, `c81f892`).
+- Scope for stable users: everything since 0.3.3. That covers the 0.3.4 prerelease (conversations on other machines, Add to another machine, the T3-style thread menu, unread dots, the Snoozed shelf, rail and project chip changes) and, new since 0.3.4:
+  - Auto-settle is hidden where the machine never auto-settles;
+  - the compact Account & Usage header;
+  - thread submenus always open beside the menu.
+- Review and checks: a fresh-context Opus regression review of `git diff 1009345` blocked twice, and both findings were fixed:
+  - a per-project auto-settle rule that hid the opt-out for threads T3 still settles on a closed pull request; it now mirrors T3's machine-wide `autoSettlementConfigured`;
+  - Refresh and Status meters sliding left when a provider has a plan but no hub (from `c81f892`).
+
+  Its final verdict was APPROVE WITH NITS. The non-blocking nits left are the plan row catching clicks on the buttons' bottom 4 px and the 160 px submenu reserve. On `e3688b2`: typecheck clean and 605/605 unit tests. Before the commit: `verify-views.ts` 16/16, after a rerun past the known intermittent resize step. Against an isolated T3 0.1.1 server with one GPT-6 Luna (low) turn, `verify-thread-attention-live.ts` passed 7/7.
+- Set `preview: false` with the bump, so `scripts/package-vsix.mjs` omits `--pre-release`. Built `target-installer/t3-vscode-0.3.5.vsix` (45 files, 3.23 MB) from the clean commit. The packaged manifest has version `0.3.5`, publisher `hungtienhuang` and `preview: false`, and `extension.vsixmanifest` has no `PreRelease` property. SHA-256: `0c45ac8d41f61bad982bb06537e26ea825d7c01f3698a70052cfe0afedd177d0`.
+- At 21:34 UTC, `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.5.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.5.` The Marketplace package endpoint then served 0.3.5 with the same SHA-256 and `preview: false`. The extension query still listed 0.3.4 as latest immediately afterwards, so listing refresh was pending. No Marketplace installation was attempted.
+
 ## 0.3.4 prerelease-channel publication
 
 - On October 25, 2026, the owner chose version 0.3.4 on the pre-release channel and then asked to "commit and publish as 0.3.4". The authorization covers 0.3.4 on the prerelease channel only. The Marketplace listed 0.3.3 as its latest version. Comparison revision: `68a1105` (v0.3.3). Source commit: `72d8911`, not pushed.

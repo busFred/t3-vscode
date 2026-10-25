@@ -1959,3 +1959,8 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Pass typecheck, 603/603 unit tests, `pnpm build`, `verify-views.ts` 16/16 and `verify-ui.mjs` up to its known subagent-archive stop with every new check passing.
 - Pass isolated two-server checks with live GPT-6 Luna (low) turns: `verify-multi-environment.ts` 17/17, `verify-remote-clone.ts` 4/4 and `verify-thread-attention-live.ts` 6/6.
 - Fresh-context regression reviews of each part, with all blockers resolved and final verdicts of APPROVE: the menu, unread state and rail work, starting conversations on another machine, Add to another machine, and the faded-title revert. A metadata review confirmed the manifest, changelog and history; its one wording nit, which listed Regenerate title as new, was fixed.
+
+### v0.3.5
+
+- Stable release of everything since 0.3.3, as the owner requested ("build and publish to stable channel"; version 0.3.5 chosen by the owner). Built `target-installer/t3-vscode-0.3.5.vsix` from `e3688b2` (SHA-256 `0c45ac8d41f61bad982bb06537e26ea825d7c01f3698a70052cfe0afedd177d0`, `preview: false`). Marketplace accepted publication on October 25, 2026 (21:34 UTC). See [publication details](publishing.md#035-release-channel-publication).
+- Fresh-context regression review against `1009345`: two blockers fixed (machine-wide auto-settle rule; usage buttons without a hub), final APPROVE WITH NITS. Typecheck, 605/605 unit tests, `verify-views.ts` 16/16 and the isolated live attention check 7/7.
