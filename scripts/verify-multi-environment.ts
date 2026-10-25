@@ -250,6 +250,20 @@ async function main(): Promise<void> {
       await until("unsent attachment removed from B", () => !holds(B.home), 10_000);
     });
 
+    await check("a new chat can choose B: B's project, checkouts and files come from B's server", async () => {
+      h.registerView("remote-draft");
+      const machines = h.snapshot("remote-draft").draft.machines;
+      must(machines?.length === 2 && machines[0]!.local && machines[1]!.environmentId === record.environmentId && machines[1]!.status === "connected", `machines=${JSON.stringify(machines)}`);
+      await h.chooseMachine(record.environmentId, "remote-draft");
+      const draft = await until("B's checkouts listed", () => { const d = h.snapshot("remote-draft").draft; return d.remoteCheckouts && !d.remoteCheckouts.loading && d; }, 15_000);
+      must(draft.environmentId === record.environmentId && draft.projectId === bProject && draft.workspaceRoot === remoteClone, `draft=${JSON.stringify({ e: draft.environmentId, p: draft.projectId, w: draft.workspaceRoot })}`);
+      must(!draft.remoteCheckouts!.error && draft.remoteCheckouts!.items[0]?.root === true && draft.remoteCheckouts!.items[0]!.path === remoteClone && draft.remoteCheckouts!.items[0]!.branch === "main", `checkouts=${scrub(JSON.stringify(draft.remoteCheckouts))}`);
+      const files = await h.composerSuggestions("path", "READ", false, "remote-draft");
+      must(files.some((item) => item.value === "README.md"), `suggestions=${JSON.stringify(files.map((item) => item.value))}`);
+      must(h.snapshot("remote-draft").providers.length > 0, "B's providers are not offered to the draft");
+      await h.removeView("remote-draft");
+    });
+
     await check("turn diff and restore are rejected for B's thread", async () => {
       for (const [name, run] of [
         ["prepareTurnDiff", () => h.prepareTurnDiff(bThread, bThread, "item")],
@@ -311,6 +325,29 @@ async function main(): Promise<void> {
           const projection = await bClient!.getThreadProjection(bThread);
           return projection.visibleTurnItems.some((row) => row.item.type === "assistant_message" && "text" in row.item && String(row.item.text).includes("MULTI-ENV-OK"));
         }, 150_000, 1500);
+      });
+      await check("live: a new chat on B launches on B with its first message, in B's root checkout", async () => {
+        h.registerView("remote-root"); await h.chooseMachine(record.environmentId, "remote-root");
+        await h.setModel(undefined, liveTestSelection(h.snapshot("remote-root")), "remote-root");
+        await h.sendMessage("Reply with exactly: REMOTE-LAUNCH-OK", undefined, "remote-root");
+        const id = h.snapshot("remote-root").activeThreadId;
+        must(id, "the tab did not switch to the launched conversation");
+        must(h.snapshot("remote-root").remoteSession?.environmentId === record.environmentId, "the launched conversation is not flagged as running on B");
+        must((await bClient!.snapshotShell()).threads.some((t) => t.id === id), "the thread is not on B");
+        must(!(await aClient!.snapshotShell()).threads.some((t) => t.id === id), "the thread leaked to A");
+        await until("assistant reply on B", async () => (await bClient!.getThreadProjection(id!)).visibleTurnItems.some((row) => row.item.type === "assistant_message" && "text" in row.item && String(row.item.text).includes("REMOTE-LAUNCH-OK")), 150_000, 1500);
+      });
+      await check("live: a new chat on B in a new worktree gets that worktree created on B", async () => {
+        h.registerView("remote-worktree"); await h.chooseMachine(record.environmentId, "remote-worktree");
+        await until("B's checkouts listed", () => h.snapshot("remote-worktree").draft.remoteCheckouts?.loading === false, 15_000);
+        await h.setModel(undefined, liveTestSelection(h.snapshot("remote-worktree")), "remote-worktree");
+        await h.configureWorktree({ type: "new", baseRef: "main", branch: "t3/remote-launch" }, bProject, "remote-worktree");
+        await h.sendMessage("Reply with exactly: REMOTE-WORKTREE-OK", undefined, "remote-worktree");
+        const id = h.snapshot("remote-worktree").activeThreadId!;
+        const thread = await until("the worktree bound on B", async () => (await bClient!.snapshotShell()).threads.find((t) => t.id === id && t.worktreePath && t.branch), 120_000, 1000);
+        must(thread.branch === "t3/remote-launch" && thread.worktreePath !== remoteClone, `branch=${thread.branch} path=${thread.worktreePath}`);
+        must(existsSync(thread.worktreePath!), "the worktree folder does not exist on B's disk");
+        await until("assistant reply on B", async () => (await bClient!.getThreadProjection(id)).visibleTurnItems.some((row) => row.item.type === "assistant_message" && "text" in row.item && String(row.item.text).includes("REMOTE-WORKTREE-OK")), 150_000, 1500);
       });
     } else console.log("SKIP: live turn (set T3_VSCODE_LIVE=1)");
   } finally {

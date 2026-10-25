@@ -60,6 +60,7 @@ function mockBridge() {
       ? { threads: window.__state.threads.map((thread) => thread.id === params.threadId ? { ...thread, ...params } : thread) }
       : { draft: { ...window.__state.draft, ...params } });
     if (request.method === "chooseProject") window.__replace({ draft: { ...window.__state.draft, projectId: null, workspaceRoot: "/tmp/picked-project" } });
+    if (request.method === "chooseMachine") window.__replace({ draft: { ...window.__state.draft, environmentId: params.environmentId === "fixture" ? undefined : params.environmentId } });
     if (request.method === "respondToRequest") window.__replace({ pending: { approvals: [], userInputs: [] } });
     if (request.method === "sendMessage") {
       if (!params.threadId) {
@@ -72,7 +73,8 @@ function mockBridge() {
       window.__replace({ transcript: [...window.__state.transcript, { ...window.__fixtures.assistant, key: "new-response", item: { ...window.__fixtures.assistant.item, id: "new-response", text: "UI verification reply" } }] });
     }
     if (request.method === "loadHistory") window.__replace({ ...(window.__historyRows ? { transcript: [...window.__historyRows, ...window.__state.transcript] } : {}), history: { hasMore: false, loading: false, error: null } });
-    setTimeout(() => window.postMessage({ id: request.id, result: window.__state }, "*"), 0);
+    const result = request.method === "listCopyableFiles" ? [{ path: ".env", checked: true }, { path: ".vscode/settings.json", checked: false }] : window.__state;
+    setTimeout(() => window.postMessage({ id: request.id, result }, "*"), 0);
   } });
 }
 const visualsJs = await readFile(new URL("../dist/mermaid.js", import.meta.url));
@@ -229,8 +231,9 @@ try {
     window.__historyRows = [{ ...user, key: 'earlier-user', item: { ...user.item, id: 'earlier-user', text: 'Earlier prompt' } }, { ...assistant, key: 'earlier-answer', item: { ...assistant.item, id: 'earlier-answer', text: 'Earlier response' } }];
     window.__replace({ history: { hasMore: true, loading: false, error: null } });
   });
-  await page.locator('.message-nav-earlier').click();
+  // The reader is already at the top after jumping to message 1, so the page arrives without a click.
   await page.getByRole('button', { name: 'Jump to message 3', exact: true }).waitFor();
+  assert.equal(await page.locator('.message-nav-earlier').count(), 0);
   assert.equal(await page.locator('.message-nav-preview strong').textContent(), 'Prompt 1');
   await rail.focus(); await rail.press('Home'); await rail.press('Enter');
   await page.locator('.timeline-row .user-message').getByText('Earlier prompt', { exact: true }).waitFor();
@@ -244,6 +247,16 @@ try {
   await page.evaluate(() => window.__replace({ transcript: [...window.__state.transcript, { ...window.__fixtures.assistant, key: 'stream-after-return', item: { ...window.__fixtures.assistant.item, id: 'stream-after-return', text: 'Streaming after manual return to bottom', streaming: true } }] }));
   await page.getByText('Streaming after manual return to bottom', { exact: true }).waitFor();
   await page.waitForFunction(() => { const item = [...document.querySelectorAll('.assistant-message')].find((entry) => entry.textContent.includes('Streaming after manual return to bottom')); const viewport = document.querySelector('.transcript-list'); return item && item.getBoundingClientRect().bottom <= viewport.getBoundingClientRect().bottom + 2; });
+  // Scrolling up to the top loads the next earlier page on its own.
+  await page.evaluate(() => {
+    const { user, assistant } = window.__fixtures;
+    window.__historyRows = [{ ...user, key: 'auto-user', item: { ...user.item, id: 'auto-user', text: 'Automatically loaded prompt' } }, { ...assistant, key: 'auto-answer', item: { ...assistant.item, id: 'auto-answer', text: 'Automatically loaded response' } }];
+    window.__replace({ history: { hasMore: true, loading: false, error: null } });
+  });
+  await page.locator('.transcript-list').hover();
+  for (let step = 0; step < 400 && !(await page.getByText('Automatically loaded prompt', { exact: true }).count()); step++) await page.mouse.wheel(0, -4000);
+  await page.locator('.timeline-row .user-message').getByText('Automatically loaded prompt', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Jump to latest message' }).click();
   await page.evaluate(() => window.__replace({ messageNavigation: 'right' }));
   await page.locator('.message-navigator.right').waitFor();
   await page.evaluate(() => window.__replace({ messageNavigation: 'off' }));
@@ -256,6 +269,20 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `Rail overflows at ${width}px`);
     await page.waitForFunction(() => { const p=document.querySelector('.message-nav-preview');if(!p)return true;const r=p.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth; });
   }
+  // A centred composer leaves the rail's strip free, so the rail is centred in the whole conversation;
+  // where the composer runs underneath, it is centred in the transcript above it.
+  const railInsets = () => page.evaluate(() => { const rail = document.querySelector('.message-navigator').getBoundingClientRect(), list = document.querySelector('.transcript-container').getBoundingClientRect(), host = document.querySelector('.chat-conversation').getBoundingClientRect(); return { top: Math.round(rail.top - list.top), bottom: Math.round(list.bottom - rail.bottom), bottomOfConversation: Math.round(host.bottom - rail.bottom) }; });
+  await page.setViewportSize({ width: 1200, height: 820 });
+  await page.waitForFunction(() => document.querySelector('.message-navigator').getBoundingClientRect().bottom > document.querySelector('.transcript-container').getBoundingClientRect().bottom);
+  let insets = await railInsets();
+  assert.equal(insets.top, insets.bottomOfConversation, `Wide rail insets ${JSON.stringify(insets)}`);
+  await page.screenshot({ path: `${evidence}/message-navigation-wide.png` });
+  assert.equal(await page.evaluate(() => document.querySelector('.chat-conversation').firstElementChild.contains(document.querySelector('.message-navigator'))), true, 'The rail comes first in reading and Tab order');
+  await page.setViewportSize({ width: 300, height: 820 });
+  await page.waitForFunction(() => document.querySelector('.message-navigator').getBoundingClientRect().bottom < document.querySelector('.transcript-container').getBoundingClientRect().bottom);
+  insets = await railInsets();
+  assert.equal(insets.top, insets.bottom, `Narrow rail insets ${JSON.stringify(insets)}`);
+  await page.setViewportSize({ width: 760, height: 820 });
   await page.evaluate(() => { document.body.dataset.surface='panel'; window.__replace({}); });
   await page.locator('.chat-header').waitFor();
   await rail.press('End'); await rail.press('Enter');
@@ -401,6 +428,80 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.evaluate(() => window.__replace({ activeThreadId: undefined, projects: [], threads: [], transcript: [],
     draft: { projectId: null, workspaceRoot: null, supportsNoProject: true, modelSelection: { instanceId: "codex", model: "gpt-6-astra" }, runtimeMode: "auto", interactionMode: "default" } }));
   await page.getByRole("button", { name: "Choose project", exact: true }).filter({ hasText: "No project" }).waitFor();
+  // A paired machine with this repository: the new chat chooses where it runs from a chip above the message box.
+  // Theme colours a real dark VS Code provides, so the screenshots show the chip as users see it.
+  const machineTheme = { 'sideBar-background': '#1f1f1f', 'list-hoverBackground': '#2a2d2e', 'list-activeSelectionBackground': '#04395e', 'list-inactiveSelectionBackground': '#37373d' };
+  await page.evaluate((theme) => { for (const [key, value] of Object.entries(theme)) document.documentElement.style.setProperty(`--vscode-${key}`, value); }, machineTheme);
+  await page.evaluate(() => window.__replace({ draft: { ...window.__state.draft, machines: [
+    { environmentId: "fixture", label: "hungtien-p1g6l", local: true, status: "connected" },
+    { environmentId: "p520", label: "hungtien-P520-Linux", local: false, status: "connected" },
+    { environmentId: "pgx", label: "hungtien-pgx", local: false, status: "reconnecting" }] } }));
+  const machineChip = page.getByRole("button", { name: /^Run on: hungtien-p1g6l$/ });
+  await machineChip.waitFor();
+  const chipBox = await machineChip.boundingBox(), messageBox = await page.locator(".composer-box").boundingBox();
+  assert.ok(chipBox.y + chipBox.height <= messageBox.y, "the chip sits in the gap above the message box");
+  await machineChip.click();
+  const machineMenu = page.getByRole("menu", { name: "Run on" });
+  assert.deepEqual(await machineMenu.getByRole("menuitemradio").allTextContents(), ["hungtien-p1g6lthis computer", "hungtien-P520-Linux", "hungtien-pgxreconnecting…"]);
+  assert.equal(await machineMenu.getByRole("menuitemradio", { name: /hungtien-pgx/ }).getAttribute("aria-disabled"), "true");
+  await page.screenshot({ path: `${evidence}/machine-chip-menu.png` });
+  await page.keyboard.press("ArrowDown"); await page.keyboard.press("Enter");
+  await page.waitForFunction(() => window.__requests.some((request) => request.method === "chooseMachine" && request.params.environmentId === "p520"));
+  await page.getByRole("button", { name: /^Run on: hungtien-P520-Linux$/ }).waitFor();
+  // The machine drops while writing: the draft stays and sending waits for it.
+  await page.evaluate(() => window.__replace({ draft: { ...window.__state.draft, machines: window.__state.draft.machines.map((machine) => machine.environmentId === "p520" ? { ...machine, status: "reconnecting" } : machine) } }));
+  await page.getByRole("button", { name: "Run on: hungtien-P520-Linux, reconnecting…", exact: true }).waitFor();
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("Kept while the machine is away");
+  assert.equal(await page.getByRole("button", { name: "Send message", exact: true }).isDisabled(), true);
+  await page.getByText("Your draft is kept", { exact: true }).waitFor();
+  await page.screenshot({ path: `${evidence}/machine-chip-away.png` });
+  // A started conversation shows where it runs as a plain label in the same place.
+  await page.evaluate(() => window.__replace({ activeThreadId: "remote-label-thread", remoteSession: { environmentId: "p520", label: "hungtien-P520-Linux" },
+    threads: [{ id: "remote-label-thread", projectId: "first-project", title: "Remote", status: "idle", modelSelection: window.__state.draft.modelSelection, runtimeMode: "auto", interactionMode: "default", updatedAt: new Date().toISOString(), archived: false, pinned: false, activeRunId: null, branch: "fix/rail" }] }));
+  await page.locator(".machine-label").filter({ hasText: "Runs on hungtien-P520-Linux" }).filter({ hasText: "fix/rail" }).waitFor();
+  assert.equal(await page.getByRole("button", { name: /^Run on:/ }).count(), 0);
+  await page.screenshot({ path: `${evidence}/machine-label.png` });
+  // A paired machine without this repository can get a clone of it from the same menu.
+  await page.evaluate(() => window.__replace({ activeThreadId: undefined, remoteSession: undefined, threads: [], draft: { ...window.__state.draft, environmentId: undefined,
+    machines: window.__state.draft.machines.map((machine) => ({ ...machine, status: machine.environmentId === "pgx" ? "reconnecting" : "connected" })),
+    cloneSource: { title: "t3-vscode", sshUrl: "git@github.com:busFred/t3-vscode.git", httpsUrl: "https://github.com/busFred/t3-vscode.git", protocol: "ssh" },
+    addTargets: [{ environmentId: "i7", label: "hungtien-p1g6l-i7", available: true, defaultDestination: "~/t3-projects/t3-vscode" }, { environmentId: "nas", label: "hungtien-nas", available: false, reason: "needs source-control access", defaultDestination: "~/t3-vscode" }] } }));
+  await page.getByRole("button", { name: /^Run on: hungtien-p1g6l$/ }).click();
+  await page.getByRole("menuitem", { name: "Add to another machine" }).click();
+  const addMenu = page.getByRole("menu", { name: "Add to another machine" });
+  assert.equal(await addMenu.getByRole("menuitem", { name: /hungtien-nas/ }).getAttribute("aria-disabled"), "true");
+  await page.screenshot({ path: `${evidence}/machine-add-menu.png` });
+  await addMenu.getByRole("menuitem", { name: /hungtien-p1g6l-i7/ }).click();
+  const cloneDialog = page.getByRole("dialog", { name: "Add t3-vscode to hungtien-p1g6l-i7" });
+  await cloneDialog.getByRole("checkbox", { name: ".env", exact: true }).waitFor();
+  assert.equal(await cloneDialog.getByRole("textbox", { name: "Destination folder" }).inputValue(), "~/t3-projects/t3-vscode");
+  assert.equal(await cloneDialog.getByRole("checkbox", { name: ".env", exact: true }).isChecked(), true);
+  assert.equal(await cloneDialog.getByRole("checkbox", { name: ".vscode/settings.json" }).isChecked(), false);
+  await cloneDialog.getByRole("combobox", { name: "Clone protocol" }).selectOption("https");
+  await page.screenshot({ path: `${evidence}/machine-clone-dialog.png` });
+  await cloneDialog.getByRole("button", { name: "Clone to hungtien-p1g6l-i7" }).click();
+  await page.waitForFunction(() => window.__requests.some((request) => request.method === "startClone" && request.params.environmentId === "i7" && request.params.protocol === "https" && request.params.files.join() === ".env"));
+  // While it clones the chat waits; a failure keeps Retry and Remove.
+  await page.evaluate(() => window.__replace({ draft: { ...window.__state.draft, environmentId: "i7", addTargets: undefined,
+    clone: { environmentId: "i7", label: "hungtien-p1g6l-i7", projectId: "cloned", name: "busFred/t3-vscode", phase: "running", stage: "Receiving objects", percent: 42, detail: null, error: null } } }));
+  await page.getByRole("status").filter({ hasText: "Cloning busFred/t3-vscode on hungtien-p1g6l-i7" }).waitFor();
+  await page.getByRole("button", { name: "Run on: hungtien-p1g6l-i7, cloning…", exact: true }).waitFor();
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("Set up the dev environment");
+  assert.equal(await page.getByRole("button", { name: "Send message", exact: true }).isDisabled(), true);
+  await page.getByText("Cloning repository", { exact: true }).waitFor();
+  await page.screenshot({ path: `${evidence}/machine-cloning.png` });
+  await page.evaluate(() => window.__replace({ draft: { ...window.__state.draft, clone: { ...window.__state.draft.clone, phase: "failed", error: "Permission denied (publickey)." } } }));
+  await page.getByRole("alert").filter({ hasText: "Clone failed on hungtien-p1g6l-i7: Permission denied (publickey)." }).getByRole("button", { name: "Remove" }).click();
+  await page.waitForFunction(() => window.__requests.some((request) => request.method === "cloneAction" && request.params.action === "remove"));
+  await page.evaluate(() => window.__replace({ draft: { ...window.__state.draft, environmentId: undefined, clone: undefined } }));
+  // With one window folder the project is fixed, so the message box shows no project chip.
+  const rootsBefore = await page.evaluate(() => window.__state.workspaceRoots);
+  await page.evaluate(() => window.__replace({ workspaceRoots: ["/tmp/t3-vscode"] }));
+  await page.waitForFunction(() => !document.querySelector(".composer-project"));
+  await page.evaluate((roots) => window.__replace({ workspaceRoots: roots }), rootsBefore);
+  await page.evaluate((theme) => { for (const key of Object.keys(theme)) document.documentElement.style.removeProperty(`--vscode-${key}`); }, machineTheme);
+  await page.evaluate(() => { const { environmentId: _machine, machines: _machines, ...draft } = window.__state.draft; window.__replace({ activeThreadId: undefined, remoteSession: undefined, threads: [], draft }); });
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("");
   await page.getByRole("button", { name: "Choose model", exact: true }).click();
   await page.getByRole("textbox", { name: "Search models" }).fill("kimi");
   await page.getByRole("button", { name: "Kimi for Coding", exact: true }).click();

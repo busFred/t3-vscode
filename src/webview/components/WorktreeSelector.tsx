@@ -9,11 +9,19 @@ import { WorktreeInspector } from "./WorktreeInspector";
 import { WorktreeSessionBranch } from "./WorktreeSessionBranch";
 import { defaultWorktreeBase } from "./WorktreeDefaults";
 
+/** A new chat on a paired machine picks among that machine's checkouts, read from its own repository. */
+export function checkoutState(state: HostStateSnapshot): HostStateSnapshot {
+  const remote = state.draft.environmentId ? state.draft.remoteCheckouts : undefined;
+  if (!remote) return state;
+  const { error: _local, ...base } = state.worktrees ?? { loading: false, settings: [], preparations: [] };
+  return { ...state, worktrees: { ...base, loading: remote.loading, items: remote.items, branches: remote.branches, settings: [], preparations: base.preparations ?? [], ...(remote.error ? { error: remote.error } : {}) } };
+}
 export function composerWorktreeLabel(state: HostStateSnapshot): string {
   const thread = state.threads.find((thread) => thread.id === state.activeThreadId);
-  return thread && !thread.canChooseWorkspace ? thread.worktreePath ? state.worktrees?.items.find((item) => item.path === thread.worktreePath)?.branch || "Worktree" : "Root" : worktreeChoiceLabel(state.draft.workspace, state);
+  return thread && !thread.canChooseWorkspace ? thread.worktreePath ? state.worktrees?.items.find((item) => item.path === thread.worktreePath)?.branch || "Worktree" : "Root" : worktreeChoiceLabel(state.draft.workspace, checkoutState(state));
 }
-export function WorktreeSelector({ state, disabled }: { readonly state: HostStateSnapshot; readonly disabled: boolean }) {
+export function WorktreeSelector({ state: snapshot, disabled }: { readonly state: HostStateSnapshot; readonly disabled: boolean }) {
+  const state = checkoutState(snapshot), remote = !!snapshot.draft.environmentId;
   const thread = state.threads.find((thread) => thread.id === state.activeThreadId);
   const projectId = thread?.projectId ?? state.draft.projectId;
   const choosing = !thread || thread.canChooseWorkspace === true;
@@ -35,6 +43,6 @@ export function WorktreeSelector({ state, disabled }: { readonly state: HostStat
   return <><button type="button" ref={anchor} className="worktree-control" title={!choosing ? `Checkout: ${thread?.worktreePath ?? "Root"}. Existing conversations keep their checkout.` : `Checkout for this draft: ${label}`} aria-label={`Worktree: ${label}`} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen(!open)}><GitBranchIcon size={12} /><span>{label}</span><ChevronDownIcon size={11} /></button>
     {open && anchor.current ? <WorktreePopover anchor={anchor.current} title={!choosing ? "Session checkout" : "Choose checkout"} onClose={close}>
       {!choosing ? <><div className="task-editor-fields"><p className="task-context">This session stays bound to its checkout folder. Start a new chat to choose another checkout.</p>{thread && item && !item.root ? <WorktreeSessionBranch state={state} thread={thread} item={item} /> : null}{item ? <WorktreeInspector state={state} item={item} /> : <p className="task-context">{thread?.worktreePath ?? state.projects.find((item) => item.id === projectId)?.workspaceRoot}</p>}</div><footer><button type="button" onClick={close}>Close</button><button type="button" className="primary" disabled={busy || state.phase !== "ready"} onClick={() => { setBusy(true); void run("newWorktreeChat", { projectId, choice: { type: "new", baseRef: defaultWorktreeBase(state, projectId) } }).then((ok) => { if (ok) close(); }).finally(() => setBusy(false)); }}>New worktree chat</button></footer></>
-        : <><div className="task-editor-fields">{state.worktrees?.error ? <p className="task-status" role="alert">{state.worktrees.error}</p> : null}{state.phase !== "ready" ? <p className="task-status" role="status">Connect to T3 to choose a checkout.</p> : null}<WorktreeChoiceFields state={state} projectId={projectId} choice={choice} onChange={setChoice} disabled={busy} />{failed ? <p className="task-status" role="alert">Could not save the checkout. Your choices are kept.</p> : null}</div><footer><button type="button" disabled={busy} onClick={close}>Cancel</button><button type="button" className="primary" disabled={busy || state.phase !== "ready" || !validWorktreeChoice(choice)} onClick={() => { void submit(); }}>{busy ? "Saving…" : "Use checkout"}</button></footer></>}
+        : <><div className="task-editor-fields">{state.worktrees?.error ? <p className="task-status" role="alert">{state.worktrees.error}</p> : null}{state.phase !== "ready" ? <p className="task-status" role="status">Connect to T3 to choose a checkout.</p> : null}<WorktreeChoiceFields state={state} projectId={projectId} choice={choice} onChange={setChoice} disabled={busy} remote={remote} />{failed ? <p className="task-status" role="alert">Could not save the checkout. Your choices are kept.</p> : null}</div><footer><button type="button" disabled={busy} onClick={close}>Cancel</button><button type="button" className="primary" disabled={busy || state.phase !== "ready" || !validWorktreeChoice(choice)} onClick={() => { void submit(); }}>{busy ? "Saving…" : "Use checkout"}</button></footer></>}
     </WorktreePopover> : null}</>;
 }

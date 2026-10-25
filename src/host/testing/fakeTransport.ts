@@ -1,6 +1,7 @@
 /** Deterministic typed transport for host, bridge and browser regression verification; no real server calls. */
 import { OrchestrationV2Command, ProviderInstanceId, ThreadId, ProjectId, TurnItemId, type OrchestrationV2TurnItem, type OrchestrationV2ShellStreamItem, type OrchestrationV2ThreadStreamItem, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem, type ServerProvider } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import * as DateTime from "effect/DateTime";
 import { v2Now, v2Project, v2ThreadShell, v2Projection, v2ShellSnapshot } from "../../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 import { HostState, type HostTransport, type HostStateOptions } from "../hostState.js";
 import type { DiscoveredServer } from "../serverDiscovery.js";
@@ -152,6 +153,17 @@ export class FakeTransport implements HostTransport {
     if (command.type === "thread.settle" || command.type === "thread.unsettle") {
       this.shell = { ...this.shell, threads: this.shell.threads.map((thread) => thread.id !== command.threadId ? thread : { ...thread,
         settledOverride: command.type === "thread.settle" ? "settled" as const : "active" as const, settledAt: command.type === "thread.settle" ? v2Now : null }) };
+    }
+    if (command.type === "thread.snooze" || command.type === "thread.unsnooze" || command.type === "thread.auto-settle.set" || command.type === "thread.visit" || command.type === "thread.mark-unread") {
+      const at = DateTime.makeUnsafe(Date.now());
+      this.shell = { ...this.shell, threads: this.shell.threads.map((thread) => thread.id !== command.threadId ? thread : { ...thread,
+        ...(command.type === "thread.snooze" ? { snoozedUntil: DateTime.makeUnsafe(command.snoozedUntil), snoozedAt: at } : {}),
+        ...(command.type === "thread.unsnooze" ? { snoozedUntil: null, snoozedAt: null } : {}),
+        ...(command.type === "thread.auto-settle.set" ? { autoSettleDisabledAt: command.enabled ? null : at } : {}),
+        ...(command.type === "thread.visit" ? { lastVisitedAt: DateTime.makeUnsafe(command.visitedAt) } : {}),
+        // Like T3, mark unread rewinds the watermark to just before the latest completion.
+        ...(command.type === "thread.mark-unread" ? { lastVisitedAt: thread.latestRunCompletedAt ? DateTime.makeUnsafe(DateTime.toEpochMillis(thread.latestRunCompletedAt) - 1) : null } : {}) }), snapshotSequence: this.shell.snapshotSequence + 1 };
+      this.shellHandler?.({ kind: "snapshot", snapshot: this.shell });
     }
     if (command.type === "thread.fork") {
       const source = [...this.shell.threads, ...this.archive.threads].find((thread) => thread.id === command.sourceThreadId)!;

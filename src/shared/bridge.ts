@@ -26,7 +26,7 @@ export const Methods = {
   sessionSearchPreviews: "sessionSearchPreviews", setSearchPreferences: "setSearchPreferences",
   restoreComposerDraft: "restoreComposerDraft", saveComposerDraft: "saveComposerDraft", chatAsset: "chatAsset", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
-  newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", startPairing: "startPairing", reconnect: "reconnect",
+  newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", chooseMachine: "chooseMachine", startClone: "startClone", cloneAction: "cloneAction", listCopyableFiles: "listCopyableFiles", startPairing: "startPairing", reconnect: "reconnect",
   setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModelVisibility: "setModelVisibility", moveModel: "moveModel", reorderModel: "reorderModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt",
   respondToRequest: "respondToRequest", answerSecretRequest: "answerSecretRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
@@ -52,7 +52,55 @@ export interface FavoriteModel { readonly instanceId: string; readonly model: st
 export type HostPhase = "discovering" | "no-server" | "pairing" | "connecting" | "ready" | "error";
 export interface ProjectSummary { readonly id: string; readonly title: string; readonly workspaceRoot: string; /** Machine label for a project on a paired remote environment. */ readonly environmentLabel?: string }
 export type ProjectSelection = { readonly projectId: string } | { readonly workspaceRoot: string } | { readonly noProject: true };
+/** A machine a new conversation can run on: this computer or a paired one with the same repository. */
+export interface MachineChoice {
+  readonly environmentId: string;
+  readonly label: string;
+  readonly local: boolean;
+  readonly status: import("./environmentStatus.js").EnvironmentDisplayStatus;
+}
+/** Checkouts and branches read from a paired machine's own repository. */
+export interface RemoteCheckouts {
+  readonly loading: boolean;
+  readonly error?: string;
+  readonly items: ReadonlyArray<import("./worktrees.js").WorktreeSummary>;
+  readonly branches: import("./worktrees.js").WorktreesState["branches"];
+}
+/** A paired machine that lacks this repository and could get a clone of it. */
+export interface AddMachineTarget {
+  readonly environmentId: string;
+  readonly label: string;
+  readonly available: boolean;
+  /** Why it cannot be chosen: away, an older T3 server, or a pairing without source-control access. */
+  readonly reason?: string;
+  /** That machine's folder for new projects plus the repository name. */
+  readonly defaultDestination: string;
+}
+/** This window's repository, as a clone source. */
+export interface CloneSource { readonly title: string; readonly sshUrl: string | null; readonly httpsUrl: string | null; readonly protocol: "ssh" | "https" | null }
+/** A clone this view started for its new chat, then the copy of the chosen ignored files. */
+export interface MachineClone {
+  readonly environmentId: string;
+  readonly label: string;
+  readonly projectId: string;
+  readonly name: string;
+  readonly phase: "running" | "done" | "failed" | "cancelled";
+  readonly stage: string;
+  readonly percent: number | null;
+  readonly detail: string | null;
+  readonly error: string | null;
+  readonly copy?: { readonly phase: "pending" | "copying" | "done" | "failed"; readonly error?: string };
+}
 export interface ConversationDraft {
+  readonly addTargets?: ReadonlyArray<AddMachineTarget>;
+  readonly cloneSource?: CloneSource;
+  readonly clone?: MachineClone;
+  /** Set when a paired machine was chosen: the new conversation runs there. */
+  readonly environmentId?: string;
+  /** Offered only when a paired machine has this repository; the first entry is this computer. */
+  readonly machines?: ReadonlyArray<MachineChoice>;
+  /** The chosen machine's checkouts, for the checkout picker. */
+  readonly remoteCheckouts?: RemoteCheckouts;
   readonly workspace?: import("./worktrees.js").WorktreeChoice;
   readonly projectId: string | null;
   readonly workspaceRoot: string | null;
@@ -79,6 +127,20 @@ export interface ThreadSummary {
   readonly activeRunId: string | null;
   readonly workingStartedAt?: string | null;
   readonly settled?: boolean;
+  /** The thread's server records visits, so read state (and Mark unread) is shared with T3 Code. */
+  readonly tracksVisits?: boolean;
+  /** T3 can mark it unread: read state is tracked and the latest run has completed. */
+  readonly canMarkUnread?: boolean;
+  /** The latest run finished or failed after the last visit. */
+  readonly unseen?: "done" | "failed";
+  /** A snoozed thread woke (on time, or early because it needs someone) after the last visit. */
+  readonly woke?: boolean;
+  /** Hidden on the Snoozed shelf until this time. */
+  readonly snoozedUntil?: string;
+  /** Present when the server supports snoozing: whether this thread may be snoozed now (not while it waits on the person). */
+  readonly canSnooze?: boolean;
+  /** Present when the server supports a per-thread auto-settle opt-out: whether auto-settle is on for this thread. */
+  readonly autoSettle?: boolean;
   readonly searchTerms?: ReadonlyArray<string>;
   readonly pendingRuntimeRequest?: { readonly id: string; readonly kind: string; readonly createdAt: string } | null;
   readonly branch?: string | null;

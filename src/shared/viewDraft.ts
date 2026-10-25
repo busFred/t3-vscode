@@ -4,7 +4,11 @@ import type { ComposerContext } from "./composerContext.js";
 import { isObject } from "./bridge.js";
 import type { DraftAttachment } from "./composerAttachments.js";
 
-export interface ViewDraft { readonly text: string; readonly contexts: ReadonlyArray<ComposerContext>; readonly attachments?: ReadonlyArray<DraftAttachment> }
+export interface ViewDraft {
+  readonly text: string; readonly contexts: ReadonlyArray<ComposerContext>; readonly attachments?: ReadonlyArray<DraftAttachment>;
+  /** A new conversation's chosen paired machine, kept by the host so a reopened draft returns to it. */
+  readonly environmentId?: string;
+}
 export interface DraftTransfer { readonly draftKey: string; readonly draft: ViewDraft }
 export function parseDraftTransfer(raw: unknown, expectedKey: string, allowPending = false): DraftTransfer | undefined {
   if (!isObject(raw) || raw.draft === undefined) return undefined;
@@ -32,5 +36,5 @@ export function parseDraftTransfer(raw: unknown, expectedKey: string, allowPendi
       ...(typeof value.environmentId === "string" ? { environmentId: value.environmentId } : {}),
       ...(typeof value.error === "string" ? { error: value.error } : {}) };
   });
-  return { draftKey: expectedKey, draft: { text: raw.draft.text, contexts, ...(parsed ? { attachments: parsed } : {}) } };
+  return { draftKey: expectedKey, draft: { text: raw.draft.text, contexts, ...(parsed ? { attachments: parsed } : {}), ...(typeof raw.draft.environmentId === "string" ? { environmentId: raw.draft.environmentId } : {}) } };
 }

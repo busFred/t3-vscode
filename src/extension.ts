@@ -1,5 +1,5 @@
 import { T3WebviewProvider } from "./host/editorProvider.js";
-import { resolveDateFormat, resolveTimeFormat } from "./shared/timeFormat.js";
+import { resolveDateFormat, resolveTimeFormat, timeFormatOptions } from "./shared/timeFormat.js";
 /**
  * Activation: build the host state machine, register the sidebar webview view
  * and the pop-out editor tab command, and bridge everything together. All T3
@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { ComposerDraftStore } from "./host/composerDraftStore.js";
 import { basename, resolve } from "node:path";
 import * as vscode from "vscode";
+import { resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
 import { BridgeHandler, WebviewRegistry } from "./host/bridge.js";
 import { HostState, SIDEBAR_VIEW_ID } from "./host/hostState.js";
 import { resolveT3Home } from "./host/serverDiscovery.js";
@@ -98,6 +99,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   });
   const unfocus = registry.onDidFocusView(() => meters.update());
+  hostState.setWindowFocused(vscode.window.state.focused);
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider("t3.session", provider, { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: false }),
     meters, { dispose: unlisten }, { dispose: unfocus },
@@ -129,6 +131,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       try { await provider.insertReference(editorReference(editor, vscode.workspace.getWorkspaceFolder(editor.document.uri)?.uri.fsPath)); }
       catch (cause) { await vscode.window.showErrorMessage(String(cause)); }
     }),
+    // Read state follows what the person can see: an unfocused window reads nothing.
+    vscode.window.onDidChangeWindowState((state) => hostState?.setWindowFocused(state.focused)),
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       void hostState?.workspaceChanged().catch((cause) => vscode.window.showErrorMessage(String(cause)));
     }),
@@ -136,15 +140,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const state = hostState?.snapshot();
       const thread = state?.threads.find((item) => item.id === state.activeThreadId);
       if (!thread || !hostState) return;
+      const snoozable = thread.canSnooze !== undefined && !thread.archived && !thread.settled;
       const choice = await vscode.window.showQuickPick([
-        { label: "$(edit) Rename thread", action: "rename" },
-        ...(thread.canRegenerateTitle ? [{ label: thread.titleRegenerating ? "$(sparkle) Stop regenerating title" : "$(sparkle) Regenerate title", action: thread.titleRegenerating ? "stop-title-regeneration" : "regenerate-title" }] : []),
         { label: thread.pinned ? "$(pinned) Unpin thread" : "$(pin) Pin thread", action: thread.pinned ? "unpin" : "pin" },
         ...(!thread.archived ? [{ label: thread.settled ? "$(debug-restart) Unsettle thread" : "$(check) Settle thread", action: thread.settled ? "unsettle" : "settle" }] : []),
+        ...(snoozable && thread.snoozedUntil ? [{ label: "$(bell) Wake thread", action: "unsnooze" }] : snoozable && thread.canSnooze ? [{ label: "$(clock) Snooze…", action: "snooze-menu" }] : []),
+        { label: "$(edit) Rename thread", action: "rename" },
+        ...(thread.canRegenerateTitle ? [{ label: thread.titleRegenerating ? "$(sparkle) Stop regenerating title" : "$(sparkle) Regenerate title", action: thread.titleRegenerating ? "stop-title-regeneration" : "regenerate-title" }] : []),
+        ...(!thread.providerNativeSubagent && !thread.activeRunId ? [{ label: "$(copy) Duplicate thread", action: "duplicate" }] : []),
+        ...(thread.canMarkUnread ? [{ label: "$(mail) Mark unread", action: "mark-unread" }] : []),
+        ...(thread.autoSettle !== undefined ? [{ label: thread.autoSettle ? "$(watch) Turn auto-settle off" : "$(watch) Turn auto-settle on", action: thread.autoSettle ? "auto-settle-off" : "auto-settle-on" }] : []),
+        { label: "$(clippy) Copy…", action: "copy-menu" },
         { label: thread.archived ? "$(archive) Restore thread" : "$(archive) Archive thread", action: thread.archived ? "unarchive" : "archive" },
         { label: "$(trash) Delete thread", action: "delete" },
       ], { title: thread.title, placeHolder: "Thread actions" });
       if (!choice) return;
+      if (choice.action === "snooze-menu") {
+        const clock = timeFormatOptions(resolveTimeFormat(vscode.workspace.getConfiguration("t3-vscode").get("timeFormat")));
+        const time = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit", ...clock });
+        const preset = await vscode.window.showQuickPick([...resolveSnoozePresets(new Date()).map((item) => ({ label: item.label, description: time(item.snoozedUntil), until: item.snoozedUntil as string | undefined })), { label: "Custom…", description: "", until: undefined }], { title: `Snooze ${thread.title}` });
+        if (preset) await bridge.performThreadAction(thread.id, "snooze", preset.until);
+        return;
+      }
+      if (choice.action === "copy-menu") {
+        const path = thread.worktreePath ?? state?.projects.find((project) => project.id === thread.projectId)?.workspaceRoot;
+        const item = await vscode.window.showQuickPick([...(path ? [{ label: "Path", value: path }] : []), ...(thread.branch ? [{ label: "Branch", value: thread.branch }] : []), { label: "Thread ID", value: thread.id }].map((entry) => ({ ...entry, description: entry.value })), { title: `Copy from ${thread.title}` });
+        if (item) await vscode.env.clipboard.writeText(item.value);
+        return;
+      }
       await bridge.performThreadAction(thread.id, choice.action);
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {

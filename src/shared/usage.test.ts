@@ -80,7 +80,8 @@ test("Hub accounts group under their provider, pool by average with the soonest 
   const groups = usageGroups(state, now);
   assert.deepEqual(groups.map(groupTitle), ["Claude · 3 accounts", "Codex"]);
   const claude = groups[0]!;
-  assert.equal(claude.plan, "Claude Subscription ×3 · via CLI Proxy");
+  assert.equal(claude.plan, "Claude Subscription ×3");
+  assert.equal(claude.source, "CLI Proxy");
   assert.deepEqual(claude.reporting.map((account) => account.email), ["soon@example.test", "mid@example.test", "late@example.test"]);
   assert.equal(groupOf(groups, claude.reporting[1]!.key), claude);
   const pooled = pooledAccount(claude, now);

@@ -24,7 +24,13 @@ export interface RemoteEnvironmentStatus {
 export interface ThreadEnvironment { readonly environmentId: string; readonly label: string }
 type RemoteClient = Pick<T3Client, "connect" | "disconnect" | "connected" | "onClose" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
   | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "createAssetUrl" | "uploadAttachment"
-  | "deleteAttachment" | "getTurnDiff" | "subscribeWorktreeSetup" | "cancelWorktreeSetup">;
+  | "deleteAttachment" | "getTurnDiff" | "subscribeWorktreeSetup" | "cancelWorktreeSetup" | "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
+  | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
+/** What starting and composing a conversation on a paired machine, or cloning this repository there, needs from that machine's own server. */
+export type EnvironmentCalls = Pick<T3Client, "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
+  | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
+/** Whether this client may clone a repository onto a paired machine, and why not. */
+export type CloneAccess = "ok" | "disconnected" | "unsupported" | "permission";
 interface Remote {
   record: RemoteEnvironmentRecord; client: RemoteClient | null; shell: OrchestrationV2ShellSnapshot | null;
   subscription: Subscription | null; state: RemoteConnectionState; error?: string; retry: ReturnType<typeof setTimeout> | null; attempts: number; generation: number;
@@ -263,6 +269,23 @@ export class MultiEnvironmentClient {
     const remote = this.remoteForProject(id);
     return remote ? { environmentId: remote.record.environmentId, label: remote.record.label } : undefined;
   }
+  /** Provider configuration of a paired machine (null while it has never connected); the local server's for undefined. */
+  configForEnvironment(environmentId: string | undefined): ServerConfig | null {
+    if (!environmentId) return this.primary.config;
+    return this.remotes.get(environmentId)?.client?.config ?? null;
+  }
+  /**
+   * Cloning needs the machine's server to track clones and this pairing to hold `source-control:write`, which T3's
+   * pairing links grant by default. A pairing recorded without scopes is left for the server to decide.
+   */
+  cloneAccess(environmentId: string): CloneAccess {
+    const remote = this.remotes.get(environmentId);
+    if (!remote?.client?.connected || remote.state !== "connected") return "disconnected";
+    if (remote.client.config?.environment?.capabilities?.projectCloneTracking !== true) return "unsupported";
+    return remote.record.scopes.length && !remote.record.scopes.includes("source-control:write") ? "permission" : "ok";
+  }
+  /** A paired machine's server, for starting a conversation there; throws while it is disconnected. */
+  environmentCalls(environmentId: string): EnvironmentCalls { return this.forEnvironment(environmentId); }
   /** Provider configuration of the environment that runs a thread. */
   configForThread(id: string | undefined): ServerConfig | null {
     const remote = this.remoteForThread(id);

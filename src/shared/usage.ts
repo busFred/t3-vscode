@@ -139,8 +139,10 @@ export interface UsageGroup {
   readonly reporting: ReadonlyArray<UsageAccount>;
   /** Every account, including API-key harnesses that report nothing. */
   readonly accounts: ReadonlyArray<UsageAccount>;
-  /** `Claude Subscription ×3 · via CLI Proxy`, or the harness's own label when nothing reports. */
+  /** `Claude Subscription ×3`, or the harness's own label when nothing reports. */
   readonly plan: string | undefined;
+  /** Where the reporting accounts come from, such as a hub machine: `CLI Proxy`. */
+  readonly source: string | undefined;
 }
 const BRAND_LABELS: Partial<Record<ProviderBrand, string>> = { claude: "Claude", codex: "Codex", kimi: "Kimi" };
 const reports = (account: UsageAccount) => !account.limits.unavailable && account.limits.windows.length > 0;
@@ -155,10 +157,11 @@ export function usageGroups(state: HostStateSnapshot, now = Date.now()): Readonl
     const plans = [...new Set(reporting.flatMap((account) => account.plan ? [account.plan] : []))];
     const sources = [...new Set(reporting.flatMap((account) => account.sourceLabel ? [account.sourceLabel] : []))];
     const plan = reporting.length
-      ? [plans.length === 1 && reporting.length > 1 ? `${plans[0]} ×${reporting.length}` : plans.join(", "), sources.length ? `via ${sources.join(", ")}` : ""].filter(Boolean).join(" · ") || undefined
+      ? (plans.length === 1 && reporting.length > 1 ? `${plans[0]} ×${reporting.length}` : plans.join(", ")) || undefined
       : accounts.find((account) => account.plan)?.plan;
+    const source = sources.join(", ") || undefined;
     const brand = accounts[0]!.brand;
-    return { key: groupKey(driver), driver, brand, label: BRAND_LABELS[brand] ?? accounts[0]!.label, reporting, accounts, plan };
+    return { key: groupKey(driver), driver, brand, label: BRAND_LABELS[brand] ?? accounts[0]!.label, reporting, accounts, plan, source };
   });
 }
 export const groupOf = (groups: ReadonlyArray<UsageGroup>, key: string | undefined) =>

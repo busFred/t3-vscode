@@ -67,7 +67,7 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
         {several ? <select className="usage-display-choice" aria-label="Multiple accounts" title="How to show several accounts" value={display} onChange={(event) => chooseDisplay(event.target.value as AccountsDisplay)}><option value="pooled">Pooled</option><option value="perAccount">Per account</option></select> : null}
         <button className="icon-button" aria-label="Refresh usage" title="Refresh usage" disabled={refreshing} onClick={() => { setRefreshing(true); void run("refreshUsage").finally(() => setRefreshing(false)); }}><RefreshCwIcon size={13} /></button><button className="icon-button" aria-label="Status meters" title="Status meters" onClick={() => { void run("configureUsage"); }}><Settings2Icon size={13} /></button></div>
       {group && account ? <>
-        {group.plan ? <p className="account-plan subtle">{group.plan}</p> : null}
+        {group.plan || group.source ? <div className="account-plan subtle">{group.plan ? <p>{group.plan}</p> : null}{group.source ? <p className="account-source" title={group.source}>{group.source}</p> : null}</div> : null}
         {perAccount ? perAccountRows(group, now).map(accountRows) : accountWindows(account).map((row) => limit(group, row.window, row.label))}
       </> : <p className="subtle">No provider accounts reported yet.</p>}
       {notices.map((notice) => <p className="usage-notice" key={notice}>{notice}</p>)}

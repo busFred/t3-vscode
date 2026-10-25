@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList, type LegendListRef, type OnViewableItemsChangedInfo } from "@legendapp/list/react";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, PencilIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, Undo2Icon, WrenchIcon, ArrowRightLeftIcon, KeyRoundIcon, MinusIcon, XIcon } from "lucide-react";
@@ -14,7 +14,7 @@ import { T3Wordmark } from "./t3/T3Wordmark";
 import { T3VSCodeIcon } from "./T3VSCodeIcon";
 import { findAssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 import { TurnChanges } from "./TurnChanges";
-import { MessageNavigator } from "./MessageNavigator";
+import { MessageNavigator, type RailFrame } from "./MessageNavigator";
 import { messageExchanges } from "../../shared/messageNavigation";
 import { finalResponseCheckpoints, transcriptRows, workSummary, workElapsed, responseBoundaries, isWorkItem, type DisplayRow } from "../../shared/transcriptRows";
 import { renderedMessageText, stripRenderedAssistantQuotes } from "../../shared/assistantQuoteText";
@@ -251,6 +251,20 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
       if (node instanceof HTMLElement) node.scrollTop = node.scrollHeight;
     }).catch(() => setNavigationNotice("Could not jump to the latest message. Try again."));
   };
+  // Earlier pages load on their own once the reader reaches the top; the header button remains for retries.
+  // Only the reader's own input arms this, so opening a conversation (scrolled to the top until it lands at the end) loads nothing.
+  const reading = useRef(false), requested = useRef(false);
+  const loadEarlierAtTop = useCallback(() => {
+    const node: unknown = list.current?.getScrollableNode();
+    if (!id || !reading.current || requested.current || !(node instanceof HTMLElement) || !state.history.hasMore || state.history.loading || state.history.error) return;
+    if (node.scrollTop > Math.max(120, node.clientHeight / 2)) return;
+    requested.current = true;
+    void run("loadHistory", { threadId: id }).finally(() => { requested.current = false; });
+  }, [id, run, state.history.hasMore, state.history.loading, state.history.error]);
+  useEffect(() => { reading.current = false; }, [id]);
+  // A short page can leave the reader near the top after it arrives, so keep loading until the view can scroll.
+  useEffect(() => { const frame = requestAnimationFrame(loadEarlierAtTop); return () => cancelAnimationFrame(frame); }, [loadEarlierAtTop, state.transcript.length]);
+  const startReading = () => { reading.current = true; };
   const attempts = useRef<{ target: AssistantCitation | null; pages: number }>({ target: null, pages: 0 });
   const [citationNotice, setCitationNotice] = useState<string | null>(null);
   const sourceIndex = citationTarget ? rows.findIndex((group) => group.rows.some((row) => row.sourceThreadId === citationTarget.threadId && (row.item.type === "assistant_message" || row.item.type === "user_message") && row.item.messageId === citationTarget.messageId)) : -1;
@@ -303,7 +317,28 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     frame = requestAnimationFrame(show);
     return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-assistant-citation"); };
   }, [citationTarget, id, sourceIndex, state.threadLoading, state.history.hasMore, state.history.loading, state.transcript.length, run]);
-  const viewportRef = useCallback((element: HTMLDivElement | null) => { container.current = element; onViewport?.(element); }, [onViewport]);
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
+  const viewportRef = useCallback((element: HTMLDivElement | null) => { container.current = element; setViewport(element); onViewport?.(element); }, [onViewport]);
+  const placement = state.messageNavigation ?? "left";
+  const [railFrame, setRailFrame] = useState<RailFrame | null>(null);
+  // The rail is centred in the whole conversation. It stops above the composer only where the composer runs underneath it:
+  // wide views centre the composer column and leave the rail's strip free down to the bottom edge.
+  useLayoutEffect(() => {
+    const conversation = viewport?.parentElement;
+    if (!viewport || !conversation || placement === "off") { setRailFrame(null); return; }
+    // The rail's slot comes first in the conversation, keeping it before the transcript and composer in reading and Tab order.
+    const host = document.createElement("div"); host.className = "message-nav-slot"; conversation.prepend(host);
+    const measure = () => {
+      const box = viewport.getBoundingClientRect(), outer = conversation.getBoundingClientRect();
+      const composer = conversation.querySelector(".composer-column")?.getBoundingClientRect();
+      const clear = !composer || (placement === "right" ? composer.right <= box.right - 34 : composer.left >= box.left + 28);
+      const next = { host, top: Math.round(box.top - outer.top), bottom: clear ? 0 : Math.round(outer.bottom - box.bottom) };
+      setRailFrame((current) => current?.host === next.host && current.top === next.top && current.bottom === next.bottom ? current : next);
+    };
+    measure();
+    const observer = new ResizeObserver(measure); observer.observe(viewport); observer.observe(conversation);
+    return () => { observer.disconnect(); host.remove(); };
+  }, [viewport, placement]);
   const renderItem = useCallback(({ item }: { item: DisplayRow }) => {
     const first = item.rows[0]!, last = item.rows.at(-1)!;
     const boundary = first.item.runId ? boundaries.get(`${first.sourceThreadId}:${first.item.runId}`) : undefined;
@@ -318,16 +353,17 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source message…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading && !working)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length && !working) return <div className="chat-empty"><p>Loading conversation…</p></div>;
-  return <SearchTargetContext.Provider value={searchTarget ?? null}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><SubagentState value={state}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation">
+  return <SearchTargetContext.Provider value={searchTarget ?? null}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><SubagentState value={state}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation"
+    onPointerDown={startReading} onKeyDown={startReading} onTouchStart={startReading} onWheel={(event) => { startReading(); if (event.deltaY < 0) loadEarlierAtTop(); }}>
     {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
     {navigationNotice ? <div className="citation-source-notice" role="status">{navigationNotice}</div> : null}
     {sticky && working ? <div className="sticky-working"><AssistantHeader working /></div> : null}
-    <MessageNavigator key={`nav:${id}`} exchanges={exchanges} currentRow={rows.find((row) => row.key === viewedKey)?.firstIndex ?? state.transcript.length - 1} placement={state.messageNavigation ?? "left"} atEnd={atEnd} history={state.history} onJump={jump} onLatest={latest} onEarlier={() => { void run("loadHistory", { threadId: id }); }} />
+    <MessageNavigator key={`nav:${id}`} exchanges={exchanges} currentRow={rows.find((row) => row.key === viewedKey)?.firstIndex ?? state.transcript.length - 1} placement={placement} frame={railFrame} atEnd={atEnd} history={state.history} onJump={jump} onLatest={latest} onEarlier={() => { void run("loadHistory", { threadId: id }); }} />
     <LegendList ref={list} key={id} data={rows} keyExtractor={(row) => row.key} renderItem={renderItem} estimatedItemSize={100}
       {...(sourceIndex >= 0 || matchIndex >= 0 ? { alwaysRender: { keys: [...new Set([sourceIndex, matchIndex].filter((index) => index >= 0).map((index) => rows[index]!.key))] } } : {})}
       initialScrollAtEnd={!searchTarget && followEnd && (!citationTarget || citationTarget.threadId !== id)} {...(!followEnd && viewedKey ? { initialScrollIndex: Math.max(0, rows.findIndex((row) => row.key === viewedKey)) } : {})} maintainScrollAtEnd={!searchTarget && followEnd && (!citationTarget || citationTarget.threadId !== id) ? { animated: false } : false} maintainScrollAtEndThreshold={0.15} maintainVisibleContentPosition
       className="transcript-list" style={{ height: "100%" }} onViewableItemsChanged={visible} viewabilityConfig={{ itemVisiblePercentThreshold: 0 }}
-      onScroll={(event) => { updateSticky(); const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent; const node: unknown = list.current?.getScrollableNode(); const distance = node instanceof HTMLElement ? node.scrollHeight - node.scrollTop - node.clientHeight : contentSize.height - contentOffset.y - layoutMeasurement.height; const end = distance < 40; setAtEnd(end); if (end) setFollowEnd(true); }}
+      onScroll={(event) => { updateSticky(); const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent; const node: unknown = list.current?.getScrollableNode(); const distance = node instanceof HTMLElement ? node.scrollHeight - node.scrollTop - node.clientHeight : contentSize.height - contentOffset.y - layoutMeasurement.height; const end = distance < 40; setAtEnd(end); if (end) setFollowEnd(true); loadEarlierAtTop(); }}
       ListHeaderComponent={header}
       ListFooterComponent={<div className="timeline-footer">
         {working && !activeHeader ? <div className="timeline-row"><AssistantHeader working /></div> : null}

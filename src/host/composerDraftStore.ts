@@ -72,6 +72,16 @@ export class ComposerDraftStore {
       if (bytes) { this.keepFile(target, key, bytes); return; }
     }
   }
+  /** A view's draft continues under another conversation key, keeping its record, kept files and attachment ownership. */
+  rekey(scope: string, owner: string, from: string, to: string): StoredComposerDraft | undefined {
+    const source = JSON.stringify([owner, scope, from]), id = this.claims.get(source);
+    if (!id) return undefined;
+    const record = this.records.get(id)!;
+    this.claims.delete(source); this.claims.set(JSON.stringify([owner, scope, to]), id);
+    (record as { threadId: string }).threadId = to;
+    this.save(record, record.draft, record.selection);
+    return record;
+  }
   claim(scope: string, threadId: string, owner: string): StoredComposerDraft {
     const key = JSON.stringify([owner, scope, threadId]), current = this.claims.get(key);
     if (current) return this.records.get(current)!;

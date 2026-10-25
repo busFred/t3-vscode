@@ -1,10 +1,14 @@
-import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { ArrowDownIcon, ChevronUpIcon } from "lucide-react";
 import { exchangeAtPointer, exchangeAtRow, exchangeTimeLabel, type MessageExchange, type MessageNavigationPlacement } from "../../shared/messageNavigation";
 import { useDateTimeFormat, useTimeFormat } from "../timeFormat";
 
-export function MessageNavigator({ exchanges, currentRow, placement, atEnd, history, onJump, onLatest, onEarlier }: {
-  exchanges: ReadonlyArray<MessageExchange>; currentRow: number; placement: MessageNavigationPlacement; atEnd: boolean;
+/** Where the rail is drawn: inside `host`, inset from its top and bottom edges. */
+export interface RailFrame { readonly host: HTMLElement; readonly top: number; readonly bottom: number }
+
+export function MessageNavigator({ exchanges, currentRow, placement, frame, atEnd, history, onJump, onLatest, onEarlier }: {
+  exchanges: ReadonlyArray<MessageExchange>; currentRow: number; placement: MessageNavigationPlacement; frame?: RailFrame | null; atEnd: boolean;
   history: { hasMore: boolean; loading: boolean; error: string | null };
   onJump: (key: string) => void; onLatest: () => void; onEarlier: () => void;
 }) {
@@ -29,7 +33,7 @@ export function MessageNavigator({ exchanges, currentRow, placement, atEnd, hist
     };
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
-  }, [placement, exchanges.length >= 2]);
+  }, [placement, exchanges.length >= 2, frame?.host]);
   if (placement === "off" || exchanges.length < 2) return null;
   const point = (event: PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -38,8 +42,8 @@ export function MessageNavigator({ exchanges, currentRow, placement, atEnd, hist
   };
   const compact = (text: string) => text.replace(/\s+/g, " ").trim();
   const sent = preview ? exchangeTimeLabel(preview.sentAt, Date.now(), date, (value) => value.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", ...timeOptions })) : "";
-  return <>
-    <div className={`message-navigator ${placement}`} onPointerLeave={(event) => {
+  const inset = frame ? { "--rail-top": `${frame.top}px`, "--rail-bottom": `${frame.bottom}px` } as CSSProperties : undefined;
+  const rail = <div className={`message-navigator ${placement}`} style={inset} onPointerLeave={(event) => {
       if (!dragging.current && !(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setPreviewKey(null);
     }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setPreviewKey(null); }}>
       {history.hasMore || history.error ? <button className="icon-button message-nav-earlier" aria-label={history.error ? "Retry earlier messages" : "Load earlier messages"} title={history.error ?? "Load earlier messages"} disabled={history.loading} onClick={onEarlier}><ChevronUpIcon size={14} /></button> : null}
@@ -67,7 +71,9 @@ export function MessageNavigator({ exchanges, currentRow, placement, atEnd, hist
           {preview.response ? <span className="message-nav-response">{compact(preview.response)}</span> : <span className="message-nav-response">Awaiting a response</span>}
         </button> : null}
       </div>
-    </div>
+    </div>;
+  return <>
+    {frame ? createPortal(rail, frame.host) : rail}
     {!atEnd ? <button className="message-nav-latest btn" onClick={onLatest} aria-label="Jump to latest message"><ArrowDownIcon size={13} />Latest</button> : null}
   </>;
 }

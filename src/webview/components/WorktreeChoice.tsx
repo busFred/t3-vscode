@@ -20,7 +20,8 @@ function RunModel({ state, selection, onChange }: { state: HostStateSnapshot; se
     {open && anchor.current ? <ModelPicker state={state} selection={selection} anchor={anchor.current} onClose={close} onSelect={onChange} /> : null}</>;
 }
 
-export function WorktreeChoiceFields({ state, projectId, choice, onChange, disabled = false }: { readonly state: HostStateSnapshot; readonly projectId: string; readonly choice: Choice; readonly onChange: (choice: Choice) => void; readonly disabled?: boolean }) {
+/** `remote`: the checkout is prepared by another machine's server, which takes its root, an existing worktree or a new one. */
+export function WorktreeChoiceFields({ state, projectId, choice, onChange, disabled = false, remote = false }: { readonly state: HostStateSnapshot; readonly projectId: string; readonly choice: Choice; readonly onChange: (choice: Choice) => void; readonly disabled?: boolean; readonly remote?: boolean }) {
   const patch = (change: Partial<Choice>) => onChange({ ...choice, ...change });
   const settings = state.worktrees?.settings.find((item) => item.projectId === projectId);
   const project = state.projects.find((item) => item.id === projectId);
@@ -39,7 +40,7 @@ export function WorktreeChoiceFields({ state, projectId, choice, onChange, disab
     <label>Checkout<select aria-label="Worktree checkout" value={choice.type} onChange={(event) => {
       const type = event.target.value as Choice["type"];
       onChange({ type, baseRef: defaultWorktreeBase(state, projectId), startFromOrigin: settings?.startFromOrigin ?? false, copyEnv: settings?.copyEnv ?? false, ...(type === "existing" && items[0] ? { path: items[0].path } : {}), ...(type === "branch" && branches[0] ? { branch: branches[0].name } : {}) });
-    }}><option value="root">Root checkout</option><option value="new">New worktree</option><option value="existing" disabled={!items.length}>Existing worktree</option><option value="branch">Existing branch</option><option value="pr">Pull request</option></select></label>
+    }}><option value="root">Root checkout</option><option value="new">New worktree</option><option value="existing" disabled={!items.length}>Existing worktree</option>{remote ? null : <><option value="branch">Existing branch</option><option value="pr">Pull request</option></>}</select></label>
     {choice.type === "root" ? <small>{project?.workspaceRoot}</small> : null}
     {choice.type === "existing" ? <label>Worktree<select aria-label="Existing worktree" value={choice.path ?? ""} onChange={(event) => patch({ path: event.target.value })}>{!items.some((item) => item.path === choice.path) ? <option value="">Choose worktree</option> : null}{items.map((item) => <option key={item.path} value={item.path}>{item.branch || item.path}</option>)}</select></label> : null}
     {choice.type === "branch" ? <label>Branch<input aria-label="Existing branch" list={`worktree-branches-${projectId}`} required value={choice.branch ?? ""} onChange={(event) => patch({ branch: event.target.value })} /><datalist id={`worktree-branches-${projectId}`}>{branches.map((branch) => <option key={branch.name} value={branch.name} />)}</datalist></label> : null}
@@ -48,9 +49,9 @@ export function WorktreeChoiceFields({ state, projectId, choice, onChange, disab
       <label>Base branch<input aria-label="Worktree base branch" required value={choice.baseRef ?? defaultWorktreeBase(state, projectId)} onChange={(event) => patch({ baseRef: event.target.value })} /></label>
       {choice.type === "new" ? <label>Branch name (optional)<input aria-label="New worktree branch" placeholder="Generated automatically" value={choice.branch ?? ""} onChange={(event) => patch({ branch: event.target.value })} /></label> : null}
       <label className="task-enabled"><input type="checkbox" checked={choice.startFromOrigin ?? false} onChange={(event) => patch({ startFromOrigin: event.target.checked })} />Start from origin</label>
-      <label className="task-enabled"><input type="checkbox" checked={choice.copyEnv ?? false} onChange={(event) => patch({ copyEnv: event.target.checked })} />Copy .env files</label>
+      {remote ? null : <label className="task-enabled"><input type="checkbox" checked={choice.copyEnv ?? false} onChange={(event) => patch({ copyEnv: event.target.checked })} />Copy .env files</label>}
     </> : null}
-    {choice.type === "new" ? <details className="task-workspace"><summary>Parallel runs · {total} of 4</summary><small>Each run gets its own checkout and the same first prompt. The agent starts after setup is ready.</small>
+    {choice.type === "new" && !remote ? <details className="task-workspace"><summary>Parallel runs · {total} of 4</summary><small>Each run gets its own checkout and the same first prompt. The agent starts after setup is ready.</small>
       {runs.map((run, index) => <div className="task-model-field" key={index}><RunModel state={state} selection={run.modelSelection} onChange={(modelSelection) => patch({ runs: runs.map((item, i) => i === index ? { ...item, modelSelection } : item) })} />
         <label>Runs<input aria-label={`Run count for model ${index + 1}`} type="number" min="1" max={4 - total + run.count} value={run.count} onChange={(event) => { const count = Math.max(1, Math.min(4 - total + run.count, Number(event.target.value) || 1)); patch({ runs: runs.map((item, i) => i === index ? { ...item, count } : item) }); }} /></label>
         <button type="button" className="text-button" aria-label={`Remove run model ${index + 1}`} onClick={() => removeRun(index)}><XIcon size={12} />Remove</button></div>)}

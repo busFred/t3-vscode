@@ -552,6 +552,56 @@ try {
   await manager.getByRole("menuitem", { name: "Rename thread", exact: true }).click();
   await manager.getByRole("button", { name: "Renamed through history", exact: true }).waitFor();
   assert.equal(await third.locator(".chat-heading strong").textContent(), "Renamed through history");
+  // Read state, snooze and auto-settle need a capable server; submenus open beside their item from keyboard and pointer.
+  const configBeforeAttention = client.config;
+  client.config = { ...client.config, environment: { ...client.config.environment, capabilities: { ...client.config.environment?.capabilities, threadSnooze: true, threadVisitedTracking: true, threadAutoSettleOptOut: true } } as NonNullable<typeof client.config.environment> };
+  const finishedAt = DateTime.makeUnsafe(Date.now() - 1000);
+  client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1, threads: client.shell.threads.map((thread) => thread.id === "first"
+    ? { ...thread, latestRunId: RunId.make("finished-run"), latestRunCompletedAt: finishedAt, lastVisitedAt: DateTime.makeUnsafe(Date.now() - 60_000) } : { ...thread, lastVisitedAt: DateTime.makeUnsafe(Date.now()) }) };
+  client.shellHandler?.({ kind: "snapshot", snapshot: client.shell });
+  const renamedTarget = manager.getByRole("navigation", { name: "Active conversations" }).locator('[data-thread-id="third"]');
+  await manager.locator('[data-thread-id="first"] .thread-dot.done').waitFor();
+  assert.equal(await manager.locator('[data-thread-id="first"] .thread-outcome.done').textContent(), "Done");
+  assert.equal(await manager.locator('[data-thread-id="first"]').getAttribute("aria-description"), "Unread: finished");
+  // Rows with nothing new keep the normal title colour; only the dot and status word mark what needs attention.
+  assert.equal(await manager.locator('[data-thread-id="second"] .thread-dot').count(), 0);
+  const titleColour = (id: string) => manager.locator(`[data-thread-id="${id}"] .thread-title`).evaluate((node) => getComputedStyle(node).color);
+  assert.equal(await titleColour("second"), await manager.evaluate(() => getComputedStyle(document.querySelector(".session-list")!).color), "a read row's title keeps the list's own colour, not a muted one");
+  await renamedTarget.click({ button: "right" });
+  const copyItem = manager.getByRole("menuitem", { name: "Copy", exact: true });
+  await copyItem.focus(); await manager.keyboard.press("ArrowRight");
+  await manager.getByRole("menu", { name: "Copy", exact: true }).waitFor();
+  assert.equal(await manager.evaluate(() => document.activeElement?.textContent), "Path");
+  assert.deepEqual(await manager.getByRole("menu", { name: "Copy", exact: true }).getByRole("menuitem").allTextContents(), ["Path", "Thread ID"]);
+  await manager.keyboard.press("ArrowLeft");
+  await manager.getByRole("menu", { name: "Copy", exact: true }).waitFor({ state: "detached" });
+  assert.equal(await copyItem.evaluate((node) => document.activeElement === node), true, "ArrowLeft returns to the parent item");
+  await copyItem.press("ArrowRight"); await manager.keyboard.press("ArrowDown");
+  assert.equal(await manager.evaluate(() => document.activeElement?.textContent), "Thread ID");
+  await manager.keyboard.press("Escape"); await manager.keyboard.press("Escape");
+  await manager.locator(".thread-actions-popup").waitFor({ state: "detached" });
+  await renamedTarget.click({ button: "right" });
+  await manager.getByRole("menuitem", { name: "Snooze", exact: true }).hover();
+  const snoozeMenu = manager.getByRole("menu", { name: "Snooze", exact: true });
+  assert.equal((await snoozeMenu.getByRole("menuitem").allTextContents()).at(-1), "Custom…");
+  const menuBox = (await manager.locator(".thread-actions-popup").first().boundingBox())!, submenuBox = (await snoozeMenu.boundingBox())!;
+  assert.ok(submenuBox.x >= 0 && submenuBox.x + submenuBox.width <= (await manager.evaluate(() => innerWidth)), "the submenu stays inside a narrow sidebar");
+  assert.ok(menuBox.width > 0);
+  await manager.getByRole("menuitem", { name: "Auto-settle", exact: true }).hover();
+  assert.equal(await manager.getByRole("menuitemradio", { name: "Enabled", exact: true }).getAttribute("aria-checked"), "true");
+  await manager.screenshot({ path: `${evidence}/thread-menu-submenu.png` });
+  await manager.getByRole("menuitem", { name: "Snooze", exact: true }).hover();
+  await snoozeMenu.getByRole("menuitem").first().click();
+  await manager.getByRole("navigation", { name: "Active conversations" }).getByRole("button", { name: "Renamed through history", exact: true }).waitFor({ state: "detached" });
+  const snoozedShelf = manager.locator(".history-shelf", { hasText: "Snoozed" });
+  await snoozedShelf.locator("summary").click();
+  await snoozedShelf.locator('[data-thread-id="third"] .thread-snoozed').filter({ hasText: /wakes in \d+m/ }).waitFor();
+  await manager.screenshot({ path: `${evidence}/sessions-unread-snoozed.png` });
+  await snoozedShelf.getByRole("button", { name: "Renamed through history", exact: true }).click({ button: "right" });
+  await manager.getByRole("menuitem", { name: "Wake thread", exact: true }).click();
+  await manager.getByRole("navigation", { name: "Active conversations" }).getByRole("button", { name: "Renamed through history", exact: true }).waitFor();
+  assert.deepEqual(client.commands.filter((command) => command.type === "thread.snooze" || command.type === "thread.unsnooze").map((command) => command.type), ["thread.snooze", "thread.unsnooze"]);
+  client.config = configBeforeAttention;
   publishText(client, "third", "Response with a persisted run for forking", 3, { runId: RunId.make("fork-run") });
   await third.getByRole("button", { name: "Fork from this response", exact: true }).click();
   await third.locator(".chat-heading strong").filter({ hasText: "Fork of Renamed through history" }).waitFor();
@@ -594,6 +644,8 @@ try {
   await accountSidebar.screenshot({ path: `${evidence}/sessions-usage-refresh.png` });
   // Hub accounts join their provider: pooled by default, equal per-account bars on request, API-key probe errors silent.
   const hubWindow = (session: number, week: number, reset: string) => [{ id: "five_hour", kind: "session" as const, label: "Session", usedPercent: session, resetsAt: reset }, { id: "seven_day", kind: "weekly" as const, label: "Weekly", usedPercent: week, resetsAt: "2026-10-12T12:00:00Z" }];
+  // Real installs always show Environments; the fake client reports a paired machine so its header is checked as well.
+  (client as unknown as { remoteStatuses: () => ReadonlyArray<object> }).remoteStatuses = () => [{ environmentId: "remote-fixture", label: "hungtien-x1yg5", httpBaseUrl: "https://hungtien-x1yg5.example.ts.net:8317", enabled: true, state: "connected", expiresAt: null }];
   const configBeforeHub = client.config;
   client.config = { ...client.config, providers: [...client.config.providers.map((provider) => provider.instanceId === "codex-personal" ? { ...provider, usageLimits: { checkedAt: "2026-10-06T12:01:00Z", windows: [], unavailable: { reason: "probeFailed" as const, message: "Codex could not read usage (JSON-RPC -32600)." } } } : provider)],
     usageLimitSources: [{ id: "hub" as never, kind: "cliproxy", label: "CLI Proxy", checkedAt: "2026-10-06T12:01:00Z", accounts: [
@@ -605,7 +657,13 @@ try {
   await accountSidebar.locator(".account-usage").getByText("unavailable").first().waitFor();
   assert.equal(await accountSidebar.locator(".account-usage .usage-notice").filter({ hasText: "-32600" }).count(), 0, "An API-key probe error stays silent");
   await accountSidebar.getByRole("combobox", { name: "Usage provider" }).selectOption({ label: "Claude · 3 accounts" });
-  await accountSidebar.getByText("Claude Subscription ×3 · via CLI Proxy", { exact: true }).waitFor();
+  await accountSidebar.getByText("Claude Subscription ×3", { exact: true }).waitFor();
+  assert.equal(await accountSidebar.locator(".account-source").evaluate((node) => [node.textContent, getComputedStyle(node).textAlign].join("|")), "CLI Proxy|right");
+  // The folded chevron and title sit where a native view pane draws its twistie and title.
+  const summaryBox = await accountSidebar.locator(".account-usage > summary").boundingBox(), titleBox = await accountSidebar.locator(".account-usage > summary > strong").boundingBox();
+  assert.ok(summaryBox && titleBox && titleBox.x - summaryBox.x === 20, `Account & Usage title inset ${titleBox && summaryBox ? titleBox.x - summaryBox.x : "?"}px`);
+  const environmentsBox = await accountSidebar.locator(".environments > summary").boundingBox(), environmentsTitle = await accountSidebar.locator(".environments > summary > strong").boundingBox();
+  assert.ok(environmentsBox && environmentsTitle && environmentsTitle.x - environmentsBox.x === 20, `Environments title inset ${environmentsTitle && environmentsBox ? environmentsTitle.x - environmentsBox.x : "?"}px`);
   await accountSidebar.getByText("61% left", { exact: true }).waitFor();
   await accountSidebar.screenshot({ path: `${evidence}/usage-hub-pooled.png` });
   await accountSidebar.getByRole("combobox", { name: "Multiple accounts" }).selectOption("perAccount");

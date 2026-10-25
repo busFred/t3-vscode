@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.4 — Prerelease
+
+- **Start a conversation on another machine.** A new chat shows a **Run on** chip above the message box when a paired machine has this repository. Choosing one runs the chat there: its models, effort and modes, its checkouts (root, an existing worktree or a new one), and its files and slash commands. The first message launches the conversation on that machine in one step. A started conversation shows "Runs on ‹machine› · ⑂ branch" in the same place.
+- **Add to another machine.** The Run on menu can clone this repository onto a paired machine that lacks it: choose the destination folder, SSH or HTTPS, and which ignored files (such as `.env`) to copy. The chat waits while it clones and copies, then runs there. A failed clone offers Retry and Remove.
+- Drafts for another machine stay on this computer, attachments included. If that machine drops, sending waits until it reconnects, and switching machine uploads attachments again from their kept copies.
+- File (@) and slash suggestions in conversations on other machines now come from that machine instead of this computer's server.
+- The thread menu now follows T3 Code's order and adds **Snooze ›** (presets or a custom time; a snoozed thread offers Wake), **Duplicate thread**, **Mark unread**, **Auto-settle ›** and **Copy ›** (Path, Branch, Thread ID). Submenus work with the keyboard and fold inline in narrow sidebars.
+- **Unread.** A coloured dot and a word mark sessions that need you: Done or Failed when a run finished since you last looked, Input while the agent waits for you, and Woke when a snoozed session comes back. Read state is shared with T3 Code and clears only while the session's tab is visible in a focused window.
+- A **Snoozed** shelf above Settled holds snoozed sessions with a countdown until they wake.
+- The message box shows the project chip only when there is a choice to make (several folders open, or none).
+- The message navigation rail is centred in the whole conversation, and older messages load on their own when you scroll to the top.
+- Account & Usage shows the plan and the account hub (such as a machine name) on separate lines, and the Account & Usage and Environments headers line up with native view headers.
+
 ## 0.3.3 — Release
 
 - First stable release since 0.2.7. It also brings the 0.3.0–0.3.2 prerelease changes below to the release channel: remote environments, the Environments section, provider subagent status, the long-history connection fix, image preview zoom and Copy image, and composer image copy.

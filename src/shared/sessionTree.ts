@@ -36,7 +36,10 @@ export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: Read
 export function sessionShelves(threads: ReadonlyArray<ThreadSummary>, matches: ReadonlyArray<ThreadSummary> = threads, sort: SessionSort = "date-desc") {
   const roots = sessionTree(threads, matches, sort);
   return {
-    active: roots.filter(node => !node.thread.archived && !node.thread.settled),
+    active: roots.filter(node => !node.thread.archived && !node.thread.settled && !node.thread.snoozedUntil),
+    // Snooze only hides an active thread; a settled or archived one keeps its own shelf.
+    snoozed: roots.filter(node => !node.thread.archived && !node.thread.settled && !!node.thread.snoozedUntil)
+      .sort((a, b) => Date.parse(a.thread.snoozedUntil!) - Date.parse(b.thread.snoozedUntil!)),
     settled: roots.filter(node => !node.thread.archived && node.thread.settled),
     archived: roots.filter(node => node.thread.archived),
   };

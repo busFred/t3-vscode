@@ -14,6 +14,7 @@ import { readFile, stat } from "node:fs/promises";
 import { basename } from "node:path";
 import { PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
 import { searchPreferencePatch } from "../shared/sessionSearchPresentation.js";
+import { parseCustomSnooze } from "../shared/threadAttention.js";
 import { TranscriptEncoder, type WireState } from "../shared/transcriptWire.js";
 
 export class WebviewRegistry {
@@ -53,17 +54,26 @@ export class WebviewRegistry {
     return encoder.encode(state);
   }
 }
+/** Custom snooze: a duration or a local time, resolved with T3's own snooze rules. */
+async function promptSnoozeUntil(): Promise<string | undefined> {
+  const vscode = await import("vscode");
+  const text = await vscode.window.showInputBox({ title: "Snooze until", prompt: "A duration (90m, 2h, 3d), a time (14:00) or a date and time (2026-10-25 14:00)",
+    validateInput: (value) => parseCustomSnooze(value, new Date()) ? null : "Enter a future time, such as 2h, 14:00 or 2026-10-25 14:00." });
+  return text === undefined ? undefined : parseCustomSnooze(text, new Date()) ?? undefined;
+}
+
 export class BridgeHandler {
   private readonly hostState: HostState;
   private readonly registry: WebviewRegistry;
   private readonly showSettings: () => PromiseLike<unknown>;
-  private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean> };
+  private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean>; snoozeUntil?: () => PromiseLike<string | undefined> };
   private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
   private readonly viewActions: { openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>; keepTab?: (viewId: string) => PromiseLike<unknown>; closeTaskTab?: (viewId: string) => void; editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown>; environmentAction?: (action: string, environmentId?: string) => PromiseLike<unknown> };
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:hungtienhuang.t3-vscode"),
-    prompts = {
+    prompts: BridgeHandler["prompts"] = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
       confirmDelete: async (title: string): Promise<boolean> => (await (await import("vscode")).window.showWarningMessage(`Delete "${title}"?`, { modal: true }, "Delete thread")) === "Delete thread",
+      snoozeUntil: promptSnoozeUntil,
     }, openDiff: BridgeHandler["openDiff"] = async () => { throw new Error("Native diff editor is unavailable."); },
     viewActions: {
       openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>;
@@ -84,9 +94,18 @@ export class BridgeHandler {
       if (title === undefined) return;
     }
     if (action === "delete" && !await this.prompts.confirmDelete(thread.title)) return;
+    if (action === "snooze" && title === undefined) {
+      title = await (this.prompts.snoozeUntil ?? promptSnoozeUntil)();
+      if (title === undefined) return;
+    }
     // A native prompt may stay open after its originating chat tab has closed.
     this.hostState.assertView(viewId);
-    await this.hostState.threadAction(id, action, title);
+    const created = await this.hostState.threadAction(id, action, title);
+    // A duplicate opens beside its source, like a new chat.
+    if (action === "duplicate" && created) {
+      if (this.viewActions.openSessionTab) await this.viewActions.openSessionTab(created, false);
+      else await this.hostState.selectThread(created, viewId);
+    }
   }
   attach(webview: vscode.Webview, viewId: string): void {
     webview.onDidReceiveMessage((raw: unknown) => {
@@ -118,7 +137,11 @@ export class BridgeHandler {
           return { id: message.id, result: this.hostState.sessionSearchPreviews(id(), stringParam(params, "query"), params.matchIds, viewId) };
         }
         case "revealSessionMatch": this.hostState.revealSessionMatch(stringParam(params, "matchId"), viewId); break;
-        case "refreshWorktrees": await this.hostState.refreshWorktrees(params.cleanupEnvironments === true); break;
+        case "refreshWorktrees":
+          // Another machine's checkouts are read from its own server.
+          if (typeof params.projectId === "string" && this.hostState.isRemoteProject(params.projectId)) await this.hostState.refreshRemoteCheckouts(params.projectId);
+          else await this.hostState.refreshWorktrees(params.cleanupEnvironments === true);
+          break;
         case "configureWorktree": await this.hostState.configureWorktree(params.choice, params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
         case "newWorktreeChat": {
           if (!this.viewActions.newWorktreeChat) throw new Error("Worktree chat tabs are unavailable.");
@@ -176,6 +199,7 @@ export class BridgeHandler {
         case "keepTab": await this.viewActions.keepTab?.(viewId); break;
         case "closeTaskTab": this.viewActions.closeTaskTab?.(viewId); break;
         case "getState": break;
+        case "listCopyableFiles": return { id: message.id, result: await this.hostState.listCopyableFiles(viewId) };
         case "searchThreads": {
           if (typeof params.query !== "string") throw new Error("Invalid search query.");
           return { id: message.id, result: await this.hostState.searchThreads(params.query, viewId) };
@@ -261,6 +285,14 @@ export class BridgeHandler {
           await this.viewActions.newChatTab(viewId); break;
         }
         case "chooseProject": await this.hostState.chooseProject(params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
+        case "chooseMachine": await this.hostState.chooseMachine(stringParam(params, "environmentId"), viewId); break;
+        case "startClone": {
+          if (params.protocol !== "ssh" && params.protocol !== "https") throw new Error("Choose SSH or HTTPS.");
+          if (!Array.isArray(params.files) || !params.files.every((file) => typeof file === "string") || params.files.length > 200) throw new Error("Invalid files to copy.");
+          await this.hostState.startClone({ environmentId: stringParam(params, "environmentId"), destinationPath: stringParam(params, "destinationPath"), protocol: params.protocol, files: params.files as string[] }, viewId);
+          break;
+        }
+        case "cloneAction": await this.hostState.cloneAction(stringParam(params, "action"), viewId); break;
         case "sendMessage": {
           if (params.attachmentIds !== undefined && (!Array.isArray(params.attachmentIds) || params.attachmentIds.length > 100 || !params.attachmentIds.every((id) => typeof id === "string"))) throw new Error("Invalid message attachments.");
           const references = params.attachmentReferences;
@@ -305,7 +337,7 @@ export class BridgeHandler {
         case "loadItemDetail": await this.hostState.loadItemDetail(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId")); break;
         case "threadAction":
           if (params.title !== undefined && typeof params.title !== "string") throw new Error("Invalid thread title.");
-          await this.performThreadAction(id(), stringParam(params, "action"), typeof params.title === "string" ? params.title : undefined, viewId); break;
+          await this.performThreadAction(id(), stringParam(params, "action"), typeof params.value === "string" ? params.value : typeof params.title === "string" ? params.title : undefined, viewId); break;
         case "forkFromResponse": await this.hostState.forkFromResponse(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId"), viewId); break;
         case "revertConversation": {
           const threadId = id();

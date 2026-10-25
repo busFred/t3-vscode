@@ -99,7 +99,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
       </header>
       {scheduledOpen && thread ? <div className="chat-scheduled-drawer"><ScheduledTaskList state={state} projectId={thread.projectId} originThreadId={thread.id} onClose={() => setScheduledOpen(false)} /></div> : null}
       {historyOpen && historyAnchor.current ? <SessionHistory state={state} anchor={historyAnchor.current} onClose={closeHistory} /> : null}
-      {threadMenu && thread ? <ThreadActionsMenu thread={thread} position={threadMenu} onClose={closeThreadMenu} /> : null}
+      {threadMenu && thread ? <ThreadActionsMenu thread={thread} workspaceRoot={project?.workspaceRoot} position={threadMenu} onClose={closeThreadMenu} /> : null}
       <div className="chat-reading" data-find-layout={findOpen && thread ? searchPreferences.layout : undefined}>
       {findOpen && thread ? <SessionFind key={`find:${thread.id}`} state={state} preferences={searchPreferences} onPreferences={setSearchPreferences} onClose={closeFind} onSearch={setSearchOptions} onSelect={(target) => { setSearchTarget(target); if (target) setCitationTarget(null); }} /> : null}
       <div className="chat-conversation" key="conversation">

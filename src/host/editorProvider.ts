@@ -134,8 +134,11 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
     try {
       this.host.beginNewChat(id);
       if (choice !== undefined) await this.host.configureWorktree(choice, projectId, id);
-      const threadId = await this.host.newThread(projectId, id);
-      await this.host.composerState(threadId, true, false, id);
+      // A chat bound for another machine has no thread until its first message launches one there.
+      if (!this.host.draftOnOtherMachine(id)) {
+        const threadId = await this.host.newThread(projectId, id);
+        await this.host.composerState(threadId, true, false, id);
+      }
       this.mountPanel(id, column);
       return id;
     } catch (cause) {
@@ -188,8 +191,11 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
     if (transfer) this.registry.postWhenReady(id, Events.initializeDraft, transfer);
     panel.webview.html = this.htmlFor(panel.webview, this.taskRequests.has(id) ? "task" : "panel");
     this.updateTitles();
-    panel.onDidChangeViewState(({ webviewPanel }) => { if (webviewPanel.active) this.registry.focus(id); });
+    // A conversation counts as read only while its tab is on screen.
+    this.host.setViewVisible(id, panel.visible);
+    panel.onDidChangeViewState(({ webviewPanel }) => { if (webviewPanel.active) this.registry.focus(id); this.host.setViewVisible(id, webviewPanel.visible); });
     panel.onDidDispose(() => {
+      this.host.setViewVisible(id, false);
       this.registry.remove(id); this.panels.delete(id); this.editorUris.delete(id); this.taskRequests.delete(id);
       void this.host.removeView(id).catch((cause) => vscode.window.showErrorMessage(String(cause)));
     });

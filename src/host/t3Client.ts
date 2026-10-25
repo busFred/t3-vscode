@@ -10,6 +10,7 @@ import {
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadStreamItem, type OrchestrationV2ArchivedShellStreamItem, type ServerConfig,
   type ReviewDiffFileContentsInput, ProviderInstanceId, type AssetResource, type AttachmentCreateUploadUrlInput, ChatAttachment,
+  ProjectCloneStartInput, type ProjectCloneListEvent,
 } from "@t3tools/contracts";
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import * as Rpc from "@t3tools/client-runtime/rpc/session";
@@ -179,6 +180,24 @@ export class T3Client {
   async ensureScratchProject(): Promise<string> {
     const result = await this.run(this.requireSession().client[WS_METHODS.projectsEnsureScratch]({}));
     return result.projectId;
+  }
+  /** Clone-backed project creation: returns once the project exists and the clone runs; progress arrives on `subscribeProjectClones`. */
+  startProjectClone(input: unknown) {
+    return this.run(this.requireSession().client[WS_METHODS.projectCloneStart](Schema.decodeUnknownSync(ProjectCloneStartInput)(input)));
+  }
+  cancelProjectClone(projectId: string) { return this.run(this.requireSession().client[WS_METHODS.projectCloneCancel]({ projectId: Schema.decodeUnknownSync(ProjectId)(projectId) })); }
+  retryProjectClone(projectId: string) { return this.run(this.requireSession().client[WS_METHODS.projectCloneRetry]({ projectId: Schema.decodeUnknownSync(ProjectId)(projectId) })); }
+  subscribeProjectClones(handler: (clones: ProjectCloneListEvent) => void) {
+    return this.subscribe(this.requireSession().client[WS_METHODS.subscribeProjectClones]({}), handler);
+  }
+  writeProjectFile(cwd: string, relativePath: string, contents: string) {
+    return this.run(this.requireSession().client[WS_METHODS.projectsWriteFile]({ cwd, relativePath, contents }));
+  }
+  /** Not forced: the server refuses to remove a project that has gained threads. */
+  async deleteProject(projectId: string): Promise<void> {
+    await this.run(this.requireSession().client[WS_METHODS.projectsMutate]({
+      type: "project.delete", commandId: Schema.decodeUnknownSync(CommandId)(randomUUID()), projectId: Schema.decodeUnknownSync(ProjectId)(projectId),
+    }));
   }
   async createProject(workspaceRoot: string, title: string): Promise<string> {
     const id = Schema.decodeUnknownSync(ProjectId)(randomUUID());

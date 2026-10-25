@@ -30,6 +30,7 @@ import { useComposerPreferences } from "../composerPreferences";
 import { ComposerFormatting } from "./ComposerFormatting";
 import { relabelWorktreeReferences } from "../../shared/worktreeReferences";
 import { WorktreeSelector, composerWorktreeLabel } from "./WorktreeSelector";
+import { MachineChip, draftMachineAway, draftSendBlock } from "./MachineChip";
 import { activeWorktreePreparations, WorktreePreparation } from "./WorktreePreparation";
 
 const runtimeLabels: Record<string, string> = { "approval-required": "Ask permission", "auto-accept-edits": "Auto-accept edits", auto: "Auto", "full-access": "Full access" };
@@ -120,7 +121,9 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const projectLabel = project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1)
     ?? (state.draft.supportsNoProject ? "No project" : "Choose project");
   const preparations = activeWorktreePreparations(state);
-  const setupBlocked = preparations.some((item) => !item.background && item.phase !== "ready");
+  // A new chat bound for a machine that dropped, or waiting for a clone there, keeps its draft; sending waits until it is ready.
+  const sendBlock = draftSendBlock(state);
+  const setupBlocked = preparations.some((item) => !item.background && item.phase !== "ready") || !!sendBlock;
   const worktreeLabel = composerWorktreeLabel(state);
   const workspace = state.draft.workspace;
   const draftCheckout = !thread || thread.canChooseWorkspace;
@@ -364,6 +367,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     {preparations.filter((item) => item.phase !== "ready" || item.backgroundRunning).map((preparation) => <WorktreePreparation key={preparation.id} preparation={preparation} />)}
     {thread?.archived ? <div className="archived-banner">This thread is archived.<button className="text-button" onClick={() => { void run("threadAction", { threadId: thread.id, action: "unarchive" }); }}>Restore thread</button></div> : null}
     {thread?.providerNativeSubagent ? <p className="subagent-readonly" role="status">This conversation is controlled by its provider. Send instructions in the parent conversation.</p> : null}
+    <MachineChip state={state} disabled={busy || state.sending} />
     <div className="composer-box" onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); addFiles([...event.dataTransfer.files]); } }}>
       <ComposerFormatting disabled={disabled || picking} listAssist={editingPreferences.listAssist} contextUsage={state.contextUsage} onListAssist={() => setEditingPreferences({ listAssist: !editingPreferences.listAssist })} onAttach={pickFiles} onFormat={applyFormat} onIndent={(outdent) => applyEdit(indentMarkdown(text, inputSelection(), outdent, true), true)} />
       {suggestionsOpen ? <ComposerSuggestions items={items} selected={highlighted} pending={suggestions.pending} error={suggestions.error} onSelect={chooseSuggestion} onHighlight={setSuggestionIndex} /> : null}
@@ -439,8 +443,9 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         }
         if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(event.ctrlKey || event.metaKey); }
       }} />
-      {!selection ? <div className="composer-hint">No models available. Configure a provider in T3 Code.</div> : null}
-      {!thread ? <div className="composer-project"><button className="project-trigger" aria-label="Choose project" title={state.draft.workspaceRoot ?? projectLabel} disabled={busy || state.workspaceRoots.length === 1} onClick={() => {
+      {!selection && !draftMachineAway(state) ? <div className="composer-hint">No models available. Configure a provider in T3 Code.</div> : null}
+      {/* The project is fixed by the window's folder or the chosen machine; the chip appears only with several folders, or none. */}
+      {!thread && !state.draft.environmentId && state.workspaceRoots.length !== 1 ? <div className="composer-project"><button className="project-trigger" aria-label="Choose project" title={state.draft.workspaceRoot ?? projectLabel} disabled={busy || state.workspaceRoots.length === 1 || !!state.draft.environmentId} onClick={() => {
         setBusy(true); void run("chooseProject").finally(() => setBusy(false));
       }}><FolderIcon size={12} /><span>{projectLabel}</span><ChevronDownIcon size={11} /></button></div> : null}
       <div className="composer-bottom">
@@ -450,7 +455,8 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
           {compactControls ? <details ref={overflow} className="composer-options-overflow" onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary className="icon-button" aria-label="Effort and permissions" title="Effort, permissions and worktree"><MoreHorizontalIcon size={16} /></summary><div className="composer-options-popup">{traits}</div></details> : traits}
         </div>
         <div className="composer-send-controls">
-          <span className="composer-shortcuts" aria-hidden="true"><span>{running ? "Enter to queue" : "Enter to send"}</span><span>{running && state.queue?.canSteer ? `${steerShortcut} to steer` : "Shift+Enter for a new line"}</span></span>
+          {sendBlock ? <span className="composer-shortcuts" role="status"><span>{sendBlock === "Send when it reconnects" ? "Your draft is kept" : sendBlock}</span><span>{sendBlock === "Send when it reconnects" ? sendBlock : "Your draft is kept"}</span></span>
+            : <span className="composer-shortcuts" aria-hidden="true"><span>{running ? "Enter to queue" : "Enter to send"}</span><span>{running && state.queue?.canSteer ? `${steerShortcut} to steer` : "Shift+Enter for a new line"}</span></span>}
           {running && thread ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
           <button className="send-button" aria-label="Send message" title={shortcutHint} disabled={disabled || setupBlocked || picking || placingPicked || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
         </div>
