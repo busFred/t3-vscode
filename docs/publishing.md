@@ -208,6 +208,18 @@ The owner reviewed these and chose to ship as they are. None is a regression aga
 - Set `preview: true` with the bump, so `scripts/package-vsix.mjs` passes `--pre-release`. Built `target-installer/t3-vscode-0.3.0.vsix` (45 files, 3.19 MB) from the clean commit. The packaged manifest has version `0.3.0`, publisher `hungtienhuang` and `preview: true`, and `extension.vsixmanifest` has `PreRelease` `true`. SHA-256: `d1593033359e31c155439b5eeaba7c39bed87cbf5505a8314d8324a8f74fb604`.
 - On October 24, 2026 (about 07:10 UTC), `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.0.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.0.` An immediate `vsce show` readback listed 0.2.7 as the latest version. This listing lag matches earlier uploads, so the listed channel is not yet confirmed by readback. No Marketplace installation was attempted.
 
+## 0.3.4 prerelease-channel publication
+
+- On October 25, 2026, the owner chose version 0.3.4 on the pre-release channel and then asked to "commit and publish as 0.3.4". The authorization covers 0.3.4 on the prerelease channel only. The Marketplace listed 0.3.3 as its latest version. Comparison revision: `68a1105` (v0.3.3). Source commit: `72d8911`, not pushed.
+- Scope:
+  - The thread menu follows T3 Code, adding Snooze/Wake, Duplicate thread, Mark unread with read-state dots, per-thread Auto-settle and Copy.
+  - A Run on machine chip above the composer starts conversations on paired machines, including in remote worktrees.
+  - Add to another machine clones the repository onto a paired machine and copies ignored env files.
+  - Rail centring with automatic loading of older messages, a two-line Account & Usage source, tighter section headers, a hidden project chip, and read titles at full colour.
+- Review and checks: fresh-context regression reviews of each part, with all blockers fixed and final verdicts of APPROVE; a metadata review approved the manifest, changelog and history. On `72d8911`: typecheck clean and 603/603 unit tests. Before the commit: `verify-views.ts` 16/16, plus isolated two-server runs with live GPT-6 Luna (low) turns (`verify-multi-environment.ts` 17/17, `verify-remote-clone.ts` 4/4, `verify-thread-attention-live.ts` 6/6).
+- Built `target-installer/t3-vscode-0.3.4.vsix` (45 files, 3.23 MB) from the clean commit. The packaged manifest has version `0.3.4`, publisher `hungtienhuang` and `preview: true`, and `extension.vsixmanifest` has `PreRelease` `true`. SHA-256: `b3ad43024195de57a19180119dd2341efea1b4b46b2dd397835882f3c8014d60`.
+- At 16:14 UTC, `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.4.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.4.` The Marketplace package endpoint then served 0.3.4 with the same SHA-256 and `PreRelease` `true`. The extension query still listed 0.3.3 as latest immediately afterwards, so listing refresh was pending. No Marketplace installation was attempted.
+
 ## 0.3.3 release-channel publication
 
 - On October 25, 2026, the owner asked to "build the new vsix and publish it as release", bump the version and clean up the installer directory. The Marketplace listed 0.3.2 (prerelease) as its latest version, so 0.3.3 was chosen. The authorization covers 0.3.3 on the stable release channel only. Comparison revisions: `e93e17a` (prerelease 0.3.2) and `dc775df` (stable 0.2.7). Source commit: `d23092f`, pushed to `origin/main` together with another session's Account & Usage commits (`f2294d4`, `ab9deb5`, `a83c687`).

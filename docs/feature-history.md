@@ -1942,7 +1942,7 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 
 ### v0.3.4
 
-- Version bump to 0.3.4 with `preview: true`, as the owner requested, packaged for the pre-release channel. Local installer only: `target-installer/t3-vscode-0.3.4.vsix` (SHA-256 `e391581e90bbb7f777c5ab2aab6805c7503246dfde5c9dae93c7d4bf7f9da26a`, manifest `PreRelease=true`). Built from the uncommitted working tree on `68a1105`; not installed or published.
+- Version bump to 0.3.4 with `preview: true`, as the owner requested, for the pre-release channel. Rebuilt `target-installer/t3-vscode-0.3.4.vsix` (45 files, 3.23 MB) from the clean commit `72d8911` (SHA-256 `b3ad43024195de57a19180119dd2341efea1b4b46b2dd397835882f3c8014d60`, manifest `PreRelease=true`). Marketplace accepted publication on October 25, 2026 (16:14 UTC). See [publication details](publishing.md#034-prerelease-channel-publication).
 - Pass typecheck, 603/603 unit tests, `pnpm build`, `verify-views.ts` 16/16 and `verify-ui.mjs` up to its known subagent-archive stop with every new check passing.
 - Pass isolated two-server checks with live GPT-6 Luna (low) turns: `verify-multi-environment.ts` 17/17, `verify-remote-clone.ts` 4/4 and `verify-thread-attention-live.ts` 6/6.
 - Fresh-context regression reviews of each part, with all blockers resolved and final verdicts of APPROVE: the menu, unread state and rail work, starting conversations on another machine, Add to another machine, and the faded-title revert. A metadata review confirmed the manifest, changelog and history; its one wording nit, which listed Regenerate title as new, was fixed.
