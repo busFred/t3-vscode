@@ -2,7 +2,7 @@
 
 Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner authorized the stable release upload of **0.1.16** on October 8, 2026, explicitly authorized prerelease **0.1.17** on October 9, 2026, explicitly authorized stable release-channel publication of **0.1.18** on October 10, 2026, and explicitly authorized prerelease-channel publication of **0.1.19** on October 10, 2026 (“bump version to 0.1.19 and publish to pre-release”). That authorization covers 0.1.19 on the prerelease channel only. The owner explicitly authorized prerelease-channel publication of **0.1.21** on October 12, 2026 (“publish this new version to pre-release channel”); that authorization covers 0.1.21 on the prerelease channel only and does not extend to the stable release channel. The owner explicitly authorized prerelease-channel publication of **0.1.20** on October 11, 2026 (“publish it to pre-release”); that authorization covers 0.1.20 on the prerelease channel only and does not extend to the stable release channel.
 
-Current release checkpoint: v0.3.2 is published to the prerelease channel from `cd9f622` (October 24, 2026); v0.2.7 remains the stable release from `dc775df`. Earlier checkpoints are recorded in the sections below.
+Current release checkpoint: v0.3.3 is published to the stable release channel from `d23092f` (October 25, 2026); the latest prerelease is v0.3.2 from `cd9f622`. Earlier checkpoints are recorded in the sections below.
 
 ## Version policy
 
@@ -207,6 +207,18 @@ The owner reviewed these and chose to ship as they are. None is a regression aga
 - Fresh-context Opus regression review against `842e482`: no blocking regressions. All six non-blocking findings were fixed and confirmed in a second review. TypeScript and 511 deterministic tests passed. `scripts/verify-multi-environment.ts` passed 13/13 deterministic checks and 14/14 with the GPT-6 Luna low-effort live turn.
 - Set `preview: true` with the bump, so `scripts/package-vsix.mjs` passes `--pre-release`. Built `target-installer/t3-vscode-0.3.0.vsix` (45 files, 3.19 MB) from the clean commit. The packaged manifest has version `0.3.0`, publisher `hungtienhuang` and `preview: true`, and `extension.vsixmanifest` has `PreRelease` `true`. SHA-256: `d1593033359e31c155439b5eeaba7c39bed87cbf5505a8314d8324a8f74fb604`.
 - On October 24, 2026 (about 07:10 UTC), `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.0.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.0.` An immediate `vsce show` readback listed 0.2.7 as the latest version. This listing lag matches earlier uploads, so the listed channel is not yet confirmed by readback. No Marketplace installation was attempted.
+
+## 0.3.3 release-channel publication
+
+- On October 25, 2026, the owner asked to "build the new vsix and publish it as release", bump the version and clean up the installer directory. The Marketplace listed 0.3.2 (prerelease) as its latest version, so 0.3.3 was chosen. The authorization covers 0.3.3 on the stable release channel only. Comparison revisions: `e93e17a` (prerelease 0.3.2) and `dc775df` (stable 0.2.7). Source commit: `d23092f`, pushed to `origin/main` together with another session's Account & Usage commits (`f2294d4`, `ab9deb5`, `a83c687`).
+- Scope for stable users: everything since 0.2.7. That covers the 0.3.0–0.3.2 prereleases (remote environments, Environments section, provider subagent status, long-history connection fix, image preview tools, composer image copy) and, new since 0.3.2:
+  - provider-grouped Account & Usage and pooled or per-account status meters;
+  - the navigation-rail send time and centring;
+  - four more date formats, with every date following Date/Time Format;
+  - Regenerate title.
+- Review and checks: a fresh-context Opus review of the stable candidate (`git diff e93e17a` plus the release edits, and manifest changes since `dc775df`) returned APPROVE WITH NITS with no blockers. Doc nits were fixed before the release commit: an upgrade note on pooled meters, the user guide's meter order and a test count. Its account-usage wording nits were left for that feature's owner. TypeScript clean and 577/577 unit tests; `verify-views.ts` 16/16 PASS on reruns, with intermittent failures in the find-in-session and response-layout steps that also occur on `e93e17a`.
+- Set `preview: false` with the bump, so `scripts/package-vsix.mjs` omits `--pre-release`. Removed every earlier installer from `target-installer/` at the owner's request and built `target-installer/t3-vscode-0.3.3.vsix` (45 files, 3.21 MB) from the clean commit. The packaged manifest has version `0.3.3`, publisher `hungtienhuang` and `preview: false`, and `extension.vsixmanifest` has no `PreRelease` property. SHA-256: `a20dead862c6943d0446a58d5677f7742a525272b938a354e13bffde96afb325`.
+- At 01:50 UTC on October 25, `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.3.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.3.` The Marketplace package endpoint then served 0.3.3 with the same SHA-256 (after gzip decoding) and `preview: false`. The extension query still listed 0.3.2 as latest immediately afterwards, so listing refresh was pending. No Marketplace installation was attempted.
 
 ## 0.3.2 prerelease-channel publication
 
