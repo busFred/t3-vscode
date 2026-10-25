@@ -20,32 +20,31 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
   const menu = useRef<HTMLDivElement>(null), submenu = useRef<HTMLDivElement>(null);
   const [location, setLocation] = useState(position);
   const [open, setOpen] = useState<{ key: string; anchor: HTMLElement; focus: boolean } | null>(null);
-  /** Beside the menu where it fits; a sidebar too narrow for both expands it inline under its item instead. */
-  const [subLocation, setSubLocation] = useState<{ x: number; y: number } | "inline" | null>(null);
+  /** Floating submenus never change the parent menu layout. */
+  const [subLocation, setSubLocation] = useState<{ x: number; y: number } | null>(null);
   const run = useActions(), timeOptions = useTimeFormat();
   useLayoutEffect(() => {
     const previous = document.activeElement;
     const element = menu.current;
     if (!element) return;
-    const box = element.getBoundingClientRect();
     element.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
     return () => { if ((document.activeElement === document.body || element.contains(document.activeElement) || submenu.current?.contains(document.activeElement)) && previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, [position]);
-  // Kept on screen, including when an inline submenu makes it taller.
-  const inline = subLocation === "inline";
+  // Reserve room to the side before opening, so hovering never moves the parent.
   useLayoutEffect(() => {
     const box = menu.current?.getBoundingClientRect();
-    if (box) setLocation({ x: Math.max(6, Math.min(position.x, innerWidth - box.width - 6)), y: Math.max(6, Math.min(position.y, innerHeight - box.height - 6)) });
-  }, [position, inline]);
+    if (box) setLocation({ x: Math.max(6, Math.min(position.x, innerWidth - box.width - Math.min(160, (innerWidth - 12) / 2) - 6)), y: Math.max(6, Math.min(position.y, innerHeight - box.height - 6)) });
+  }, [position]);
   // A submenu opens beside its item, on whichever side fits.
   useLayoutEffect(() => {
     if (!open) { setSubLocation(null); return; }
     const element = submenu.current;
     if (!element || subLocation) return;
     const anchor = open.anchor.getBoundingClientRect(), box = element.getBoundingClientRect();
-    const right = anchor.right + 2, left = anchor.left - box.width - 2;
-    const x = right + box.width <= innerWidth - 6 ? right : left >= 6 ? left : null;
-    setSubLocation(x === null ? "inline" : { x, y: Math.max(6, Math.min(anchor.top - 4, innerHeight - box.height - 6)) });
+    const parent = menu.current!.getBoundingClientRect();
+    const right = parent.right - 1, left = parent.left - box.width + 1;
+    const x = right + box.width <= innerWidth - 6 ? right : left >= 6 ? left : Math.max(6, innerWidth - box.width - 6);
+    setSubLocation({ x, y: Math.max(6, Math.min(anchor.top - 4, innerHeight - box.height - 6)) });
   }, [open, subLocation]);
   // A hidden submenu cannot take focus, so keyboard opening focuses it once it is placed.
   useLayoutEffect(() => {
@@ -90,10 +89,10 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     { kind: "action", key: "archive", label: `${thread.archived ? "Restore" : "Archive"} thread`, icon: <ArchiveIcon size={ICON} />, disabled: !thread.archived && Boolean(thread.activeRunId), run: () => choose(thread.archived ? "unarchive" : "archive") },
     { kind: "action", key: "delete", label: "Delete thread", icon: <Trash2Icon size={ICON} />, danger: true, run: () => choose("delete") },
   ];
-  // Each submenu is placed afresh; once the view proved too narrow, the next one expands inline too.
+  // Measure each submenu independently.
   const openSubmenu = (key: string, anchor: HTMLElement, focus: boolean) => {
     if (open?.key === key && open.focus === focus) return;
-    setOpen({ key, anchor, focus }); setSubLocation((current) => current === "inline" ? current : null);
+    setOpen({ key, anchor, focus }); setSubLocation(null);
   };
   const openItem = open ? items.find((item) => item.kind === "submenu" && item.key === open.key) : undefined;
 
@@ -116,9 +115,6 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
         onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); openSubmenu(item.key, event.currentTarget, true); } }}>
         {item.icon}{item.label}<ChevronRightIcon className="menu-chevron" size={13} />
       </button>
-      {inline && open?.key === item.key ? <div ref={submenu} className="thread-actions-inline" role="menu" aria-label={item.label} onKeyDown={(event) => navigate(event, submenu.current, true)}>
-        {item.items.map((child) => entry(child, true))}
-      </div> : null}
     </div>;
     return <div className="menu-entry" key={item.key} onPointerEnter={nested ? undefined : () => setOpen(null)}>
       <button role={item.checked === undefined ? "menuitem" : "menuitemradio"} aria-checked={item.checked} className={item.danger ? "danger" : undefined} disabled={item.disabled} title={item.title} onClick={item.run}>
@@ -127,10 +123,10 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     </div>;
   };
   return createPortal(<>
-    <div ref={menu} className="thread-actions-popup" role="menu" aria-label={`Actions for ${thread.title}`} style={{ left: location.x, top: location.y }} onKeyDown={(event) => navigate(event, menu.current, false)}>
+    <div ref={menu} className="thread-actions-popup thread-actions-root" role="menu" aria-label={`Actions for ${thread.title}`} style={{ left: location.x, top: location.y }} onKeyDown={(event) => navigate(event, menu.current, false)}>
       {items.map((item) => entry(item, false))}
     </div>
-    {openItem?.kind === "submenu" && !inline ? <div ref={submenu} className="thread-actions-popup thread-actions-submenu" role="menu" aria-label={openItem.label}
+    {openItem?.kind === "submenu" ? <div ref={submenu} className="thread-actions-popup thread-actions-submenu" role="menu" aria-label={openItem.label}
       style={typeof subLocation === "object" && subLocation ? { left: subLocation.x, top: subLocation.y } : { left: 0, top: 0, visibility: "hidden" }} onKeyDown={(event) => navigate(event, submenu.current, true)}>
       {openItem.items.map((item) => entry(item, true))}
     </div> : null}

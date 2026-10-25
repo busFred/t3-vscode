@@ -156,7 +156,13 @@ select, input { color: inherit; background: var(--card); }
 .message-author .response-actions { margin-left: auto; }
 .message-author .copy-button, .message-author .fork-button, .user-message > .copy-button { margin-top: 0; flex-shrink: 0; }
 .thread-actions-popup { position: fixed; min-width: min(190px, calc(100vw - 12px)); max-width: calc(100vw - 12px); padding: 4px; border: 1px solid var(--input); border-radius: 4px; background: var(--card); box-shadow: 0 4px 18px #0003; z-index: 80; }.thread-actions-popup button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; font-size: 0.75rem; border-radius: 3px; text-align: left; }.thread-actions-popup button:hover, .thread-actions-popup button:focus-visible { background: var(--muted); }.thread-actions-popup .danger { color: var(--destructive); }.thread-actions-popup hr { border: 0; border-top: 1px solid var(--border); margin: 3px 0; }
-.thread-actions-submenu { min-width: min(150px, calc(100vw - 12px)); }
+.thread-actions-root { min-width: min(190px, calc((100vw - 12px) / 2)); max-width: min(260px, calc((100vw - 12px) / 2)); }
+.thread-actions-submenu { min-width: min(150px, calc((100vw - 12px) / 2)); max-width: calc((100vw - 12px) / 2); }
+.thread-actions-popup button > svg { flex-shrink: 0; }
+@media (max-width: 340px) {
+  .thread-actions-popup button { gap: 4px; padding: 7px 3px; overflow-wrap: anywhere; }
+  .thread-actions-submenu button { flex-wrap: wrap; }
+}
 /* Where a conversation runs: a chip above the message box for a new chat, a quiet label once it has started. */
 .composer-machine { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; margin: 0 0 4px; }
 .machine-chip { gap: 5px; padding: 0 6px; cursor: pointer; }
@@ -186,8 +192,6 @@ select, input { color: inherit; background: var(--card); }
 .machine-menu-heading { margin: 2px 8px 4px; font-size: .6875rem; color: var(--muted-foreground); }
 .machine-menu button[aria-checked="true"] { background: var(--sidebar-row-active); }
 .machine-menu button.unavailable { opacity: .55; cursor: default; }
-.thread-actions-inline { margin: 1px 0 3px 22px; padding-left: 4px; border-left: 1px solid var(--border); }
-.thread-actions-popup button[aria-expanded="true"] .menu-chevron { transform: rotate(90deg); }
 .thread-actions-popup .menu-chevron, .thread-actions-popup .menu-detail { margin-left: auto; color: var(--muted-foreground); }
 .thread-actions-popup .menu-detail { padding-left: 12px; font-size: .6875rem; white-space: nowrap; }
 .thread-actions-popup .menu-check { display: inline-flex; width: 14px; flex: none; }

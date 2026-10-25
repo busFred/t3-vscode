@@ -581,12 +581,37 @@ try {
   await manager.keyboard.press("Escape"); await manager.keyboard.press("Escape");
   await manager.locator(".thread-actions-popup").waitFor({ state: "detached" });
   await renamedTarget.click({ button: "right" });
+  for (const width of [240, 280]) {
+    await manager.setViewportSize({ width, height: 820 });
+    await renamedTarget.click({ button: "right" });
+    const parent = manager.getByRole("menu", { name: /^Actions for / });
+    const before = await parent.boundingBox();
+    const rename = manager.getByRole("menuitem", { name: "Rename thread", exact: true });
+    const target = (await rename.boundingBox())!;
+    await manager.getByRole("menuitem", { name: "Snooze", exact: true }).hover();
+    await manager.getByRole("menu", { name: "Snooze", exact: true }).waitFor();
+    assert.deepEqual(await parent.boundingBox(), before);
+    assert.equal(await manager.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.textContent, { x: target.x + target.width / 2, y: target.y + target.height / 2 }), "Rename thread", `${width}px: Snooze must not cover Rename`);
+    await manager.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
+    await manager.getByRole("menu", { name: "Snooze", exact: true }).waitFor({ state: "detached" });
+    assert.deepEqual(await rename.boundingBox(), target);
+    await manager.keyboard.press("Escape");
+  }
+  await manager.setViewportSize({ width: 360, height: 820 });
+  await renamedTarget.click({ button: "right" });
+  const parentMenu = manager.getByRole("menu", { name: /^Actions for / });
+  const parentBefore = await parentMenu.boundingBox();
+  const renameBefore = await manager.getByRole("menuitem", { name: "Rename thread", exact: true }).boundingBox();
   await manager.getByRole("menuitem", { name: "Snooze", exact: true }).hover();
   const snoozeMenu = manager.getByRole("menu", { name: "Snooze", exact: true });
   assert.equal((await snoozeMenu.getByRole("menuitem").allTextContents()).at(-1), "Custom…");
   const menuBox = (await manager.locator(".thread-actions-popup").first().boundingBox())!, submenuBox = (await snoozeMenu.boundingBox())!;
   assert.ok(submenuBox.x >= 0 && submenuBox.x + submenuBox.width <= (await manager.evaluate(() => innerWidth)), "the submenu stays inside a narrow sidebar");
-  assert.ok(menuBox.width > 0);
+  assert.deepEqual(await parentMenu.boundingBox(), parentBefore, "opening Snooze must not resize or move the parent");
+  assert.ok(submenuBox.x >= menuBox.x + menuBox.width - 1 || submenuBox.x + submenuBox.width <= menuBox.x + 1, "Snooze opens beside the parent");
+  await manager.getByRole("menuitem", { name: "Rename thread", exact: true }).hover();
+  await snoozeMenu.waitFor({ state: "detached" });
+  assert.deepEqual(await manager.getByRole("menuitem", { name: "Rename thread", exact: true }).boundingBox(), renameBefore, "Rename stays in place after passing Snooze");
   await manager.getByRole("menuitem", { name: "Auto-settle", exact: true }).hover();
   assert.equal(await manager.getByRole("menuitemradio", { name: "Enabled", exact: true }).getAttribute("aria-checked"), "true");
   await manager.screenshot({ path: `${evidence}/thread-menu-submenu.png` });
