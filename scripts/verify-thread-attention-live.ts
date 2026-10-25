@@ -66,6 +66,12 @@ try {
   await host.threadAction(id, "auto-settle-on");
   await waitFor((state) => thread(state, id)?.autoSettle === true, "auto-settle on");
   console.log("PASS: the per-thread auto-settle opt-out round-trips");
+  // Only the isolated home's settings change here.
+  await client.updateSettings({ sidebarAutoSettleAfterDays: null, sidebarAutoSettleOnMerge: false });
+  await waitFor((state) => thread(state, id)?.autoSettle === undefined, "auto-settle hidden when the machine never auto-settles", 20_000);
+  await client.updateSettings({ sidebarAutoSettleAfterDays: 3, sidebarAutoSettleOnMerge: true });
+  await waitFor((state) => thread(state, id)?.autoSettle === true, "auto-settle offered again", 20_000);
+  console.log("PASS: the auto-settle choice follows the server's own auto-settle settings live");
 
   const copy = await host.threadAction(id, "duplicate");
   assert.ok(copy);

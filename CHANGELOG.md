@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Auto-settle ›** is hidden for sessions on a machine whose T3 settings never auto-settle that project, instead of always showing "Enabled". It follows each machine's own settings, project overrides included, and updates when they change.
+
 ## 0.3.4 — Prerelease
 
 - **Start a conversation on another machine.** A new chat shows a **Run on** chip above the message box when a paired machine has this repository. Choosing one runs the chat there: its models, effort and modes, its checkouts (root, an existing worktree or a new one), and its files and slash commands. The first message launches the conversation on that machine in one step. A started conversation shows "Runs on ‹machine› · ⑂ branch" in the same place.

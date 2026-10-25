@@ -141,6 +141,18 @@ test("A remote shell event emits a merged snapshot carrying the primary's snapsh
   assert.equal(r.items.length, 1);
 });
 
+test("A paired machine's config change reaches the same listener as the local server's", async () => {
+  const r = await rig();
+  const seen: unknown[] = [];
+  r.multi.onConfig = (config) => { seen.push(config); };
+  const remote = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 100));
+  (remote.onConfig as (config: unknown) => void)({ name: "a" });
+  assert.deepEqual(seen, [{ name: "a" }]);
+  await r.multi.setRemoteEnvironments([]);
+  (remote.onConfig as (config: unknown) => void)({ name: "a" });
+  assert.equal(seen.length, 1, "a removed machine no longer redraws");
+});
+
 test("With remote shells present a primary snapshot is re-emitted merged", async () => {
   const r = await rig();
   await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 1));

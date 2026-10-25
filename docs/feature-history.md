@@ -12,7 +12,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and independent model/effort editor tabs. | v0.1.16 | v0.1.23 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
-| [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | v0.3.4 |
+| [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | Unreleased |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.23 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
 | [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
@@ -300,6 +300,11 @@ Session resources retain the current History selection for restoration. Opening 
 - **Auto-settle ›** Enabled / Disabled sets T3's per-thread opt-out (`thread.auto-settle.set`); T3 Code shows the same setting.
 - **Mark unread** appears only once the thread has a finished response: T3 rewinds the read watermark to just before the latest run's completion and rejects the command otherwise (found in the live check below).
 - Each new item appears only when the thread's own server advertises the matching capability (`threadSnooze`, `threadVisitedTracking`, `threadAutoSettleOptOut`); the host rejects the command otherwise. The native Thread actions quick pick offers the same actions, with second steps for Snooze and Copy.
+
+#### Unreleased — auto-settle follows each machine's settings
+
+- **Auto-settle ›** (and the quick pick's auto-settle action) is now hidden when the thread's machine never auto-settles that project: both `sidebarAutoSettleAfterDays` (null) and `sidebarAutoSettleOnMerge` are off after that machine's per-project overrides. This resolves them the way T3's settlement service does, via `resolveProjectSettings`. The settings come from each server's own config stream, paired machines included, and changes apply live. Owner request: the per-thread "Enabled" check read as auto-settle being on while every machine had it off. T3 Code's own menu still shows the opt-out in that case; the server's behaviour is unchanged.
+- Validation: typecheck and 605/605 unit tests, including project-override cases and a paired machine's config change reaching the redraw listener. Against an isolated T3 0.1.1 server with one GPT-6 Luna (low) turn, `verify-thread-attention-live.ts` passed 7/7; its new step turns auto-settle off and back on in that server's settings and checks the item hides and returns.
 
 ### Settled and Archive
 

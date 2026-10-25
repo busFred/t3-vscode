@@ -22,7 +22,7 @@ export interface RemoteEnvironmentStatus {
   readonly expiresAt: number | null; readonly ignoredStatus?: IgnorableEnvironmentStatus;
 }
 export interface ThreadEnvironment { readonly environmentId: string; readonly label: string }
-type RemoteClient = Pick<T3Client, "connect" | "disconnect" | "connected" | "onClose" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
+type RemoteClient = Pick<T3Client, "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
   | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "createAssetUrl" | "uploadAttachment"
   | "deleteAttachment" | "getTurnDiff" | "subscribeWorktreeSetup" | "cancelWorktreeSetup" | "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
   | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
@@ -131,6 +131,8 @@ export class MultiEnvironmentClient {
         if (!current()) { await subscription(); await client.disconnect(); return; }
         remote.subscription = subscription; remote.state = "connected"; remote.attempts = 0;
         client.onClose = () => { if (current()) void this.remoteClosed(remote, generation, "Connection lost."); };
+        // A paired machine's settings (such as auto-settle) change what its sessions offer, so redraw like the local server does.
+        client.onConfig = (config) => { if (current()) this.primary.onConfig?.(config); };
         this.emitMerged(); this.onRemoteStatus?.();
       } catch (cause) {
         if (!current()) return;

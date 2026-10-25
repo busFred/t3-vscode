@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as DateTime from "effect/DateTime";
-import { RunId, ThreadId } from "@t3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS, RunId, ThreadId } from "@t3tools/contracts";
 import { BridgeHandler, WebviewRegistry } from "./bridge.js";
 import { viewsHarness, type FakeTransport } from "./testing/fakeTransport.js";
 
@@ -30,6 +30,22 @@ test("Read state, snooze and auto-settle appear only where the thread's server s
   // T3 can only mark a thread unread once a run has finished.
   assert.equal(capableSummary.canMarkUnread, undefined);
   await assert.rejects(host.threadAction("first", "mark-unread"), /finished response/);
+});
+
+test("Auto-settle is offered only where the thread's machine auto-settles its project, following live settings", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose()); capable(client);
+  const projectId = host.snapshot().threads.find((thread) => thread.id === "first")!.projectId;
+  const settle = (settings: Partial<typeof DEFAULT_SERVER_SETTINGS>) => {
+    client.config = { ...client.config, settings: { ...DEFAULT_SERVER_SETTINGS, ...settings } } as typeof client.config;
+    client.onConfig?.(client.config as Parameters<NonNullable<typeof client.onConfig>>[0]);
+  };
+  assert.equal(summary(host, "first").autoSettle, true, "unknown settings keep the choice");
+  settle({ sidebarAutoSettleAfterDays: null, sidebarAutoSettleOnMerge: false });
+  assert.equal(summary(host, "first").autoSettle, undefined, "a machine that never auto-settles hides it");
+  settle({ sidebarAutoSettleAfterDays: null, sidebarAutoSettleOnMerge: false, projectSettingsOverrides: { [projectId]: { sidebarAutoSettleOnMerge: true } } });
+  assert.equal(summary(host, "first").autoSettle, true, "a project that auto-settles on merge shows it");
+  settle({ sidebarAutoSettleAfterDays: 3, projectSettingsOverrides: { [projectId]: { sidebarAutoSettleAfterDays: null, sidebarAutoSettleOnMerge: false } } });
+  assert.equal(summary(host, "first").autoSettle, undefined, "a project that turns it off hides it");
 });
 
 test("Snooze moves a thread to the Snoozed shelf until it wakes, and Wake brings it back", async (t) => {
