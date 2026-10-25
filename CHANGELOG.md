@@ -5,6 +5,7 @@
 - **Account & Usage** now lists providers rather than accounts. Every Claude (or Codex) account a T3 usage hub such as CLI Proxy reports joins its provider: **Pooled** shows each window's average remaining with the soonest reset, and **Per account** shows one equal-length bar per account, with the email on hover. No setup is needed in T3 VSCode.
 - Several instances of one provider (for example Codex Personal and Work) now share one Account & Usage entry and, when pooled, one status meter; choose **Per account** to see them separately.
 - A harness signed in with an API key now reads “unavailable” instead of showing errors such as `Codex could not read usage (JSON-RPC -32600)`.
+- **Status meters** can show one pooled meter per provider or one per chosen account, pin providers, and choose which windows (Session, Week, model weeks, Month) appear.
 
 ## 0.3.2 — Prerelease
 
