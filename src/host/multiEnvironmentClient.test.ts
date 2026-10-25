@@ -146,11 +146,13 @@ test("A paired machine's config change reaches the same listener as the local se
   const seen: unknown[] = [];
   r.multi.onConfig = (config) => { seen.push(config); };
   const remote = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 100));
-  (remote.onConfig as (config: unknown) => void)({ name: "a" });
+  const forward = remote.onConfig as (config: unknown) => void;
+  forward({ name: "a" });
   assert.deepEqual(seen, [{ name: "a" }]);
   await r.multi.setRemoteEnvironments([]);
-  (remote.onConfig as (config: unknown) => void)({ name: "a" });
-  assert.equal(seen.length, 1, "a removed machine no longer redraws");
+  assert.equal(remote.onConfig, null, "removing the machine detaches its listener");
+  forward({ name: "a" });
+  assert.equal(seen.length, 1, "a late event from a removed machine no longer redraws");
 });
 
 test("With remote shells present a primary snapshot is re-emitted merged", async () => {

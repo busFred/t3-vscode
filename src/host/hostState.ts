@@ -36,7 +36,6 @@ import { mergeOlderHistoryIntoProjection, EMPTY_THREAD_HISTORY_META, applyHistor
 import { resolveWorkEntryToolPresentation } from "@t3tools/client-runtime/work-log/presentation";
 import { turnItemNeedsDetailFetch, turnItemOutputText } from "@t3tools/client-runtime/work-log/item-detail";
 import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import type { AddMachineTarget, MachineChoice, MachineClone, RemoteCheckouts, ThreadSummary, HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, SecretRequestAnswerParams, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch, RewindMarker, RestoreResult, RestorePreview } from "../shared/bridge.js";
@@ -642,17 +641,20 @@ export class HostState {
   /** Older servers omit the capability, so the action stays hidden rather than failing. */
   private canRegenerateTitle(id: string): boolean { return this.configForThread(id)?.environment?.capabilities?.threadTitleRegeneration === true; }
   private supports(id: string, capability: "threadSnooze" | "threadVisitedTracking" | "threadAutoSettleOptOut"): boolean { return this.configForThread(id)?.environment?.capabilities?.[capability] === true; }
-  /** Whether the thread's machine auto-settles its project at all, resolved as T3's settlement service does; unknown counts as yes. */
+  /**
+   * Whether the thread's machine auto-settles anything; unknown counts as yes. Mirrors T3's `autoSettlementConfigured`: once
+   * any project auto-settles, its sweep also settles threads whose pull request closed, whatever their own project says.
+   */
   private machineAutoSettles(thread: OrchestrationV2ThreadShell): boolean {
     const settings = (this.configForThread(thread.id) as Partial<Pick<ServerConfig, "settings">> | null)?.settings;
     if (!settings) return true;
-    const resolved = resolveProjectSettings(settings, thread.projectId).settings;
-    return resolved.sidebarAutoSettleOnMerge || resolved.sidebarAutoSettleAfterDays !== null;
+    return settings.sidebarAutoSettleOnMerge || settings.sidebarAutoSettleAfterDays !== null
+      || Object.values(settings.projectSettingsOverrides).some((entry) => entry.sidebarAutoSettleOnMerge === true || (entry.sidebarAutoSettleAfterDays !== undefined && entry.sidebarAutoSettleAfterDays !== null));
   }
   /** Read state, snooze and auto-settle as T3 Code's sidebar derives them, each only where the thread's server supports it. */
   private attention(thread: OrchestrationV2ThreadShell, now: number): Pick<ThreadSummary, "tracksVisits" | "canMarkUnread" | "unseen" | "woke" | "snoozedUntil" | "canSnooze" | "autoSettle"> {
     const visits = this.supports(thread.id, "threadVisitedTracking"), snooze = this.supports(thread.id, "threadSnooze");
-    // A per-thread opt-out means nothing on a machine that never auto-settles this project, so the choice is hidden there.
+    // A per-thread opt-out means nothing on a machine that never auto-settles, so the choice is hidden there.
     const autoSettle = this.supports(thread.id, "threadAutoSettleOptOut") && this.machineAutoSettles(thread);
     if (!visits && !snooze && !autoSettle) return {};
     const shell = presentThreadShell(ATTENTION_ENVIRONMENT, thread), at = { now: new Date(now).toISOString() };

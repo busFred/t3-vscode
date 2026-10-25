@@ -170,7 +170,7 @@ export class MultiEnvironmentClient {
     remote.retry = null;
     const { subscription, client } = remote;
     remote.subscription = null; remote.client = null; remote.shell = null;
-    if (client) client.onClose = null;
+    if (client) { client.onClose = null; client.onConfig = null; }
     await subscription?.().catch(() => undefined);
     await client?.disconnect().catch(() => undefined);
   }
