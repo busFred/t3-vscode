@@ -10,6 +10,8 @@ export interface MessageExchange {
   readonly key: string;
   readonly rowIndex: number;
   readonly prompt: string;
+  /** When the prompt was sent, shown in the hover preview. */
+  readonly sentAt: string | null;
   response: string | null;
 }
 
@@ -24,11 +26,22 @@ export function messageExchanges(rows: ReadonlyArray<TranscriptItem>): MessageEx
       // blocks are most of a referencing message and would crowd out the words the user typed.
       const prompt = stripRenderedAssistantQuotes(splitMessageReferences(row.item.text).text);
       exchanges.push({ key: row.key, rowIndex,
-        prompt: prompt.trim() ? prompt : row.item.attachments.map((attachment) => attachment.name).join(", ") || "Attached message", response: null });
+        prompt: prompt.trim() ? prompt : row.item.attachments.map((attachment) => attachment.name).join(", ") || "Attached message", sentAt: row.item.startedAt ?? null, response: null });
     }
     else if (row.item.type === "assistant_message" && exchanges.length) exchanges[exchanges.length - 1]!.response = row.item.text;
   }
   return exchanges;
+}
+
+/** Calendar days, not 24-hour spans: Today and Yesterday, then "N days ago" for a week; from the 8th day the full date. */
+export function exchangeTimeLabel(stamp: string | null, now: number, date: (value: Date) => string, time: (value: Date) => string): string {
+  const sent = stamp ? new Date(stamp) : null;
+  if (!sent || !Number.isFinite(sent.getTime())) return "";
+  const midnight = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  // Rounding absorbs the hour a daylight-saving change adds to or removes from the span.
+  const days = Math.round((midnight(new Date(now)) - midnight(sent)) / 86_400_000);
+  const day = days <= 0 ? "Today" : days === 1 ? "Yesterday" : days <= 7 ? `${days} days ago` : date(sent);
+  return `${day} ${time(sent)}`;
 }
 
 /** Tool rows and assistant messages belong to their preceding prompt. */

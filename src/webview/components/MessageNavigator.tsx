@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
 import { ArrowDownIcon, ChevronUpIcon } from "lucide-react";
-import { exchangeAtPointer, exchangeAtRow, type MessageExchange, type MessageNavigationPlacement } from "../../shared/messageNavigation";
+import { exchangeAtPointer, exchangeAtRow, exchangeTimeLabel, type MessageExchange, type MessageNavigationPlacement } from "../../shared/messageNavigation";
+import { useDateTimeFormat, useTimeFormat } from "../timeFormat";
 
 export function MessageNavigator({ exchanges, currentRow, placement, atEnd, history, onJump, onLatest, onEarlier }: {
   exchanges: ReadonlyArray<MessageExchange>; currentRow: number; placement: MessageNavigationPlacement; atEnd: boolean;
@@ -9,6 +10,7 @@ export function MessageNavigator({ exchanges, currentRow, placement, atEnd, hist
 }) {
   const prefix = useId(); const track = useRef<HTMLDivElement>(null); const dragging = useRef(false);
   const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const { date, dateTime } = useDateTimeFormat(), timeOptions = useTimeFormat();
   const current = exchangeAtRow(exchanges, currentRow);
   const found = exchanges.findIndex((item) => item.key === previewKey);
   const selected = found < 0 ? current : found;
@@ -35,6 +37,7 @@ export function MessageNavigator({ exchanges, currentRow, placement, atEnd, hist
     const key = exchanges[index]!.key; setPreviewKey(key); return key;
   };
   const compact = (text: string) => text.replace(/\s+/g, " ").trim();
+  const sent = preview ? exchangeTimeLabel(preview.sentAt, Date.now(), date, (value) => value.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", ...timeOptions })) : "";
   return <>
     <div className={`message-navigator ${placement}`} onPointerLeave={(event) => {
       if (!dragging.current && !(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setPreviewKey(null);
@@ -59,7 +62,7 @@ export function MessageNavigator({ exchanges, currentRow, placement, atEnd, hist
             role="option" aria-selected={index === selected} aria-label={`Message ${index + 1}: ${compact(exchange.prompt.slice(0, 160))}`} data-message-key={exchange.key} style={{ top: `${percent(index)}%` }} />)}
         </div>
         {preview ? <button className="message-nav-preview" style={{ top: `clamp(0px, calc(${percent(selected)}% - 40px), max(0px, calc(100% - 100px)))` }} onClick={() => onJump(preview.key)} aria-label={`Jump to message ${selected + 1}`}>
-          <span className="message-nav-position">{selected + 1} / {exchanges.length}</span>
+          <span className="message-nav-head"><span className="message-nav-position">{selected + 1} / {exchanges.length}</span>{sent ? <time className="message-nav-time" dateTime={preview.sentAt!} title={dateTime(new Date(preview.sentAt!))}>{sent}</time> : null}</span>
           <strong>{compact(preview.prompt)}</strong>
           {preview.response ? <span className="message-nav-response">{compact(preview.response)}</span> : <span className="message-nav-response">Awaiting a response</span>}
         </button> : null}
