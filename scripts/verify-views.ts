@@ -668,7 +668,22 @@ try {
   assert.equal(await accountSidebar.locator(".account-usage").getByRole("button", { name: "Refresh usage", exact: true }).isEnabled(), true);
   // With no plan or source the update time joins the actions row rather than sitting alone.
   assert.deepEqual(await accountSidebar.evaluate(() => [document.querySelectorAll(".account-plan").length, document.querySelector(".account-usage [role=status]")?.parentElement?.className]), [0, "account-usage-update"]);
+  const actionsAtRightEdge = () => accountSidebar.evaluate(() => {
+    const row = document.querySelector(".account-usage-update")!.getBoundingClientRect(), meters = document.querySelector(".account-usage [aria-label='Status meters']")!.getBoundingClientRect();
+    return Math.round(row.right - meters.right);
+  });
+  assert.equal(await actionsAtRightEdge(), 0, "Refresh and Status meters sit at the right edge");
   await accountSidebar.screenshot({ path: `${evidence}/sessions-usage-refresh.png` });
+  // A local sign-in has a plan but no hub: the actions row then holds only the buttons, which must stay right-aligned.
+  const configBeforePlan = client.config;
+  client.config = { ...client.config, providers: client.config.providers.map((provider) => provider.instanceId === "codex-personal" ? { ...provider, auth: { ...provider.auth, label: "ChatGPT Plus" } } : provider) } as typeof client.config;
+  client.onConfig?.(client.config as Parameters<NonNullable<typeof client.onConfig>>[0]);
+  await accountSidebar.locator(".account-plan > p").filter({ hasText: "ChatGPT Plus" }).waitFor();
+  assert.deepEqual(await accountSidebar.evaluate(() => [document.querySelectorAll(".account-source").length, document.querySelector(".account-usage [role=status]")?.parentElement?.className]), [0, "account-plan subtle"]);
+  assert.equal(await actionsAtRightEdge(), 0, "Without a hub, Refresh and Status meters still sit at the right edge");
+  client.config = configBeforePlan;
+  client.onConfig?.(client.config as Parameters<NonNullable<typeof client.onConfig>>[0]);
+  await accountSidebar.locator(".account-plan").waitFor({ state: "detached" });
   // Hub accounts join their provider: pooled by default, equal per-account bars on request, API-key probe errors silent.
   const hubWindow = (session: number, week: number, reset: string) => [{ id: "five_hour", kind: "session" as const, label: "Session", usedPercent: session, resetsAt: reset }, { id: "seven_day", kind: "weekly" as const, label: "Weekly", usedPercent: week, resetsAt: "2026-10-12T12:00:00Z" }];
   // Real installs always show Environments; the fake client reports a paired machine so its header is checked as well.
