@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.6 — Unpublished
+## 0.3.6 — Release
 
 - In **Pooled** usage meters, an account whose 7-day limit is used up no longer counts its 5-hour and model-week (such as Fable) limits towards the pooled figure. Its 7-day limit still counts; **Per account** is unchanged. A model week such as Fable resets with the earliest locked-out account.
 - Several accounts show as `Claude · (3)` instead of `Claude · 3 accounts`.
