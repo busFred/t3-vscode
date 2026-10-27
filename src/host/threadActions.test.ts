@@ -76,6 +76,9 @@ test("Forking uses the trusted response's run and opens the child only in its or
   // Inherited responses still fork from the original persisted source/run.
   const secondId = await host.forkFromResponse(id, "first", "text-first", "fork-tab");
   assert.equal(client.commands.at(-1)?.type, "thread.fork"); assert.equal(host.snapshot("fork-tab").activeThreadId, secondId);
+  // T3 Code cannot move a fork to another machine, so neither choosing one nor cloning onto one is accepted.
+  await assert.rejects(host.chooseMachine("studio", "fork-tab"), /stays on its machine/);
+  await assert.rejects(host.startClone({ environmentId: "studio", destinationPath: "/x", protocol: "https", files: [] }, "fork-tab"), /stays on its machine/);
 });
 
 test("A forged response, a streamed response, or a known incapable provider cannot fork", async (t) => {

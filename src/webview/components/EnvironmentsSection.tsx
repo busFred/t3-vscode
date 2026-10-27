@@ -1,10 +1,9 @@
-import type { ReactNode } from "react";
-import { ChevronDownIcon, LaptopMinimalIcon, PlusIcon, PowerIcon, RefreshCwIcon, ServerIcon, Trash2Icon } from "lucide-react";
+import { Fragment, type ReactNode } from "react";
+import { BellIcon, BellOffIcon, ChevronDownIcon, LaptopMinimalIcon, LinkIcon, PlayIcon, PlusIcon, PowerIcon, RefreshCwIcon, ServerIcon, Trash2Icon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import type { EnvironmentRow } from "../../shared/environmentStatus";
+import { environmentRowActions, type EnvironmentActionName, type EnvironmentIconAction } from "../../shared/environmentActions";
 import { useActions } from "../actions";
-
-type EnvironmentActionName = "add" | "pairAgain" | "enable" | "disable" | "reconnect" | "remove" | "ignore";
 
 const meta = (...parts: ReadonlyArray<string | undefined>) => parts.filter(Boolean).join(" · ");
 
@@ -20,24 +19,34 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
   const problems = environments.rows.filter((row) => !row.ignored && (row.status === "reconnecting" || row.status === "expiring" || row.status === "expired"));
   const summary = problems.length ? problems.map((row) => `${row.label}: ${row.status}`).join(", ")
     : environments.rows.every((row) => row.status === "connected") ? "All machines connected" : "Nothing needs attention";
-  const textButton = (label: string, action: EnvironmentActionName, row: EnvironmentRow) =>
-    <button className="text-button" aria-label={`${label} ${row.label}`} onClick={() => act(action, row.environmentId)}>{label}</button>;
-  const ignore = (row: EnvironmentRow) => row.ignored ? <span className="env-ignored">Ignored</span> : textButton("Ignore", "ignore", row);
   const iconButton = (title: string, action: EnvironmentActionName, row: EnvironmentRow, icon: ReactNode, danger = false) =>
     <button className={`icon-button${danger ? " danger" : ""}`} title={title} aria-label={`${title} ${row.label}`} onClick={() => act(action, row.environmentId)}>{icon}</button>;
+  const iconOf: Record<EnvironmentIconAction, (row: EnvironmentRow) => ReactNode> = {
+    reconnect: (row) => iconButton("Reconnect", "reconnect", row, <RefreshCwIcon size={13} />),
+    disable: (row) => iconButton("Disable", "disable", row, <PowerIcon size={13} />),
+    remove: (row) => iconButton("Remove", "remove", row, <Trash2Icon size={13} />, true),
+  };
+  // Beside the status, each is an icon button like the hover icons; the title and the machine-named label keep it readable.
+  const inlineOf = {
+    pairAgain: { label: "Pair again", icon: <LinkIcon size={13} /> }, enable: { label: "Enable", icon: <PlayIcon size={13} /> },
+    ignore: { label: "Ignore", icon: <BellOffIcon size={13} /> }, unignore: { label: "Unignore", icon: <BellIcon size={13} /> },
+  } as const;
   const stateOf = (row: EnvironmentRow): ReactNode => {
+    const { text, icons } = environmentRowActions(row);
+    const buttons = text.map((action) => <Fragment key={action}>{iconButton(inlineOf[action].label, action, row, inlineOf[action].icon)}</Fragment>);
+    const hover = icons.length ? <span className="env-hover-actions">{icons.map((action) => <Fragment key={action}>{iconOf[action](row)}</Fragment>)}</span> : null;
     switch (row.status) {
       case "connected": return <>
         <span className="env-resting"><Dot tone="ok" />Connected</span>
-        <span className="env-hover-actions">{iconButton("Reconnect", "reconnect", row, <RefreshCwIcon size={13} />)}{iconButton("Disable", "disable", row, <PowerIcon size={13} />)}{iconButton("Remove", "remove", row, <Trash2Icon size={13} />, true)}</span>
+        {hover}
       </>;
       case "connecting": return <span>Connecting…</span>;
-      case "reconnecting": return <><span className="env-warn"><Dot tone="warn" />Reconnecting…</span>{ignore(row)}</>;
-      case "expiring": return <><span className="env-warn"><Dot tone="warn" />{row.detail ?? "Expiring soon"}</span>{textButton("Pair again", "pairAgain", row)}{ignore(row)}</>;
-      case "expired": return <><span className="env-error"><Dot tone="error" />Expired</span>{textButton("Pair again", "pairAgain", row)}{ignore(row)}</>;
+      case "reconnecting": return <><span className="env-warn"><Dot tone="warn" />Reconnecting…</span>{hover}{buttons}</>;
+      case "expiring": return <><span className="env-warn"><Dot tone="warn" />{row.detail ?? "Expiring soon"}</span>{hover}{buttons}</>;
+      case "expired": return <><span className="env-error"><Dot tone="error" />Expired</span>{hover}{buttons}</>;
       case "disabled": return <>
-        <span><Dot tone="off" />Disabled</span>{textButton("Enable", "enable", row)}
-        <span className="env-hover-actions">{iconButton("Remove", "remove", row, <Trash2Icon size={13} />, true)}</span>
+        <span><Dot tone="off" />Disabled</span>{buttons}
+        {hover}
       </>;
     }
   };

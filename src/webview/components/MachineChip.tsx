@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { ChevronDownIcon, ChevronRightIcon, GitBranchIcon, LoaderCircleIcon, MonitorIcon, PlusIcon, ServerIcon, CircleXIcon } from "lucide-react";
 import type { AddMachineTarget, HostStateSnapshot, MachineChoice } from "../../shared/bridge";
+import { choosingMachine } from "../../shared/machineChoice";
 import { updateDraft } from "../composerDrafts";
 import { useActions } from "../actions";
 import { useBridgeQuery } from "../useBridgeQuery";
@@ -19,19 +20,15 @@ const icon = (machine: { readonly local: boolean }) => machine.local ? <MonitorI
 function rehomeAttachments(environmentId: string): void {
   updateDraft("new", (draft) => draft.attachments ? { ...draft, attachments: draft.attachments.map((file) => file.attachment && file.environmentId !== environmentId ? { ...file, pending: true } : file) } : draft);
 }
-function choosing(state: HostStateSnapshot): boolean {
-  const thread = state.threads.find((item) => item.id === state.activeThreadId);
-  return !thread || thread.canChooseWorkspace === true;
-}
 /** The machine a new conversation's draft targets, unless it has disconnected; send waits for it. */
 export function draftMachineAway(state: HostStateSnapshot): MachineChoice | undefined {
-  if (!choosing(state)) return undefined;
+  if (!choosingMachine(state)) return undefined;
   const machine = state.draft.machines?.find((item) => item.environmentId === state.draft.environmentId);
   return machine && !machine.local && !available(machine) ? machine : undefined;
 }
 /** Why a new chat cannot be sent yet: its machine is away, or the clone it waits for is not ready. */
 export function draftSendBlock(state: HostStateSnapshot): string | undefined {
-  if (!choosing(state)) return undefined;
+  if (!choosingMachine(state)) return undefined;
   if (draftMachineAway(state)) return "Send when it reconnects";
   const clone = state.draft.clone;
   if (!clone) return undefined;
@@ -79,7 +76,7 @@ function ClonePopover({ state, target, anchor, onClose }: { readonly state: Host
 /** Progress of the clone a new chat waits for, with its actions; failures stay until retried or removed. */
 function CloneBanner({ state }: { readonly state: HostStateSnapshot }) {
   const clone = state.draft.clone; const run = useActions(); const [busy, setBusy] = useState(false);
-  if (!clone || !choosing(state)) return null;
+  if (!clone || !choosingMachine(state)) return null;
   const act = (action: string) => {
     setBusy(true);
     // Remove returns the chat to this computer, so its attachments follow it back.
@@ -102,7 +99,7 @@ function CloneBanner({ state }: { readonly state: HostStateSnapshot }) {
  */
 export function MachineChip({ state, disabled }: { readonly state: HostStateSnapshot; readonly disabled: boolean }) {
   const thread = state.threads.find((item) => item.id === state.activeThreadId);
-  const newChat = choosing(state) && (!!state.draft.machines?.length || !!state.draft.addTargets?.length || !!state.draft.clone);
+  const newChat = choosingMachine(state) && (!!state.draft.machines?.length || !!state.draft.addTargets?.length || !!state.draft.clone);
   const anchor = useRef<HTMLButtonElement>(null), menu = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false), [location, setLocation] = useState<{ left: number; bottom: number } | null>(null);
   const [adding, setAdding] = useState(false), [cloneTarget, setCloneTarget] = useState<AddMachineTarget | null>(null);

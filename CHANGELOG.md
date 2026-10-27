@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.6 — Unpublished
+
+- In **Pooled** usage meters, an account whose 7-day limit is used up no longer counts its 5-hour and model-week (such as Fable) limits towards the pooled figure. Its 7-day limit still counts; **Per account** is unchanged. A model week such as Fable resets with the earliest locked-out account.
+- Several accounts show as `Claude · (3)` instead of `Claude · 3 accounts`.
+- Reconnecting, expiring and expired machines keep Disable and Remove, and an ignored machine can be un-ignored. Pair again, Enable, Ignore and Unignore are now icon buttons (hover for their names). A Disabled machine always shows its Remove icon.
+- A forked session no longer offers the **Run on** machine chooser, since T3 Code cannot move a fork to another machine; it shows where it runs instead.
+
 ## 0.3.5 — Release
 
 - Stable release of everything in the 0.3.4 prerelease below: conversations on other machines (the **Run on** chip and **Add to another machine**), the T3-style thread menu with Snooze, Duplicate, Mark unread, Auto-settle and Copy, unread dots, the Snoozed shelf, and the rail and project chip changes.

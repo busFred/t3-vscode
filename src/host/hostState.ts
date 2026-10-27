@@ -597,6 +597,8 @@ export class HostState {
   /** Only a new chat chooses where it runs; a conversation that has started stays on its machine. */
   private assertNewChat(view: ViewState, thread: OrchestrationV2ThreadShell | undefined): void {
     // A shell can lag a just-sent first message, so an accepted send or another machine's thread counts as started.
+    // T3 Code cannot move a forked conversation to another machine, whatever its own item count.
+    if (thread?.lineage.relationshipToParent === "fork") throw new Error("A conversation stays on its machine. Start a new chat to choose another.");
     if (thread && !this.emptyThreads.has(thread.id) && (thread.itemCount > 0 || this.acceptedMessages.has(thread.id) || this.remoteThread(thread.id))) throw new Error("A conversation stays on its machine. Start a new chat to choose another.");
     if (view.sending) throw new Error("Wait for the message to send before choosing another machine.");
   }

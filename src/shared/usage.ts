@@ -1,5 +1,5 @@
 import type { EnvironmentId, ServerProvider } from "@t3tools/contracts";
-import { collectLimitAccounts, collectLimitNotices, collectLimitPools, remainingPercent, type LimitAccount, type LimitPresentations } from "@t3tools/shared/usageLimits";
+import { collectLimitAccounts, collectLimitNotices, collectLimitPools, remainingPercent, type LimitAccount, type LimitPoolWindow, type LimitPresentations } from "@t3tools/shared/usageLimits";
 import type { HostStateSnapshot } from "./bridge.js";
 
 export type ProviderBrand = "codex" | "claude" | "kimi" | "other";
@@ -167,11 +167,35 @@ export function usageGroups(state: HostStateSnapshot, now = Date.now()): Readonl
 export const groupOf = (groups: ReadonlyArray<UsageGroup>, key: string | undefined) =>
   key ? groups.find((group) => group.key === key || group.accounts.some((account) => account.key === key)) : undefined;
 
-/** `Claude · 3 accounts`, `Claude · me@example.com`, or just `Claude` when nothing reports. */
+/** `Claude · (3)`, `Claude · me@example.com`, or just `Claude` when nothing reports. */
 export function groupTitle(group: UsageGroup): string {
-  if (group.reporting.length > 1) return `${group.label} · ${group.reporting.length} accounts`;
+  if (group.reporting.length > 1) return `${group.label} · (${group.reporting.length})`;
   const only = group.reporting[0];
   return only ? `${group.label} · ${only.email || only.label}` : group.label;
+}
+
+/** The general 7-day window is used up: the account is locked out until it resets, whatever its other windows say. */
+const weeklyExhausted = (account: UsageAccount) => account.limits.windows.some((window) => window.kind === "weekly" && generalWeekly(window) && remainingPercent(window) <= 0);
+/**
+ * The windows to pool across the group. An account whose general weekly window is exhausted cannot be used until
+ * that resets, so its other windows (session, model-specific weeks, month) are left out; its weekly window still counts.
+ * A window that only exhausted accounts report keeps all of them, so no meter disappears.
+ */
+function pooledWindows(group: UsageGroup, now: number): ReadonlyArray<LimitPoolWindow> {
+  const [all] = collectLimitPools(group.reporting, now);
+  if (!all || !group.reporting.some(weeklyExhausted)) return all?.windows ?? [];
+  const usable = group.reporting.map((account) => weeklyExhausted(account)
+    ? { ...account, limits: { ...account.limits, windows: account.limits.windows.filter((window) => window.kind === "weekly" && generalWeekly(window)) } } : account);
+  const [filtered] = collectLimitPools(usable, now);
+  const lockedOut = new Set(group.reporting.filter(weeklyExhausted).map((account) => account.key));
+  return all.windows.map((window) => {
+    const usableWindow = filtered?.windows.find((candidate) => candidate.kind === window.kind && candidate.id === window.id);
+    if (!usableWindow) return window;
+    // A model-specific week (Fable, ...) is averaged over the usable accounts, but it is next usable again when the
+    // locked-out accounts' same window resets, so that earliest reset is the one shown.
+    const returning = window.kind === "weekly" && !generalWeekly(window) ? window.resets.find((reset) => lockedOut.has(reset.member.account.key)) : undefined;
+    return returning ? { ...usableWindow, resets: [returning, ...usableWindow.resets] } : usableWindow;
+  });
 }
 
 /**
@@ -180,16 +204,16 @@ export function groupTitle(group: UsageGroup): string {
  */
 export function pooledAccount(group: UsageGroup, now = Date.now()): UsageAccount {
   if (group.reporting.length <= 1) return group.reporting[0] ?? group.accounts[0]!;
-  const [pool] = collectLimitPools(group.reporting, now);
   const checkedAt = group.reporting.map((account) => account.limits.checkedAt).sort().at(-1)!;
-  const windows = (pool?.windows ?? []).map((window) => ({ ...(window.resets[0]?.member.window ?? window.members[0]!.window), id: window.id, kind: window.kind, label: window.label, usedPercent: window.usedPercent }));
+  const windows = pooledWindows(group, now).map((window) => ({ ...(window.resets[0]?.member.window ?? window.members[0]!.window), id: window.id, kind: window.kind, label: window.label, usedPercent: window.usedPercent }));
   return { ...group.reporting[0]!, key: group.key, label: group.label, email: undefined, plan: group.plan, sourceLabel: null,
     instanceIds: group.accounts.flatMap((account) => account.instanceIds), limits: { checkedAt, windows } };
 }
 /** The reporting account whose window resets first, to name it on hover. */
 export function soonestReset(group: UsageGroup, window: UsageWindow, now = Date.now()): UsageAccount | undefined {
-  const pool = collectLimitPools(group.reporting, now)[0]?.windows.find((candidate) => candidate.kind === window.kind && candidate.id === window.id);
-  return pool?.resets[0]?.member.account as UsageAccount | undefined;
+  const pool = pooledWindows(group, now).find((candidate) => candidate.kind === window.kind && candidate.id === window.id);
+  const key = pool?.resets[0]?.member.account.key;
+  return group.reporting.find((account) => account.key === key);
 }
 
 export interface AccountRow extends MeterRow { readonly columns: ReadonlyArray<{ readonly account: UsageAccount; readonly window: UsageWindow | null }> }

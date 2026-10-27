@@ -447,11 +447,15 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .env-state .text-button { font-size: .6875rem; }
 /* Faded rather than removed, so keyboard focus can reach the actions and reveal them. */
 .env-hover-actions { display: inline-flex; gap: 2px; position: absolute; right: 0; top: 50%; transform: translateY(-50%); opacity: 0; pointer-events: none; }
-.env-state.disabled .env-hover-actions { position: static; transform: none; }
-.env-hover-actions .icon-button { width: 22px; height: 22px; }
+.env-state.disabled .env-hover-actions { position: static; transform: none; opacity: 1; pointer-events: auto; }
+.env-hover-actions .icon-button, .env-state > .icon-button { width: 22px; height: 22px; }
 .env-hover-actions .icon-button.danger:hover { color: var(--destructive); }
 .env-row:hover .env-hover-actions, .env-row:focus-within .env-hover-actions { opacity: 1; pointer-events: auto; }
 .env-row:hover .env-resting, .env-row:focus-within .env-resting { visibility: hidden; }
+/* A machine needing attention keeps its status and text buttons at rest; on hover or focus the status steps aside for the icons, so nothing is covered and the row never widens. */
+.env-state:is(.reconnecting, .expiring, .expired) .env-hover-actions { display: none; position: static; transform: none; }
+.env-row:is(:hover, :focus-within) .env-state:is(.reconnecting, .expiring, .expired) .env-hover-actions { display: inline-flex; }
+.env-row:is(:hover, :focus-within) .env-state:is(.reconnecting, .expiring, .expired) > :is(.env-warn, .env-error) { display: none; }
 .env-add { display: flex; align-items: center; gap: 6px; margin: 6px 6px 2px; font-size: .75rem; }
 .env-hint { margin: 4px 6px 0; font-size: .6875rem; line-height: 1.45; color: var(--muted-foreground); }
 .account-usage-update { display: flex; align-items: center; gap: 4px; color: var(--muted-foreground); font-size: .6875rem; }

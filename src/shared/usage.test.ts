@@ -78,7 +78,7 @@ test("Hub accounts group under their provider, pool by average with the soonest 
     accounts: [hubAccount("late@example.test", 17, 4, 8), hubAccount("soon@example.test", 28, 2, 60), hubAccount("mid@example.test", 72, 3, 91)] };
   const state = { ...host.snapshot(), providers: [claudeKey, codexKey], usageLimitSources: [hub] };
   const groups = usageGroups(state, now);
-  assert.deepEqual(groups.map(groupTitle), ["Claude · 3 accounts", "Codex"]);
+  assert.deepEqual(groups.map(groupTitle), ["Claude · (3)", "Codex"]);
   const claude = groups[0]!;
   assert.equal(claude.plan, "Claude Subscription ×3");
   assert.equal(claude.source, "CLI Proxy");
@@ -99,4 +99,72 @@ test("Hub accounts group under their provider, pool by average with the soonest 
   assert.deepEqual(usageNotices({ ...state, providers: [{ ...codexKey, usageLimits: { ...codexKey.usageLimits, unavailable: { reason: "probeFailed" as const, message: "Timed out." } } }] }), ["Codex: Timed out."]);
   assert.equal(meterText(pooled, resolveMeterWindows(["week"])), "Week 47%");
   assert.equal(meterText(pooled, resolveMeterWindows([])), "No selected window");
+});
+
+test("Pooled meters ignore the other windows of an account whose 7-day limit is used up, while per-account rows keep every real bar", async (t) => {
+  const { host } = await harness(); t.after(() => host.dispose());
+  const now = Date.parse("2026-10-24T12:00:00Z");
+  const at = (hours: number) => new Date(now + hours * 3_600_000).toISOString();
+  type Spec = { readonly session?: readonly [used: number, reset: number]; readonly week?: readonly [used: number, reset: number]; readonly fable?: readonly [used: number, reset: number] };
+  const account = (email: string, spec: Spec) => ({ id: `${email}.json`, driver: ProviderDriverKind.make("claudeAgent"), email, plan: "Claude Subscription",
+    usageLimits: { checkedAt: at(0), windows: [
+      ...(spec.session ? [{ id: "five_hour", kind: "session" as const, label: "Session", usedPercent: spec.session[0], resetsAt: at(spec.session[1]) }] : []),
+      ...(spec.week ? [{ id: "seven_day", kind: "weekly" as const, label: "Weekly", usedPercent: spec.week[0], resetsAt: at(spec.week[1]) }] : []),
+      ...(spec.fable ? [{ id: "seven_day_fable", kind: "weekly" as const, label: "Fable", usedPercent: spec.fable[0], resetsAt: at(spec.fable[1]) }] : []),
+    ] } });
+  const groupOf3 = (accounts: ReadonlyArray<ReturnType<typeof account>>) => {
+    const hub = { id: "hub" as never, kind: "cliproxy" as const, label: "CLI Proxy", checkedAt: at(0), accounts: [...accounts] };
+    return usageGroups({ ...host.snapshot(), providers: [], usageLimitSources: [hub] }, now)[0]!;
+  };
+  const all = resolveMeterWindows(["session", "week", "modelWeeks"]);
+  const exhausted = account("out@example.test", { session: [90, 1], week: [100, 50], fable: [95, 5] });
+  const second = account("b@example.test", { session: [20, 2], week: [40, 100], fable: [10, 6] });
+  const third = account("c@example.test", { session: [40, 3], week: [60, 100], fable: [30, 7] });
+
+  const group = groupOf3([exhausted, second, third]);
+  assert.deepEqual(group.reporting.map((a) => a.email), ["out@example.test", "b@example.test", "c@example.test"]);
+  const pooled = pooledAccount(group, now);
+  // Session and Fable average only the two usable accounts (30 and 20 used); the week averages all three (100, 40, 60 used).
+  assert.equal(meterText(pooled, all), "S 70% · W 33% · Fable 80%");
+  assert.equal(soonestReset(group, accountWindows(pooled)[0]!.window!, now)?.email, "b@example.test");
+  assert.equal(soonestReset(group, accountWindows(pooled)[1]!.window!, now)?.email, "out@example.test");
+  // Fable shows when the locked-out account's own Fable resets (+5h), not the usable accounts' (+6h).
+  assert.equal(soonestReset(group, accountWindows(pooled)[2]!.window!, now)?.email, "out@example.test");
+  assert.equal(accountWindows(pooled)[2]!.window!.resetsAt, at(5));
+  assert.equal(soonestReset(group, accountWindows(pooled)[0]!.window!, now), group.reporting[1]);
+
+  // Two locked-out accounts whose Fable returns in 24h and one usable account whose Fable resets in 72h with 20% used.
+  const day = groupOf3([account("a@example.test", { session: [90, 1], week: [100, 24], fable: [95, 24] }), account("b@example.test", { session: [80, 2], week: [100, 30], fable: [60, 24] }),
+    account("c@example.test", { session: [10, 3], week: [40, 100], fable: [20, 72] })]);
+  const dayPool = pooledAccount(day, now);
+  const dayRows = accountWindows(dayPool).map((row) => row.window!);
+  const daySession = dayRows[0]!, dayWeek = dayRows[1]!, dayFable = dayRows[2]!;
+  assert.equal(dayFable.usedPercent, 20);
+  assert.equal(dayFable.resetsAt, at(24));
+  assert.equal(dayWeek.usedPercent, 80);
+  assert.equal(dayWeek.resetsAt, at(24));
+  assert.equal(daySession.usedPercent, 10);
+  assert.equal(daySession.resetsAt, at(3));
+  assert.equal(["a@example.test", "b@example.test"].includes(soonestReset(day, dayFable, now)!.email!), true);
+  assert.equal(soonestReset(day, daySession, now)?.email, "c@example.test");
+  assert.equal(soonestReset(day, dayFable, now), day.reporting.find((a) => a.email === soonestReset(day, dayFable, now)!.email));
+  // Per-account mode still shows every account's own bars.
+  const rows = perAccountRows(group, now);
+  assert.deepEqual(rows.map((row) => row.label), ["Session", "Week", "Fable"]);
+  assert.deepEqual(rows.map((row) => row.columns.map(({ window }) => window?.usedPercent)), [[90, 20, 40], [100, 40, 60], [95, 10, 30]]);
+  assert.equal(group.reporting[0]!.limits.windows.length, 3);
+
+  // Nothing usable left: every account is exhausted, so the other windows are still averaged over all of them.
+  const stuck = groupOf3([exhausted, account("b@example.test", { session: [20, 2], week: [100, 100], fable: [10, 6] })]);
+  assert.equal(meterText(pooledAccount(stuck, now), all), "S 45% · W 0% · Fable 47%");
+
+  // An account with no weekly window is never excluded; an exhausted one only drops out of the windows others report.
+  const noWeek = groupOf3([exhausted, account("none@example.test", { session: [20, 2] })]);
+  assert.equal(meterText(pooledAccount(noWeek, now), all), "S 80% · W 0% · Fable 5%");
+  assert.equal(soonestReset(noWeek, accountWindows(pooledAccount(noWeek, now))[0]!.window!, now)?.email, "none@example.test");
+
+  // A single exhausted account keeps showing its own windows.
+  assert.equal(meterText(pooledAccount(groupOf3([exhausted]), now), all), "S 10% · W 0% · Fable 5%");
+  // Without an exhausted week every window pools as before.
+  assert.equal(meterText(pooledAccount(groupOf3([account("x@example.test", { session: [90, 1], week: [99, 50] }), second]), now), all), "S 45% · W 30% · Fable 90%");
 });

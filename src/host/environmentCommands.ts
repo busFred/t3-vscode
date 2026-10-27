@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { EnvironmentCatalog, EnvironmentPairingError, pairRemoteEnvironment } from "./environmentCatalog.js";
 import type { MultiEnvironmentClient } from "./multiEnvironmentClient.js";
 import { environmentDisplayStatus } from "../shared/environmentStatus.js";
+import { ignoreChange } from "../shared/environmentActions.js";
 
 const stateLabel = { connecting: "Connecting…", connected: "Connected", error: "Reconnecting…", expired: "Expired", disabled: "Disabled" } as const;
 
@@ -64,12 +65,9 @@ export function registerEnvironmentCommands(input: {
     if (action === "enable" || action === "disable") await catalog.setEnabled(environmentId, action === "enable");
     else if (action === "reconnect") client.reconnectRemote(environmentId);
     else if (action === "remove") await removeEnvironment(environmentId);
-    else if (action === "ignore") {
-      // Only the problem showing now is ignored; a different one later still counts.
+    else if (action === "ignore" || action === "unignore") {
       const status = client.remoteStatuses().find((entry) => entry.environmentId === environmentId);
-      const shown = status ? environmentDisplayStatus(status, Date.now()) : undefined;
-      if (shown !== "reconnecting" && shown !== "expiring" && shown !== "expired") throw new Error("This machine has nothing to ignore.");
-      await catalog.setIgnored(environmentId, shown);
+      await catalog.setIgnored(environmentId, ignoreChange(action, status ? environmentDisplayStatus(status, Date.now()) : undefined));
     } else throw new Error("Unknown environment action.");
   };
   // A machine that revoked this computer is removed from every profile, with a way back.

@@ -4,6 +4,7 @@ import {
   ENVIRONMENT_CATALOG_KEY, EnvironmentCatalog, EnvironmentPairingError, pairRemoteEnvironment,
   type EnvironmentPairingDeps, type RemoteEnvironmentRecord, type SecretBackend,
 } from "./environmentCatalog.js";
+import { ignoreChange } from "../shared/environmentActions.js";
 
 function fakeSecrets() {
   const data = new Map<string, string>();
@@ -214,4 +215,16 @@ test("pairRemoteEnvironment maps failures without leaking the token", async () =
       return true;
     });
   }
+});
+
+test("unignore clears the ignored status and the cleared state persists", async () => {
+  const s = fakeSecrets();
+  const catalog = new EnvironmentCatalog(s.backend);
+  await catalog.upsert(record("a"));
+  await catalog.setIgnored("a", ignoreChange("ignore", "reconnecting"));
+  assert.equal((await new EnvironmentCatalog(s.backend).list())[0]?.ignoredStatus, "reconnecting");
+  await catalog.setIgnored("a", ignoreChange("unignore", "reconnecting"));
+  const reread = await new EnvironmentCatalog(s.backend).list();
+  assert.equal("ignoredStatus" in reread[0]!, false);
+  assert.deepEqual(reread[0], record("a"));
 });

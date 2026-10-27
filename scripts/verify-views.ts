@@ -698,7 +698,7 @@ try {
   client.onConfig?.(client.config as Parameters<NonNullable<typeof client.onConfig>>[0]);
   await accountSidebar.locator(".account-usage").getByText("unavailable").first().waitFor();
   assert.equal(await accountSidebar.locator(".account-usage .usage-notice").filter({ hasText: "-32600" }).count(), 0, "An API-key probe error stays silent");
-  await accountSidebar.getByRole("combobox", { name: "Usage provider" }).selectOption({ label: "Claude · 3 accounts" });
+  await accountSidebar.getByRole("combobox", { name: "Usage provider" }).selectOption({ label: "Claude · (3)" });
   await accountSidebar.getByText("Claude Subscription ×3", { exact: true }).waitFor();
   // Both choices share a row, the hub sits beside Refresh at the update time's size, and the update time is right-aligned beside the plan.
   const middle = async (selector: string) => { const box = await accountSidebar.locator(selector).first().boundingBox(); assert.ok(box, selector); return box.y + box.height / 2; };

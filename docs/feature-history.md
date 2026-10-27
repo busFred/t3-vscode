@@ -37,7 +37,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.2.7 |
-| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.5 |
+| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.6 |
 | [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.3 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
@@ -49,7 +49,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.0 |
-| [Remote environments](#remote-environments) | Pairs other machines by link, lists their matching-repository sessions, starts new chats on them (including their worktrees) from a Run on chip, and clones the repository onto machines that lack it. | v0.3.0 | v0.3.4 |
+| [Remote environments](#remote-environments) | Pairs other machines by link, lists their matching-repository sessions, starts new chats on them (including their worktrees) from a Run on chip, and clones the repository onto machines that lack it. | v0.3.0 | v0.3.6 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
@@ -1055,6 +1055,13 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Refresh and Status meters stay pinned to the right edge when a provider has a plan but no hub or machine, the usual local sign-in. The previous change left nothing before them in that case, so they slid left. The 0.3.5 release regression review found it; `verify-views.ts` now checks the buttons' right edge with and without a plan.
 - Validation: typecheck, 605/605 unit tests, `pnpm build`; `verify-views.ts` PASS, with row-alignment, font-size and right-alignment assertions replacing the old right-aligned source line check (screenshots match the mockup); an earlier run stopped at the known resize flake after the usage checks passed.
 
+#### v0.3.6 — exhausted accounts leave the pool
+
+- In **Pooled** mode, an account whose general 7-day window is used up no longer counts its 5-hour, model-week (such as Fable) or monthly windows towards the pooled figure, since it cannot be used until that week resets. Its 7-day window still counts in the weekly average, and the soonest-reset hover skips it for the other windows. A window reported only by exhausted accounts keeps all of them, so no meter disappears; an account without a general weekly window is never excluded. **Per account** mode and all visuals are unchanged.
+- A model week such as Fable keeps the average over the usable accounts, but its reset is the earliest reset among the locked-out accounts' same window, since that is when more of it comes back (owner request; no extra hover text).
+- The provider title for several accounts is `Claude · (3)` instead of `Claude · 3 accounts`, which did not fit a narrow side panel. Text only.
+- Validation: new unit tests covering three accounts with one exhausted, a 24 h/72 h Fable scenario, per-account columns, the all-exhausted fallback, a no-weekly account and a single exhausted account.
+
 ### Status bar meters
 
 #### v0.3.3
@@ -1414,6 +1421,19 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
   - **Nits:** focus returns to the chip, the inline submenu closes with ArrowLeft, idle progress streams close, and a not-yet-reported clone reads as running ("Connecting").
   Final verdict: APPROVE, no findings. Final checks: typecheck, 603/603 unit tests, `pnpm build`, `verify-views.ts` 16/16, `verify-ui.mjs` up to its known subagent-archive stop with the machine and clone checks passing, `verify-remote-clone.ts` 4/4 and `verify-multi-environment.ts` 17/17, both with live turns.
 - Unpublished installer `target-installer/t3-vscode-0.3.3-add-to-machine.vsix` (contains every v0.3.4 entry above), built from the uncommitted working tree on `68a1105`; manifest unchanged at 0.3.3, not installed or published. SHA-256 recorded in its sidecar.
+
+#### v0.3.6 — forks stay on their machine
+
+- A forked conversation (Fork on a response, or Duplicate thread) shows the plain "Runs on ‹machine›" label instead of the selectable **Run on** chip, and the host rejects choosing a machine or cloning onto one for it, because T3 Code does not support moving a fork to another machine. A fork no longer waits on a draft machine or clone. New chats and the worktree/checkout choice are unchanged, and nothing visual changed.
+- Validation: unit tests for the chooser rule and for the host rejecting `chooseMachine` and `startClone` on a fork. Whether a real T3 server reports a fresh fork with zero items is unconfirmed; the rule keys on the fork lineage, so it holds either way.
+
+#### v0.3.6 — reconnecting machines keep their actions
+
+- A machine that is reconnecting, expiring or expired keeps **Disable** and **Remove** (and **Reconnect**, except when expired) as hover icons, using the existing icon buttons. On those rows the status text steps aside on hover or focus for the icons (as a Connected row hides its status), so the row never widens or covers the text buttons; the icons sit before the text buttons so those keep their positions (a click aimed at Ignore or Pair again cannot land on an icon). Reconnect on a reconnecting machine retries at once instead of waiting out the backoff.
+- An ignored machine shows **Unignore** instead of the static "Ignored" label; it clears the stored ignore.
+- The row's text buttons became icon buttons at the owner's request (icon table reviewed in chat): Pair again = Link, Enable = Play, Ignore = BellOff, Unignore = Bell, each with a title and a machine-named label, at the same 22 px size as the hover icons. Review of this change: APPROVE WITH NITS (layout and hover swap measured unchanged; the icons are muted grey where Pair again used to be a coloured link; an ignored machine has no text cue beyond its dimmed status and the Bell icon; the Disabled row's Enable is now a Play icon). A Disabled row's Remove (trash) icon is always visible instead of appearing only on hover (owner request; checked in a 280 px render, not re-reviewed).
+- Reconnect timing (owner question): the extension's own backoff is 2 s doubling to a 60 s cap (T3's app uses jittered 2 s to 5 min); no periodic check runs while connected, a drop is noticed when the socket closes.
+- Validation: pure action-set tests for each status, an unignore persistence test in the catalog tests. A first approach that reserved icon width at rest squeezed the machine name out in narrow panels (review blocker) and was replaced by the hover swap. `verify-views.ts` already fails on unmodified `a203643` at "Snooze opens beside the parent".
 
 ### Missing-server setup
 
@@ -1964,3 +1984,10 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 
 - Stable release of everything since 0.3.3, as the owner requested ("build and publish to stable channel"; version 0.3.5 chosen by the owner). Built `target-installer/t3-vscode-0.3.5.vsix` from `e3688b2` (SHA-256 `0c45ac8d41f61bad982bb06537e26ea825d7c01f3698a70052cfe0afedd177d0`, `preview: false`). Marketplace accepted publication on October 25, 2026 (21:34 UTC). See [publication details](publishing.md#035-release-channel-publication).
 - Fresh-context regression review against `1009345`: two blockers fixed (machine-wide auto-settle rule; usage buttons without a hub), final APPROVE WITH NITS. Typecheck, 605/605 unit tests, `verify-views.ts` 16/16 and the isolated live attention check 7/7.
+
+### v0.3.6
+
+- Version bump to 0.3.6 (`preview: false`, channel metadata unchanged) as the owner requested ("build the vsix to the next available version number"); unpublished, not installed. Contains the pooled-usage exclusion of 7-day-exhausted accounts (see [Account usage](#account-usage)) and forks no longer offering the machine chooser (see [Remote environments](#remote-environments)). No visual style changed.
+- Fresh-context Opus regression review against `a203643`: APPROVE WITH NITS, no blockers. Nits: an empty fork still lets the worktree/checkout picker treat it as a draft (pre-existing, left unchanged by instruction); the exhausted test uses rounded remaining (≥ 99.5% used); providers whose 7-day window has an unrecognised id are never excluded.
+- Checks: typecheck, 614/614 unit tests; review nits above refer to the first two items only.
+- Follow-up review (Environments, Fable reset, title): BLOCK first, for icon width reserved at rest squeezing machine names in narrow panels, then BLOCK for text buttons shifting under the pointer on hover. Both fixed (status steps aside on hover; icons placed before the buttons) and measured in headless Chromium: rest layout equals the pre-change layout, Ignore and Pair again stay put on hover. The final reorder is the reviewer's own measured suggestion and was not given a third full review. Open nit: an expiring row's "Expires in…" text is hidden while hovered.
