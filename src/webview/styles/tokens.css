@@ -429,6 +429,15 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .environments[open] .env-summary-dot { display: none; }
 .env-summary-dot { margin-left: auto; display: inline-flex; }
 .environments-body { padding: 2px 6px 8px; }
+.peer-links { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.peer-links > strong { font-size: .75rem; }
+.peer-links .env-row { grid-template-columns: minmax(0, 1fr) auto; }
+.peer-links .env-name { grid-column: 1; flex-wrap: wrap; }
+.peer-links .env-meta { grid-column: 1; }
+.peer-links .env-row > button { grid-column: 2; grid-row: 1 / span 2; }
+.peer-links .env-row > div:last-child:not(.env-meta):not(.env-name) { grid-column: 1 / -1; }
+.peer-links fieldset { display: flex; flex-direction: column; gap: 8px; border: 0; padding: 6px; min-width: 0; }
+.peer-links fieldset label { display: flex; flex-direction: column; gap: 4px; font-size: .75rem; }
 .env-dot { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--vscode-testing-iconPassed, #388a34); }
 .env-dot.warn { background: var(--warning); }
 .env-dot.error { background: var(--destructive); }

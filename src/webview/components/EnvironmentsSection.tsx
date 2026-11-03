@@ -1,4 +1,5 @@
-import { Fragment, type ReactNode } from "react";
+import { PeerLinksSection } from "./PeerLinksSection";
+import { Fragment, useState, type ReactNode } from "react";
 import { BellIcon, BellOffIcon, ChevronDownIcon, LaptopMinimalIcon, LinkIcon, PlayIcon, PlusIcon, PowerIcon, RefreshCwIcon, ServerIcon, Trash2Icon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import type { EnvironmentRow } from "../../shared/environmentStatus";
@@ -13,6 +14,7 @@ function Dot({ tone, label }: { readonly tone: "ok" | "warn" | "error" | "off"; 
 
 export function EnvironmentsSection({ state }: { readonly state: HostStateSnapshot }) {
   const run = useActions();
+  const [open, setOpen] = useState(false);
   const environments = state.environments;
   if (!environments) return null;
   const act = (action: EnvironmentActionName, environmentId?: string) => { void run("environmentAction", { action, environmentId }); };
@@ -51,9 +53,11 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
     }
   };
   const local = environments.local;
-  return <details className="environments">
+  return <details className="environments" onToggle={event => { const next = event.currentTarget.open; setOpen(next); }}>
     <summary><ChevronDownIcon size={12} /><strong>ENVIRONMENTS</strong><span className="env-summary-dot"><Dot tone={environments.indicator} label={summary} /></span></summary>
     <div className="environments-body">
+      <strong>Paired with this extension</strong>
+      <p className="env-hint">These machines share their conversations with VS Code.</p>
       {local ? <div className="env-row">
         <LaptopMinimalIcon size={14} />
         <div className="env-name"><span>{local.label}</span><span className="env-chip">This computer</span></div>
@@ -69,6 +73,7 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
       </div>)}
       <button className="text-button env-add" onClick={() => act("add")}><PlusIcon size={13} />Add machine…</button>
       {environments.rows.length === 0 ? <p className="env-hint">In T3 Code on the other machine, choose Create link, then paste the link here. Its sessions for this repository appear in Sessions.</p> : null}
+      {open && state.peerLinks ? <PeerLinksSection peers={state.peerLinks} /> : null}
     </div>
   </details>;
 }

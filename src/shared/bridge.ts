@@ -31,7 +31,7 @@ export const Methods = {
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
   newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", chooseMachine: "chooseMachine", startClone: "startClone", cloneAction: "cloneAction", listCopyableFiles: "listCopyableFiles", startPairing: "startPairing", reconnect: "reconnect",
   setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModelVisibility: "setModelVisibility", moveModel: "moveModel", reorderModel: "reorderModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt", forceStop: "forceStop",
-  respondToRequest: "respondToRequest", answerSecretRequest: "answerSecretRequest", answerLinkRequest: "answerLinkRequest", dismissRequest: "dismissRequest",
+  respondToRequest: "respondToRequest", answerSecretRequest: "answerSecretRequest", answerLinkRequest: "answerLinkRequest", refreshPeerLinks: "refreshPeerLinks", linkPeer: "linkPeer", unlinkPeer: "unlinkPeer", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
   createGuestShare: "createGuestShare", threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab", openSessionTab: "openSessionTab", keepTab: "keepTab", openTaskManager: "openTaskManager", closeTaskTab: "closeTaskTab",
   searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", turnDiffSummary: "turnDiffSummary", openMergeDiff: "openMergeDiff", refreshUsage: "refreshUsage",
@@ -281,6 +281,8 @@ export interface HostStateSnapshot {
   /** Set when the active session runs on a paired remote machine: checkout actions, saved-turn diffs and file restores are unavailable. */
   readonly remoteSession?: { readonly environmentId: string; readonly label: string };
   /** The sidebar's Environments section: this computer, paired machines and the collapsed status dot. */
+  readonly peerLinks?: import("./peerLinks.js").PeerLinksState;
+  readonly linkRequestPeers?: import("./peerLinks.js").PeerLinksState;
   readonly environments?: { readonly local?: { readonly label: string; readonly host: string; readonly serverVersion?: string }; readonly rows: ReadonlyArray<import("./environmentStatus.js").EnvironmentRow>; readonly indicator: import("./environmentStatus.js").EnvironmentIndicator };
   readonly projects: ReadonlyArray<ProjectSummary>;
   readonly threads: ReadonlyArray<ThreadSummary>;

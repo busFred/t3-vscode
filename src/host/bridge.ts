@@ -344,6 +344,9 @@ export class BridgeHandler {
             ...(isObject(params.answers) ? { answers: params.answers } : {}) });
           break;
         }
+        case "refreshPeerLinks": await this.hostState.refreshPeerLinks(typeof params.threadId === "string" ? id() : undefined); break;
+        case "linkPeer": await this.hostState.linkPeer(params); break;
+        case "unlinkPeer": await this.hostState.unlinkPeer(stringParam(params, "environmentId")); break;
         case "answerLinkRequest": {
           let input: PeerLinkRequestAnswerInput;
           try { input = Schema.decodeUnknownSync(PeerLinkRequestAnswerInput)({ threadId: id(), turnItemId: params.turnItemId, answer: params.answer }); }

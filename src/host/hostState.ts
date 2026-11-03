@@ -1,5 +1,7 @@
 import { conversationPullRequests, pullRequestHost, pullRequestOperations, type PullRequestOperation } from "../shared/pullRequests.js";
 import { clampManagedRuntimeMode, isManagedDriverAllowed, managedPolicyDeniedMessage, managedRuntimeModeDenial, managedCapabilityDenial, pendingGuestMessageCount, type ThreadGuestShare } from "@t3tools/contracts";
+import { peerLinksDenial, peerReachableUrls, type PeerLinksState } from "../shared/peerLinks.js";
+import { peerLinkHealth } from "@t3tools/client-runtime/state/peerLinks";
 import { relayMcpAppRequest, type McpAppNativePort } from "./mcpApps.js";
 import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
 import { mcpAppFileName } from "@t3tools/shared/mcpApp";
@@ -81,7 +83,7 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "pullRequestRequest" | "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream" | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy">> | null }
+export type HostTransport = Pick<T3Client, "pullRequestRequest" | "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream" | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext"> & Partial<Pick<T3Client, "linkPeer" | "unlinkPeer">> & { listPeerLinks?: (threadId?: string) => ReturnType<T3Client["listPeerLinks"]> } & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy" | "directEndpoints">> | null }
   // Remote environments: assets and attachments live on the server that owns the conversation.
   & { createAssetUrl(resource: AssetResource, threadId?: string): ReturnType<T3Client["createAssetUrl"]>;
     uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array, environmentId?: string): ReturnType<T3Client["uploadAttachment"]>;
@@ -242,7 +244,11 @@ export class HostState {
         if (!this.disposed) this.setPhase("error", describeError(cause));
       });
     };
-    client.onConfig = () => { this.scheduleEmit(); };
+    client.onConfig = config => {
+      const environmentId = config.environment?.environmentId;
+      if (environmentId && peerLinksDenial(config)) { this.peerLists.delete(environmentId); this.peerListErrors.delete(environmentId); }
+      this.scheduleEmit();
+    };
     this.refreshIntervalsChanged();
   }
   refreshIntervalsChanged(): void {
@@ -936,6 +942,7 @@ export class HostState {
   }
   private async connect(forcePair: boolean): Promise<void> {
     await this.stopSubscriptions();
+    this.peerLists.clear(); this.peerListErrors.clear();
     await this.client.disconnect();
     this.setPhase("discovering");
     const discovered = await (this.options.discover ?? discoverServer)(this.options.home, this.options.serverStartupHint);
@@ -1904,13 +1911,62 @@ export class HostState {
       await this.client.answerSecretRequest(input);
     });
   }
+  private readonly peerLists = new Map<string, Awaited<ReturnType<T3Client["listPeerLinks"]>>["links"]>();
+  private readonly peerListErrors = new Set<string>();
+  private peerScope(threadId?: string) {
+    const config = threadId && this.client.configForThread ? this.client.configForThread(threadId) : this.client.config;
+    return { config, key: config?.environment?.environmentId ?? "local" };
+  }
+  private peerLinksSnapshot(threadId?: string): PeerLinksState {
+    const { config, key } = this.peerScope(threadId), denial = peerLinksDenial(config);
+    const links = denial ? [] : this.peerLists.get(key) ?? [];
+    const remotes = this.client.remoteStatuses?.() ?? [];
+    const pairedIds = new Set(remotes.map(remote => remote.environmentId));
+    const machines = links.filter(link => link.status !== "expired").map(link => ({ environmentId: String(link.environmentId), label: link.label, urls: link.urls, linked: true, paired: pairedIds.has(link.environmentId) }));
+    for (const remote of remotes) {
+      if (remote.environmentId === key || machines.some(machine => machine.environmentId === remote.environmentId)) continue;
+      const remoteConfig = this.client.configForEnvironment?.(remote.environmentId);
+      machines.push({ environmentId: remote.environmentId, label: remote.label, urls: peerReachableUrls([...(remoteConfig?.directEndpoints ?? []).map(endpoint => endpoint.httpBaseUrl), remote.httpBaseUrl]), linked: false, paired: true });
+    }
+    // For remote conversations the local server is also a known machine.
+    const primary = this.client.config?.environment;
+    if (primary && primary.environmentId !== key && !machines.some(machine => machine.environmentId === primary.environmentId)) machines.push({ environmentId: primary.environmentId, label: primary.label, urls: peerReachableUrls(this.client.config?.directEndpoints?.map(endpoint => endpoint.httpBaseUrl) ?? []), linked: false, paired: true });
+    return { environmentId: key, ...(denial ? { denial } : {}), loaded: !denial && this.peerLists.has(key), ...(this.peerListErrors.has(key) && !denial ? { error: "Could not load linked environments." } : {}),
+      links: links.map(link => ({ environmentId: link.environmentId, label: link.label, access: link.access, status: peerLinkHealth(link, DateTime.nowUnsafe()).kind, paired: pairedIds.has(link.environmentId) })), machines: denial ? [] : machines };
+  }
+  async refreshPeerLinks(threadId?: string): Promise<void> {
+    if (threadId) this.requireThread(threadId);
+    const { config, key } = this.peerScope(threadId), denial = peerLinksDenial(config);
+    if (denial) { this.peerLists.delete(key); this.emit(); return; }
+    if (!this.client.listPeerLinks) throw new Error("Linked environments are unavailable.");
+    try {
+      const result = await this.client.listPeerLinks(threadId);
+      if (this.peerScope(threadId).key === key && !peerLinksDenial(this.peerScope(threadId).config)) { this.peerLists.set(key, result.links); this.peerListErrors.delete(key); }
+    } catch { this.peerListErrors.add(key); }
+    this.emit();
+  }
+  async linkPeer(input: unknown): Promise<void> {
+    const denial = peerLinksDenial(this.client.config);
+    if (denial) throw new Error(denial);
+    if (!this.client.linkPeer) throw new Error("Linked environments are unavailable.");
+    try { await this.client.linkPeer(input); } catch { throw new Error("Could not link the machine. Check its address and pairing code."); }
+    await this.refreshPeerLinks();
+  }
+  async unlinkPeer(environmentId: string): Promise<void> {
+    const denial = peerLinksDenial(this.client.config);
+    if (denial) throw new Error(denial);
+    if (!this.client.unlinkPeer) throw new Error("Linked environments are unavailable.");
+    await this.client.unlinkPeer({ environmentId });
+    await this.refreshPeerLinks();
+  }
   /** Pairing codes go straight to the peer RPC; inherited/resolved requests cannot be answered here. */
   answerLinkRequest(input: import("@t3tools/contracts").PeerLinkRequestAnswerInput): Promise<void> {
     return this.enqueue(async () => {
       this.requireThread(input.threadId);
       const row = this.threads.get(input.threadId)?.projection?.visibleTurnItems.find(row => row.item.id === input.turnItemId);
       if (!row || row.visibility !== "local" || row.item.type !== "link_request" || row.item.linkStatus !== "pending") throw new Error("This link request is no longer pending here.");
-      await this.client.answerLinkRequest(input);
+      try { await this.client.answerLinkRequest(input); } catch { throw new Error("Could not answer the request. Try again."); }
+      await this.refreshPeerLinks(input.threadId);
     });
   }
   dismissRequest(id: string, requestId: string): Promise<void> {
@@ -2501,6 +2557,7 @@ export class HostState {
     const acknowledgedWorking = accepted && !observedActive && !(acceptedRun && ["completed", "failed", "cancelled", "interrupted", "rolled_back"].includes(acceptedRun.status)) ? accepted : undefined;
     if (accepted && !acknowledgedWorking && activeThreadId) this.acceptedMessages.delete(activeThreadId);
     return {
+      peerLinks: this.peerLinksSnapshot(), linkRequestPeers: this.peerLinksSnapshot(activeThreadId),
       ...(acknowledgedWorking ? { acknowledgedWorking } : {}),
       ...(this.worktrees ? { worktrees: this.worktrees.snapshot() } : {}),
       revision: this.revision, clipboardNonce: this.clipboardNonce, phase: this.phase, home: this.options.home,

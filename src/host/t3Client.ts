@@ -1,5 +1,6 @@
 import { signInRequired, type PullRequestOperation, type PullRequestResponse } from "../shared/pullRequests.js";
 import { linkRequestFailureMessage } from "@t3tools/client-runtime/link-request";
+import { peerLinksDenial } from "../shared/peerLinks.js";
 import { captureTurnBaseline, findTurnBaseline } from "./turnBaseline.js";
 /** Transport adapter over T3's vendored contracts and Effect RPC client. */
 import { randomUUID } from "node:crypto";
@@ -9,7 +10,7 @@ import {
   OrchestrationV2ThreadLaunchInput, VcsCreateWorktreeInput, VcsListRefsInput, GitPreparePullRequestThreadInput, GitRunStackedActionInput, ServerSettingsPatch, type WorktreeSetupStreamEvent,
   ORCHESTRATION_V2_WS_METHODS as V2, WS_METHODS,
   McpAppCallToolInput, McpAppToolInfoInput, McpAppReadResourceInput, McpAppUpdateModelContextInput,
-  PeerLinkRequestAnswerInput, SecretRequestAnswerInput, SecretRequestError, EnvironmentAuthorizationError,
+  PeerLinkCreateInput, PeerLinkRemoveInput, PeerLinkRequestAnswerInput, SecretRequestAnswerInput, SecretRequestError, EnvironmentAuthorizationError,
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadStreamItem, type ServerConfig, type OrchestrationV2SearchThreadResult,
@@ -178,12 +179,41 @@ export class T3Client {
   preparePullRequest(input: unknown) {
     return this.run(this.requireSession().client[WS_METHODS.gitPreparePullRequestThread](Schema.decodeUnknownSync(GitPreparePullRequestThreadInput)(input)));
   }
+  private requirePeerLinks(): void {
+    this.requireSession();
+    const denial = peerLinksDenial(this.config);
+    if (denial) throw new Error(denial);
+  }
+  async listPeerLinks() {
+    this.requirePeerLinks();
+    return this.run(this.requireSession().client[WS_METHODS.peerLinksList]({}).pipe(
+      Effect.mapError(() => new Error("Could not load linked environments."))));
+  }
+  /** Decode and run inside the secret boundary: even a schema defect may quote the code. */
+  async linkPeer(input: unknown): Promise<void> {
+    this.requirePeerLinks();
+    try {
+      const payload = Schema.decodeUnknownSync(PeerLinkCreateInput)(input);
+      await this.run(this.requireSession().client[WS_METHODS.peerLinksLink](payload).pipe(
+        Effect.catchCause(() => Effect.fail(new Error("Could not link the machine. Check its address and pairing code.")))));
+    } catch { throw new Error("Could not link the machine. Check its address and pairing code."); }
+  }
+  async unlinkPeer(input: unknown): Promise<void> {
+    this.requirePeerLinks();
+    let payload: PeerLinkRemoveInput;
+    try { payload = Schema.decodeUnknownSync(PeerLinkRemoveInput)(input); } catch { throw new Error("Invalid linked environment."); }
+    await this.run(this.requireSession().client[WS_METHODS.peerLinksUnlink](payload).pipe(
+      Effect.mapError(() => new Error("Could not unlink the machine."))));
+  }
   /** Never expose schema or transport errors containing the pairing code. */
   async answerLinkRequest(input: unknown): Promise<void> {
+    this.requirePeerLinks();
     let payload: PeerLinkRequestAnswerInput;
     try { payload = Schema.decodeUnknownSync(PeerLinkRequestAnswerInput)(input); } catch { throw new Error("Invalid link answer."); }
-    await this.run(this.requireSession().client[WS_METHODS.peerLinksAnswerRequest](payload).pipe(
-      Effect.mapError(error => new Error(linkRequestFailureMessage(error)))));
+    try {
+      await this.run(this.requireSession().client[WS_METHODS.peerLinksAnswerRequest](payload).pipe(
+        Effect.catchCause(() => Effect.fail(new Error("Could not answer the request. Try again.")))));
+    } catch { throw new Error("Could not answer the request. Try again."); }
   }
   /** T3 0.1.5 removed `server.getSettings`; settings arrive with the server config stream. */
   async getSettings() {

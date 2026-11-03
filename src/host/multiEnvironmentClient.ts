@@ -22,7 +22,7 @@ export interface RemoteEnvironmentStatus {
   readonly expiresAt: number | null; readonly ignoredStatus?: IgnorableEnvironmentStatus;
 }
 export interface ThreadEnvironment { readonly environmentId: string; readonly label: string }
-type RemoteClient = Partial<Pick<T3Client, "forceStopThread">> & Pick<T3Client, "pullRequestRequest" | "createGuestShare" | "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
+type RemoteClient = Partial<Pick<T3Client, "forceStopThread" | "listPeerLinks">> & Pick<T3Client, "pullRequestRequest" | "createGuestShare" | "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
   | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "answerLinkRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "searchThreadStream" | "createAssetUrl" | "uploadAttachment"
   | "deleteAttachment" | "getTurnDiff" | "subscribeWorktreeSetup" | "cancelWorktreeSetup" | "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
   | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
@@ -366,6 +366,13 @@ export class MultiEnvironmentClient {
   }
 
   // ---- Local-only operations: project setup, checkouts, settings, schedules ----
+  listPeerLinks(threadId?: string) {
+    const client = threadId ? this.forThread(threadId) : this.primary;
+    if (!client.listPeerLinks) throw new Error("Linked environments are unavailable.");
+    return client.listPeerLinks();
+  }
+  linkPeer(input: unknown) { return this.primary.linkPeer(input); }
+  unlinkPeer(input: unknown) { return this.primary.unlinkPeer(input); }
   snapshotArchive() { return this.primary.snapshotArchive(); }
   launchThread(input: unknown) { return this.primary.launchThread(input); }
   listRefs(input: unknown) { return this.primary.listRefs(input); }

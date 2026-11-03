@@ -52,6 +52,9 @@ class FakeClient {
   async createGuestShare(id: string) { this.log("createGuestShare", id); return { url: `https://${this.name}/guest#credential` }; }
   async getThreadProjection(id: string) { this.log("getThreadProjection", id); return { from: this.name }; }
   async dispatch(input: unknown) { this.log("dispatch", input); }
+  async listPeerLinks() { this.log("listPeerLinks"); return { links: [] }; }
+  async linkPeer(input: unknown) { this.log("linkPeer", input); }
+  async unlinkPeer(input: unknown) { this.log("unlinkPeer", input); }
   async answerLinkRequest(input: unknown) { this.log("answerLinkRequest", input); }
   async answerSecretRequest(input: unknown) { this.log("answerSecretRequest", input); }
   async getHistory(id: string, cursor: string) { this.log("getHistory", id, cursor); return { from: this.name }; }
@@ -533,4 +536,21 @@ test("Conversation PR reads, generation and source-control sign-in follow the th
     remote.connected = false;
     await assert.rejects(async () => r.multi.pullRequestRequest("remote-thread", "summary", {}), /connect/i);
   } finally { await r.multi.dispose(); }
+});
+
+test("Peer management stays local while card list and answers follow their conversation", async t => {
+  const r = await rig(); t.after(() => r.multi.disconnect());
+  const remote = await pair(r, "build", shell([project("build-project")], [thread("build-thread", "build-project")]));
+  await r.multi.listPeerLinks();
+  await r.multi.listPeerLinks("build-thread");
+  await r.multi.linkPeer({ url: "https://new.example", pairingCode: "fixture", access: "read-only" });
+  await r.multi.unlinkPeer({ environmentId: "new" });
+  const input = { threadId: "build-thread", turnItemId: "request", answer: { type: "use-existing", environmentId: "new" } };
+  await r.multi.answerLinkRequest(input);
+  assert.equal(r.primary.callsNamed("listPeerLinks").length, 1);
+  assert.equal(remote.callsNamed("listPeerLinks").length, 1);
+  assert.equal(r.primary.callsNamed("linkPeer").length, 1);
+  assert.equal(r.primary.callsNamed("unlinkPeer").length, 1);
+  assert.equal(remote.callsNamed("linkPeer").length, 0);
+  assert.deepEqual(remote.callsNamed("answerLinkRequest").at(-1), ["answerLinkRequest", input]);
 });
