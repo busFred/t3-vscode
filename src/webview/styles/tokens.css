@@ -106,9 +106,9 @@ select, input { color: inherit; background: var(--card); }
 .search-status { margin: 0; padding: 2px 8px; font-size: 0.6875rem; }
 .history-shelves { max-height: 45%; flex-shrink: 0; }
 .dedicated-sessions .history-shelves { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-.dedicated-sessions .history-shelf[open] { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
+.dedicated-sessions .history-shelf[open] { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; }
 .dedicated-sessions .history-shelf > summary { flex-shrink: 0; }
-.dedicated-sessions .history-shelf::details-content { flex: 1 1 0; min-height: 0; overflow: auto; }
+.dedicated-sessions .history-shelf::details-content { flex: 0 1 auto; min-height: 0; overflow: auto; }
 .history-shelf { border-top: 1px solid var(--border); }
 .history-shelf > summary { display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 7px 8px; font-size: 0.75rem; }
 .history-shelf > summary::after { content: "›"; }

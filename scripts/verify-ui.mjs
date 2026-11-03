@@ -26,7 +26,8 @@ const initial = {
   projects: [{ id: "project-one", title: "t3-vscode", workspaceRoot: "/tmp/t3-vscode" }, { id: "project-two", title: "myt3code", workspaceRoot: "/tmp/myt3code" }],
   threads: [{ id: "thread-one", projectId: "project-one", title: "Migrate the T3 chat experience", status: "idle", modelSelection: selection, runtimeMode: "auto", interactionMode: "default", updatedAt: now, archived: false, pinned: true, activeRunId: null }, { id: "thread-two", projectId: "project-two", title: "Server integration checks", status: "idle", modelSelection: selection, runtimeMode: "auto", interactionMode: "default", updatedAt: now, archived: false, pinned: false, activeRunId: null }],
   favoriteModels: [],
-  providers: [{ instanceId: "codex", driver: "codex", displayName: "Codex", installed: true, enabled: true, supportedRuntimeModes: ["approval-required", "auto", "full-access"], models: [{ slug: "gpt-6-astra", name: "GPT-6 Astra", isCustom: false, capabilities }] }, { instanceId: "kimi-acp", driver: "acp", displayName: "Kimi via ACP", installed: true, enabled: true, models: [{ slug: "kimi-for-coding", name: "Kimi for Coding", isCustom: false, capabilities }] }],
+  // T3 0.1.6 contracts require ServerProvider.auth; usage-limit aggregation reads provider.auth.email.
+  providers: [{ instanceId: "codex", driver: "codex", displayName: "Codex", installed: true, enabled: true, auth: { status: "authenticated" }, supportedRuntimeModes: ["approval-required", "auto", "full-access"], models: [{ slug: "gpt-6-astra", name: "GPT-6 Astra", isCustom: false, capabilities }] }, { instanceId: "kimi-acp", driver: "acp", displayName: "Kimi via ACP", installed: true, enabled: true, auth: { status: "authenticated" }, models: [{ slug: "kimi-for-coding", name: "Kimi for Coding", isCustom: false, capabilities }] }],
   draft: { projectId: "project-one", workspaceRoot: "/tmp/t3-vscode", supportsNoProject: true, modelSelection: selection, runtimeMode: "auto", interactionMode: "default" },
   reader: { mode: "off", sensitivity: 5 }, activeThreadId: "thread-one", transcript: [user, assistant, command, diff], pending: { approvals: [], userInputs: [], secrets: [] }, history: { hasMore: false, loading: false, error: null }, threadLoading: false, sending: false,
 };
@@ -592,6 +593,8 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   assert.equal(await page.locator('.session-list .thread[data-thread-id="subagent-one"]').count(), 0);
   await page.locator('.session-list').getByRole('button', { name: 'Expand session of Migrate the T3 chat experience', exact: true }).click();
   await page.locator('.session-list .thread[data-thread-id="subagent-one"]').waitFor();
+  // Past subagents sit in a Past group that is collapsed by default (3ecaa8d) while one subagent is running.
+  await page.locator(".session-task-group.nested > summary").filter({ hasText: /^Past/ }).click();
   await page.locator('.session-list .thread[data-thread-id="subagent-archive"]').waitFor();
   await page.locator('.session-list .thread[data-thread-id="subagent-settled"]').waitFor();
   const archiveShelf = page.locator('.history-shelf').filter({ has: page.locator('summary > span', { hasText: /^Archive$/ }) });
@@ -624,8 +627,9 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   assert.equal(shelfMetrics.overflow, 'auto');
   assert.ok(shelfMetrics.firstTop < shelfMetrics.headerBottom && shelfMetrics.lastBottom <= shelfMetrics.shelfBottom + 1, 'Settled body scrolls to its final row');
   const bounds = await page.evaluate(() => {
+    // Scope to the Sessions shelves; the Worktrees tab also uses .history-shelf for hidden (zero-size) rows.
     const container = document.querySelector('.history-shelves').getBoundingClientRect();
-    return [...document.querySelectorAll('.history-shelf > summary')].map(element => { const rect = element.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, containerTop: container.top, containerBottom: container.bottom, viewport: innerHeight }; });
+    return [...document.querySelectorAll('.history-shelves > .history-shelf > summary')].map(element => { const rect = element.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, containerTop: container.top, containerBottom: container.bottom, viewport: innerHeight }; });
   });
   assert.ok(bounds.every(rect => rect.top >= rect.containerTop && rect.bottom <= rect.containerBottom + 1 && rect.top >= 0 && rect.bottom <= rect.viewport));
   await page.screenshot({ path: `${evidence}/settled-scrolled-light.png` });

@@ -42,11 +42,11 @@ export function usageAccounts(state: HostStateSnapshot): ReadonlyArray<UsageAcco
   if (!state.environment) return [];
   const environmentId = state.environment.environmentId;
   const accounts = new Map<string, UsageAccount>();
-  const reports = [...state.providers.filter((provider) => provider.enabled).map((provider) => ({ driver: provider.driver, email: provider.auth.email, workspaceId: provider.auth.workspaceId, fingerprint: provider.usageLimits?.credentialFingerprint })),
+  const reports = [...state.providers.filter((provider) => provider.enabled).map((provider) => ({ driver: provider.driver, email: provider.auth?.email, workspaceId: provider.auth?.workspaceId, fingerprint: provider.usageLimits?.credentialFingerprint })),
     ...(state.usageLimitSources ?? []).flatMap((source) => source.accounts.map((account) => ({ driver: account.driver, email: account.email, workspaceId: account.workspaceId, fingerprint: account.usageLimits.credentialFingerprint })))];
   const resolvedProviderKey = (provider: ServerProvider) => {
     const key = providerKey(provider, environmentId);
-    if (provider.auth.workspaceId) return key;
+    if (provider.auth?.workspaceId) return key;
     const known = new Set(reports.filter((report) => identity(report.driver, report.email, report.fingerprint, "") === key && report.workspaceId).map((report) => report.workspaceId!));
     return known.size === 1 ? `${key}:${[...known][0]}` : key;
   };
@@ -54,7 +54,7 @@ export function usageAccounts(state: HostStateSnapshot): ReadonlyArray<UsageAcco
     const base = identity(account.driver, account.email, account.limits.credentialFingerprint, account.key);
     const native = state.providers.find((provider) => `${environmentId}:${provider.instanceId}` === account.key);
     const source = (state.usageLimitSources ?? []).flatMap((source) => source.accounts.map((entry) => ({ key: `${source.id}:${entry.id}${entry.workspaceId ? `:${entry.workspaceId}` : ""}`, entry }))).find((entry) => entry.key === account.key)?.entry;
-    const reportWorkspace = native?.auth.workspaceId ?? source?.workspaceId;
+    const reportWorkspace = native?.auth?.workspaceId ?? source?.workspaceId;
     const known = new Set(reports.filter((report) => identity(report.driver, report.email, report.fingerprint, "") === base && report.workspaceId).map((report) => report.workspaceId!));
     const workspaceId = reportWorkspace ?? (known.size === 1 ? [...known][0] : undefined);
     const key = workspaceId ? `${base}:${workspaceId}` : base;
