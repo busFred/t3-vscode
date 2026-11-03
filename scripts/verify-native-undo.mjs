@@ -12,7 +12,8 @@ export async function verifyNativeUndo(options) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   let browser, clipboard, saved = false;
   try {
-    browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? '/usr/bin/chromium', headless: false, args: ['--no-sandbox'] });
+    assert.ok(options.environment?.DISPLAY, 'Use the same isolated display as VS Code for clipboard verification');
+    browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? '/usr/bin/chromium', headless: false, args: ['--no-sandbox'], env: options.environment });
     const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
     clipboard = await context.newPage();
     await clipboard.goto(`http://127.0.0.1:${server.address().port}`);

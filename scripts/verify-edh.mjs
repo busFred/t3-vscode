@@ -61,12 +61,12 @@ await new Promise((resolve) => portServer.listen(0, "127.0.0.1", resolve));
 const port = portServer.address().port;
 await new Promise((resolve) => portServer.close(resolve));
 const log = createWriteStream(join(profile, "code.log"));
-const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("T3") && !["ELECTRON_RUN_AS_NODE", "VITE_HTTP_URL", "VITE_WS_URL"].includes(key)));
+const baseEnvironment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("T3") && !["ELECTRON_RUN_AS_NODE", "VITE_HTTP_URL", "VITE_WS_URL"].includes(key)));
 // Never drive the owner's desktop: windows would pop up, their focus breaks the test, and OS-clipboard checks would
-// overwrite their clipboard. Use T3_VSCODE_TEST_DISPLAY, else start a private X display (Xvfb, invisible; else Xephyr).
-const { startIsolatedDisplay } = await import("./isolatedDisplay.mjs");
+// overwrite their clipboard. Use T3_VSCODE_TEST_DISPLAY, else start an invisible Xvfb display.
+const { startIsolatedDisplay, isolatedDisplayEnvironment } = await import("./isolatedDisplay.mjs");
 const isolated = await startIsolatedDisplay(process.env.T3_VSCODE_TEST_DISPLAY);
-environment.DISPLAY = isolated.display; delete environment.WAYLAND_DISPLAY;
+const environment = isolatedDisplayEnvironment(isolated.display, baseEnvironment);
 process.on("exit", () => isolated.stop());
 const child = spawn(process.env.VSCODE_BIN ?? "/usr/share/code/code", [
   "--no-sandbox", "--disable-gpu", "--new-window", "--profile=Default", "--skip-welcome", "--skip-release-notes", "--disable-workspace-trust",
@@ -265,7 +265,7 @@ try {
     await captureReadme({ home, workbench, sidebar, findWebview, runCommand });
   } else if (undoOnly) {
     const { verifyNativeUndo } = await import('./verify-native-undo.mjs');
-    await verifyNativeUndo({ home, workbench, sidebar, findWebview, runCommand });
+    await verifyNativeUndo({ home, workbench, sidebar, findWebview, runCommand, environment });
     console.log('PASS: Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo one step in a new chat panel and in a session custom-editor tab');
     // Unlocks `pnpm package` for exactly this source (scripts/nativeUndoGate.mjs).
     const { recordNativeUndoPass } = await import('./nativeUndoGate.mjs');
@@ -280,7 +280,7 @@ try {
     await verifyEmptyChat({ workbench, sidebar, findWebview });
   } else if (visualsOnly) {
     const { verifyRichChat } = await import('./verify-rich-chat.mjs');
-    await verifyRichChat({ home, evidence, workbench, sidebar, findWebview, chooseLiveTestModel, runCommand, async findVisualFrame() {
+    await verifyRichChat({ home, evidence, workbench, sidebar, findWebview, chooseLiveTestModel, runCommand, environment, async findVisualFrame() {
       const runtime = JSON.parse(await readFile(join(home, 'userdata/server-runtime.json'), 'utf8'));
       const deadline = Date.now() + 20_000;
       while (Date.now() < deadline) {
@@ -312,4 +312,5 @@ try {
   await browser?.close();
   if (child.pid && child.exitCode === null) child.kill("SIGTERM");
   log.end();
+  isolated.stop();
 }

@@ -20,7 +20,11 @@ export function MachineProject({ state, machine }: { readonly state: HostStateSn
   if (machine.local || info.present.includes(machine.environmentId))
     return <span className="env-project" role="img" aria-label={`${title} is on ${machine.label}`} title={`${title} is on ${machine.label}`}><FolderGit2Icon size={13} aria-hidden="true" /></span>;
   const clone = cloneOf(state, machine);
-  if (clone) return <span className="env-project" role="img" aria-label={`Adding ${title} to ${machine.label}`} title={`Adding ${title} to ${machine.label}`}><LoaderCircleIcon size={13} className="animate-spin" aria-hidden="true" /></span>;
+  if (clone) {
+    const failed = clone.phase === "failed" || clone.phase === "cancelled" || clone.copy?.phase === "failed";
+    const label = `${failed ? "Could not add" : "Adding"} ${title} to ${machine.label}`;
+    return <span className="env-project" role="img" aria-label={label} title={label}>{failed ? <FolderXIcon size={13} aria-hidden="true" /> : <LoaderCircleIcon size={13} className="animate-spin" aria-hidden="true" />}</span>;
+  }
   const target = info.targets.find((item) => item.environmentId === machine.environmentId);
   if (!target || !info.cloneSource) return null;
   if (!target.available) {

@@ -1067,7 +1067,6 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .env-icon { position: relative; grid-row: span 2; display: inline-flex; color: var(--muted-foreground); }
 .env-icon > .env-dot { position: absolute; right: -3px; bottom: -2px; width: 7px; height: 7px; box-shadow: 0 0 0 1.5px var(--sidebar, var(--vscode-sideBar-background)); }
 .env-icon > .env-dot.off { width: 5px; height: 5px; background: var(--sidebar, var(--vscode-sideBar-background)); }
-/* With no status text, the state column still reserves room for the hover actions so they never cover the name. */
 /* Machine rows: actions always visible in solid colors on the name line; tags (and any problem) on the line below. */
 .env-row { grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; }
 .env-row > .env-icon { grid-row: 1 / span 2; align-self: start; margin-top: 3px; }
@@ -1080,6 +1079,6 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .env-status { font-size: .6875rem; }
 .env-status.env-warn { color: var(--warning); }
 .env-status.env-error { color: var(--destructive); }
-.env-chip-missing { border: 0; background: var(--status-error); color: #fff; cursor: pointer; font: inherit; font-size: .625rem; }
-.env-chip-missing:hover:not(:disabled) { filter: brightness(1.1); }
+.env-chip-missing { border: 0; background: #c62828; color: #fff; cursor: pointer; font: inherit; font-size: .625rem; }
+.env-chip-missing:hover:not(:disabled) { background: #b71c1c; }
 .env-chip-missing:disabled { opacity: .55; cursor: default; }

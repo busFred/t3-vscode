@@ -5,13 +5,14 @@ import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright-core';
 
-export async function verifyRichChat({ home, evidence, workbench, sidebar, findWebview, findVisualFrame, chooseLiveTestModel, runCommand }) {
+export async function verifyRichChat({ home, evidence, workbench, sidebar, findWebview, findVisualFrame, chooseLiveTestModel, runCommand, environment }) {
   const fixture = JSON.parse(await readFile(join(home, 'rich-chat-fixture.json'), 'utf8'));
   assert.equal(fixture.home, home);
   // ClipboardItem writes through Chromium's OS clipboard; VS Code receives a real Ctrl+V.
   const clipboardServer = createServer((_request, response) => { response.end('<!doctype html><title>Isolated clipboard verification</title>'); });
   await new Promise(resolve => clipboardServer.listen(0, '127.0.0.1', resolve));
-  const clipboardBrowser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: false, args: ['--no-sandbox'], env: { ...process.env, DISPLAY: process.env.DISPLAY ?? ':0' } });
+  assert.ok(environment?.DISPLAY, 'Use the same isolated display as VS Code for clipboard verification');
+  const clipboardBrowser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: false, args: ['--no-sandbox'], env: environment });
   const context = await clipboardBrowser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
   const clipboardPage = await context.newPage();
   await clipboardPage.goto(`http://127.0.0.1:${clipboardServer.address().port}`);

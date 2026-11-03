@@ -88,7 +88,7 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
         const status = machine.conversation ? statusTextOf(machine.conversation) : !machine.local && machine.agents && machine.agents.status !== "reachable" ? <span className="env-status env-error">{peerHealthLabel(machine.agents.status)}</span> : null;
         return <div className={`env-row${machine.conversation?.ignored ? " ignored" : ""}`} key={machine.environmentId}>
         <span className="env-icon" role="img" aria-label={`${machine.local ? "This computer" : "Machine"}: ${label}`} title={label}>{machine.local ? <LaptopMinimalIcon size={14} aria-hidden="true" /> : <ServerIcon size={14} aria-hidden="true" />}<Dot tone={tone} /></span>
-        <div className="env-name" title={[host, machine.conversation?.detail].filter(Boolean).join(" · ") || undefined}><span>{machine.label}</span>{machine.local && <span className="env-chip">This computer</span>}</div>
+        <div className="env-name" title={[machine.label, host, machine.conversation?.detail].filter(Boolean).join(" · ")}><span>{machine.label}</span>{machine.local && <span className="env-chip">This computer</span>}</div>
         <div className="env-actions"><MachineProject state={state} machine={machine} />{machine.conversation ? actionsOf(machine.conversation) : !machine.local && machine.agents ? <MachineRemoveButton machine={machine} peers={state.peerLinks} removeConversations={() => undefined} /> : null}</div>
         <MachineCapabilities machine={machine} peers={state.peerLinks} pair={() => setAdding(machine)} lead={<>{status}{managed ? <span className="env-managed">Managed by {managed}</span> : null}<MachineCloneStatus state={state} machine={machine} /></>} />
       </div>; })}

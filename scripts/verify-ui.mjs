@@ -190,7 +190,7 @@ try {
   // A missing capability is a solid red tag that enables it; the local machine never offers agents.
   assert.deepEqual(await page.locator('.environments .env-row').evaluateAll(rows => rows.map(row => [row.querySelector('.env-name span')?.textContent, [...row.querySelectorAll('.env-chip-missing')].map(tag => tag.textContent)])),
     [['Local workstation', []], ['Build machine', []], ['Conversation machine', ['Agents']], ['Agent VPS', ['Conversations']]]);
-  assert.equal(await page.locator('.environments .env-chip-missing').first().evaluate(tag => getComputedStyle(tag).backgroundColor), 'rgb(229, 57, 53)');
+  assert.equal(await page.locator('.environments .env-chip-missing').first().evaluate(tag => getComputedStyle(tag).backgroundColor), 'rgb(198, 40, 40)');
   assert.equal(await page.locator('.environments .env-meta:not(.machine-capabilities)').count(), 0, 'machine addresses are not shown');
   // The explanation lives in the title's info icon once machines are listed.
   assert.match(await page.locator('.environments .env-info').getAttribute('title'), /Conversations: .*Agents: /);
@@ -238,6 +238,10 @@ try {
   await page.waitForFunction(() => window.__requests.some(request => request.method === 'machineCloneAction' && request.params.environmentId === 'conversations' && request.params.action === 'cancel'));
   await page.evaluate(() => window.__replace({ projectMachines: { title: 't3-vscode', present: [], targets: [], clones: [{ environmentId: 'conversations', label: 'Conversation machine', projectId: 'p', name: 't3-vscode', phase: 'failed', stage: 'Receiving objects', percent: null, detail: null, error: 'Permission denied (publickey).' }] } }));
   await page.getByRole('alert').filter({ hasText: 'Adding t3-vscode failed: Permission denied (publickey).' }).waitFor();
+  const failedCloneIcon = page.getByRole('img', { name: 'Could not add t3-vscode to Conversation machine', exact: true });
+  await failedCloneIcon.waitFor();
+  assert.equal(await failedCloneIcon.locator('.animate-spin').count(), 0, 'Failed clones must not look as though they are still running');
+  assert.ok((await page.locator('.env-name').filter({ hasText: 'Conversation machine' }).getAttribute('title'))?.includes('Conversation machine'), 'The full machine name remains available in its tooltip');
   for (const action of ['retry', 'remove']) {
     await page.getByRole('button', { name: `${action[0].toUpperCase()}${action.slice(1)} adding t3-vscode to Conversation machine` }).click();
     await page.waitForFunction((action) => window.__requests.some(request => request.method === 'machineCloneAction' && request.params.action === action), action);

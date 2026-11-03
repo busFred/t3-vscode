@@ -153,6 +153,8 @@ For native editor groups and Command Palette routing, run `node scripts/verify-e
 
 `--undo-only` drives the composer with real workbench clicks and keystrokes, in a new chat panel and in a session opened from Sessions (a custom-editor preview tab). It checks typing, dispatched image paste, actual OS image paste with completed uploads, assistant quotes through the selection menu (including the same passage twice), and native editor references. Each insertion must undo in one step and redo with both Ctrl+Shift+Z and Ctrl+Y, immediately and after hiding/revealing the tab and switching focus through Sessions; earlier typing must remain undoable. The OS-paste check uses a disposable Chromium window and saves/restores the clipboard. It needs the rich fixture (`prepare-rich-fixture.ts`, then `--seed`) in the same isolated home and does not call a provider.
 
+`verify-edh.mjs` requires Xvfb on PATH and starts an invisible private X display for VS Code and its clipboard browsers, with Wayland disabled for those children. It stops that display after verification and fails if Xvfb is missing; it never automatically opens a Xephyr window on the desktop. Alternatively, set `T3_VSCODE_TEST_DISPLAY` to an existing private local X display distinct from your desktop display.
+
 ## Session-search verification
 
 Use the [feature-history overview](feature-history.md#overview) as the regression checklist before packaging. `scripts/verify-views.ts` covers full-history search, case/word/content filters, older command reveal, math source, independent tabs and draft preservation against deterministic fixtures. Unit tests cover source occurrences, incremental updates, cancellation and incomplete history; these checks do not call a provider.
