@@ -124,4 +124,9 @@ test("Stop right after Send cancels the still-queued run instead of holding it",
   client.getThreadProjection = async () => ({ runs: [{ id: "running-run", userMessageId: second.messageId, status: "running" }] }) as never;
   await host.interrupt(id);
   assert.equal(client.commands.at(-1)?.type, "thread.stop");
+  // An unreadable projection still stops the thread.
+  client.getThreadProjection = async () => { throw new Error("offline"); };
+  const before = client.commands.length;
+  await host.interrupt(id);
+  assert.equal(client.commands.length, before + 1); assert.equal(client.commands.at(-1)?.type, "thread.stop");
 });

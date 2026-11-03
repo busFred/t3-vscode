@@ -101,7 +101,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 #### v0.3.7
 
 - Show conversation tags, filter sessions by tag and reorder pinned conversations by dragging or using arrow keys on the grip.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.1.23 — same-version rebuild
 
@@ -178,7 +178,7 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 - Style once and webhook controls and policy notices with VS Code theme colors; managed policy can restrict webhook tasks.
 - Add once and webhook schedules, filter editing, endpoint and token controls, delivery history, and policy notices. Unsupported schedule fields remain read-only.
 - T3 reference: `packages/contracts/src/scheduledTask.ts` and `packages/client-runtime/src/scheduledTaskWebhook.ts`.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.1.23 — same-version rebuild
 
@@ -289,7 +289,7 @@ Session resources retain the current History selection for restoration. Opening 
 - Add and remove tags from thread actions; choose tags to hide and toggle hiding per environment.
 - Use T3 snooze and wake rules for pending requests, guest attention and child approvals. Stop also addresses background work; **Force stop** appears for an unresponsive run when supported.
 - Preserve tags and pull-request links in conversation summaries for the display controls added later in v0.3.7.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.0.1
 
@@ -336,7 +336,7 @@ Session resources retain the current History selection for restoration. Opening 
 
 - Show linked pull or merge requests in Sessions and the conversation header. The header opens details, checks, change breakdowns and review guides, with refresh and browser links.
 - Offer device sign-in where supported, show repository app access issues, and route requests through the conversation’s environment.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 ### Guest sharing
 
@@ -345,14 +345,14 @@ Session resources retain the current History selection for restoration. Opening 
 - Create a single-use guest link that expires after 24 hours, copy it, or stop sharing. Guests can see the conversation, including command output and reasoning.
 - Review guest messages and attachments, then send or dismiss each message. Sharing follows T3 settings and managed Connect policy.
 - T3 reference: `packages/contracts/src/guestShare.ts`.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 ### Settled and Archive
 
 #### v0.3.7
 
 - Apply archive-located shell updates and refresh the archive after relevant changes, replacing the retired archive subscription.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.0.6
 
@@ -390,7 +390,7 @@ Session resources retain the current History selection for restoration. Opening 
 #### v0.3.7
 
 - Add **Message text only (progressive)**: compatible plain searches stream results from the conversation’s T3 environment and load history when a result is selected. Other searches retain the local full-history scanner.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.1.13
 
@@ -421,7 +421,7 @@ Session resources retain the current History selection for restoration. Opening 
 #### v0.3.7
 
 - Show approval reasons, supported decline feedback, question previews and initial answers, and secret delivery information.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.0.1
 
@@ -463,7 +463,7 @@ Session resources retain the current History selection for restoration. Opening 
 - Choose an already linked environment or a known paired machine in the request picker; new links still require a pairing code.
 - Review a requested machine link, choose access and enter an address and pairing code, use an existing environment ID, or decline. Resolved requests show their outcome.
 - T3 reference: `packages/client-runtime/src/linkRequest.ts`.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 ### Message navigation rail
 
@@ -490,7 +490,7 @@ Session resources retain the current History selection for restoration. Opening 
 
 - Offer Stop for eligible running subagents in Sessions and transcript cards, including supported remote children.
 - List delegated tasks on other machines beneath their parent. Paired children open on their own machine; unpaired tasks show their status and a pairing hint.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.2.0 — local follow-up
 
@@ -639,7 +639,7 @@ Typed composer text uses the editor foreground for stronger contrast, while plac
 #### v0.3.7
 
 - Refresh stale provider workspace catalogs before offering workspace skills and commands, using T3’s freshness rules.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.2.0
 
@@ -682,7 +682,7 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 #### v0.3.7
 
 - **Send now** starts a selected queued message when permitted, or steers the active turn when supported.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.0.6
 
@@ -909,7 +909,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Render supported MCP tool apps inline in the transcript. Tool writes, messages and file downloads ask for approval; links require a click in the app.
 - If an app fails to load or initialize, show its ordinary tool output and offer **Show app** to retry.
 - T3 reference: `packages/client-runtime/src/mcpApps/host.ts`.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 ### Interactive HTML graphics
 
@@ -992,7 +992,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 #### v0.3.7
 
 - Read T3 settings from the server config stream to match the current server contract.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.2.0
 
@@ -1067,7 +1067,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 #### v0.3.7
 
 - Detect advertised effort selectors by their reasoning role as well as recognized option IDs.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.3.7
 
@@ -1112,7 +1112,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 #### v0.3.7
 
 - Distinguish accounts by workspace when pooling or splitting usage, and show workspace identifiers where available.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.0.6
 
@@ -1180,7 +1180,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 #### v0.3.7
 
 - Keep usage pins workspace-aware; legacy account pins continue to match their workspaces.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.3.3
 
@@ -1456,7 +1456,7 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 
 - Require T3 Code 0.1.5 or newer and refresh the vendored contracts and runtime to T3 Code 0.1.6. Server settings now arrive through config, and scheduled task lists through the subscription.
 - T3 reference: `packages/contracts/src/rpc.ts` and `packages/contracts/src/server.ts`.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.0.1
 
@@ -1499,7 +1499,7 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 #### v0.3.7
 
 - Manage T3 server linked environments separately from VS Code pairings: list health and access, link a machine with an address and pairing code, or confirm unlinking.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 #### v0.3.0
 
@@ -1569,7 +1569,7 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 #### v0.3.7
 
 - Show the managing organization in Status and Environments. Apply policy restrictions to provider drivers, permission modes, webhook tasks and locked worktree settings, with explanations in the interface.
-- Validation: pending the v0.3.7 release review.
+- Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 ### Missing-server setup
 

@@ -1887,11 +1887,14 @@ export class HostState {
       // thread.stop only holds a run that is still queued, so a just-sent message is cancelled instead.
       const accepted = this.acceptedMessages.get(id);
       if (accepted) {
-        const run = (await this.client.getThreadProjection(id)).runs.find(run => run.userMessageId === accepted.messageId);
-        if (run?.status === "queued") {
+        // If the run cannot be read, or starts before the cancel lands, Stop falls back to thread.stop.
+        const cancelled = await (async () => {
+          const run = (await this.client.getThreadProjection(id)).runs.find(run => run.userMessageId === accepted.messageId);
+          if (run?.status !== "queued") return false;
           await this.client.dispatch({ type: "queued-run.cancel", commandId: randomUUID(), threadId: id, runId: run.id });
-          this.acceptedMessages.delete(id); this.emit(); return;
-        }
+          return true;
+        })().catch(() => false);
+        if (cancelled) { this.acceptedMessages.delete(id); this.emit(); return; }
       }
       // Thread-wide Stop includes work omitted from paginated history and delegated tasks.
       await this.client.dispatch({ type: "thread.stop", commandId: randomUUID(), threadId: id });
