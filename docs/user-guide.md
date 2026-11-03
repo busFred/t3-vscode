@@ -4,7 +4,7 @@ Reference detail for the extension's behavior. See [README.md](../README.md) for
 
 ## Connect to a T3 server
 
-Linux is the first verified platform. Install the T3 Code CLI using its [installation guide](https://github.com/pingdotgg/t3code/blob/main/docs/user/install.md), then run `t3` to start the server and open its web app. Open **Settings → Providers** in T3 to connect a provider. Alternatively, keep `t3 serve` running in a terminal and open the web address it prints. Return to T3 VSCode and choose **Retry connection**; the extension pairs automatically and the sidebar opens Sessions directly. If providers still need setup, guidance appears above Sessions while existing conversations remain available.
+T3 Code 0.1.5 or newer is required. Linux is the first verified platform. Install the T3 Code CLI using its [installation guide](https://github.com/pingdotgg/t3code/blob/main/docs/user/install.md), then run `t3` to start the server and open its web app. Open **Settings → Providers** in T3 to connect a provider. Alternatively, keep `t3 serve` running in a terminal and open the web address it prints. Return to T3 VSCode and choose **Retry connection**; the extension pairs automatically and the sidebar opens Sessions directly. If providers still need setup, guidance appears above Sessions while existing conversations remain available.
 
 Running in the background is optional. On Linux or macOS, `t3 service install` installs and starts the service; see the [service instructions](https://github.com/pingdotgg/t3code/blob/main/docs/user/background-service.md). Stop a manually started foreground server before switching. You can also install the service first and configure providers in T3's web app afterward. Use `t3 service status` to diagnose an installed service and `t3 service restart` to restart it. To use sessions from another machine, see [Other machines](#other-machines).
 
@@ -60,7 +60,17 @@ Select a session to open its editor tab; if it is already open, the extension re
 
 The sidebar title keeps **Open Web UI** and its overflow actions. Right-click a session to rename, pin, settle, archive, restore or delete it. The editor has its conversation breadcrumb, browser shortcut and thread actions.
 
-Subagents appear beneath their parent session in a tree whose branches start collapsed. Expand a parent to inspect its children; expand a session to see independently collapsible **Subagents** and **Scheduled tasks** groups. Active, Settled and Archive list and count ordinary conversations only, according to each conversation’s own state. Subagents of every state stay beneath their parent; archived summaries load automatically after connection. A parent is never duplicated into another section because of a child’s state. Search expands the ancestors of matching children. Hover or focus a subagent transcript row for its provider, model, current status and elapsed time; click it to open the child, then use **Subagent of** to return. Provider-native child conversations are read-only; T3-owned delegated conversations accept follow-ups.
+Subagents appear beneath their parent session in a tree whose branches start collapsed. Expand a parent to inspect its children; expand a session to see independently collapsible **Subagents** and **Scheduled tasks** groups. Active, Settled and Archive list and count ordinary conversations only, according to each conversation’s own state. Subagents of every state stay beneath their parent; archived summaries load automatically after connection. A parent is never duplicated into another section because of a child’s state. Search expands the ancestors of matching children. Hover or focus a subagent transcript row for its provider, model, current status and elapsed time; click it to open the child, then use **Subagent of** to return. Provider-native child conversations are read-only; T3-owned delegated conversations accept follow-ups. Remote delegated tasks also appear under **Subagents**: open a paired child on its machine, or use the pairing hint on an unpaired task.
+
+### Guest sharing
+
+Open a conversation's actions menu and choose **Share with guest**. Create and copy the link; it works once and expires in 24 hours. The guest can see the conversation, including command output and reasoning. A new link ends the current one. Enable guest links in T3 **Settings → Labs** if needed; managed policy can also block sharing.
+
+Guest messages and attachments wait for your review. Choose **Send** or **Dismiss** for each one. Use **Stop sharing** in the conversation or its actions menu to end the share.
+
+### Link requests
+
+When a conversation requests a link to another environment, choose **Review link…** or **Choose machine…**. Enter the environment address, access level and a pairing code from the other machine's Connections settings or `t3 pair`; alternatively enter an already linked environment ID. Choose **Link**, **Use existing link**, or **Decline**.
 
 ## Workspace scope
 
@@ -141,7 +151,7 @@ Use **Fork** at the end of a settled assistant run to continue from that run in 
 
 The composer keeps Markdown as editable text with a permanent grouped toolbar. Links stay as `[text](url)` and backticks stay visible. **Shift+Enter** continues lists, **Tab/Shift+Tab** indent or outdent lists, code and multiline selections, and **List assist** enables automatic continuation and numbering repair. Inserting a line into an ordered list repairs the following numbers; Undo first reverses the repair while keeping the inserted line. Selected text can be wrapped by quotes, brackets, backticks or dollar signs; colon and semicolon remain ordinary punctuation. Paste, code fences, math, IME and autocomplete retain their usual behavior. A small ring and percent immediately left of **List assist** tracks the active thread's context window usage once the provider reports it; hover or focus it for exact token counts, and watch for it to turn to the warning or error color as usage climbs.
 
-Model, effort and permission controls sit inside the composer, with shortcut hints beside Send. Stop appears immediately to its left while a run is working, leaving Send in place.
+Model, effort and permission controls sit inside the composer, with shortcut hints beside Send. Stop appears immediately to its left while a run is working, leaving Send in place. If a supported run does not respond to Stop, **Force stop** appears beside it.
 
 ### Queue and steer
 
@@ -177,6 +187,10 @@ Chat stays in one virtualized column at every editor size; the two-column experi
 
 Use the message rail to preview and jump through past prompts and responses with the pointer, mouse wheel or keyboard. **Latest** returns to the live end. **T3 VSCode: Message Navigation** in native Settings offers **Left**, **Right** and **Off**, with Left as the default. Jumps are instant and preserve the composer draft; returning to the bottom resumes following streamed replies.
 
+### MCP Apps
+
+Supported MCP tool results can appear as interactive apps in the transcript. Follow the app's controls; VS Code asks before a tool write, message or file download. Open links by clicking inside the app. If an app fails, its ordinary tool output remains visible and **Show app** retries it.
+
 ### Markdown, media and math
 
 Markdown images, video/audio, Mermaid diagrams and T3's `html_render` graphics render inside the transcript. HTML graphics keep their interactions and adapt to the native theme inside a sandbox. Inline math supports `$...$` or `\(...\)`; display math supports `$$...$$` or `\[...\]`, including matrices and aligned equations. Wide display equations scroll horizontally inside the message; click or keyboard-activate an equation for a floating preview. Right-click a rendered equation to copy **LaTeX**, **LaTeX with delimiters**, or **MathML**; MathML is useful for equation editors. Math fonts and the diagram renderer ship locally with the extension.
@@ -201,11 +215,15 @@ Click **Find in session** or press **Ctrl/Cmd+F** inside a chat to search its co
 
 The results disclosure collapses search to a floating bar with a **› N results** row, leaving no empty pane. The layout icon switches Above/Side and expands directly to Side from the collapsed bar. Narrow editors automatically stack results above chat and restore Side when wide enough. Results can be resized; layout, context, ordering and height are remembered per workspace.
 
+Select **Message text only (progressive)** in Find to stream compatible plain-query results from T3 as they arrive. Clear it to search with the existing full-history scanner, including attachment filenames and advanced filters.
+
 ## Scheduled tasks
 
 **Tasks** lists the selected project's scheduled work, including independent tasks with no parent conversation. With one project, the list starts directly at **TASKS**; a project selector appears only when multiple projects are available. The chat header's **Scheduled** button lists only tasks with a known origin in that session. Existing tasks whose origin T3 does not record remain in the project list as **Origin unknown**; result destinations are not treated as proof of origin. Origin associations created by this extension are saved locally in VS Code, scoped to server/project/task.
 
 Click a task to edit it on a secondary sidebar page. Choose its model, advertised effort, prompt, schedule, result destination and enabled state. Model changes apply only to the task. Models with a speed option also get a **Speed** select, whose **Server default** entry leaves the speed unset. New tasks use advertised **GPT-6 Luna / Low** when available, at Standard speed unless `t3-vscode.scheduledTasks.defaultSpeed` is `inherit`; otherwise choose a model explicitly. **Save task** updates future runs and returns to the list; **Run now** is separate. **Back** retains the task draft, and **Cancel** discards it. Unsupported newer schedules stay visible with enable/run controls, but require T3 Web for full editing.
+
+For a one-time task, choose **Once** and set **Run on**. For a webhook task, choose **Webhook**, add any filters (all must match), and save to create the endpoint. Reopen the task to copy an available public endpoint, rotate its token or inspect **Recent deliveries** and their details. Rotation invalidates the old URL; a public URL requires a T3 Connect link. Policy blocks appear in the task editor.
 
 ## Install a local VSIX
 

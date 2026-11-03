@@ -9,20 +9,22 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
 | [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times, unread dots shared with T3 Code, a Snoozed shelf and chat in editor tabs. | v0.0.7 | v0.3.4 |
-| [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector and independent model/effort editor tabs. | v0.1.16 | v0.1.23 |
+| [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector, once and webhook schedules, and independent editor tabs. | v0.1.16 | v0.3.7 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
-| [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | v0.3.5 |
-| [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.1.23 |
+| [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | v0.3.7 |
+| [Guest sharing](#guest-sharing) | Guest links and owner review of guest messages. | v0.3.7 | v0.3.7 |
+| [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.3.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
-| [Find in session](#find-in-session) | Full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.1.22 |
-| [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.2.5 |
+| [Find in session](#find-in-session) | Progressive message-text and full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.3.7 |
+| [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.3.7 |
+| [Link requests](#link-requests) | Review or decline requests to link environments. | v0.3.7 | v0.3.7 |
 | [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation, centred in the whole conversation; earlier pages load at the top. | v0.0.8 | v0.3.4 |
-| [Subagent conversations](#subagent-conversations) | Nested child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.1 |
+| [Subagent conversations](#subagent-conversations) | Nested local and remote child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.7 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
 | [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.2.4 |
 | [Context window meter](#context-window-meter) | Ring + percent in the composer toolbar showing live provider usage against the model's context window. | v0.2.2 | v0.2.2 |
-| [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.2.0 |
+| [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.3.7 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.23 |
@@ -30,6 +32,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.3.2 |
 | [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.3.2 |
 | [Collapsed activity](#collapsed-activity) | Timed thought/tool groups separated by visible assistant messages and steers. | v0.0.1 | v0.1.13 |
+| [MCP Apps](#mcp-apps) | Interactive MCP tool apps in the transcript. | v0.3.7 | v0.3.7 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
 | [Two-column reading](#two-column-reading) | Removed in v0.1.10 after performance feedback. | v0.0.9 | v0.1.10 |
@@ -37,8 +40,8 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options, a Speed (service tier / fast mode) control and runtime modes inside the composer. | v0.0.1 | v0.3.7 |
-| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.6 |
-| [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.3 |
+| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.7 |
+| [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.7 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
 | [Editor references](#editor-references) | Inserts file ranges with checkout-aware labels and preserved source URIs. | v0.0.4 | v0.2.0 |
@@ -48,7 +51,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Revert and restore](#revert-and-restore) | "Edit from here" rewinds the conversation only; "Restore files to this point" is a separate, guarded extension-owned Git restore that keeps your edits where it can. | v0.2.2 | v0.3.0 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
-| [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.0 |
+| [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.7 |
 | [Remote environments](#remote-environments) | Pairs other machines by link, lists their matching-repository sessions, starts new chats on them (including their worktrees) from a Run on chip, and clones the repository onto machines that lack it. | v0.3.0 | v0.3.6 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
@@ -63,7 +66,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Message timestamps](#message-timestamps) | Recorded local date/time beside each message’s footer actions; extension-wide Date Format and Time Format settings. | v0.1.22 | v0.3.3 |
 | [Dense transcript spacing](#dense-transcript-spacing) | Compact gaps, one author per run and unobtrusive message actions. | v0.1.13 | v0.1.22 |
 | [Worktree management](#worktree-management) | Checkout creation, import, parallel runs, review, selected-file apply, retained conversations and session branch policies. | v0.2.0 | v0.2.6 |
-| [Worktree environments and settings](#worktree-environments-and-settings) | Service-backed native settings, extension-owned Python environments per checkout and a default session branch policy. | v0.2.0 | v0.2.6 |
+| [Worktree environments and settings](#worktree-environments-and-settings) | Service-backed native settings, extension-owned Python environments per checkout and a default session branch policy. | v0.2.0 | v0.3.7 |
 
 ## Sessions and navigation
 
@@ -162,6 +165,12 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 - Unpublished installer `target-installer/t3-vscode-0.3.3-thread-menu-unread.vsix` (SHA-256 `0948da4f60119c5bf923f28005f07600f92528a08e8c5afaa62c20220c60d148`), built from the uncommitted working tree on `68a1105`; manifest unchanged at 0.3.3, not installed or published.
 
 ### Scheduled task management
+
+#### v0.3.7
+
+- Add once and webhook schedules, filter editing, endpoint and token controls, delivery history, and policy notices. Unsupported schedule fields remain read-only.
+- T3 reference: `packages/contracts/src/scheduledTask.ts` and `packages/client-runtime/src/scheduledTaskWebhook.ts`.
+- Validation: pending the v0.3.7 release review.
 
 #### v0.1.23 — same-version rebuild
 
@@ -267,6 +276,12 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Conversation management
 
+#### v0.3.7
+
+- Use T3 snooze and wake rules for pending requests, guest attention and child approvals. Stop also addresses background work; **Force stop** appears for an unresponsive run when supported.
+- Preserve tags and pull-request links in conversation summaries as data; this change does not add tag or pull-request display controls.
+- Validation: pending the v0.3.7 release review.
+
 #### v0.0.1
 
 - Support rename, pin, archive, restore and deletion through the host's typed commands.
@@ -306,7 +321,21 @@ Session resources retain the current History selection for restoration. Opening 
 - **Auto-settle ›** (and the quick pick's auto-settle action) is now hidden when the thread's machine never auto-settles anything: `sidebarAutoSettleAfterDays` is null, `sidebarAutoSettleOnMerge` is off, and no project override turns either on. This mirrors T3's `autoSettlementConfigured` gate (`apps/server/src/orchestration-v2/ThreadSettlementService.ts`). It is machine-wide, not per project, because once T3's sweep runs it also settles threads whose pull request was closed whatever their own project's settings. The settings come from each server's own config stream, paired machines included, and changes apply live. Owner request: the per-thread "Enabled" check read as auto-settle being on while every machine had it off. T3 Code's own menu still shows the opt-out in that case; the server's behaviour is unchanged.
 - Validation: typecheck and 605/605 unit tests, including override cases and a paired machine's config change reaching the redraw listener. Against an isolated T3 0.1.1 server with one GPT-6 Luna (low) turn, `verify-thread-attention-live.ts` passed 7/7; its new step turns auto-settle off and back on in that server's settings and checks the item hides and returns. The release regression review blocked a first per-project version, which hid the choice for threads T3 still settles on a closed pull request; fixed as above.
 
+### Guest sharing
+
+#### v0.3.7
+
+- Create a single-use guest link that expires after 24 hours, copy it, or stop sharing. Guests can see the conversation, including command output and reasoning.
+- Review guest messages and attachments, then send or dismiss each message. Sharing follows T3 settings and managed Connect policy.
+- T3 reference: `packages/contracts/src/guestShare.ts`.
+- Validation: pending the v0.3.7 release review.
+
 ### Settled and Archive
+
+#### v0.3.7
+
+- Apply archive-located shell updates and refresh the archive after relevant changes, replacing the retired archive subscription.
+- Validation: pending the v0.3.7 release review.
 
 #### v0.0.6
 
@@ -341,6 +370,11 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Find in session
 
+#### v0.3.7
+
+- Add **Message text only (progressive)**: compatible plain searches stream results from the conversation’s T3 environment and load history when a result is selected. Other searches retain the local full-history scanner.
+- Validation: pending the v0.3.7 release review.
+
 #### v0.1.13
 
 - Open search with the header icon or Ctrl/Cmd+F and navigate every occurrence with Enter, F3 or arrow buttons.
@@ -366,6 +400,11 @@ Session resources retain the current History selection for restoration. Opening 
 - Clear highlights when the query is cleared or search closes, honor source/content/case/word filters, and retain the existing Above/Side search panel, source-only fallback and draft state.
 
 ### Conversation status and notifications
+
+#### v0.3.7
+
+- Show approval reasons, supported decline feedback, question previews and initial answers, and secret delivery information.
+- Validation: pending the v0.3.7 release review.
 
 #### v0.0.1
 
@@ -400,6 +439,14 @@ Session resources retain the current History selection for restoration. Opening 
 - Transcript items of a type this version does not know (from a newer T3) decode into a "Unsupported item (type …)" notice instead of failing the whole thread; a known type with malformed fields still fails.
 - Validation: typecheck clean; 462/462 unit tests pass (new: `src/host/secretRequest.test.ts`, `src/host/unknownTurnItem.test.ts`). Live verification against the real T3 0.1.1 server in an isolated home with GPT-6 Luna (low effort) via `scripts/verify-secret-request.ts`: secret item decoded, pending card listed, save recorded as `saved`, repeat answer rejected, agent resumed, and the secret absent from host snapshots and server logs. First fresh-context Sonnet regression review of the secret-request change: no blocking findings; two minor findings fixed (malformed-id error text, focus after a failed save). Final fresh-context Sonnet regression review of the full 0.2.5 candidate against `a9d036d`: APPROVE, no blocking findings; it also confirmed `pnpm build`, an unchanged VSIX file list (the verification script is not packaged), `preview: false`, and no measurable decode cost from the fallback. Waiting/notification status for a pending secret comes from T3 0.1.1, whose thread shell reports it as a `user_input` `pendingRuntimeRequest`.
 
+### Link requests
+
+#### v0.3.7
+
+- Review a requested machine link, choose access and enter an address and pairing code, use an existing environment ID, or decline. Resolved requests show their outcome.
+- T3 reference: `packages/client-runtime/src/linkRequest.ts`.
+- Validation: pending the v0.3.7 release review.
+
 ### Message navigation rail
 
 #### v0.0.8
@@ -420,6 +467,11 @@ Session resources retain the current History selection for restoration. Opening 
 - Load earlier messages on their own once the reader scrolls or wheels up to the top (within half a view), and keep loading while a short page leaves the reader there. Only the reader's own input starts this, so opening a conversation loads nothing extra. The header button and the rail's ⌃ stay for retries after an error.
 
 ### Subagent conversations
+
+#### v0.3.7
+
+- List delegated tasks on other machines beneath their parent. Paired children open on their own machine; unpaired tasks show their status and a pairing hint.
+- Validation: pending the v0.3.7 release review.
 
 #### v0.2.0 — local follow-up
 
@@ -564,6 +616,11 @@ Typed composer text uses the editor foreground for stronger contrast, while plac
 - An independent regression-review agent checked the implementation and found one bug: rounding to the nearest thousand could itself reach `1000k` (e.g. 999,999 tokens) instead of rolling into the millions format; fixed by checking the rounded thousands value before choosing the `k`/`M` branch, with added test coverage around the 999.5k–999.999k boundary. No other issues were found in the band thresholds, percent rounding/clamping, tie-break ordering, prop wiring from `hostState.ts` through to `ContextMeter.tsx`, or the CSS layout/coloring.
 
 ### Slash commands and file suggestions
+
+#### v0.3.7
+
+- Refresh stale provider workspace catalogs before offering workspace skills and commands, using T3’s freshness rules.
+- Validation: pending the v0.3.7 release review.
 
 #### v0.2.0
 
@@ -821,6 +878,15 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Update late command completion in its original group and expose individual tool status/details when expanded.
 - Expand matched activity groups and command details when navigating session-search results.
 
+### MCP Apps
+
+#### v0.3.7
+
+- Render supported MCP tool apps inline in the transcript. Tool writes, messages and file downloads ask for approval; links require a click in the app.
+- If an app fails to load or initialize, show its ordinary tool output and offer **Show app** to retry.
+- T3 reference: `packages/client-runtime/src/mcpApps/host.ts`.
+- Validation: pending the v0.3.7 release review.
+
 ### Interactive HTML graphics
 
 #### v0.0.8
@@ -899,6 +965,11 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Worktree environments and settings
 
+#### v0.3.7
+
+- Read T3 settings from the server config stream to match the current server contract.
+- Validation: pending the v0.3.7 release review.
+
 #### v0.2.0
 
 - Read and save all native counterparts through T3 settings: project actions, setup wait/background behavior, base/origin defaults, branch prefix, submodules, machine worktree directory and supported cleanup policies. Preserve unrelated service overrides and action metadata. Unsupported server fields are disabled rather than silently saved locally.
@@ -971,6 +1042,11 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 #### v0.3.7
 
+- Detect advertised effort selectors by their reasoning role as well as recognized option IDs.
+- Validation: pending the v0.3.7 release review.
+
+#### v0.3.7
+
 - Add a **Speed** control beside Effort for models whose server catalog advertises a `serviceTier` select (Codex: Standard, Fast, Ultrafast…) or a `fastMode` boolean (Claude, Cursor). It is matched by descriptor id and type, not by provider, so a provider that starts advertising one gets the control with no extension change. Models with neither show nothing.
 - A tier above Standard is tinted with a bolt and a "costs more" tooltip; unrecognised tier ids count as premium. With nothing picked the control shows the server default (for Codex this reflects `service_tier` in the user Codex config) marked "(Default)". The server does not report the tier a running Codex thread actually used, so this is the configured default, not a guarantee. Picking a speed uses the existing `setModelOption` path and validation.
 - The scheduled task editor has the same Speed select with a "Server default" entry that clears the option. New setting `t3-vscode.scheduledTasks.defaultSpeed` (`standard`, default, or `inherit`) controls what new tasks start with: `standard` stores the model's own standard option (`serviceTier: "default"` or `fastMode: false`) so an unattended task does not silently inherit a fast tier; `inherit` stores nothing. Standard is the tier with id `default` (or `fastMode: false`); a model whose tiers lack one gets no pin and behaves like `inherit`. It applies only when creating a task (and when changing a new task's model); saved tasks keep what they stored.
@@ -1008,6 +1084,11 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Place model, effort and permission selectors together at the bottom left inside the composer, retaining narrow overflow access.
 
 ### Account usage
+
+#### v0.3.7
+
+- Distinguish accounts by workspace when pooling or splitting usage, and show workspace identifiers where available.
+- Validation: pending the v0.3.7 release review.
 
 #### v0.0.6
 
@@ -1071,6 +1152,11 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Validation: new unit tests covering three accounts with one exhausted, a 24 h/72 h Fable scenario, per-account columns, the all-exhausted fallback, a no-weekly account and a single exhausted account.
 
 ### Status bar meters
+
+#### v0.3.7
+
+- Keep usage pins workspace-aware; legacy account pins continue to match their workspaces.
+- Validation: pending the v0.3.7 release review.
 
 #### v0.3.3
 
@@ -1341,6 +1427,12 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 ## Setup and settings
 
 ### Local connection and pairing
+
+#### v0.3.7
+
+- Require T3 Code 0.1.5 or newer and refresh the vendored contracts and runtime to T3 Code 0.1.6. Server settings now arrive through config, and scheduled task lists through the subscription.
+- T3 reference: `packages/contracts/src/rpc.ts` and `packages/contracts/src/server.ts`.
+- Validation: pending the v0.3.7 release review.
 
 #### v0.0.1
 

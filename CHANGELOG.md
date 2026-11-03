@@ -2,6 +2,18 @@
 
 ## 0.3.7 — Release
 
+- Require T3 Code 0.1.5 or newer and update compatibility with the 0.1.6 server contracts.
+- Create guest links and review guest messages before sending or dismissing them.
+- Use interactive MCP Apps in the transcript, with approval for tool writes, messages and downloads.
+- Review, accept or decline requests to link another environment.
+- Schedule one-time and webhook tasks, manage webhook endpoints and inspect deliveries; policy blocks are shown in the editor.
+- Search message text progressively with the new Find option.
+- See remote delegated subagents beneath their parent, including unpaired tasks.
+- Use Force stop when a supported run does not respond to Stop; snooze and wake follow current T3 attention rules.
+- See approval reasons, supported decline feedback, question previews and defaults, and secret delivery notes.
+- Keep usage accounts and status meter pins distinct by workspace.
+- Refresh stale workspace skills and recognize effort options advertised with the reasoning role.
+
 - A **Speed** control next to Effort for models that offer a service tier (such as Codex Fast and Ultrafast) or fast mode. Tiers above Standard are marked because they cost more per request.
 - The scheduled task editor has the same Speed select. New setting `t3-vscode.scheduledTasks.defaultSpeed` (default `standard`) keeps new tasks from silently running on a fast tier; set it to `inherit` to follow the server or Codex config.
 
