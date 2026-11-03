@@ -534,6 +534,10 @@
     "./state/server-config-projection": {
       "types": "./src/state/serverConfigProjection.ts",
       "default": "./src/state/serverConfigProjection.ts"
+    },
+    "./state/thread-tag-filter": {
+      "types": "./src/state/threadTagFilter.ts",
+      "default": "./src/state/threadTagFilter.ts"
     }
   },
   "dependencies": {

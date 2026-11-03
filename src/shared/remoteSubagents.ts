@@ -15,6 +15,7 @@ export function withRemoteSubagents(threads: ReadonlyArray<ThreadSummary>): Thre
       ...(child ?? { modelSelection: parent.modelSelection, runtimeMode: parent.runtimeMode, interactionMode: parent.interactionMode,
         updatedAt: parent.updatedAt, status: task.status, activeRunId: null, archived: false, pinned: false }), id, projectId: child?.projectId ?? parent.projectId, title: child?.title || task.title,
       environmentId: task.environmentId, environmentLabel: task.label,
+      ...(task.stopSubagent ? { stopSubagent: task.stopSubagent } : {}),
       ...(outcome ? { subagentOutcome: outcome } : {}),
       parentThreadId: parent.id, relationshipToParent: "subagent", remoteDelegation: true, ...(child?.remoteSubagents ? { remoteSubagents: child.remoteSubagents } : {}),
       ...(child ? {} : { readOnlyHint: `Machine ${task.label} is not paired or its thread is unavailable. Pair this machine to open the conversation.`,

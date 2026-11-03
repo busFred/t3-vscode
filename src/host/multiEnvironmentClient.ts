@@ -22,12 +22,12 @@ export interface RemoteEnvironmentStatus {
   readonly expiresAt: number | null; readonly ignoredStatus?: IgnorableEnvironmentStatus;
 }
 export interface ThreadEnvironment { readonly environmentId: string; readonly label: string }
-type RemoteClient = Partial<Pick<T3Client, "forceStopThread" | "listPeerLinks">> & Pick<T3Client, "pullRequestRequest" | "createGuestShare" | "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
+type RemoteClient = Partial<Pick<T3Client, "forceStopThread" | "listPeerLinks" | "updateSettings">> & Pick<T3Client, "pullRequestRequest" | "createGuestShare" | "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
   | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "answerLinkRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "searchThreadStream" | "createAssetUrl" | "uploadAttachment"
   | "deleteAttachment" | "getTurnDiff" | "subscribeWorktreeSetup" | "cancelWorktreeSetup" | "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
   | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
 /** What starting and composing a conversation on a paired machine, or cloning this repository there, needs from that machine's own server. */
-export type EnvironmentCalls = Pick<T3Client, "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
+export type EnvironmentCalls = Partial<Pick<T3Client, "updateSettings">> & Pick<T3Client, "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
   | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
 /** Whether this client may clone a repository onto a paired machine, and why not. */
 export type CloneAccess = "ok" | "disconnected" | "unsupported" | "permission";

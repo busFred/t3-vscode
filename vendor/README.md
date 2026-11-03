@@ -100,7 +100,8 @@ closure command. Then re-apply by hand (not scripted):
    dependency; drop `./testing/*` exports.
 4. In `client-runtime`: add the extension adapter subpath exports if upstream
    lacks them: `./rpc/session`, `./rpc/http`, `./connection/model`,
-   `./state/thread-history-merge`, `./state/server-config-projection`.
+   `./state/thread-history-merge`, `./state/server-config-projection`,
+   `./state/thread-tag-filter`.
 5. Preserve the Windows launcher correction in `shared/src/shell.ts`: escape
    command-path metacharacters without adding argument-style quotes, keeping
    argument escaping separate as in [cross-spawn](https://github.com/moxystudio/node-cross-spawn/blob/master/lib/util/escape.js).

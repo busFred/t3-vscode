@@ -132,6 +132,11 @@ export class FakeTransport implements HostTransport {
   async answerSecretRequest(input: unknown) { if (this.secretAnswerError) throw this.secretAnswerError; this.secretAnswers.push(input); }
   async dispatch(raw: unknown) {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(raw); this.commands.push(command);
+    if (command.type === "thread.tag.set" || command.type === "thread.pin.reorder") {
+      this.shell = { ...this.shell, threads: this.shell.threads.map(thread => thread.id !== command.threadId ? thread : command.type === "thread.pin.reorder"
+        ? { ...thread, pinOrderKey: command.orderKey }
+        : { ...thread, tags: command.tagged ? [...new Set([...thread.tags ?? [], command.tag])] : (thread.tags ?? []).filter(tag => tag !== command.tag) }) };
+    }
     const queueCommand = command.type === "queued-run.cancel" || command.type === "queued-run.edit" || command.type === "queued-run.reorder" || command.type === "queued-message.promote-to-steer" || command.type === "queue.resume";
     if (queueCommand) {
       const snapshot = this.snapshots.get(command.threadId);

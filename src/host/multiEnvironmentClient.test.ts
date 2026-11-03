@@ -554,3 +554,14 @@ test("Peer management stays local while card list and answers follow their conve
   assert.equal(remote.callsNamed("linkPeer").length, 0);
   assert.deepEqual(remote.callsNamed("answerLinkRequest").at(-1), ["answerLinkRequest", input]);
 });
+
+test("Subagent Stop and pinned reorders dispatch to the owning environment", async () => {
+  const r = await rig();
+  const remote = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 1));
+  await r.multi.snapshotShell();
+  const stop = { type: "subagent.stop", threadId: "t-a", runId: "run", subagentId: "task" };
+  const pin = { type: "thread.pin.reorder", threadId: "t-a", orderKey: "n" };
+  await r.multi.dispatch(stop); await r.multi.dispatch(pin);
+  assert.deepEqual(remote.callsNamed("dispatch").map(([, input]) => input), [stop, pin]);
+  assert.equal(r.primary.callsNamed("dispatch").length, 0);
+});

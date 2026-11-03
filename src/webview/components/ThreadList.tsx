@@ -1,5 +1,8 @@
 import { pullRequestLabel } from "../../shared/pullRequests";
 import "./pullRequests.css";
+import { GripVerticalIcon } from "lucide-react";
+import { filterThreadListTags } from "../../shared/threadListTags";
+import { compareSessions } from "../../shared/sessionSort";
 import { UserIcon } from "lucide-react";
 import { useDateTimeFormat } from "../timeFormat";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -37,6 +40,10 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   const [sortOpen, setSortOpen] = useState(false);
   const sortAnchor = useRef<HTMLButtonElement>(null);
   const closeSort = useCallback(() => setSortOpen(false), []);
+  const [tagFilter, setTagFilter] = useState("");
+  const [draggingPin, setDraggingPin] = useState<string | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [stopping, setStopping] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
   const [openedGroups, setOpenedGroups] = useState<ReadonlySet<string>>(new Set());
@@ -68,7 +75,16 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   const menuThread = state.threads.find((thread) => thread.id === menu?.threadId);
   const query = search.trim();
   const hits = useBridgeQuery<ReadonlyArray<ThreadSearchMatch>>("searchThreads", { query }, query.length >= 2 ? `${state.environment?.environmentId}:${state.archiveLoaded}:${state.workspaceRoots.join("\0")}:${query}` : null);
-  const sessionThreads = useMemo(() => withRemoteSubagents(state.threads), [state.threads]);
+  const sessionThreads = useMemo(() => filterThreadListTags(withRemoteSubagents(state.threads), tagFilter), [state.threads, tagFilter]);
+  const pins = sessionThreads.filter(thread => thread.pinned && !thread.archived && !thread.readOnlyHint).sort((a, b) => compareSessions(a, b, sort));
+  const reorderPin = async (threadId: string, beforeThreadId: string | null) => {
+    if (pinBusy) return;
+    setPinBusy(true); await run("reorderPins", { threadId, beforeThreadId }); setPinBusy(false); setDraggingPin(null);
+  };
+  const stopAgent = async (thread: ThreadSummary) => {
+    if (!thread.stopSubagent || stopping) return;
+    setStopping(thread.id); await run("stopSubagent", thread.stopSubagent); setStopping(null);
+  };
   const matching = useMemo(() => searchThreads(sessionThreads, query, new Set(hits.data?.map((hit) => hit.threadId))), [sessionThreads, query, hits.data]);
   const { active, snoozed, settled, archived } = useMemo(() => sessionShelves(sessionThreads, matching, sort), [sessionThreads, matching, sort]);
   const row = (thread: ThreadSummary) => {
@@ -85,7 +101,7 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
     return <button key={thread.id} data-thread-id={thread.id} disabled={!!thread.readOnlyHint} title={thread.readOnlyHint} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={(event) => { if (onSelect) onSelect(thread.id); else void run("openSessionTab", { threadId: thread.id, preview: event.detail < 2 }); }} onDoubleClick={onSelect ? undefined : () => { void run("openSessionTab", { threadId: thread.id, preview: false }); }} onContextMenu={compact || thread.readOnlyHint ? undefined : (event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
       if (!compact && !thread.readOnlyHint && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }
     }} aria-label={thread.title || "Untitled"} aria-description={thread.pendingRuntimeRequest ? "Input needed" : isWorking ? "Working" : isWaiting ? waitingSummary(thread) : thread.subagentOutcome === "failed" ? "Subagent failed" : thread.subagentOutcome === "stopped" ? "Subagent stopped" : attention ? attentionLabel[attention] : undefined} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>
-      <span className="thread-title-line">{thread.guestShare ? <span title="Shared with guest" aria-label="Shared with guest"><UserIcon size={12} /></span> : null}{thread.pendingGuestMessageCount ? <span className="guest-message-badge" title="Guest messages waiting" aria-label={`${thread.pendingGuestMessageCount} guest messages waiting`}>{thread.pendingGuestMessageCount}</span> : null}{attention ? <span className={`thread-dot ${attention}`} aria-hidden="true" /> : null}<span className="thread-title" title={thread.title || "Untitled"}>{thread.title || "Untitled"}</span>{thread.titleRegenerating ? <span className="thread-retitling" title="Generating a new title…" aria-label="Generating a new title"><WandSparklesIcon size={12} /></span> : null}</span>
+      <span className="thread-title-line">{thread.guestShare ? <span title="Shared with guest" aria-label="Shared with guest"><UserIcon size={12} /></span> : null}{thread.pendingGuestMessageCount ? <span className="guest-message-badge" title="Guest messages waiting" aria-label={`${thread.pendingGuestMessageCount} guest messages waiting`}>{thread.pendingGuestMessageCount}</span> : null}{attention ? <span className={`thread-dot ${attention}`} aria-hidden="true" /> : null}<span className="thread-title" title={thread.title || "Untitled"}>{thread.title || "Untitled"}</span>{thread.titleRegenerating ? <span className="thread-retitling" title="Generating a new title…" aria-label="Generating a new title"><WandSparklesIcon size={12} /></span> : null}</span>{thread.tags?.length ? <span className="thread-tags">{thread.tags.map(tag => <small className="thread-tag" key={tag}>{tag}</small>)}</span> : null}
       {thread.readOnlyHint ? <small className="subtle">Machine not paired · read-only · {thread.status}</small> : null}<span className="thread-meta">{thread.pendingRuntimeRequest ? <span className="thread-input" title={thread.pendingRuntimeRequest.kind === "user_input" ? "Input needed" : "Approval needed"} aria-label="Input needed"><MessageCircleQuestionIcon size={13} /><span>{thread.pendingRuntimeRequest.kind === "user_input" ? "Input" : "Approval"}</span></span> : isWorking ? <span className="thread-working" aria-label="Working"><CircleDashedIcon size={13} /><span>Working</span><time title={thread.workingStartedAt ?? undefined}>{elapsedLabel(thread.workingStartedAt, now)}</time></span> : isWaiting ? <span className="thread-waiting" title={waitingSummary(thread)} aria-label={waitingSummary(thread)}><HourglassIcon size={13} /><span>Waiting</span><time title={elapsedStart ?? undefined}>{elapsedLabel(elapsedStart, now)}</time></span> : thread.subagentOutcome === "failed" ? <span className="thread-outcome failed" title="Subagent failed" aria-label="Subagent failed"><CircleXIcon size={13} /><span>Failed</span></span> : thread.subagentOutcome === "stopped" ? <span className="thread-outcome stopped" title="Subagent stopped" aria-label="Subagent stopped"><CircleStopIcon size={13} /><span>Stopped</span></span>
         : attention === "failed" ? <span className="thread-outcome failed" title="Failed since you last looked"><CircleXIcon size={13} /><span>Failed</span></span>
         : attention === "woke" ? <span className="thread-outcome woke" title="Woke from snooze"><AlarmClockIcon size={13} /><span>Woke</span></span>
@@ -110,7 +126,12 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
       ? <div className="session-tree-children" aria-label={subagentLabel}>{group("Running", runningChildren.length, <div className="session-tree-children">{runningChildren.map((child) => treeRow(child, section, depth + 1))}</div>, true)}{group("Past", pastChildren.length, <div className="session-tree-children">{pastChildren.map((child) => treeRow(child, section, depth + 1))}</div>, true, false)}</div>
       : <div className="session-tree-children" aria-label={subagentLabel}>{node.children.map((child) => treeRow(child, section, depth + 1))}{!node.children.length ? <p className="empty-list">No subagents.</p> : null}</div>;
     return <div className="session-tree-node" key={node.thread.id} data-session-depth={depth}>
-      <div className="session-tree-row">{!compact || node.children.length || !state.archiveLoaded ? <button className="session-tree-toggle icon-button" aria-label={`${open ? "Collapse" : "Expand"} ${compact ? "subagents" : "session"} of ${node.thread.title || "Untitled"}`} aria-expanded={open} onClick={() => { if (!open && !state.archiveLoaded) void run("loadArchive"); setExpanded((previous) => { const next = new Set(previous); if (next.has(expansionKey)) next.delete(expansionKey); else next.add(expansionKey); return next; }); }}><ChevronRightIcon size={12} className={open ? "rotate-90" : ""} /></button> : <span className="session-tree-spacer" />}{row(node.thread)}</div>
+      <div className="session-tree-row" onDragOver={(event) => { if (draggingPin && node.thread.pinned && draggingPin !== node.thread.id) event.preventDefault(); }} onDrop={(event) => { if (!draggingPin || !node.thread.pinned || draggingPin === node.thread.id) return; event.preventDefault(); event.stopPropagation(); void reorderPin(draggingPin, node.thread.id); }}>
+        {!compact && node.thread.pinned && !node.thread.archived && !node.thread.readOnlyHint ? <button className="icon-button pin-grip" aria-label={`Reorder pinned thread ${node.thread.title}`} title="Drag to reorder; use arrow keys to move" disabled={pinBusy} draggable={!pinBusy} onDragStart={(event) => { event.dataTransfer.setData("application/x-t3-pinned-thread", node.thread.id); event.dataTransfer.effectAllowed = "move"; setDraggingPin(node.thread.id); }} onDragEnd={() => setDraggingPin(null)} onKeyDown={(event) => {
+          const index = pins.findIndex(thread => thread.id === node.thread.id);
+          if (event.key === "ArrowUp" && index > 0) { event.preventDefault(); void reorderPin(node.thread.id, pins[index - 1]!.id); }
+          if (event.key === "ArrowDown" && index < pins.length - 1) { event.preventDefault(); void reorderPin(node.thread.id, pins[index + 2]?.id ?? null); }
+        }}><GripVerticalIcon size={12} /></button> : null}{!compact || node.children.length || !state.archiveLoaded ? <button className="session-tree-toggle icon-button" aria-label={`${open ? "Collapse" : "Expand"} ${compact ? "subagents" : "session"} of ${node.thread.title || "Untitled"}`} aria-expanded={open} onClick={() => { if (!open && !state.archiveLoaded) void run("loadArchive"); setExpanded((previous) => { const next = new Set(previous); if (next.has(expansionKey)) next.delete(expansionKey); else next.add(expansionKey); return next; }); }}><ChevronRightIcon size={12} className={open ? "rotate-90" : ""} /></button> : <span className="session-tree-spacer" />}{row(node.thread)}{!compact && node.thread.stopSubagent ? <button className="icon-button subagent-stop" aria-label={`Stop subagent ${node.thread.title}`} title="Stop subagent" disabled={stopping !== null} onClick={() => { void stopAgent(node.thread); }}><CircleStopIcon size={13} /></button> : null}</div>
       {open ? compact ? node.children.length ? <div className="session-tree-children" aria-label={`Subagents of ${node.thread.title || "Untitled"}`}>{node.children.map((child) => treeRow(child, section, depth + 1))}</div> : null
         : <div className="session-expanded-groups">{group("Subagents", node.children.length, subagentRows)}{group("Scheduled tasks", tasks.length, <ScheduledTaskRows state={state} tasks={tasks} />)}</div> : null}
     </div>;
@@ -121,9 +142,13 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
       {compact ? null : <button ref={sortAnchor} className="icon-button sidebar-search-add" aria-label="Sort sessions" aria-haspopup="menu" aria-expanded={sortOpen} title={`Sort sessions: ${SESSION_SORTS.find(option => option.value === sort)!.label} (date uses last activity)`} onClick={() => { setSortOpen(!sortOpen); setMenu(null); }}><ArrowDownUpIcon size={15} /></button>}
       {/* Each tab renders its own +, so the name follows the visible list instead of a shared button mutating behind it. */}
       {compact ? null : <button className="icon-button sidebar-search-add" aria-label="New thread" title="Open New Chat in Editor Tab" onClick={() => { void run("newChatTab"); }}><PlusIcon size={15} /></button>}</div>
+    {!compact ? <div className="thread-tag-filters"><label>Tag <select aria-label="Filter threads by tag" value={tagFilter} onChange={(event) => setTagFilter(event.target.value)}><option value="">All tags</option>{[...new Set(state.threads.flatMap(thread => thread.tags ?? []))].sort().map(tag => <option key={tag} value={tag}>{tag}</option>)}</select></label>
+      {[...new Map(state.threads.filter(thread => thread.hiddenThreadTags?.length).map(thread => [thread.environmentId ?? "local", thread])).values()].map(thread => <label key={thread.environmentId ?? "local"} title={thread.hiddenThreadTags?.join(", ")}><input type="checkbox" checked={thread.hideTaggedThreads ?? false} onChange={() => { void run("threadAction", { threadId: thread.id, action: "toggle-tag-hiding" }); }} />Hide tagged threads{thread.environmentLabel ? ` · ${thread.environmentLabel}` : ""}</label>)}
+    </div> : null}
     {hits.pending ? <p className="search-status" role="status">Searching messages…</p> : hits.error ? <p className="search-status turn-error" role="status">{hits.error}</p> : null}
     <div className="thread-sections"><nav className="session-list" aria-label="Active conversations">
       {active.map((node) => treeRow(node, "active"))}
+      {draggingPin ? <div className="pin-drop-end" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void reorderPin(draggingPin, null); }}>Move pinned thread to end</div> : null}
       {query && !active.length && !settled.length && !archived.length && !hits.pending && !hits.error ? <p className="empty-list">No matching threads.</p> : null}
       {!query && !active.length ? <p className="empty-list">No active conversations in this workspace.</p> : null}
     </nav>

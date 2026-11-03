@@ -1,7 +1,11 @@
 import { conversationPullRequests, pullRequestHost, pullRequestOperations, type PullRequestOperation } from "../shared/pullRequests.js";
-import { clampManagedRuntimeMode, isManagedDriverAllowed, managedPolicyDeniedMessage, managedRuntimeModeDenial, managedCapabilityDenial, pendingGuestMessageCount, type ThreadGuestShare } from "@t3tools/contracts";
 import { peerLinksDenial, peerReachableUrls, type PeerLinksState } from "../shared/peerLinks.js";
 import { peerLinkHealth } from "@t3tools/client-runtime/state/peerLinks";
+import { ThreadTag, clampManagedRuntimeMode, isManagedDriverAllowed, managedPolicyDeniedMessage, managedRuntimeModeDenial, managedCapabilityDenial, pendingGuestMessageCount, type ThreadGuestShare } from "@t3tools/contracts";
+import { hiddenThreadKeys } from "@t3tools/client-runtime/state/thread-tag-filter";
+import { threadKey } from "@t3tools/client-runtime/state/entities";
+import { planPinnedReorder, sortPinnedThreadsByOrderKey } from "@t3tools/client-runtime/state/thread-sort";
+import { canStopSubagent } from "../shared/subagentStop.js";
 import { relayMcpAppRequest, type McpAppNativePort } from "./mcpApps.js";
 import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
 import { mcpAppFileName } from "@t3tools/shared/mcpApp";
@@ -2009,6 +2013,20 @@ export class HostState {
         await this.client.dispatch(action === "dismiss-guest-message"
           ? { type: "thread.guest-message.dismiss", commandId, threadId: id, guestMessageId: value }
           : { type: "message.dispatch", commandId, threadId: id, messageId: commandId, guestMessageId: value, text: "", attachments: [], dispatchMode: { type: "queue_after_active" }, createdBy: "user", creationSource: "web" });
+      } else if (action === "tag-add" || action === "tag-remove") {
+        const tag = Schema.decodeUnknownSync(ThreadTag)(value);
+        await this.client.dispatch({ type: "thread.tag.set", commandId: randomUUID(), threadId: id, tag, tagged: action === "tag-add" });
+      } else if (["hide-tag", "show-tag", "toggle-tag-hiding"].includes(action)) {
+        const settings = this.configForThread(id)?.settings;
+        if (!settings) throw new Error("T3 has not sent its settings yet.");
+        const tag = action === "toggle-tag-hiding" ? undefined : Schema.decodeUnknownSync(ThreadTag)(value);
+        const hiddenTags = settings.hiddenThreadTags.map(tag => tag.trim()).filter(Boolean);
+        const patch = tag === undefined ? { hideTaggedThreads: !settings.hideTaggedThreads }
+          : { hiddenThreadTags: action === "hide-tag" ? [...new Set([...hiddenTags, tag])] : hiddenTags.filter(entry => entry !== tag) };
+        const remote = this.remoteThread(id);
+        const calls = remote ? this.client.environmentCalls?.(remote.environmentId) : this.client;
+        if (!calls?.updateSettings) throw new Error("Settings are unavailable for this environment.");
+        await calls.updateSettings(patch);
       } else if (action === "rename") {
         if (!title?.trim()) throw new Error("Enter a thread title.");
         await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, title });
@@ -2378,6 +2396,52 @@ export class HostState {
     return [...this.views.values()].some((view) => view.sending)
       || this.visibleThreads().some((thread) => !thread.archivedAt && Boolean(thread.activeRunId));
   }
+  reorderPins(id: string, beforeId: string | null): Promise<void> {
+    return this.enqueue(async () => {
+      const thread = this.requireThread(id);
+      if (!thread.pinnedAt || thread.archivedAt) throw new Error("Only active pinned threads can be reordered.");
+      const allPins = sortPinnedThreadsByOrderKey(this.visibleThreads().filter(entry => entry.pinnedAt && !entry.archivedAt).map(entry => ({
+        ...entry, createdAt: DateTime.formatIso(entry.createdAt), environmentId: this.remoteThread(entry.id)?.environmentId ?? this.server?.descriptor.environmentId ?? "",
+      })));
+      const visibleIds = new Set(this.snapshot().threads.filter(entry => !entry.hiddenByTag).map(entry => entry.id));
+      const pins = allPins.filter(entry => visibleIds.has(entry.id));
+      if (!visibleIds.has(id)) throw new Error("This pinned thread is hidden by tag settings.");
+      if (beforeId === id) return;
+      if (beforeId !== null && !pins.some(entry => entry.id === beforeId)) throw new Error("The destination thread is no longer pinned.");
+      const order = pins.filter(entry => entry.id !== id).map(entry => entry.id);
+      order.splice(beforeId === null ? order.length : order.indexOf(beforeId as typeof thread.id), 0, thread.id);
+      for (const assignment of planPinnedReorder({ orderedIds: order, keysById: new Map(allPins.map(entry => [entry.id, entry.pinOrderKey])), movedId: id })) {
+        await this.client.dispatch({ type: "thread.pin.reorder", commandId: randomUUID(), threadId: assignment.id, orderKey: assignment.orderKey });
+      }
+      this.shell = await this.client.snapshotShell();
+    });
+  }
+  private stoppableSubagent(agent: OrchestrationV2ThreadProjection["subagents"][number]): boolean {
+    const childId = agent.remoteChild?.threadId ?? agent.childThreadId;
+    const child = childId && (!agent.remoteChild || this.remoteThread(childId)?.environmentId === agent.remoteChild.environmentId) ? this.findThread(childId) : undefined;
+    return canStopSubagent(agent, child);
+  }
+  stopSubagent(id: string, subagentId: string): Promise<void> {
+    return this.enqueue(async () => {
+      this.requireThread(id);
+      const projection = this.threads.get(id)?.projection ?? await this.client.getThreadProjection(id);
+      const agent = projection.subagents.find(entry => entry.id === subagentId);
+      if (!agent || !this.stoppableSubagent(agent)) throw new Error("This subagent cannot be stopped.");
+      let parentStopError: unknown;
+      if (agent.runId !== null) {
+        try { await this.client.dispatch({ type: "subagent.stop", commandId: randomUUID(), threadId: id, runId: agent.runId, subagentId: agent.id }); }
+        catch (error) { if (agent.origin !== "app_owned") throw error; parentStopError = error; }
+      }
+      // App-owned tasks also stop their child, including a remote child on its owning machine.
+      if (agent.origin === "app_owned") {
+        const childId = agent.remoteChild?.threadId ?? agent.childThreadId;
+        if (childId && this.findThread(childId) && (!agent.remoteChild || this.remoteThread(childId)?.environmentId === agent.remoteChild.environmentId))
+          await this.client.dispatch({ type: "thread.stop", commandId: randomUUID(), threadId: childId });
+        else if (parentStopError) throw parentStopError;
+        else if (agent.runId === null) throw new Error("This subagent's owning environment is unavailable.");
+      }
+    });
+  }
   queueAction(id: string, action: string, runId: string | undefined, text: string | undefined, beforeRunId: string | null | undefined, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     return this.enqueue(async () => {
       this.requireView(viewId); this.requireThread(id);
@@ -2391,7 +2455,10 @@ export class HostState {
       }
       const entry = workflow.queuedRuns.find((entry) => entry.run.id === runId);
       if (!entry) throw new Error("This message is no longer queued.");
-      if (action === "steer") {
+      if (action === "start") {
+        if (!workflow.canSendNow) throw new Error("Wait for the current turn to finish before starting a queued message.");
+        await this.client.dispatch({ ...command, type: "queued-run.start", runId: entry.run.id });
+      } else if (action === "steer") {
         if (!workflow.canPromoteToSteer || !workflow.activeRun) throw new Error("This provider cannot steer the current turn.");
         await this.client.dispatch({ ...command, type: "queued-message.promote-to-steer", queuedRunId: entry.run.id, targetRunId: workflow.activeRun.id });
       } else if (action === "cancel") await this.client.dispatch({ ...command, type: "queued-run.cancel", runId: entry.run.id });
@@ -2551,6 +2618,21 @@ export class HostState {
     const threadById = new Map<string, OrchestrationV2ThreadShell>(threads.map((thread) => [thread.id, thread]));
     const visibleThreadIds = new Set(threadById.keys());
     const subagentActivity = this.subagentActivity();
+    const environmentOf = (id: string) => EnvironmentId.make(this.remoteThread(id)?.environmentId ?? descriptor?.environmentId ?? "local");
+    const tagEnvironments = new Map<string, { environmentId: EnvironmentId; threads: OrchestrationV2ThreadShell[]; hiddenTags: ReadonlyArray<string> | null }>();
+    for (const thread of this.allThreads()) {
+      const environmentId = environmentOf(thread.id), settings = this.configForThread(thread.id)?.settings;
+      const hiddenTags = settings?.hideTaggedThreads ? settings.hiddenThreadTags.map(tag => tag.trim()).filter(Boolean) : [];
+      const entry = tagEnvironments.get(environmentId) ?? { environmentId, threads: [], hiddenTags: hiddenTags.length ? hiddenTags : null };
+      entry.threads.push(thread); tagEnvironments.set(environmentId, entry);
+    }
+    const hiddenKeys = hiddenThreadKeys([...tagEnvironments.values()]);
+    const stopTargets = new Map<string, NonNullable<ThreadSummary["stopSubagent"]>>();
+    for (const parent of threads) for (const agent of this.threads.get(parent.id)?.projection?.subagents ?? []) {
+      if (!this.stoppableSubagent(agent)) continue;
+      const childId = agent.remoteChild?.threadId ?? agent.childThreadId;
+      if (childId && (!agent.remoteChild || environmentOf(childId) === agent.remoteChild.environmentId)) stopTargets.set(childId, { threadId: parent.id, subagentId: agent.id });
+    }
     const accepted = activeThreadId ? this.acceptedMessages.get(activeThreadId) : undefined;
     const acceptedRun = accepted ? projection?.runs.find(run => run.userMessageId === accepted.messageId) : undefined;
     const observedActive = threadActiveRun(projection);
@@ -2604,6 +2686,7 @@ export class HostState {
               rows.set(`${remote.environmentId}:${remote.threadId}`, { id: agent.id,
                 environmentId: remote.environmentId, threadId: remote.threadId, label: remote.label,
                 title: agent.title || agent.prompt || "Subagent", status: agent.status,
+                ...(this.stoppableSubagent(agent) && agent.runId !== null ? { stopSubagent: { threadId: thread.id, subagentId: agent.id } } : {}),
                 startedAt: agent.startedAt ? DateTime.formatIso(agent.startedAt) : null });
             }
             // Before expansion loads the parent's tasks, paired children can identify their parent themselves.
@@ -2623,6 +2706,11 @@ export class HostState {
           guestShare: this.threadGuestShare(thread),
           pendingGuestMessageCount: projection ? pendingGuestMessageCount(projection.thread.guestShare) : thread.pendingGuestMessageCount ?? pendingGuestMessageCount(this.threadGuestShare(thread)),
           ...(this.guestSharingDisabledReason(thread.id) ? { guestSharingDisabledReason: this.guestSharingDisabledReason(thread.id)! } : {}),
+          hiddenByTag: hiddenKeys.has(threadKey({ environmentId: environmentOf(thread.id), threadId: thread.id })),
+          hiddenThreadTags: this.configForThread(thread.id)?.settings?.hiddenThreadTags?.map(tag => tag.trim()).filter(Boolean) ?? [],
+          hideTaggedThreads: this.configForThread(thread.id)?.settings?.hideTaggedThreads ?? false,
+          ...(stopTargets.has(thread.id) ? { stopSubagent: stopTargets.get(thread.id)! } : {}),
+          pinOrderKey: thread.pinOrderKey ?? null, createdAt: DateTime.formatIso(thread.createdAt),
           id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
           modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
           updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
@@ -2677,7 +2765,8 @@ export class HostState {
       transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => {
         const source = this.threads.get(row.sourceThreadId)?.projection ?? projection;
         const status = row.item.type === "checkpoint" && row.item.runId ? indexBy(source.runs, "id", (run) => run.id as string).get(row.item.runId)?.status : undefined;
-        return this.stableRow({ key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId, visibility: row.visibility,
+        const agent = row.item.type === "subagent" ? source.subagents.find(agent => agent.id === (row.item as Extract<OrchestrationV2TurnItem, { type: "subagent" }>).subagentId) : undefined;
+        return this.stableRow({ ...(agent && this.stoppableSubagent(agent) ? { stopSubagent: { threadId: row.sourceThreadId, subagentId: agent.id } } : {}), key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId, visibility: row.visibility,
           ...this.presentItem(row.item), canFork: visibleThreadIds.has(row.sourceThreadId) && this.canForkRow(projection, row, threadById),
           ...(status ? { checkpointRunStatus: status } : {}),
           ...this.transcriptRevertFields(projection, row, activeThreadId, threadById),

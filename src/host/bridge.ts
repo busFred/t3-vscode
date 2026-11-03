@@ -317,6 +317,11 @@ export class BridgeHandler {
           if (references !== undefined && (!Array.isArray(references) || references.length > 100 || !references.every((entry) => isObject(entry) && typeof entry.contextId === "string" && typeof entry.attachmentId === "string"))) throw new Error("Invalid inline attachments.");
           await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id(), viewId, params.mode === undefined ? "auto" : stringParam(params, "mode"), params.attachmentIds as string[] | undefined, references as Array<{ contextId: string; attachmentId: string }> | undefined); break;
         }
+        case "stopSubagent": await this.hostState.stopSubagent(id(), stringParam(params, "subagentId")); break;
+        case "reorderPins": {
+          if (params.beforeThreadId !== null && typeof params.beforeThreadId !== "string") throw new Error("Invalid pinned destination.");
+          await this.hostState.reorderPins(id(), params.beforeThreadId as string | null); break;
+        }
         case "queueAction": {
           if (params.beforeRunId !== undefined && params.beforeRunId !== null && typeof params.beforeRunId !== "string") throw new Error("Invalid queue destination.");
           await this.hostState.queueAction(id(), stringParam(params, "action"), typeof params.runId === "string" ? params.runId : undefined, typeof params.text === "string" ? params.text : undefined,

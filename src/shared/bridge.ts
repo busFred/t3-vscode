@@ -35,7 +35,7 @@ export const Methods = {
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
   createGuestShare: "createGuestShare", threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab", openSessionTab: "openSessionTab", keepTab: "keepTab", openTaskManager: "openTaskManager", closeTaskTab: "closeTaskTab",
   searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", turnDiffSummary: "turnDiffSummary", openMergeDiff: "openMergeDiff", refreshUsage: "refreshUsage",
-  queueAction: "queueAction",
+  queueAction: "queueAction", reorderPins: "reorderPins", stopSubagent: "stopSubagent",
   revertConversation: "revertConversation", dismissRewindMarker: "dismissRewindMarker", restorePreview: "restorePreview", restoreFiles: "restoreFiles", openRestoreDiff: "openRestoreDiff", compareRestoredFile: "compareRestoredFile",
   openWebUi: "openWebUi", configureUsage: "configureUsage", setUsagePanelAccounts: "setUsagePanelAccounts", showUsage: "showUsage",
   environmentAction: "environmentAction", watchSessions: "watchSessions",
@@ -120,8 +120,15 @@ export interface ThreadSummary {
   readonly remoteSubagents?: ReadonlyArray<{
     readonly id: string; readonly environmentId: string; readonly threadId: string; readonly label: string;
     readonly title: string; readonly status: string; readonly startedAt: string | null;
+    readonly stopSubagent?: { readonly threadId: string; readonly subagentId: string };
   }>;
   readonly tags?: OrchestrationV2ThreadShell["tags"];
+  readonly hiddenByTag?: boolean;
+  readonly hiddenThreadTags?: ReadonlyArray<string>;
+  readonly hideTaggedThreads?: boolean;
+  readonly stopSubagent?: { readonly threadId: string; readonly subagentId: string };
+  readonly pinOrderKey?: string | null;
+  readonly createdAt?: string;
   readonly linkedPullRequest?: OrchestrationV2ThreadShell["linkedPullRequest"];
   readonly pullRequests?: OrchestrationV2ThreadShell["pullRequests"];
   /** Unresponsive Stop, scoped to the run the user saw. */
@@ -190,6 +197,7 @@ export interface ComposerSuggestion {
 export interface ConversationQueue {
   readonly activeRunId: string | null;
   readonly canSteer: boolean;
+  readonly canSendNow?: boolean;
   readonly canReorder: boolean;
   readonly held: boolean;
   readonly entries: ReadonlyArray<{ readonly runId: string; readonly text: string; readonly attachmentNames: ReadonlyArray<string> }>;
@@ -200,6 +208,7 @@ export interface ConversationTasks {
 }
 export type WireTurnItem = typeof OrchestrationV2TurnItemJson.Encoded;
 export interface TranscriptItem {
+  readonly stopSubagent?: { readonly threadId: string; readonly subagentId: string };
   readonly visibility?: "local" | "inherited" | "synthetic";
   readonly key: string;
   readonly sourceThreadId: string;

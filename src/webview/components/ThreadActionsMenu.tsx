@@ -1,3 +1,5 @@
+import { ThreadTag } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { GuestShareDialog } from "./GuestShareControls";
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -18,6 +20,9 @@ const levelButtons = (menu: HTMLElement | null) => [...(menu?.querySelectorAll<H
 
 /** The same actions are available from a history row and an editor header. */
 export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: { readonly thread: ThreadSummary; readonly workspaceRoot?: string | undefined; readonly position: { x: number; y: number }; readonly onClose: () => void }) {
+  const [tagEditing, setTagEditing] = useState(false);
+  const [tagText, setTagText] = useState("");
+  const [tagError, setTagError] = useState("");
   const [sharing, setSharing] = useState(false);
   const menu = useRef<HTMLDivElement>(null), submenu = useRef<HTMLDivElement>(null);
   const [location, setLocation] = useState(position);
@@ -53,7 +58,7 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     if (open?.focus && subLocation) submenu.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }, [open, subLocation]);
   useEffect(() => {
-    const dismiss = (event: PointerEvent) => { if (!(event.target as Element).closest(".guest-share-dialog") && !menu.current?.contains(event.target as Node) && !submenu.current?.contains(event.target as Node)) onClose(); };
+    const dismiss = (event: PointerEvent) => { if (!(event.target as Element).closest(".guest-share-dialog, .thread-tag-dialog") && !menu.current?.contains(event.target as Node) && !submenu.current?.contains(event.target as Node)) onClose(); };
     const close = () => onClose();
     document.addEventListener("pointerdown", dismiss); window.addEventListener("resize", close);
     return () => { document.removeEventListener("pointerdown", dismiss); window.removeEventListener("resize", close); };
@@ -76,6 +81,13 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     ...(thread.canSnooze === undefined || thread.archived || thread.settled ? []
       : thread.snoozedUntil ? [{ kind: "action" as const, key: "wake", label: "Wake thread", icon: <AlarmClockIcon size={ICON} />, run: () => choose("unsnooze") }]
       : [{ kind: "submenu" as const, key: "snooze", label: "Snooze", icon: <AlarmClockIcon size={ICON} />, disabled: !thread.canSnooze, title: thread.canSnooze ? undefined : "This thread is waiting for you", items: snoozeItems }]),
+    { kind: "submenu", key: "tags", label: "Tags", icon: <PencilIcon size={ICON} />, items: [
+      { kind: "action", key: "add-tag", label: "Add tag…", run: () => { setOpen(null); setTagEditing(true); } },
+      ...(thread.tags ?? []).flatMap((tag): MenuItem[] => [
+        { kind: "action", key: `remove:${tag}`, label: `Remove ${tag}`, run: () => choose("tag-remove", tag) },
+        { kind: "action", key: `hide:${tag}`, label: `${thread.hiddenThreadTags?.includes(tag) ? "Show" : "Hide"} threads tagged ${tag}`, run: () => choose(thread.hiddenThreadTags?.includes(tag) ? "show-tag" : "hide-tag", tag) },
+      ]),
+    ] },
     { kind: "separator", key: "edit-separator" },
     { kind: "action", key: "rename", label: "Rename thread", icon: <PencilIcon size={ICON} />, run: () => choose("rename") },
     ...(thread.canRegenerateTitle ? [{ kind: "action" as const, key: "title", label: thread.titleRegenerating ? "Stop regenerating title" : "Regenerate title", icon: <WandSparklesIcon size={ICON} />, run: () => choose(thread.titleRegenerating ? "stop-title-regeneration" : "regenerate-title") }] : []),
@@ -127,6 +139,11 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     </div>;
   };
   return createPortal(<>
+    {tagEditing ? <div className="thread-tag-dialog" role="dialog" aria-modal="true" aria-label="Add thread tag" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onClose(); } }}><form onSubmit={(event) => {
+      event.preventDefault();
+      try { const tag = Schema.decodeUnknownSync(ThreadTag)(tagText); choose("tag-add", tag); }
+      catch { setTagError("Enter a tag of 1–64 characters, without control characters."); }
+    }}><label>Tag<input autoFocus aria-label="Thread tag" value={tagText} onChange={(event) => setTagText(event.target.value)} /></label>{tagError ? <p role="alert">{tagError}</p> : null}<button type="button" onClick={onClose}>Cancel</button><button type="submit">Add tag</button></form></div> : null}
     {sharing ? <GuestShareDialog thread={thread} onClose={onClose} /> : null}
     <div ref={menu} className="thread-actions-popup thread-actions-root" role="menu" aria-label={`Actions for ${thread.title}`} style={{ left: location.x, top: location.y }} onKeyDown={(event) => navigate(event, menu.current, false)}>
       {items.map((item) => entry(item, false))}

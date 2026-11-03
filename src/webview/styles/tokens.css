@@ -961,3 +961,21 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .scheduled-task-meta > .task-policy-notice { color: var(--vscode-editorWarning-foreground, #cca700); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .env-managed { display: block; overflow-wrap: anywhere; white-space: normal; color: var(--muted-foreground); }
+
+/* Thread-list tags and accessible pin handles. */
+.thread-tags { display: flex; gap: 4px; flex-wrap: wrap; padding-top: 2px; }
+.thread-tag { border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: .6875rem; overflow-wrap: anywhere; }
+.thread-tag-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px; font-size: .75rem; }
+.thread-tag-filters label { display: flex; align-items: center; gap: 4px; }
+.thread-tag-filters select { max-width: 160px; }
+.pin-grip { flex-shrink: 0; cursor: grab; }
+.thread-tag-dialog { position: fixed; inset: 20% 8% auto; padding: 12px; background: var(--card); border: 1px solid var(--input); border-radius: 4px; z-index: 100; }
+.thread-tag-dialog form { display: flex; flex-wrap: wrap; gap: 8px; }
+.thread-tag-dialog label { display: grid; gap: 4px; width: 100%; }
+.thread-tag-dialog p { width: 100%; color: var(--destructive); }
+
+.session-tree-row:has(> .pin-grip) { position: relative; padding-left: 16px; }
+.session-tree-row > .pin-grip { position: absolute; left: 0; top: 0; bottom: 0; width: 16px; padding: 0; }
+.session-tree-row:has(> .subagent-stop) { position: relative; padding-right: 24px; }
+.session-tree-row > .subagent-stop { position: absolute; right: 0; top: 0; bottom: 0; width: 24px; padding: 0; }
+.pin-drop-end { padding: 8px; border: 1px dashed var(--border); font-size: .75rem; }

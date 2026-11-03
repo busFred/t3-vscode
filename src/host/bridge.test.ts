@@ -114,3 +114,13 @@ test("A view re-resolved under the same id starts whole; replies encoded for its
   assert.ok("transcriptPatch" in registry.encodeState(old.webview, host.snapshot()));
   assert.ok("transcriptPatch" in registry.encodeState(current.webview, host.snapshot()));
 });
+
+test("Thread-list bridge rejects invalid pin destinations and missing subagent identities", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  const registry = new WebviewRegistry(), view = new FakeWebview();
+  const bridge = new BridgeHandler(host, registry);
+  registry.add(SIDEBAR_VIEW_ID, view.webview); bridge.attach(view.webview, SIDEBAR_VIEW_ID);
+  await assert.rejects(view.request("reorderPins", { threadId: "first", beforeThreadId: 42 }), /Invalid pinned destination/);
+  await assert.rejects(view.request("stopSubagent", { threadId: "first", subagentId: " " }), /Missing/);
+  assert.equal(client.commands.length, 0);
+});
