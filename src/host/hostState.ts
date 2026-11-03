@@ -2839,13 +2839,15 @@ export class HostState {
                 ...(this.stoppableSubagent(agent) && agent.runId !== null ? { stopSubagent: { threadId: thread.id, subagentId: agent.id } } : {}),
                 startedAt: agent.startedAt ? DateTime.formatIso(agent.startedAt) : null });
             }
-            // Before expansion loads the parent's tasks, paired children can identify their parent themselves.
-            if (!projection) for (const child of delegatedChildren.get(thread.id) ?? []) {
+            // Paired children identify their parent themselves: before expansion loads its tasks, and after,
+            // because a long thread's windowed projection omits completed tasks from older runs.
+            for (const child of delegatedChildren.get(thread.id) ?? []) {
               const from = child.delegatedFrom;
               if (from?.threadId !== thread.id || from.environmentId !== (remote?.environmentId ?? descriptor?.environmentId)) continue;
               const owner = this.remoteThread(child.id);
               const environmentId = owner?.environmentId ?? descriptor?.environmentId;
               if (!environmentId) continue;
+              if (rows.has(`${environmentId}:${child.id}`)) continue;
               rows.set(`${environmentId}:${child.id}`, { id: child.id, environmentId, threadId: child.id,
                 label: owner?.label ?? descriptor?.label ?? environmentId, title: child.title,
                 status: child.activityRunStatus ?? child.status, startedAt: null });

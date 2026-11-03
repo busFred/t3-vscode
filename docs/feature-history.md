@@ -21,7 +21,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.3.7 |
 | [Link requests](#link-requests) | Review or decline requests to link environments. | v0.3.7 | v0.3.7 |
 | [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation, centred in the whole conversation; earlier pages load at the top. | v0.0.8 | v0.3.4 |
-| [Subagent conversations](#subagent-conversations) | Nested local and remote child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.7 |
+| [Subagent conversations](#subagent-conversations) | Nested local and remote child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.11 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
 | [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.3.10 |
 | [Context window meter](#context-window-meter) | Ring + percent in the composer toolbar showing live provider usage against the model's context window. | v0.2.2 | v0.2.2 |
@@ -511,6 +511,10 @@ Session resources retain the current History selection for restoration. Opening 
 - Load earlier messages on their own once the reader scrolls or wheels up to the top (within half a view), and keep loading while a short page leaves the reader there. Only the reader's own input starts this, so opening a conversation loads nothing extra. The header button and the rail's ⌃ stay for retries after an error.
 
 ### Subagent conversations
+
+#### v0.3.11
+
+- Keep finished tasks delegated to another machine beneath their parent after the parent is opened. A long parent's history arrives windowed (only running tasks and tasks from recent runs), so older completed remote tasks dropped out of the parent's task list and their conversations showed as top-level sessions. Children that name their parent (`delegatedFrom`) are now always nested; the parent's own task record still wins when present.
 
 #### v0.3.7
 

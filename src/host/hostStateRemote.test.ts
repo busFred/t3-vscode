@@ -574,6 +574,25 @@ test("A remote delegated child in another repository is listed and can open thro
   assert.equal(f.host.snapshot().remoteSession?.environmentId, "devbox");
 });
 
+test("A remote delegated child stays nested when its loaded parent's windowed history omits the task", async (t) => {
+  const f = await fixture(); t.after(f.cleanup);
+  // A long parent's projection only carries active tasks and tasks from recent runs.
+  await f.host.selectThread("local-thread");
+  f.client.shell = { ...f.client.shell, snapshotSequence: f.client.shell.snapshotSequence + 1,
+    threads: f.client.shell.threads.map(thread => thread.id === "other-thread" ? { ...thread,
+      delegatedFrom: { environmentId: "audit", threadId: ThreadId.make("local-thread"), title: "local thread" } as never,
+      status: "completed" as const } : thread) };
+  f.client.shellHandler!({ kind: "snapshot", snapshot: f.client.shell });
+  const snapshot = f.host.snapshot();
+  assert.equal(snapshot.activeThreadId, "local-thread");
+  const parent = snapshot.threads.find(thread => thread.id === "local-thread")!;
+  assert.deepEqual(parent.remoteSubagents?.map(task => [task.environmentId, task.threadId]), [["devbox", "other-thread"]]);
+  const { sessionTree } = await import("../shared/sessionTree.js");
+  const roots = sessionTree(snapshot.threads);
+  assert.ok(!roots.some(node => node.thread.id === "other-thread"), "the child is not a top-level conversation");
+  assert.equal(roots.find(node => node.thread.id === parent.id)!.children[0]?.thread.id, "other-thread");
+});
+
 test("The Machines list shows where this project is and adds it to a machine without moving any chat", async (t) => {
   const f = await cloneFixture(t);
   const before = f.host.snapshot().projectMachines;
