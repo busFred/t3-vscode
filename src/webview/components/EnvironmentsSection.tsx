@@ -1,6 +1,8 @@
 import { mergeMachines, type MachineRow } from "../machines";
 import { AddMachineForm, MachineCapabilities, peerHealthLabel } from "./PeerLinksSection";
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEnvironmentsHeight } from "../environmentsHeight";
+import { clampSectionHeight } from "../sectionHeight";
 import { BellIcon, BellOffIcon, ChevronDownIcon, LaptopMinimalIcon, LinkIcon, PlayIcon, PlusIcon, PowerIcon, RefreshCwIcon, ServerIcon, Trash2Icon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import type { EnvironmentRow } from "../../shared/environmentStatus";
@@ -17,6 +19,17 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
   const run = useActions();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState<MachineRow | true | null>(null);
+  const [height, setHeight] = useEnvironmentsHeight();
+  const section = useRef<HTMLDetailsElement>(null), drag = useRef<{ y: number; height: number; moved: boolean } | null>(null), dragHeight = useRef<number | null>(null);
+  const [live, setLive] = useState<number | null>(null);
+  // Leave the Sessions tabs and a few rows below; the list's own title never scrolls (see .environments CSS).
+  const maxHeight = () => { const front = section.current?.parentElement; const summary = section.current?.querySelector("summary"); return front ? front.clientHeight - (summary?.offsetHeight ?? 20) - 140 : 600; };
+  const listHeight = live ?? (height === null ? null : clampSectionHeight(height, maxHeight()));
+  const resize = (next: number) => { const value = clampSectionHeight(next, maxHeight())!; dragHeight.current = value; setLive(value); return value; };
+  // A click without movement keeps the automatic height rather than saving one.
+  const finishResize = () => { const current = drag.current; if (current) { drag.current = null; if (current.moved) setHeight(dragHeight.current); setLive(null); } };
+  /** The list's visible height (not its full content height), so resizing starts from what is on screen. */
+  const shownHeight = () => { const element = section.current; if (!element) return 200; const summary = element.querySelector("summary"); return element.getBoundingClientRect().height - (summary?.getBoundingClientRect().height ?? 22) - 1; };
   useEffect(() => { if (open && state.peerLinks && !state.peerLinks.denial) void run("refreshPeerLinks"); }, [open, state.peerLinks?.environmentId, state.peerLinks?.denial, run]);
   const environments = state.environments;
   if (!environments) return null;
@@ -56,7 +69,7 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
     }
   };
   const local = environments.local;
-  return <details className="environments" onToggle={event => setOpen(event.currentTarget.open)}>
+  return <><details ref={section} className="environments" data-sized={listHeight !== null || undefined} style={listHeight !== null ? { "--env-list-height": `${listHeight}px` } as CSSProperties : undefined} onToggle={event => setOpen(event.currentTarget.open)}>
     <summary><ChevronDownIcon size={12} /><strong>MACHINES</strong><span className="env-summary-dot"><Dot tone={environments.indicator} label={summary} /></span></summary>
     <div className="environments-body">
       <p className="env-hint">Conversations appear in VS Code. Agents can use machines to launch and drive threads.</p>
@@ -71,5 +84,15 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
       </div>)}
       {adding ? <AddMachineForm key={adding === true ? "new" : adding.environmentId} peers={state.peerLinks} machine={adding === true ? undefined : adding} close={() => setAdding(null)} /> : <button className="text-button env-add" onClick={() => setAdding(true)}><PlusIcon size={13} />Add machine…</button>}
     </div>
-  </details>;
+  </details>
+  {open ? <div className="section-resize" role="separator" tabIndex={0} aria-label="Resize machines list" aria-orientation="horizontal" aria-valuemin={60} aria-valuemax={Math.max(60, maxHeight())} {...(listHeight !== null ? { "aria-valuenow": listHeight } : {})} title="Drag or use arrow keys to resize; double-click to fit the list"
+    onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); const start = listHeight ?? shownHeight(); drag.current = { y: event.clientY, height: start, moved: false }; dragHeight.current = start; event.currentTarget.setPointerCapture(event.pointerId); }}
+    onPointerMove={(event) => { const current = drag.current; if (!current || event.clientY === current.y && !current.moved) return; current.moved = true; resize(current.height + event.clientY - current.y); }}
+    onPointerUp={(event) => { finishResize(); if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}
+    onPointerCancel={finishResize} onLostPointerCapture={finishResize}
+    onDoubleClick={() => { setLive(null); setHeight(null); }}
+    onKeyDown={(event) => { if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return; event.preventDefault();
+      const current = listHeight ?? shownHeight();
+      setHeight(resize(event.key === "Home" ? 60 : event.key === "End" ? maxHeight() : current + (event.key === "ArrowDown" ? 20 : -20))); setLive(null); }}><span className="find-grip" /></div> : null}
+  </>;
 }

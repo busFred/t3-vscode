@@ -201,6 +201,48 @@ try {
   assert.equal(await page.getByLabel('Let agents use it', { exact: true }).isChecked(), true);
   await page.screenshot({ path: `${evidence}/machines-add.png` });
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  // Section titles stay on screen however long the lists are; the Machines list height is adjustable.
+  await page.evaluate(() => window.__replace({ environments: { local: { label: "Local workstation", host: "localhost" }, indicator: "ok", rows: Array.from({ length: 40 }, (_, index) => ({ environmentId: `machine-${index}`, label: `Machine ${index}`, host: `machine-${index}.example`, status: "connected", expiresAt: null, ignored: false })) } }));
+  if (!await page.locator('.account-usage').evaluate(element => element.open)) await page.locator('.account-usage > summary').click();
+  const titlesOnScreen = async () => {
+    const viewport = page.viewportSize();
+    for (const target of [page.locator('.account-usage > summary'), page.locator('.environments > summary'), page.getByRole('tab', { name: 'Sessions' })]) {
+      const box = await target.boundingBox();
+      assert.ok(box && box.y >= 0 && box.y + box.height <= viewport.height + 0.5 && box.height >= 18, `section title off screen at ${viewport.height}px: ${JSON.stringify(box)} ${await page.evaluate(() => JSON.stringify([...document.querySelectorAll('.sidebar-front, .sidebar-front > *')].map(element => [element.className, Math.round(element.getBoundingClientRect().height), getComputedStyle(element).minHeight, getComputedStyle(element).display])))}`);
+    }
+  };
+  for (const height of [820, 420, 260]) {
+    await page.setViewportSize({ width: 360, height });
+    await page.locator('.environments .env-row').nth(5).hover(); await page.mouse.wheel(0, 4000);
+    await page.locator('.sidebar-front').evaluate(element => element.scrollTo(0, 99999));
+    await page.evaluate(() => document.scrollingElement.scrollTo(0, 99999));
+    await page.mouse.move(180, height - 5); await page.mouse.wheel(0, 4000);
+    await titlesOnScreen();
+  }
+  await page.setViewportSize({ width: 360, height: 820 });
+  const separator = page.getByRole('separator', { name: 'Resize machines list' });
+  const listHeight = () => page.locator('.environments').evaluate(element => element.getBoundingClientRect().height);
+  const before = await listHeight();
+  // A click without movement keeps the automatic (capped) height; arrow keys start from the visible height.
+  await separator.click();
+  assert.equal(await page.locator('.environments').getAttribute('data-sized'), null);
+  assert.ok(Math.abs(await listHeight() - before) <= 1, 'clicking the separator does not resize the list');
+  await separator.press('ArrowUp');
+  assert.ok(Math.abs(await listHeight() - (before - 20)) <= 2, `ArrowUp shrinks from the visible height: ${before} -> ${await listHeight()}`);
+  await separator.focus(); await separator.press('Home');
+  assert.equal(await page.locator('.environments').getAttribute('data-sized'), 'true');
+  assert.ok(await listHeight() < before && await listHeight() <= 22 + 60 + 2, 'Home shrinks the machines list to its minimum');
+  for (let index = 0; index < 5; index++) await separator.press('ArrowDown');
+  assert.ok(Math.abs(await listHeight() - (22 + 160)) <= 2, `arrow keys grow the list in 20 px steps: ${await listHeight()}`);
+  const box = await separator.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + 3); await page.mouse.down(); await page.mouse.move(box.x + box.width / 2, box.y + 103, { steps: 4 }); await page.mouse.up();
+  assert.ok(Math.abs(await listHeight() - (22 + 260)) <= 3, `dragging resizes the list: ${await listHeight()}`);
+  await titlesOnScreen();
+  await page.screenshot({ path: `${evidence}/sections-pinned.png` });
+  await separator.press('End'); await titlesOnScreen();
+  await separator.dblclick();
+  assert.equal(await page.locator('.environments').getAttribute('data-sized'), null);
+  await page.locator('.account-usage > summary').click();
   await page.evaluate(() => window.__replace({ environments: undefined, peerLinks: undefined }));
   await page.evaluate(() => { document.body.dataset.surface = "panel"; window.__replace({}); });
   await page.getByRole("textbox", { name: "Search threads" }).waitFor({ state: "hidden" });

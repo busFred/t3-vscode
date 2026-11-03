@@ -420,13 +420,21 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .thread.active .thread-input { color: inherit; }
 .history-settings { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); }
 .history-settings > span { font-size: .625rem; color: var(--muted-foreground); }
-.account-usage { flex-shrink: 0; border-bottom: 1px solid var(--border); max-height: 50%; overflow: auto; }
+.account-usage { border-bottom: 1px solid var(--border); max-height: 50%; }
+/* Section titles never scroll away: the title is fixed, only the open content scrolls, and the section can shrink to its title. */
+.account-usage, .environments { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 22px; }
+.account-usage > summary, .environments > summary { flex: none; height: 22px; box-sizing: border-box; padding-block: 0; }
+.account-usage[open]::details-content, .environments[open]::details-content { flex: 0 1 auto; min-height: 0; overflow: auto; }
+.environments[data-sized] { max-height: none; }
+.environments[data-sized][open]::details-content { flex: 0 1 var(--env-list-height); height: var(--env-list-height); }
+.section-resize { display: flex; justify-content: center; align-items: center; height: 7px; flex: none; margin-top: -1px; cursor: row-resize; touch-action: none; user-select: none; color: transparent; border-bottom: 1px solid var(--border); }
+.section-resize:hover, .section-resize:focus-visible { color: var(--muted-foreground); background: var(--muted); outline: 1px solid var(--ring); outline-offset: -1px; }
 .account-usage > summary { display: flex; align-items: center; gap: 4px; padding: 3px 10px 3px 4px; font-size: .625rem; cursor: pointer; list-style: none; }
 /* Chevron and title sit where a native view pane's twistie and title do. */
 .account-usage > summary > svg { transform: rotate(-90deg); }
 .account-usage[open] > summary > svg { transform: none; }
 .account-usage-body { padding: 0 10px 8px; }
-.environments { flex-shrink: 0; border-bottom: 1px solid var(--border); max-height: 50%; overflow: auto; }
+.environments { border-bottom: 1px solid var(--border); max-height: 50%; }
 .environments > summary { display: flex; align-items: center; gap: 4px; padding: 3px 10px 3px 4px; font-size: .625rem; cursor: pointer; list-style: none; }
 .environments > summary > svg { transform: rotate(-90deg); }
 .environments[open] > summary > svg { transform: none; }
@@ -549,7 +557,7 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .setup-diagnostics dd { margin: 0; color: var(--foreground); }
 .server-setup footer { border-top: 1px solid var(--border); padding-top: 12px; color: var(--muted-foreground); font-size: .6875rem; }
 .server-setup footer .setup-guide { font-size: inherit; }
-.provider-setup { flex-shrink: 0; margin: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 5px; font-size: .75rem; max-height: 45%; overflow: auto; }
+.provider-setup { flex: 0 1 auto; min-height: 0; margin: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 5px; font-size: .75rem; max-height: 45%; overflow: auto; }
 .provider-setup > strong { font-weight: 600; }
 .provider-setup p { margin: 5px 0 9px; color: var(--muted-foreground); }
 .provider-setup > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
@@ -818,6 +826,10 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 
 /* Sessions and scheduled tasks share a sidebar; editing keeps the front page mounted. */
 .sidebar-front, .sidebar-manager { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
+/* The sidebar never scrolls as a whole, so no section title can be scrolled out of view; each list scrolls itself. */
+.sidebar-front { overflow: hidden; }
+/* Sessions keep a few rows when the sections above are open and long; those shrink to their titles first. */
+.sidebar-front > .sidebar-manager { min-height: min(96px, 20vh); overflow: hidden; }
 .sidebar-tabs { height: var(--sidebar-band-height); display: flex; flex: none; gap: 3px; border-bottom: 1px solid var(--border); padding: 0 6px; }
 .sidebar-tabs > button { flex: none; padding: 3px 7px; border-bottom: 2px solid transparent; color: var(--muted-foreground); font-size: .75rem; }
 .sidebar-tabs > button:hover { color: var(--foreground); }
@@ -990,3 +1002,5 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .environments fieldset { min-width: 0; margin: 4px 0; border: 0; padding: 0; }
 .environments fieldset label { display: block; margin: 6px 0; }
 .environments fieldset input:not([type=checkbox]) { width: 100%; box-sizing: border-box; }
+/* Below any usable height the setup notice would push the Sessions tabs away; Settings still shows it. */
+@media (max-height: 120px) { .sidebar-front > .provider-setup { display: none; } }

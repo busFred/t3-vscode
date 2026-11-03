@@ -174,6 +174,14 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 - Regression review (covers every v0.3.4 entry: usage plan line, section-header inset, rail centring, automatic earlier pages, thread menu, unread and snooze): a fresh-context Opus review against `68a1105` first blocked on one bug — after Mark unread, leaving and returning to the tab did not mark the thread read again, because the server leaves `updatedAt` unchanged and the visit was treated as already sent. Fixed by clearing the sent watermark on hold, with the unit and host assertions corrected. Its non-blocking findings were also fixed: a checkout whose only session is snoozed no longer says it has no sessions, choosing from a side submenu returns focus to the row, the rail is first in reading and Tab order again (portal slot prepended to the conversation), the native Snooze picker follows Time Format, and Mark-unread holds survive a reconnect. Re-review: APPROVE WITH NITS (Duplicate has no capability gate because T3 has no fork flag; the rail slot is a non-React node in a React parent). Final checks: typecheck, 590/590 unit tests, `pnpm build`, `verify-views.ts` 16/16, `verify-ui.mjs` up to its known subagent-archive stop with the new rail checks passing, and the 6/6 live check above. `verify-views.ts`'s resize check is flaky on unmodified `68a1105` too (2 of 4 runs).
 - Unpublished installer `target-installer/t3-vscode-0.3.3-thread-menu-unread.vsix` (SHA-256 `0948da4f60119c5bf923f28005f07600f92528a08e8c5afaa62c20220c60d148`), built from the uncommitted working tree on `68a1105`; manifest unchanged at 0.3.3, not installed or published.
 
+
+#### Unreleased (after v0.3.7) — pinned section titles
+
+- The **Account & Usage**, **Machines** and **Sessions** titles never scroll away, however long their lists are or however short the sidebar is. Each section's title stays fixed while only its open content scrolls, and the sections above shrink down to their titles before the Sessions tabs are pushed off screen.
+- The Machines list height is adjustable: drag the separator under it, or focus it and use Up/Down (20 px steps), Home and End. Double-click returns to the automatic height. The chosen height is kept with the sidebar's view state, like the session sort.
+- The sidebar itself never scrolls; Sessions keep a few rows (up to 96 px) and the setup notice shrinks too, so neither pushes the tabs away.
+- Validation: browser fixture with 40 machines and both sections open at 820, 420 and 260 px high checks that all three titles stay on screen, including after the document and sidebar are scrolled. A plain click on the separator keeps the automatic height. It also checks keyboard and drag resizing and the double-click reset. Screenshot: `sections-pinned.png`.
+
 ### Scheduled task management
 
 #### v0.3.7
