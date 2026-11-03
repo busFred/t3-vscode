@@ -29,7 +29,7 @@ export const Methods = {
   sessionSearchPreviews: "sessionSearchPreviews", setSearchPreferences: "setSearchPreferences",
   restoreComposerDraft: "restoreComposerDraft", saveComposerDraft: "saveComposerDraft", chatAsset: "chatAsset", mcpAppRequest: "mcpAppRequest", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
-  newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", chooseMachine: "chooseMachine", startClone: "startClone", cloneAction: "cloneAction", listCopyableFiles: "listCopyableFiles", startPairing: "startPairing", reconnect: "reconnect",
+  newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", chooseMachine: "chooseMachine", startClone: "startClone", cloneToMachine: "cloneToMachine", machineCloneAction: "machineCloneAction", cloneAction: "cloneAction", listCopyableFiles: "listCopyableFiles", startPairing: "startPairing", reconnect: "reconnect",
   setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModelVisibility: "setModelVisibility", moveModel: "moveModel", reorderModel: "reorderModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt", forceStop: "forceStop",
   respondToRequest: "respondToRequest", answerSecretRequest: "answerSecretRequest", answerLinkRequest: "answerLinkRequest", refreshPeerLinks: "refreshPeerLinks", addMachine: "addMachine", linkPeer: "linkPeer", unlinkPeer: "unlinkPeer", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
@@ -93,6 +93,15 @@ export interface MachineClone {
   readonly detail: string | null;
   readonly error: string | null;
   readonly copy?: { readonly phase: "pending" | "copying" | "done" | "failed"; readonly error?: string };
+}
+/** For the Machines list: which machines have this window's repository, which could get a clone, and clones in progress. */
+export interface ProjectMachines {
+  readonly title: string;
+  /** Paired machines with this repository; this computer is implied by a local project. */
+  readonly present: ReadonlyArray<string>;
+  readonly targets: ReadonlyArray<AddMachineTarget>;
+  readonly clones: ReadonlyArray<MachineClone>;
+  readonly cloneSource?: CloneSource;
 }
 export interface ConversationDraft {
   readonly addTargets?: ReadonlyArray<AddMachineTarget>;
@@ -295,6 +304,8 @@ export interface HostStateSnapshot {
   readonly environments?: { readonly local?: { readonly label: string; readonly host: string; readonly serverVersion?: string }; readonly rows: ReadonlyArray<import("./environmentStatus.js").EnvironmentRow>; readonly indicator: import("./environmentStatus.js").EnvironmentIndicator };
   readonly projects: ReadonlyArray<ProjectSummary>;
   readonly threads: ReadonlyArray<ThreadSummary>;
+  /** Sidebar only. */
+  readonly projectMachines?: ProjectMachines;
   readonly archiveLoaded?: boolean;
   readonly archiveLoading?: boolean;
   readonly archiveError?: string;

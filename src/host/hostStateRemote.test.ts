@@ -573,3 +573,26 @@ test("A remote delegated child in another repository is listed and can open thro
   await f.host.selectThread(child.id);
   assert.equal(f.host.snapshot().remoteSession?.environmentId, "devbox");
 });
+
+test("The Machines list shows where this project is and adds it to a machine without moving any chat", async (t) => {
+  const f = await cloneFixture(t);
+  const before = f.host.snapshot().projectMachines;
+  assert.equal(before?.title, "local");
+  assert.deepEqual(before?.targets.map((target) => [target.environmentId, target.available, target.defaultDestination]), [["devbox", true, "~/widget"]]);
+  f.host.registerView("tab-one");
+  assert.equal(f.host.snapshot("tab-one").projectMachines, undefined, "only the sidebar reports it");
+  await f.host.cloneToMachine({ environmentId: "devbox", destinationPath: "~/src/widget", protocol: "https", files: [".env"] });
+  const { input } = f.client.cloneStarts[0]!;
+  assert.deepEqual([input.destinationPath, input.remoteUrl], ["~/src/widget", "https://github.com/acme/widget.git"]);
+  assert.equal(f.host.snapshot().draft.environmentId, undefined, "the sidebar's new chat stays on this computer");
+  f.client.cloneHandlers.get("devbox")!([cloneSnapshot(input.projectId, "running")]);
+  const running = f.host.snapshot().projectMachines!;
+  assert.deepEqual([running.clones[0]?.environmentId, running.clones[0]?.percent], ["devbox", 42]);
+  assert.deepEqual(running.targets, [], "a machine being cloned onto is not offered again");
+  f.client.cloneHandlers.get("devbox")!([cloneSnapshot(input.projectId, "failed", { error: "Permission denied (publickey)." })]);
+  assert.equal(f.host.snapshot().projectMachines!.clones[0]?.phase, "failed");
+  await f.host.machineCloneAction("devbox", "retry");
+  await f.host.machineCloneAction("devbox", "remove");
+  assert.deepEqual(f.client.cloneActions, [`retry:${input.projectId}`, `delete:${input.projectId}`]);
+  assert.deepEqual(f.host.snapshot().projectMachines!.clones, []);
+});

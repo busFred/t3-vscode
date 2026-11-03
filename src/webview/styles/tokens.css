@@ -1043,3 +1043,10 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .machine-remove-confirm .danger { color: var(--destructive); }
 /* A machine's actions stay rendered while its remove menu is open, so the menu keeps its anchor and focus returns to it. */
 .env-row:has(.env-hover-actions [aria-expanded="true"]) .env-hover-actions { display: inline-flex; opacity: 1; pointer-events: auto; }
+/* This window's project on each machine. */
+.env-project { display: inline-flex; align-items: center; gap: 3px; }
+.env-project-add { display: inline-flex; align-items: center; gap: 3px; }
+.env-project-clone { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; font-size: .6875rem; color: var(--muted-foreground); }
+.env-project-clone > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.env-project-clone.failed { color: var(--destructive); }
+.env-project-unavailable { font-size: .6875rem; color: var(--muted-foreground); }

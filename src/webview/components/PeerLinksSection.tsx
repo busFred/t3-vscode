@@ -4,7 +4,7 @@ import { peerAccessLabels, type PeerLinksState } from "../../shared/peerLinks";
 import type { MachineRow } from "../machines";
 import { useActions } from "../actions";
 
-export function MachineCapabilities({ machine, peers, pair }: { readonly machine: MachineRow; readonly peers?: PeerLinksState | undefined; readonly pair: () => void }) {
+export function MachineCapabilities({ machine, peers, pair, project }: { readonly machine: MachineRow; readonly peers?: PeerLinksState | undefined; readonly pair: () => void; readonly project?: import("react").ReactNode }) {
   const run = useActions();
   const [editing, setEditing] = useState(false), [manual, setManual] = useState(false), [code, setCode] = useState("");
   const [address, setAddress] = useState(machine.address ?? ""), [access, setAccess] = useState<AuthMcpClientAccess>("approval-required");
@@ -21,6 +21,7 @@ export function MachineCapabilities({ machine, peers, pair }: { readonly machine
   };
   return <div className="env-meta machine-capabilities">
     {machine.conversations ? <span className="env-chip">Conversations</span> : <button className="text-button" onClick={pair}>Pair to see conversations</button>}
+    {project}
     {!machine.local && (machine.agents ? <>
       <span className="env-chip" title={peerHealthLabel(machine.agents.status)}>{agentChipLabel(machine.agents)}</span>
       {machine.agents.status === "expired" && <button className="text-button" disabled={!peers || !!peers.denial || !peers.loaded} title={peers?.denial} onClick={() => setEditing(true)}>Let agents use this…</button>}

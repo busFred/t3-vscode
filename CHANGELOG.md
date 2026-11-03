@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (after v0.3.9)
+
+- Machines show whether this window's project is on each machine and can add it (clone) from the sidebar.
+
 ## 0.3.9 — Release
 
 - Machines: one remove menu per machine that asks whether to remove the conversations from VS Code or the agent access, describing each; an ⓘ replaces the standing description; chips read "Agents (Auto)"; roomier rows.

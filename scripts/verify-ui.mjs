@@ -206,6 +206,26 @@ try {
   assert.deepEqual(await page.getByRole('menu', { name: 'Remove Agent VPS' }).getByRole('menuitem').evaluateAll(items => items.map(item => item.querySelector('strong')?.textContent)), ['Remove agent access']);
   await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Remove Agent VPS…', 'Escape returns focus to the remove button');
+  // Each machine shows whether this window's project is there, and offers to add it.
+  await page.evaluate(() => window.__replace({ projectMachines: { title: 't3-vscode', present: ['both'], targets: [{ environmentId: 'conversations', label: 'Conversation machine', available: true, defaultDestination: '~/code/t3-vscode' }], clones: [], cloneSource: { title: 't3-vscode', sshUrl: 'git@github.com:busFred/t3-vscode.git', httpsUrl: 'https://github.com/busFred/t3-vscode.git', protocol: 'ssh' } } }));
+  await page.locator('.environments .env-project').first().waitFor();
+  assert.deepEqual(await page.locator('.environments .env-row').evaluateAll(rows => rows.map(row => [row.querySelector('.env-name span')?.textContent, row.querySelector('.env-project')?.textContent ?? row.querySelector('.env-project-add')?.textContent ?? null])),
+    [['Local workstation', 't3-vscode'], ['Build machine', 't3-vscode'], ['Conversation machine', 'Add t3-vscode…'], ['Agent VPS', null]]);
+  await page.getByRole('button', { name: 'Add t3-vscode…' }).click();
+  await page.getByRole('button', { name: 'Clone to Conversation machine' }).click();
+  await page.waitForFunction(() => window.__requests.some(request => request.method === 'cloneToMachine' && request.params.environmentId === 'conversations' && request.params.destinationPath === '~/code/t3-vscode'));
+  await page.screenshot({ path: `${evidence}/machines-project.png` });
+  await page.evaluate(() => window.__replace({ projectMachines: { title: 't3-vscode', present: ['both'], targets: [], clones: [{ environmentId: 'conversations', label: 'Conversation machine', projectId: 'p', name: 't3-vscode', phase: 'running', stage: 'Receiving objects', percent: 42, detail: null, error: null }] } }));
+  await page.locator('.env-project-clone', { hasText: 'Adding t3-vscode · Receiving objects 42%' }).waitFor();
+  await page.getByRole('button', { name: 'Cancel adding t3-vscode to Conversation machine' }).click();
+  await page.waitForFunction(() => window.__requests.some(request => request.method === 'machineCloneAction' && request.params.environmentId === 'conversations' && request.params.action === 'cancel'));
+  await page.evaluate(() => window.__replace({ projectMachines: { title: 't3-vscode', present: [], targets: [], clones: [{ environmentId: 'conversations', label: 'Conversation machine', projectId: 'p', name: 't3-vscode', phase: 'failed', stage: 'Receiving objects', percent: null, detail: null, error: 'Permission denied (publickey).' }] } }));
+  await page.getByRole('alert').filter({ hasText: 'Adding t3-vscode failed: Permission denied (publickey).' }).waitFor();
+  for (const action of ['retry', 'remove']) {
+    await page.getByRole('button', { name: `${action[0].toUpperCase()}${action.slice(1)} adding t3-vscode to Conversation machine` }).click();
+    await page.waitForFunction((action) => window.__requests.some(request => request.method === 'machineCloneAction' && request.params.action === action), action);
+  }
+  await page.evaluate(() => window.__replace({ projectMachines: undefined }));
   const localMachine = page.locator('.environments .env-row').filter({ hasText: 'Local workstation' });
   assert.equal(await localMachine.getByText('Let agents use this…').count(), 0);
   await page.screenshot({ path: `${evidence}/machines-merged.png` });

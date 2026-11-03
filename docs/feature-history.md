@@ -1607,6 +1607,10 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - One remove (trash) button per machine opens a menu: **Remove from VS Code** (the existing VS Code confirmation) and **Remove agent access** (confirmed in the menu). Each option describes its effect on hover and in the menu; the separate inline "Remove agent access" link is gone. Machines with agent access only get the same button.
 - Agent chips read **Agents (Auto)**, **Agents (Read only)**, … or **Agents (expired)**. Machine rows have more line spacing.
 
+#### Unreleased (after v0.3.9)
+
+- Each machine with Conversations shows whether this window's project is on it, or offers **Add *project*…** to clone it there from the sidebar, using the composer's clone form and pipeline without starting a chat. Clone progress, Cancel, Retry and Remove show on the machine's row.
+
 ### Managed policy
 
 #### v0.3.7

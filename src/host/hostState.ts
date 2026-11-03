@@ -446,6 +446,8 @@ export class HostState {
   // ---- Cloning this repository onto a paired machine (T3's "Add to another machine") ----
   private readonly cloneStreams = new Map<string, Subscription>();
   private readonly cloneSnapshots = new Map<string, ReadonlyArray<{ readonly projectId: string; readonly phase: MachineClone["phase"]; readonly stage: string; readonly percent: number | null; readonly detail: string | null; readonly error: string | null; readonly destinationPath: string; readonly repository: { readonly nameWithOwner: string } | null }>>();
+  /** Clones started from the Machines list, by machine; each is shown on that machine's row until it finishes. */
+  private readonly machineClones = new Map<string, string>();
   /** Clones this extension started, and the ignored files to copy from this computer once each finishes. */
   private readonly cloneCopies = new Map<string, { environmentId: string; cwd: string; sourceRoot: string; files: ReadonlyArray<string>; phase: "pending" | "copying" | "done" | "failed"; error?: string; seen?: boolean }>();
   /** This window's repository: the draft's own local project when it has one, else a local project with a Git remote to clone from. */
@@ -465,7 +467,10 @@ export class HostState {
   /** The clone a view's new chat waits for, while it runs, fails, or its files are being copied. */
   private viewClone(view: ViewState): MachineClone | undefined {
     const machine = this.draftMachine(view), projectId = view.draftProjectId;
-    if (!machine || !projectId) return undefined;
+    return machine && projectId ? this.cloneStatus(machine, projectId) : undefined;
+  }
+  /** A clone's progress, then the copy of its files; undefined once both are done. */
+  private cloneStatus(machine: string, projectId: string): MachineClone | undefined {
     const snapshot = this.cloneSnapshots.get(machine)?.find((entry) => entry.projectId === projectId), copy = this.cloneCopies.get(projectId);
     if (!snapshot && !copy) return undefined;
     // Not yet reported: still starting. Reported and then gone: the server drops finished clones after a short grace period.
@@ -499,9 +504,29 @@ export class HostState {
     return { ...(addTargets.length ? { addTargets } : {}), ...(clone ? { clone } : {}),
       cloneSource: { title: source.title, sshUrl: cloneUrlForProtocol(url, "ssh"), httpsUrl: cloneUrlForProtocol(url, "https"), protocol: cloneUrlProtocol(url) } };
   }
+  /** Which machines have this window's repository, which could get it, and clones started from the Machines list. */
+  private projectMachines(): HostStateSnapshot["projectMachines"] {
+    // The window's repository, not a draft's choice: the list describes this workspace on each machine.
+    const source = this.cloneSourceProject();
+    if (!source) return undefined;
+    const remotes = (this.client.remoteStatuses?.() ?? []).filter((entry) => entry.enabled);
+    const present = remotes.filter((entry) => this.machineProjects(entry.environmentId).length).map((entry) => entry.environmentId);
+    const clones = [...this.machineClones].flatMap(([environmentId, projectId]) => { const status = this.cloneStatus(environmentId, projectId); return status ? [status] : []; });
+    const url = source.repositoryIdentity?.locator.remoteUrl;
+    const REASONS = { disconnected: "reconnecting…", unsupported: "update T3 Code there", permission: "needs source-control access" } as const;
+    const targets = url && this.client.cloneAccess ? remotes.filter((entry) => !present.includes(entry.environmentId) && !clones.some((clone) => clone.environmentId === entry.environmentId)).map((entry): AddMachineTarget => {
+      const access = this.client.cloneAccess!(entry.environmentId);
+      const base = this.client.configForEnvironment?.(entry.environmentId)?.settings?.addProjectBaseDirectory;
+      return { environmentId: entry.environmentId, label: entry.label, available: access === "ok", ...(access === "ok" ? {} : { reason: REASONS[access] }),
+        defaultDestination: getCloneDestinationPath(getAddProjectInitialQuery(base), getCloneDirectoryName(url)) };
+    }) : [];
+    return { title: source.title, present, targets, clones,
+      ...(url ? { cloneSource: { title: source.title, sshUrl: cloneUrlForProtocol(url, "ssh"), httpsUrl: cloneUrlForProtocol(url, "https"), protocol: cloneUrlProtocol(url) } } : {}) };
+  }
   /** Ignored files under 1 MB in this window's checkout; env files are checked by default. Ignored folders are skipped whole. */
-  async listCopyableFiles(viewId = SIDEBAR_VIEW_ID): Promise<ReadonlyArray<{ readonly path: string; readonly checked: boolean }>> {
-    const root = await this.cloneSourceRoot(this.views.get(viewId));
+  /** `windowSource`: the Machines list clones the window's repository, not the one a view's new chat chose. */
+  async listCopyableFiles(viewId = SIDEBAR_VIEW_ID, windowSource = false): Promise<ReadonlyArray<{ readonly path: string; readonly checked: boolean }>> {
+    const root = await this.cloneSourceRoot(windowSource ? undefined : this.views.get(viewId));
     if (!root) return [];
     const stdout = await new Promise<string>((resolve, reject) => execFile("git", ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"], { cwd: root, maxBuffer: 8 << 20 },
       (error, out) => error ? reject(error) : resolve(out)));
@@ -574,6 +599,27 @@ export class HostState {
     return this.enqueue(async () => {
       const view = this.requireView(viewId), thread = this.findThread(view.activeThreadId);
       this.assertNewChat(view, thread);
+      const { projectId, result } = await this.beginClone(view, viewId, input);
+      await this.detachPlaceholder(view, viewId, thread);
+      view.draftEnvironmentId = input.environmentId; view.draftProjectId = projectId; view.draftWorkspaceRoot = result.cwd; delete view.workspaceChoice;
+      this.shell = await this.client.snapshotShell().catch(() => this.shell);
+      if (this.cloneSnapshots.get(input.environmentId)?.find((entry) => entry.projectId === projectId)?.phase === "done") void this.copyCloneFiles(projectId);
+      this.emit();
+    });
+  }
+  /** Add this window's repository to a paired machine from the Machines list, without a new chat waiting for it. */
+  cloneToMachine(input: { readonly environmentId: string; readonly destinationPath: string; readonly protocol: CloneProtocol; readonly files: ReadonlyArray<string> }, viewId = SIDEBAR_VIEW_ID): Promise<void> {
+    return this.enqueue(async () => {
+      this.requireView(viewId);
+      const { projectId } = await this.beginClone(undefined, viewId, input);
+      this.machineClones.set(input.environmentId, projectId);
+      this.shell = await this.client.snapshotShell().catch(() => this.shell);
+      if (this.cloneSnapshots.get(input.environmentId)?.find((entry) => entry.projectId === projectId)?.phase === "done") void this.copyCloneFiles(projectId);
+      this.emit();
+    });
+  }
+  /** Starts a clone of this window's repository on a paired machine and tracks the copy of the chosen ignored files. */
+  private async beginClone(view: ViewState | undefined, viewId: string, input: { readonly environmentId: string; readonly destinationPath: string; readonly protocol: CloneProtocol; readonly files: ReadonlyArray<string> }) {
       const source = this.cloneSourceProject(view), url = source?.repositoryIdentity?.locator.remoteUrl, sourceRoot = await this.cloneSourceRoot(view);
       if (!source || !url || !sourceRoot) throw new Error("This window's repository has no Git remote to clone from.");
       const access = this.client.cloneAccess?.(input.environmentId) ?? "unsupported";
@@ -581,7 +627,7 @@ export class HostState {
       const destinationPath = input.destinationPath.trim();
       if (!destinationPath) throw new Error("Choose a destination folder on that machine.");
       if (this.machineProjects(input.environmentId).length) throw new Error("That machine already has this repository.");
-      const allowed = new Set((await this.listCopyableFiles(viewId)).map((file) => file.path));
+      const allowed = new Set((await this.listCopyableFiles(viewId, !view)).map((file) => file.path));
       const files = [...new Set(input.files)].filter((file) => allowed.has(file));
       const calls = this.client.environmentCalls!(input.environmentId);
       await this.ensureCloneStream(input.environmentId);
@@ -590,10 +636,24 @@ export class HostState {
       // The server may publish the clone before this call returns, so an entry already received counts as seen.
       this.cloneCopies.set(projectId, { environmentId: input.environmentId, cwd: result.cwd, sourceRoot, files, phase: "pending",
         ...(this.cloneSnapshots.get(input.environmentId)?.some((entry) => entry.projectId === projectId) ? { seen: true } : {}) });
-      await this.detachPlaceholder(view, viewId, thread);
-      view.draftEnvironmentId = input.environmentId; view.draftProjectId = projectId; view.draftWorkspaceRoot = result.cwd; delete view.workspaceChoice;
-      this.shell = await this.client.snapshotShell().catch(() => this.shell);
-      if (this.cloneSnapshots.get(input.environmentId)?.find((entry) => entry.projectId === projectId)?.phase === "done") void this.copyCloneFiles(projectId);
+      return { projectId, result };
+  }
+  /** Retry or remove a clone started from the Machines list; removing forgets its project there (refused if a thread appeared). */
+  machineCloneAction(environmentId: string, action: string): Promise<void> {
+    return this.enqueue(async () => {
+      const projectId = this.machineClones.get(environmentId), clone = projectId ? this.cloneStatus(environmentId, projectId) : undefined;
+      if (!projectId || !clone) { this.machineClones.delete(environmentId); this.emit(); return; }
+      const calls = this.client.environmentCalls?.(environmentId);
+      if (!calls) throw new Error("This connection cannot reach other machines.");
+      if (action === "cancel") await calls.cancelProjectClone(projectId);
+      else if (action === "retry") {
+        if (clone.phase === "failed" || clone.phase === "cancelled") await calls.retryProjectClone(projectId);
+        else { const copy = this.cloneCopies.get(projectId); if (copy?.phase === "failed") { copy.phase = "pending"; void this.copyCloneFiles(projectId); } }
+      } else if (action === "remove") {
+        // Forgotten here even when that machine already lost the project, so a failed row can always be cleared.
+        try { await calls.deleteProject(projectId); }
+        finally { this.cloneCopies.delete(projectId); this.machineClones.delete(environmentId); this.shell = await this.client.snapshotShell().catch(() => this.shell); this.emit(); }
+      } else throw new Error("Unknown clone action.");
       this.emit();
     });
   }
@@ -2725,6 +2785,7 @@ export class HostState {
         return { id: project.id, title: project.title, workspaceRoot: project.workspaceRoot, ...(remote ? { environmentLabel: remote.label } : {}) }; }),
       ...(activeThreadId && this.remoteThread(activeThreadId) ? { remoteSession: this.remoteThread(activeThreadId)! } : {}),
       ...this.environmentsSection(),
+      ...(() => { const projectMachines = viewId === SIDEBAR_VIEW_ID ? this.projectMachines() : undefined; return projectMachines ? { projectMachines } : {}; })(),
       threads: withSubagentWorkingState(threads.map((thread) => {
         // visibleTurnItems lags each thread's own settled record (#the subagent's child thread
         // settles before the parent's turn item stops showing "Running"), so the roster above
