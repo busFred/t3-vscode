@@ -1,3 +1,4 @@
+import { AuthMcpClientAccess } from "@t3tools/contracts";
 import { conversationPullRequests, pullRequestHost, pullRequestOperations, type PullRequestOperation } from "../shared/pullRequests.js";
 import { peerLinksDenial, peerReachableUrls, type PeerLinksState } from "../shared/peerLinks.js";
 import { peerLinkHealth } from "@t3tools/client-runtime/state/peerLinks";
@@ -87,7 +88,7 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "pullRequestRequest" | "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream" | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext"> & Partial<Pick<T3Client, "linkPeer" | "unlinkPeer">> & { listPeerLinks?: (threadId?: string) => ReturnType<T3Client["listPeerLinks"]> } & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy" | "directEndpoints">> | null }
+export type HostTransport = Pick<T3Client, "pullRequestRequest" | "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream" | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext"> & Partial<Pick<T3Client, "linkPeer" | "unlinkPeer">> & { mintPeerPairingCodeOn?: (environmentId: string, access: import("@t3tools/contracts").AuthMcpClientAccess) => Promise<string> } & { listPeerLinks?: (threadId?: string) => ReturnType<T3Client["listPeerLinks"]> } & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy" | "directEndpoints">> | null }
   // Remote environments: assets and attachments live on the server that owns the conversation.
   & { createAssetUrl(resource: AssetResource, threadId?: string): ReturnType<T3Client["createAssetUrl"]>;
     uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array, environmentId?: string): ReturnType<T3Client["uploadAttachment"]>;
@@ -2003,7 +2004,16 @@ export class HostState {
     const denial = peerLinksDenial(this.client.config);
     if (denial) throw new Error(denial);
     if (!this.client.linkPeer) throw new Error("Linked environments are unavailable.");
-    try { await this.client.linkPeer(input); } catch { throw new Error("Could not link the machine. Check its address and pairing code."); }
+    try {
+      const value = input as { environmentId?: string; pairingCode?: string; access: import("@t3tools/contracts").AuthMcpClientAccess };
+      if (value.environmentId && !value.pairingCode) {
+        const machine = this.peerLinksSnapshot().machines.find(machine => machine.environmentId === value.environmentId && machine.paired);
+        if (!machine || !machine.urls[0] || !this.client.mintPeerPairingCodeOn) throw new Error("Unavailable machine");
+        const access = Schema.decodeUnknownSync(AuthMcpClientAccess)(value.access);
+        const pairingCode = await this.client.mintPeerPairingCodeOn(machine.environmentId, access);
+        await this.client.linkPeer({ url: machine.urls[0], alternateUrls: machine.urls.slice(1), expectedEnvironmentId: machine.environmentId, expectedLabel: machine.label, access, pairingCode });
+      } else await this.client.linkPeer(input);
+    } catch { throw new Error("Could not link the machine. Check its address and pairing code."); }
     await this.refreshPeerLinks();
   }
   async unlinkPeer(environmentId: string): Promise<void> {

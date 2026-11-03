@@ -53,6 +53,7 @@ class FakeClient {
   async getThreadProjection(id: string) { this.log("getThreadProjection", id); return { from: this.name }; }
   async dispatch(input: unknown) { this.log("dispatch", input); }
   async listPeerLinks() { this.log("listPeerLinks"); return { links: [] }; }
+  async mintPeerPairingCode(access: unknown) { this.log("mintPeerPairingCode", access); return "host-only-code"; }
   async linkPeer(input: unknown) { this.log("linkPeer", input); }
   async unlinkPeer(input: unknown) { this.log("unlinkPeer", input); }
   async answerLinkRequest(input: unknown) { this.log("answerLinkRequest", input); }
@@ -564,4 +565,16 @@ test("Subagent Stop and pinned reorders dispatch to the owning environment", asy
   await r.multi.dispatch(stop); await r.multi.dispatch(pin);
   assert.deepEqual(remote.callsNamed("dispatch").map(([, input]) => input), [stop, pin]);
   assert.equal(r.primary.callsNamed("dispatch").length, 0);
+});
+
+
+test("Minting targets only the selected connected machine, never local fallback", async t => {
+  const r = await rig({ reconnectDelayMs: 60000 }); t.after(() => r.multi.disconnect());
+  const remote = await pair(r, "build", shell([], []));
+  assert.equal(await r.multi.mintPeerPairingCodeOn("build", "read-only"), "host-only-code");
+  assert.deepEqual(remote.callsNamed("mintPeerPairingCode"), [["mintPeerPairingCode", "read-only"]]);
+  remote.close();
+  await assert.rejects(r.multi.mintPeerPairingCodeOn("build", "read-only"), /disconnected/);
+  await assert.rejects(r.multi.mintPeerPairingCodeOn("missing", "read-only"), /no longer paired/);
+  assert.equal(r.primary.callsNamed("mintPeerPairingCode").length, 0);
 });

@@ -53,7 +53,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.7 |
-| [Remote environments](#remote-environments) | Pairs other machines by link, lists their matching-repository sessions, starts new chats on them (including their worktrees) from a Run on chip, and clones the repository onto machines that lack it. | v0.3.0 | v0.3.7 |
+| [Remote environments](#remote-environments) | One Machines list shows Conversations and agent access independently; add either or both, start remote chats with Run on, and clone missing repositories. | v0.3.0 | Unreleased (after v0.3.7) |
 | [Managed policy](#managed-policy) | Shows the managing organization and applies server policy restrictions. | v0.3.7 | v0.3.7 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
@@ -1507,6 +1507,13 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - Keep local discovery through the T3 home unchanged. Add pairing of other machines by link; see [Remote environments](#remote-environments).
 
 ### Remote environments
+
+#### Unreleased (after v0.3.7)
+
+- Merge conversation machines and T3 agent connections by environment identity into one **Machines** list. Each row shows **Conversations** and **Agents can use · access** independently; this computer never offers agent access to itself. Machines with only agent access remain visible, with **Pair to see conversations**.
+- **Add machine…** asks for an address, then Conversations / Let agents use it (both default on when allowed), agent access and a fresh code. Adding both signs in for conversations first, then mints a separate code for agent access; a partial failure keeps the conversation capability.
+- **Let agents use this…** on a conversation machine needs only an access choice. Mint codes through that specific machine’s authenticated session, entirely in the host; disconnected targets cannot fall through to this computer. Manual code entry remains a fallback. Preserve confirmed removal of agent access and upstream setting / policy explanations.
+- Validation: pure merge and rendering tests cover local only, conversations only, agents only and both; fake-transport tests cover minted/manual linking, removal, masked failures, host-only codes and disconnected routing. Browser fixtures cover the merged list and add flow. No installer or release was requested.
 
 #### v0.3.7
 

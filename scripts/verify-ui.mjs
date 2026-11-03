@@ -179,6 +179,29 @@ try {
   await page.getByRole("textbox", { name: "Search threads" }).waitFor();
   assert.equal(await page.locator('.account-usage').evaluate(element => element.open), false);
   assert.equal(await page.getByRole("button", { name: "Chat", exact: true }).count(), 0);
+  await page.evaluate(() => window.__replace({
+    environments: { local: { label: "Local workstation", host: "localhost" }, indicator: "ok", rows: ["both", "conversations"].map(environmentId => ({ environmentId, label: environmentId === "both" ? "Build machine" : "Conversation machine", host: `${environmentId}.example`, status: "connected", expiresAt: null, ignored: false })) },
+    peerLinks: { environmentId: "fixture", loaded: true, machines: [{ environmentId: "both", label: "Build machine", urls: ["https://both.example"], paired: true, linked: true }], links: [{ environmentId: "both", label: "Build machine", status: "reachable", access: "read-only", paired: true }, { environmentId: "vps", label: "Agent VPS", status: "reachable", access: "approval-required", paired: false }] }
+  }));
+  await page.locator('.environments summary').click();
+  assert.equal(await page.locator('.environments .env-row').count(), 4);
+  assert.equal(await page.locator('.environments .env-chip').filter({ hasText: /^Conversations$/ }).count(), 3);
+  assert.equal(await page.locator('.environments .env-chip').filter({ hasText: /Agents can use/ }).count(), 2);
+  const localMachine = page.locator('.environments .env-row').filter({ hasText: 'Local workstation' });
+  assert.equal(await localMachine.getByText('Let agents use this…').count(), 0);
+  await page.screenshot({ path: `${evidence}/machines-merged.png` });
+  await page.getByRole('button', { name: 'Let agents use this…', exact: true }).click();
+  assert.equal(await page.getByLabel('Pairing code', { exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Let agents use this', exact: true }).click();
+  await page.waitForFunction(() => window.__requests.some(request => request.method === 'linkPeer' && request.params.environmentId === 'conversations' && !request.params.pairingCode));
+  await page.getByRole('button', { name: 'Add machine…', exact: true }).click();
+  await page.getByLabel('Machine address', { exact: true }).fill('https://new.example');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  assert.equal(await page.getByLabel('Conversations in VS Code', { exact: true }).isChecked(), true);
+  assert.equal(await page.getByLabel('Let agents use it', { exact: true }).isChecked(), true);
+  await page.screenshot({ path: `${evidence}/machines-add.png` });
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.evaluate(() => window.__replace({ environments: undefined, peerLinks: undefined }));
   await page.evaluate(() => { document.body.dataset.surface = "panel"; window.__replace({}); });
   await page.getByRole("textbox", { name: "Search threads" }).waitFor({ state: "hidden" });
   await page.screenshot({ path: `${evidence}/chat-sidebar.png` });

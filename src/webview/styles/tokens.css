@@ -984,3 +984,9 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .session-tree-row:has(> .subagent-stop) { position: relative; padding-right: 24px; }
 .session-tree-row > .subagent-stop { position: absolute; right: 0; top: 0; bottom: 0; width: 24px; padding: 0; }
 .pin-drop-end { padding: 8px; border: 1px dashed var(--border); font-size: .75rem; }
+
+.machine-capabilities { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px 8px; white-space: normal; overflow: visible; }
+.machine-capabilities form, .machine-capabilities > div { flex-basis: 100%; min-width: 0; }
+.environments fieldset { min-width: 0; margin: 4px 0; border: 0; padding: 0; }
+.environments fieldset label { display: block; margin: 6px 0; }
+.environments fieldset input:not([type=checkbox]) { width: 100%; box-sizing: border-box; }

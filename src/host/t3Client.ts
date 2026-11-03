@@ -1,3 +1,4 @@
+import { mintPeerPairingCode } from "./peerPairingCode.js";
 import { signInRequired, type PullRequestOperation, type PullRequestResponse } from "../shared/pullRequests.js";
 import { linkRequestFailureMessage } from "@t3tools/client-runtime/link-request";
 import { peerLinksDenial } from "../shared/peerLinks.js";
@@ -197,6 +198,12 @@ export class T3Client {
       await this.run(this.requireSession().client[WS_METHODS.peerLinksLink](payload).pipe(
         Effect.catchCause(() => Effect.fail(new Error("Could not link the machine. Check its address and pairing code.")))));
     } catch { throw new Error("Could not link the machine. Check its address and pairing code."); }
+  }
+  /** Minted with the user's own session on the machine being linked to; only the linking (local) side gates on its link setting and policy. */
+  async mintPeerPairingCode(access: import("@t3tools/contracts").AuthMcpClientAccess): Promise<string> {
+    this.requireSession();
+    if (!this.server || !this.accessToken) throw new Error("That machine is disconnected.");
+    return mintPeerPairingCode(this.server.origin, this.accessToken, access);
   }
   async unlinkPeer(input: unknown): Promise<void> {
     this.requirePeerLinks();

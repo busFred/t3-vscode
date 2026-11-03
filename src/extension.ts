@@ -83,6 +83,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     newWorktreeChat: (id, projectId, choice) => provider.createNewPanel(id, projectId, choice),
     editScheduledTask: (request, preview) => provider.editScheduledTask(request, preview),
     showUsage: (id, key) => provider.showUsage(key, id), configureUsage: () => meters.configure(),
+    addMachine: (input) => environmentControls.addMachine(input),
     environmentAction: (action, environmentId) => environmentControls.environmentAction(action, environmentId),
   });
   provider = new T3WebviewProvider(context.extensionUri, registry, bridge, hostState, context.workspaceState);

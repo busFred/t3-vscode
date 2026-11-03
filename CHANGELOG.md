@@ -2,6 +2,9 @@
 
 ## Unreleased (after v0.3.7)
 
+- Replace separate machine lists with one Machines list, showing Conversations and agent access independently.
+- Add either or both capabilities in one address-first flow; enable agent access for an existing conversation machine using a host-only minted code, with manual code fallback.
+- Preserve connection actions, policy explanations and confirmed removal of agent access.
 - Faster sidebar and transcript updates with many sessions and while replies stream; hidden views no longer receive updates until shown.
 
 ## 0.3.7 — Release

@@ -1,3 +1,7 @@
+import { peerLinksDenial, peerReachableUrls } from "../shared/peerLinks.js";
+import { mintPeerPairingCode } from "./peerPairingCode.js";
+import { AuthMcpClientAccess } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 /** Commands that pair, enable, disable and remove remote T3 environments. */
 import * as vscode from "vscode";
 import { EnvironmentCatalog, EnvironmentPairingError, pairRemoteEnvironment } from "./environmentCatalog.js";
@@ -9,7 +13,7 @@ const stateLabel = { connecting: "Connecting…", connected: "Connected", error:
 
 export function registerEnvironmentCommands(input: {
   readonly catalog: EnvironmentCatalog; readonly client: MultiEnvironmentClient; readonly localEnvironmentId: () => string | undefined;
-}): { readonly environmentAction: (action: string, environmentId?: string) => Promise<void>; readonly clearRecoveredIgnores: () => void; readonly disposables: vscode.Disposable[] } {
+}): { readonly addMachine: (input: unknown) => Promise<void>; readonly environmentAction: (action: string, environmentId?: string) => Promise<void>; readonly clearRecoveredIgnores: () => void; readonly disposables: vscode.Disposable[] } {
   const { catalog, client } = input;
   const addEnvironment = async () => {
     const link = await vscode.window.showInputBox({
@@ -26,6 +30,32 @@ export function registerEnvironmentCommands(input: {
     } catch (cause) {
       void vscode.window.showErrorMessage(`T3 VSCode: ${cause instanceof EnvironmentPairingError ? cause.message : "Pairing failed. Create a new link and try again."}`);
     }
+  };
+  const addMachine = async (value: unknown): Promise<void> => {
+    const request = value as { address: string; code: string; conversations: boolean; agents: boolean; access: unknown; environmentId?: string };
+    if (!request.conversations && !request.agents) throw new Error("Choose a capability.");
+    if (request.agents) {
+      const denial = peerLinksDenial(client.config);
+      if (denial) throw new Error(denial);
+    }
+    try {
+      const access = Schema.decodeUnknownSync(AuthMcpClientAccess)(request.access);
+      const address = new URL(request.address);
+      if (!["https:", "http:"].includes(address.protocol) || address.username || address.password || address.search || address.hash) throw new Error("Invalid address");
+      if (request.conversations) {
+        const pairingUrl = new URL("pair", `${address.href.replace(/\/$/, "")}/`);
+        pairingUrl.hash = `token=${encodeURIComponent(request.code)}`;
+        const record = await pairRemoteEnvironment(pairingUrl.href, { ...(input.localEnvironmentId() ? { localEnvironmentId: input.localEnvironmentId()! } : {}), ...(request.environmentId ? { expectedEnvironmentId: request.environmentId } : {}) });
+        await catalog.upsert(record);
+        if (request.agents) {
+          // The local T3 server dials this address itself, so loopback or tunnel addresses are not usable for it.
+          const urls = peerReachableUrls([...(client.configForEnvironment?.(record.environmentId)?.directEndpoints ?? []).map(endpoint => endpoint.httpBaseUrl), record.httpBaseUrl]);
+          if (!urls[0]) throw new Error("No address the local server can reach");
+          const pairingCode = await mintPeerPairingCode(record.httpBaseUrl, record.accessToken, access);
+          await client.linkPeer({ url: urls[0], alternateUrls: urls.slice(1), expectedEnvironmentId: record.environmentId, expectedLabel: record.label, pairingCode, access });
+        }
+      } else await client.linkPeer({ url: address.href, pairingCode: request.code, access });
+    } catch { throw new Error("Could not finish adding capabilities. Conversations already added are kept. Check the address and use a fresh code."); }
   };
   const removeEnvironment = async (environmentId: string) => {
     const record = (await catalog.list()).find((entry) => entry.environmentId === environmentId);
@@ -89,7 +119,7 @@ export function registerEnvironmentCommands(input: {
       if (recovered && status.ignoredStatus === "reconnecting") void catalog.setIgnored(status.environmentId, null).catch(() => undefined);
     }
   };
-  return { environmentAction, clearRecoveredIgnores, disposables: [
+  return { addMachine, environmentAction, clearRecoveredIgnores, disposables: [
     vscode.commands.registerCommand("t3-vscode.addEnvironment", addEnvironment),
     vscode.commands.registerCommand("t3-vscode.manageEnvironments", manageEnvironments),
   ] };
