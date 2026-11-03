@@ -1,12 +1,12 @@
 # Changelog
 
-## 0.3.9 — Local build
+## 0.3.9 — Release
 
 - Machines: one remove menu per machine that asks whether to remove the conversations from VS Code or the agent access, describing each; an ⓘ replaces the standing description; chips read "Agents (Auto)"; roomier rows.
 - Account & Usage: only Per account folds usage windows; Pooled no longer folds.
-- Validation: typecheck clean; 728/728 unit tests; `pnpm run build`; `scripts/verify-ui.mjs` passes, with new remove-menu, chip, info-icon, focus-return and Pooled no-fold checks. Fresh-context Opus regression review: APPROVE WITH NITS, and all five nits are fixed (menu anchoring and focus on reconnecting rows, in-flight unlink, wording, info-icon name). Not exercised in a live VS Code window. Local installer `target-installer/t3-vscode-0.3.9.vsix` (SHA-256 `38f8afb21d3f37e4fb7f9d5a57b4a324ad409b2b1fd63f960c0145bef68eef52`), not installed or published.
+- Validation: typecheck clean; 728/728 unit tests; `pnpm run build`; `scripts/verify-ui.mjs` passes, with new remove-menu, chip, info-icon, focus-return and Pooled no-fold checks. Fresh-context Opus regression review: APPROVE WITH NITS, and all five nits are fixed (menu anchoring and focus on reconnecting rows, in-flight unlink, wording, info-icon name). Not exercised in a live VS Code window. The published VSIX checksum is recorded in docs/publishing.md.
 
-## 0.3.8 — Local build
+## 0.3.8 — Local build (not published; its changes ship in 0.3.9)
 
 - Replace separate machine lists with one Machines list, showing Conversations and agent access independently.
 - Add either or both capabilities in one address-first flow; enable agent access for an existing conversation machine using a host-only minted code, with manual code fallback.
@@ -14,7 +14,7 @@
 - Keep the Account & Usage, Machines and Sessions titles in view however long their lists are; drag or use the keyboard to adjust the Machines list height.
 - Fold usage windows (Session, Week, Fable, Month…) when a provider reports more than one; tighter usage and machine rows.
 - Faster sidebar and transcript updates with many sessions and while replies stream; hidden views no longer receive updates until shown.
-- Validation: typecheck clean; 727/727 unit tests; `pnpm run build`; `scripts/verify-ui.mjs` passes, with new Machines, pinned-section, resize, compact and folding fixtures. Each feature had a fresh-context Opus regression review: performance and Machines APPROVE after fixes; pinned sections BLOCK → fixed → APPROVE WITH NITS (nit fixed); foldable usage APPROVE WITH NITS (all fixed). Not exercised in a live VS Code window; live minting against a second machine not run. Local installer `target-installer/t3-vscode-0.3.8.vsix` (SHA-256 `ee2f08c350e81f3a0a807fbe000620d95a3d8b596c1abd54902b536a5da8919e`), not installed or published.
+- Validation: typecheck clean; 727/727 unit tests; `pnpm run build`; `scripts/verify-ui.mjs` passes, with new Machines, pinned-section, resize, compact and folding fixtures. Each feature had a fresh-context Opus regression review: performance and Machines APPROVE after fixes; pinned sections BLOCK → fixed → APPROVE WITH NITS (nit fixed); foldable usage APPROVE WITH NITS (all fixed). Not exercised in a live VS Code window; live minting against a second machine not run. Local installer only.
 
 ## 0.3.7 — Release
 
