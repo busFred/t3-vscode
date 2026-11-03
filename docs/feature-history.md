@@ -9,7 +9,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
 | [Sessions sidebar](#sessions-sidebar) | Session manager with tags, pinned ordering, a Snoozed shelf and chat in editor tabs. | v0.0.7 | v0.3.10 |
-| [Scheduled task management](#scheduled-task-management) | Machine-grouped project/session task lists, once and webhook schedules, and independent editor tabs. | v0.1.16 | v0.3.11 |
+| [Scheduled task management](#scheduled-task-management) | Machine-grouped project/session task lists, once and webhook schedules, and independent editor tabs. | v0.1.16 | v0.3.10 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
 | [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | v0.3.7 |
@@ -67,7 +67,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Markdown composer tools](#markdown-composer-tools) | Literal formatting, selection wrapping, automatic numbering, indentation and undo. | v0.1.13 | v0.1.21 |
 | [Message timestamps](#message-timestamps) | Recorded local date/time beside each message’s footer actions; extension-wide Date Format and Time Format settings. | v0.1.22 | v0.3.3 |
 | [Dense transcript spacing](#dense-transcript-spacing) | Compact gaps, one author per run and unobtrusive message actions. | v0.1.13 | v0.1.22 |
-| [Worktree management](#worktree-management) | Machine-grouped checkouts, creation, import, parallel runs, review, selected-file apply and session branch policies. | v0.2.0 | v0.3.11 |
+| [Worktree management](#worktree-management) | Machine-grouped checkouts, creation, import, parallel runs, review, selected-file apply and session branch policies. | v0.2.0 | v0.3.10 |
 | [Worktree environments and settings](#worktree-environments-and-settings) | Service-backed native settings, extension-owned Python environments per checkout and a default session branch policy. | v0.2.0 | v0.3.7 |
 
 ## Sessions and navigation
@@ -189,7 +189,7 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 
 ### Scheduled task management
 
-#### v0.3.11
+#### v0.3.10
 
 - Replace the Project dropdown with machine shelves using saved fold state and machine-targeted new-task actions; show project headings only for multi-root machines.
 - Remote scheduled tasks are explicitly unavailable in this view; no remote task action can reach the local store. Repeated project names in other pickers show the machine name.
@@ -1002,7 +1002,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Worktree management
 
-#### v0.3.11
+#### v0.3.10
 
 - Group by machine name, with repository headings only for machines with several repositories. **Machines** replaces **Groups**; visibility remains workspace-scoped and old repository preferences reset.
 - Load paired-machine checkouts through their own server on tab activation and refresh. Keep cached rows and show errors when disconnected; hide local-only checkout management and settings on remote machines.
