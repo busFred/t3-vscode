@@ -284,6 +284,10 @@ The owner reviewed these and chose to ship as they are. None is a regression aga
 - On November 3, 2026 the owner said “release” for the reviewed 0.3.11 test build, which they define as: merge to `main`, push, tag, GitHub release and Marketplace publication. Channel: stable release (`preview: false`). Comparison revision: `v0.3.10`.
 - Scope: remote delegated tasks stay nested under a loaded parent whose windowed history omits them (`bf3d827`), with a dedupe/Stop test (`185e146`).
 - Validation: typecheck clean; 741/741 unit tests; fresh-context Opus regression review against `v0.3.10`: APPROVE WITH NITS (nit applied; native undo unaffected). Real VS Code `verify-edh.mjs --undo-only` 11/11 PASS on the exact source in invisible Xvfb; no waiver.
+- Fresh-context release review (Sonnet) of `v0.3.10..a1df563`: APPROVE; manifest changes only the version, source scope is the fix and two tests, native-undo code and guards untouched, `git diff --check` clean. Its nits (record commit, checksum and readbacks here) are applied below.
+- Published from clean `main` source commit `a1df563dd9cff63aec7218675690d9648984c9b3`. The 45-file VSIX has version `0.3.11`, publisher `hungtienhuang`, `preview: false`, no prerelease property; packaging accepted the native-undo stamp without a waiver. SHA-256: `150fa79c5476f398abf32c796c5304bdb2a24c6641908040d19e718d4f47132d`.
+- `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.11.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.11.` The Marketplace package endpoint serves the same checksum (after gzip transfer decoding). Immediate `vsce show` readback still listed 0.3.10, so listing propagation was pending. No Marketplace installation was attempted.
+- Pushed `main` and annotated tag `v0.3.11` atomically to `origin`; the tag points at the source commit above. Created https://github.com/busFred/t3-vscode/releases/tag/v0.3.11 (public, not draft, not prerelease) with the VSIX and `.sha256`; the VSIX asset digest matches.
 
 ## 0.3.10 release-channel publication
 

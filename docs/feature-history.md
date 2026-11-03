@@ -516,6 +516,7 @@ Session resources retain the current History selection for restoration. Opening 
 
 - Keep finished tasks delegated to another machine beneath their parent after the parent is opened. A long parent's history arrives windowed (only running tasks and tasks from recent runs), so older completed remote tasks dropped out of the parent's task list and their conversations showed as top-level sessions. Children that name their parent (`delegatedFrom`) are now always nested; the parent's own task record still wins when present.
 - Validation: typecheck clean; 741/741 unit tests plus a dedupe/Stop test for a child named by both the task list and `delegatedFrom`; the new windowed-parent test fails without the fix. Fresh-context Opus regression review against `v0.3.10`: APPROVE WITH NITS, native undo unaffected; its missing-test nit was applied. Accepted: a child whose task was removed from the parent still nests by `delegatedFrom`, as it already did before the parent loaded. Real VS Code native-undo gate (`verify-edh.mjs --undo-only`, invisible Xvfb, rich fixture seeded): 11/11 PASS on the exact source. Local test VSIX `target-installer/t3-vscode-0.3.11.vsix` built; not installed or published.
+- Published v0.3.11 to the stable channel from `a1df563` on November 3, 2026; annotated tag and GitHub release carry the exact VSIX and checksum, and the Marketplace package digest matches. See [publication record](publishing.md#0311-release-channel-publication).
 
 #### v0.3.7
 
