@@ -6,7 +6,7 @@ import { compareSessions } from "../../shared/sessionSort";
 import { UserIcon } from "lucide-react";
 import { useDateTimeFormat } from "../timeFormat";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArchiveIcon, CheckIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, SettingsIcon, RefreshCwIcon, XIcon, MessageCircleQuestionIcon, CircleDashedIcon, HourglassIcon, LoaderCircleIcon, ChevronRightIcon, CircleXIcon, CircleStopIcon, BotIcon, ArrowDownUpIcon, ServerIcon, WandSparklesIcon, AlarmClockIcon, CircleCheckIcon } from "lucide-react";
+import { ArchiveIcon, CheckIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, SettingsIcon, RefreshCwIcon, XIcon, MessageCircleQuestionIcon, CircleDashedIcon, HourglassIcon, LoaderCircleIcon, ChevronRightIcon, CircleXIcon, CircleStopIcon, BotIcon, ArrowDownUpIcon, ServerIcon, WandSparklesIcon, AlarmClockIcon, CircleCheckIcon, TagIcon } from "lucide-react";
 import { snoozeWakeLabel } from "@t3tools/client-runtime/state/thread-settled";
 import type { HostStateSnapshot, ThreadSearchMatch, ThreadSummary } from "../../shared/bridge";
 import { searchThreads } from "../../shared/composerSuggestions";
@@ -14,6 +14,7 @@ import { useActions } from "../actions";
 import { useBridgeQuery } from "../useBridgeQuery";
 import { ThreadActionsMenu } from "./ThreadActionsMenu";
 import { ScheduledTaskRows } from "./ScheduledTaskList";
+import { SessionTagMenu } from "./SessionTagMenu";
 import { SessionSortMenu } from "./SessionSortMenu";
 import { useSessionSort } from "../sessionSortPreference";
 import { SESSION_SORTS } from "../../shared/sessionSort";
@@ -40,7 +41,13 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   const [sortOpen, setSortOpen] = useState(false);
   const sortAnchor = useRef<HTMLButtonElement>(null);
   const closeSort = useCallback(() => setSortOpen(false), []);
-  const [tagFilter, setTagFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState<ReadonlySet<string>>(new Set());
+  const [tagOpen, setTagOpen] = useState(false);
+  const tagAnchor = useRef<HTMLButtonElement>(null);
+  const closeTags = useCallback(() => setTagOpen(false), []);
+  const tags = [...new Set(state.threads.flatMap(thread => thread.tags ?? []))].sort();
+  const hiddenEnvironments = [...new Map(state.threads.filter(thread => thread.hiddenThreadTags?.length).map(thread => [thread.environmentId ?? "local", thread])).values()];
+  const tagLabel = tagFilter.size ? `Filter by tag: ${[...tagFilter].sort().join(", ")}` : "Filter by tag";
   const [draggingPin, setDraggingPin] = useState<string | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
   const [stopping, setStopping] = useState<string | null>(null);
@@ -139,12 +146,10 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   return <aside className={compact ? "compact-history" : "projects-sidebar dedicated-sessions"} aria-label={compact ? "Conversation history" : "Sessions"}>
     {compact ? <div className="history-heading"><strong>History</strong><span>Current workspace</span></div> : null}
     <div className="sidebar-search-row"><label className="thread-search thread-search-with-clear"><SearchIcon size={14} /><input placeholder="Search conversations…" aria-label="Search threads" value={search} onChange={(event) => setSearch(event.target.value)} /><button className="icon-button thread-search-clear" aria-label="Clear search" disabled={!search} style={{ visibility: search ? "visible" : "hidden" }} onClick={() => setSearch("")}><XIcon size={13} /></button></label>
-      {compact ? null : <button ref={sortAnchor} className="icon-button sidebar-search-add" aria-label="Sort sessions" aria-haspopup="menu" aria-expanded={sortOpen} title={`Sort sessions: ${SESSION_SORTS.find(option => option.value === sort)!.label} (date uses last activity)`} onClick={() => { setSortOpen(!sortOpen); setMenu(null); }}><ArrowDownUpIcon size={15} /></button>}
+      {compact ? null : <button ref={tagAnchor} className="icon-button sidebar-search-add" aria-label={tagLabel} title={tagLabel} aria-pressed={tagFilter.size > 0} aria-haspopup="menu" aria-expanded={tagOpen} onClick={() => { setTagOpen(!tagOpen); setSortOpen(false); setMenu(null); }}><TagIcon size={15} /></button>}
+      {compact ? null : <button ref={sortAnchor} className="icon-button sidebar-search-add" aria-label="Sort sessions" aria-haspopup="menu" aria-expanded={sortOpen} title={`Sort sessions: ${SESSION_SORTS.find(option => option.value === sort)!.label} (date uses last activity)`} onClick={() => { setSortOpen(!sortOpen); setTagOpen(false); setMenu(null); }}><ArrowDownUpIcon size={15} /></button>}
       {/* Each tab renders its own +, so the name follows the visible list instead of a shared button mutating behind it. */}
       {compact ? null : <button className="icon-button sidebar-search-add" aria-label="New thread" title="Open New Chat in Editor Tab" onClick={() => { void run("newChatTab"); }}><PlusIcon size={15} /></button>}</div>
-    {!compact ? <div className="thread-tag-filters"><label>Tag <select aria-label="Filter threads by tag" value={tagFilter} onChange={(event) => setTagFilter(event.target.value)}><option value="">All tags</option>{[...new Set(state.threads.flatMap(thread => thread.tags ?? []))].sort().map(tag => <option key={tag} value={tag}>{tag}</option>)}</select></label>
-      {[...new Map(state.threads.filter(thread => thread.hiddenThreadTags?.length).map(thread => [thread.environmentId ?? "local", thread])).values()].map(thread => <label key={thread.environmentId ?? "local"} title={thread.hiddenThreadTags?.join(", ")}><input type="checkbox" checked={thread.hideTaggedThreads ?? false} onChange={() => { void run("threadAction", { threadId: thread.id, action: "toggle-tag-hiding" }); }} />Hide tagged threads{thread.environmentLabel ? ` · ${thread.environmentLabel}` : ""}</label>)}
-    </div> : null}
     {hits.pending ? <p className="search-status" role="status">Searching messages…</p> : hits.error ? <p className="search-status turn-error" role="status">{hits.error}</p> : null}
     <div className="thread-sections"><nav className="session-list" aria-label="Active conversations">
       {active.map((node) => treeRow(node, "active"))}
@@ -158,6 +163,7 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
       <details className="history-shelf" open={archiveOpen} onToggle={(event) => { const open = event.currentTarget.open; setArchiveOpen(open); if (open && !state.archiveLoaded) void run("loadArchive"); }}><summary><ArchiveIcon size={13} /><span>Archive</span><span className="shelf-count">{state.archiveLoading ? <LoaderCircleIcon size={12} className="animate-spin" aria-label="Loading archive" /> : state.archiveLoaded ? archived.length : null}</span></summary><div>{state.archiveError ? <p className="empty-list" role="status">Could not load archive. <button className="text-button" onClick={() => { void run("loadArchive"); }}>Retry</button></p> : null}{archived.map((node) => treeRow(node, "archive"))}{state.archiveLoaded && !state.archiveLoading && !state.archiveError && !archived.length ? <p className="empty-list">No archived threads.</p> : null}</div></details>
     </div></div>
     {compact ? <div className="history-picker-hint">Switch this tab · drafts stay with each conversation</div> : <div className="history-settings"><button className="icon-button" aria-label="T3 VSCode settings" title="T3 VSCode settings" onClick={onAppearance}><SettingsIcon size={15} /></button><span>Current workspace only</span><button className="icon-button" aria-label="Refresh connection" title="Reconnect" onClick={() => { void run("reconnect"); }}><RefreshCwIcon size={14} /></button></div>}
+    {tagOpen && tagAnchor.current ? <SessionTagMenu anchor={tagAnchor.current} tags={tags} selected={tagFilter} onChange={setTagFilter} environments={hiddenEnvironments} onToggle={threadId => { void run("threadAction", { threadId, action: "toggle-tag-hiding" }); }} onClose={closeTags} /> : null}
     {sortOpen && sortAnchor.current ? <SessionSortMenu anchor={sortAnchor.current} value={sort} onChange={setSort} onClose={closeSort} /> : null}
     {menu && menuThread ? <ThreadActionsMenu thread={menuThread} workspaceRoot={state.projects.find((project) => project.id === menuThread.projectId)?.workspaceRoot} position={menu} onClose={closeMenu} /> : null}
   </aside>;

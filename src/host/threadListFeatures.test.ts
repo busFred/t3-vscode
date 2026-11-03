@@ -38,12 +38,13 @@ test("Server tag hiding follows parent lineage and settings, while explicit side
   })) };
   client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
   assert.deepEqual(filterThreadListTags(host.snapshot().threads).map(thread => thread.id), ["third"]);
-  assert.deepEqual(filterThreadListTags(host.snapshot().threads, "private").map(thread => thread.id), ["third"]);
-  assert.deepEqual(filterThreadListTags(host.snapshot().threads, "Private"), []);
+  assert.deepEqual(filterThreadListTags(host.snapshot().threads, ["private"]).map(thread => thread.id), ["third"]);
+  assert.deepEqual(filterThreadListTags(host.snapshot().threads, ["Private"]), []);
   client.config = { ...client.config, settings: { ...client.config.settings!, hideTaggedThreads: false } };
   client.onConfig?.(client.config as never);
   assert.equal(filterThreadListTags(host.snapshot().threads).length, 3);
-  assert.deepEqual(filterThreadListTags(host.snapshot().threads, "Private").map(thread => thread.id), ["first", "second"]);
+  assert.deepEqual(filterThreadListTags(host.snapshot().threads, new Set(["Private", "private"])).map(thread => thread.id), ["first", "second", "third"]);
+  assert.deepEqual(filterThreadListTags(host.snapshot().threads, ["Private"]).map(thread => thread.id), ["first", "second"]);
 });
 
 test("Tag visibility updates use the owning server settings without discarding existing tags", async (t) => {

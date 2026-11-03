@@ -104,7 +104,11 @@ select, input { color: inherit; background: var(--card); }
 .thread-match { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thread-match { font-size: 0.625rem; color: var(--primary); }
 .search-status { margin: 0; padding: 2px 8px; font-size: 0.6875rem; }
-.history-shelves { max-height: 45%; overflow: auto; flex-shrink: 0; }
+.history-shelves { max-height: 45%; flex-shrink: 0; }
+.dedicated-sessions .history-shelves { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.dedicated-sessions .history-shelf[open] { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
+.dedicated-sessions .history-shelf > summary { flex-shrink: 0; }
+.dedicated-sessions .history-shelf::details-content { flex: 1 1 0; min-height: 0; overflow: auto; }
 .history-shelf { border-top: 1px solid var(--border); }
 .history-shelf > summary { display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 7px 8px; font-size: 0.75rem; }
 .history-shelf > summary::after { content: "›"; }
@@ -965,9 +969,10 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 /* Thread-list tags and accessible pin handles. */
 .thread-tags { display: flex; gap: 4px; flex-wrap: wrap; padding-top: 2px; }
 .thread-tag { border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: .6875rem; overflow-wrap: anywhere; }
-.thread-tag-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px; font-size: .75rem; }
-.thread-tag-filters label { display: flex; align-items: center; gap: 4px; }
-.thread-tag-filters select { max-width: 160px; }
+.sidebar-search-add[aria-pressed="true"] { color: var(--vscode-inputOption-activeForeground, var(--primary)); background: var(--vscode-inputOption-activeBackground, var(--muted)); outline: 1px solid var(--vscode-inputOption-activeBorder, var(--ring)); outline-offset: -1px; }
+.session-tag-menu { max-height: min(70vh, 400px); overflow: auto; }
+.tag-menu-hint { max-width: 220px; padding: 4px 8px; color: var(--muted-foreground); font-size: .75rem; }
+.tag-menu-separator { border-top: 1px solid var(--border); margin: 4px 0; }
 .pin-grip { flex-shrink: 0; cursor: grab; }
 .thread-tag-dialog { position: fixed; inset: 20% 8% auto; padding: 12px; background: var(--card); border: 1px solid var(--input); border-radius: 4px; z-index: 100; }
 .thread-tag-dialog form { display: flex; flex-wrap: wrap; gap: 8px; }

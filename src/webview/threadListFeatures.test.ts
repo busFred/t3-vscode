@@ -14,3 +14,15 @@ test("Queue rows offer Send now for idle or steerable turns, retaining edit/canc
   const html = renderToStaticMarkup(createElement(ConversationActivity, { state: { ...state, queue: { ...state.queue!, canSendNow: false, canSteer: false } } }));
   assert.doesNotMatch(html, /Send now/);
 });
+
+test("Tag filtering matches any selected tag and inherits parent visibility", async () => {
+  const { filterThreadListTags } = await import("../shared/threadListTags");
+  const threads = [
+    { id: "work", tags: ["work"] },
+    { id: "child", parentThreadId: "work", relationshipToParent: "subagent", tags: ["other"] },
+    { id: "review", tags: ["review"] },
+    { id: "other", tags: ["other"] },
+  ] as unknown as HostStateSnapshot["threads"];
+  assert.deepEqual(filterThreadListTags(threads, ["work", "review"]).map(thread => thread.id), ["work", "child", "review"]);
+  assert.equal(filterThreadListTags(threads, []).length, 4);
+});

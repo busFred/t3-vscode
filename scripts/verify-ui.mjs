@@ -155,7 +155,8 @@ try {
   await page.getByLabel("Browser", { exact: false }).check();
   await page.getByRole("textbox", { name: "Answer: Checks" }).fill("real server");
   await page.getByRole("button", { name: "Submit answers" }).click();
-  assert.deepEqual(await page.evaluate(() => window.__requests.findLast((request) => request.method === "respondToRequest").params.answers.checks), ["browser", "real server"]);
+  // T3's pending-input rules: a typed answer replaces checked options, even on multi-select questions.
+  assert.equal(await page.evaluate(() => window.__requests.findLast((request) => request.method === "respondToRequest").params.answers.checks), "real server");
   await page.setViewportSize({ width: 360, height: 820 });
   await page.evaluate(() => { document.body.dataset.surface = "sidebar"; window.__replace({}); });
   await page.getByRole("button", { name: "Server integration checks", exact: true }).click();
@@ -566,6 +567,24 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.evaluate(() => { document.documentElement.style.fontSize = '16px'; });
   assert.equal(await page.locator('.project-heading').count(), 0);
   assert.equal(await page.locator('.session-list > .session-tree-node').count() > 0, true);
+  // Tag filters are multi-select and sit directly before sort.
+  await page.evaluate(() => window.__replace({ threads: window.__state.threads.map(thread => ({ ...thread, tags: thread.id === 'thread-one' ? ['work'] : thread.id === 'thread-two' ? ['review'] : [] })) }));
+  const tagButton = page.getByRole('button', { name: 'Filter by tag', exact: true });
+  assert.equal(await tagButton.evaluate(button => button.nextElementSibling?.getAttribute('aria-label')), 'Sort sessions');
+  await tagButton.click();
+  const tagMenu = page.getByRole('menu', { name: 'Filter sessions by tag' });
+  await tagMenu.getByRole('menuitemcheckbox', { name: 'work' }).click();
+  assert.equal(await page.locator('.session-list .thread[data-thread-id="thread-two"]').count(), 0);
+  await tagMenu.getByRole('menuitemcheckbox', { name: 'review' }).click();
+  assert.equal(await page.locator('.session-list .thread[data-thread-id="thread-one"]').count(), 1);
+  assert.equal(await page.locator('.session-list .thread[data-thread-id="thread-two"]').count(), 1);
+  await page.screenshot({ path: `${evidence}/tag-menu-light.png` });
+  await page.evaluate(() => { document.body.className = 'vscode-dark'; });
+  await page.screenshot({ path: `${evidence}/tag-menu-dark.png` });
+  await page.evaluate(() => { document.body.className = 'vscode-light'; });
+  await tagMenu.getByRole('menuitem', { name: 'Clear' }).click();
+  await page.keyboard.press('Escape');
+  assert.equal(await tagButton.evaluate(button => document.activeElement === button), true);
   // The sessions band is gone; its + sits beside the search field and names what the active tab creates.
   assert.equal(await page.locator('.dedicated-sessions .history-heading').count(), 0);
   assert.equal(await page.locator('.sidebar-search-row').getByRole('button', { name: 'New thread', exact: true }).count(), 1);
@@ -592,6 +611,27 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.evaluate(() => window.__replace({ threads: window.__state.threads.map(thread => thread.id === 'thread-one' ? { ...thread, settled: false } : thread) }));
   await page.locator('.session-list .thread[data-thread-id="thread-one"]').waitFor();
   assert.equal(await settledShelf.locator('.shelf-count').textContent(), '0');
+  // The browser's details content box scrolls independently of all shelf headers.
+  await page.evaluate(() => { const base = window.__state.threads.find(thread => thread.id === 'thread-two'); window.__replace({ threads: [...window.__state.threads, ...Array.from({ length: 45 }, (_, i) => ({ ...base, id: `settled-many-${i}`, title: `Settled row ${i}`, settled: true, pinned: false }))] }); });
+  await settledShelf.locator('.thread[data-thread-id="settled-many-0"]').waitFor();
+  const shelfMetrics = await settledShelf.evaluate(element => {
+    const style = getComputedStyle(element, '::details-content');
+    const body = element.querySelector(':scope > div');
+    body.lastElementChild.scrollIntoView({ block: 'end' });
+    const first = body.firstElementChild.getBoundingClientRect(); const last = body.lastElementChild.getBoundingClientRect(); const header = element.querySelector('summary').getBoundingClientRect();
+    return { overflow: style.overflowY, firstTop: first.top, lastBottom: last.bottom, headerBottom: header.bottom, shelfBottom: element.getBoundingClientRect().bottom };
+  });
+  assert.equal(shelfMetrics.overflow, 'auto');
+  assert.ok(shelfMetrics.firstTop < shelfMetrics.headerBottom && shelfMetrics.lastBottom <= shelfMetrics.shelfBottom + 1, 'Settled body scrolls to its final row');
+  const bounds = await page.evaluate(() => {
+    const container = document.querySelector('.history-shelves').getBoundingClientRect();
+    return [...document.querySelectorAll('.history-shelf > summary')].map(element => { const rect = element.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, containerTop: container.top, containerBottom: container.bottom, viewport: innerHeight }; });
+  });
+  assert.ok(bounds.every(rect => rect.top >= rect.containerTop && rect.bottom <= rect.containerBottom + 1 && rect.top >= 0 && rect.bottom <= rect.viewport));
+  await page.screenshot({ path: `${evidence}/settled-scrolled-light.png` });
+  await page.evaluate(() => { document.body.className = 'vscode-dark'; });
+  await page.screenshot({ path: `${evidence}/settled-scrolled-dark.png` });
+  await page.evaluate(() => { document.body.className = 'vscode-light'; window.__replace({ threads: window.__state.threads.filter(thread => !thread.id.startsWith('settled-many-')) }); });
   // A child-only match stays beneath its real parent in the parent's shelf.
   await page.getByRole('textbox', { name: 'Search threads' }).fill('Settled Audit');
   await page.locator('.session-list .thread[data-thread-id="subagent-settled"]').waitFor();
