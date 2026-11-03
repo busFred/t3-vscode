@@ -2,7 +2,8 @@
 
 ## 0.3.7 — Release
 
-- Tag conversations, filter or hide tagged threads, and reorder pinned conversations.
+- Tag conversations, filter by several tags at once from the tag button beside Sort, hide tagged threads, and reorder pinned conversations.
+- Snoozed, Settled and Archive headers stay in view; long shelves scroll on their own.
 - Send a selected queued message now when the workflow permits.
 - Stop eligible running subagents from Sessions or their transcript cards.
 - View linked pull requests, checks and review guides, with supported sign-in.
