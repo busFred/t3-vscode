@@ -2,7 +2,7 @@
 
 Current owner policy: build local installers after implementation and review. Publish only the exact version and channel the owner explicitly authorizes; packaging does not grant that authority. Keep the version unchanged unless the owner explicitly requests a bump. The owner authorized the stable release upload of **0.1.16** on October 8, 2026, explicitly authorized prerelease **0.1.17** on October 9, 2026, explicitly authorized stable release-channel publication of **0.1.18** on October 10, 2026, and explicitly authorized prerelease-channel publication of **0.1.19** on October 10, 2026 (“bump version to 0.1.19 and publish to pre-release”). That authorization covers 0.1.19 on the prerelease channel only. The owner explicitly authorized prerelease-channel publication of **0.1.21** on October 12, 2026 (“publish this new version to pre-release channel”); that authorization covers 0.1.21 on the prerelease channel only and does not extend to the stable release channel. The owner explicitly authorized prerelease-channel publication of **0.1.20** on October 11, 2026 (“publish it to pre-release”); that authorization covers 0.1.20 on the prerelease channel only and does not extend to the stable release channel.
 
-Current release checkpoint: v0.3.6 is published to the stable release channel from `c93def3` (October 27, 2026); the latest prerelease is v0.3.4 from `72d8911`. Earlier checkpoints are recorded in the sections below.
+Current release checkpoint: v0.3.7 is published to the stable release channel from `33399a4` (November 3, 2026), tagged `v0.3.7` with a GitHub release; the latest prerelease is v0.3.4 from `72d8911`. Earlier checkpoints are recorded in the sections below.
 
 ## Version policy
 
@@ -15,7 +15,7 @@ Read the version directly from `package.json`; use the same value in release not
 3. Start a regression reviewer with fresh context, resolve blockers, obtain final signoff and record the outcome in the feature history.
 4. Run `pnpm package` and verify the VSIX version, publisher, channel metadata and bundled assets. Store the installer and checksum under `target-installer/`.
 
-The packaging script reads the existing manifest and derives the prerelease flag from `preview: true`. Keep packaging separate from publication, do not bump or tag without the owner's specific request, and publish only the specifically authorized version/channel. Packaging does not authorize installation into the normal VS Code profile. T3 Code and providers remain separately installed applications.
+The packaging script reads the existing manifest and derives the prerelease flag from `preview: true`. Keep packaging separate from publication, do not bump without the owner's specific request, and publish only the specifically authorized version/channel. Packaging does not authorize installation into the normal VS Code profile. T3 Code and providers remain separately installed applications.
 
 ## First public release
 
@@ -277,3 +277,16 @@ The owner reviewed these and chose to ship as they are. None is a regression aga
 - Review and checks: a fresh-context Opus review of the first two changes was APPROVE WITH NITS; the follow-up review of the Environments changes blocked twice on layout (both fixed and measured) and then approved with nits. The last two small changes (Remove icon always visible on a Disabled row, and the icon-button review's follow-through) were checked in a render only. On `c93def3`: typecheck clean and 614/614 unit tests. `verify-views.ts` fails at "Snooze opens beside the parent" on unmodified `a203643` too, so it was not used as a gate.
 - Built `target-installer/t3-vscode-0.3.6.vsix` (45 files, 3.23 MB) from the clean commit with `preview: false`; the packaged manifest has version `0.3.6`, publisher `hungtienhuang` and no `PreRelease` property. SHA-256: `13f6d6c1aea83a70601bfc19174ccdd45225c6fe18fb5d144bf31526708bf476`.
 - At 20:58 UTC, `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.6.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.6.` The first `vsce show` readback still listed 0.3.5 as latest, so listing refresh is pending. No Marketplace installation was attempted.
+
+## Git tags and GitHub releases
+
+Owner policy since 0.3.7: every Marketplace publication also gets an annotated tag `vX.Y.Z` on the exact source commit of the published VSIX, pushed to `origin`, and a GitHub release for that tag (`--prerelease` for the Marketplace prerelease channel). Attach `target-installer/t3-vscode-X.Y.Z.vsix` and its `.sha256`, use the version's changelog section as notes, and confirm the release asset digest matches the published package. Earlier versions were not tagged.
+
+## 0.3.7 release-channel publication
+
+- On November 3, 2026 the owner gave explicit permission to push, publish to the Marketplace and maintain GitHub tags and releases for the finished 0.3.7 build. Channel: stable release (`preview: false`). Comparison revision: `a6dc78e` (stable 0.3.6). Source commit: `33399a4`.
+- Scope: the Speed control, and the sync with T3 Code 0.1.6 (vendored packages refreshed from 0.0.45, protocol removals adapted, minimum server 0.1.5) with its features; see the 0.3.7 changelog.
+- Review and checks: release review against `a6dc78e` blocked (worktree restore at an explicit path; Stop right after Send), fixed in `8303223`, re-review APPROVE; review of `8303223..782ed52` APPROVE, follow-ups in `33399a4`. Typecheck, 712/712 unit tests, `pnpm run build`, `scripts/verify-ui.mjs` end to end, and live `verify-host.ts`/`verify-scheduled-live.ts` against an isolated T3 0.1.6 server with GPT-6 Luna (low).
+- Built `target-installer/t3-vscode-0.3.7.vsix` (45 files, 3.59 MB) from the clean commit; packaged manifest version `0.3.7`, publisher `hungtienhuang`, `preview: false`. SHA-256: `327f57cf0f682f310e093d76a1eab087f406cad7d659163978d69afacf851890`. Installed successfully into disposable VS Code user and extension directories.
+- At 06:27 UTC, `vsce publish --packagePath target-installer/t3-vscode-0.3.7.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.7.` The Marketplace package endpoint served 0.3.7 with the same SHA-256 (after removing the transport gzip layer). The first `vsce show` readback still listed 0.3.6 as latest, so listing refresh was pending.
+- Tagged `v0.3.7` at `33399a4`, pushed `main` and the tag, and created the GitHub release https://github.com/busFred/t3-vscode/releases/tag/v0.3.7 (not a prerelease) with the VSIX (asset digest matches) and checksum.

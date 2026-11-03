@@ -60,7 +60,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, scannable README listing and a separate user guide for reference detail. | v0.0.7 | v0.1.19 |
 | [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.1.15 |
-| [Release versioning](#release-versioning) | Keeps the owner-selected version and publishes only a specifically authorized version/channel. | v0.1.10 | v0.1.17 |
+| [Release versioning](#release-versioning) | Keeps the owner-selected version, publishes only a specifically authorized version/channel, and tags each published version with a GitHub release. | v0.1.10 | v0.3.7 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.22 |
 | [New chat editor actions](#new-chat-editor-actions) | Fresh chat tabs from the Command Palette, header and sidebar. | v0.1.13 | v0.2.0 |
@@ -1718,6 +1718,10 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 
 ### Release versioning
 
+#### v0.3.7
+
+- Each published version gets an annotated Git tag `vX.Y.Z` at its exact source commit and a GitHub release (a GitHub prerelease for the Marketplace prerelease channel) with the VSIX and its `.sha256` attached and the changelog section as notes. Owner request: "we should also maintain github tag and release".
+
 #### v0.1.10
 
 - Track major.minor.stage.build in release.json, with 0/1/2/3 denoting alpha/beta/RC/stable.
@@ -2136,3 +2140,5 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Version bump to 0.3.7 (`preview: false`) as the owner requested ("build it to the next version number"). Adds the Speed control and the `t3-vscode.scheduledTasks.defaultSpeed` setting (see [Effort and permission controls](#effort-and-permission-controls)). Built locally as `target-installer/t3-vscode-0.3.7.vsix`; not published, not committed, and not installed into any profile.
 - Fresh-context Opus regression review against `a6dc78e` (the v0.3.6 release commit): BLOCK first, fixed, then APPROVE WITH NITS on the final tree. The version bump changed only `package.json`, `CHANGELOG.md` and this file after that review; no source changed.
 - Checks: typecheck, 622/622 unit tests, `pnpm build`.
+- Before publication, 0.3.7 grew to include the T3 Code 0.1.6 sync (vendor refresh, protocol fixes, minimum server 0.1.5) and every feature in this version's entries above. Final candidate `33399a4`: typecheck, 712/712 unit tests, `pnpm run build`, `scripts/verify-ui.mjs`, live `verify-host.ts`/`verify-scheduled-live.ts` against isolated T3 0.1.6; release review blocked twice (fixed) and approved, post-approval review approved.
+- Published to the stable release channel on November 3, 2026 at 06:27 UTC from `33399a4`, with the owner's explicit permission to push, publish and maintain GitHub tags and releases. The Marketplace download matches the reviewed VSIX (SHA-256 `327f57cf0f682f310e093d76a1eab087f406cad7d659163978d69afacf851890`). First version with a Git tag (`v0.3.7`) and GitHub release carrying the VSIX and checksum.
