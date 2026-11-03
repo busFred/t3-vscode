@@ -5,6 +5,7 @@
 - Machines show whether this window's project is on each machine and can add it (clone) from the sidebar.
 - Project pickers name the machine for same-named projects and match the other inputs' height.
 - Reconnect and Settings moved to the sidebar title bar beside Open Web UI; the sidebar has no footer.
+- More solid colors for status icons, labels, chips and badges.
 
 ## 0.3.9 — Release
 

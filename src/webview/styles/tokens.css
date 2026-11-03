@@ -1043,6 +1043,13 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .machine-remove-confirm .danger { color: var(--destructive); }
 /* A machine's actions stay rendered while its remove menu is open, so the menu keeps its anchor and focus returns to it. */
 .env-row:has(.env-hover-actions [aria-expanded="true"]) .env-hover-actions { display: inline-flex; opacity: 1; pointer-events: auto; }
+/* Solid colors: status icons and labels at full strength, and chips in VS Code's own opaque badge colors. */
+.thread-meta > svg, .scheduled-task-meta > svg, .thread-machine > svg { opacity: 1; }
+.thread.active .thread-branch, .thread.active .thread-age, .thread.active .thread-waiting, .thread.active .thread-outcome, .thread.active .thread-machine, .session-task-group.nested > summary { opacity: 1; }
+.env-chip { background: var(--vscode-badge-background, #616161); color: var(--vscode-badge-foreground, #fff); }
+/* Opaque tints with the normal text color keep contrast in every theme (white on Light+'s warning yellow does not). */
+.restore-badge-you { background: color-mix(in srgb, var(--warning) 22%, var(--vscode-editor-background, #fff)); color: var(--foreground); }
+.restore-badge-conflict { background: color-mix(in srgb, var(--destructive) 18%, var(--vscode-editor-background, #fff)); color: var(--foreground); }
 /* Project pickers match the other sidebar inputs instead of a squat native select. */
 .task-project-select select { height: 28px; padding: 0 6px; border-radius: 4px; font-size: .75rem; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); }
 /* This window's project on each machine. */
