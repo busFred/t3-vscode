@@ -219,7 +219,7 @@ export class BridgeHandler {
         case "keepTab": await this.viewActions.keepTab?.(viewId); break;
         case "closeTaskTab": this.viewActions.closeTaskTab?.(viewId); break;
         case "getState": break;
-        case "listCopyableFiles": return { id: message.id, result: await this.hostState.listCopyableFiles(viewId) };
+        case "listCopyableFiles": return { id: message.id, result: await this.hostState.listCopyableFiles(viewId, isObject(raw) && isObject(raw.params) && raw.params.windowSource === true) };
         case "searchThreads": {
           if (typeof params.query !== "string") throw new Error("Invalid search query.");
           return { id: message.id, result: await this.hostState.searchThreads(params.query, viewId) };
@@ -319,12 +319,14 @@ export class BridgeHandler {
         }
         case "chooseProject": await this.hostState.chooseProject(params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
         case "chooseMachine": await this.hostState.chooseMachine(stringParam(params, "environmentId"), viewId); break;
-        case "startClone": {
+        case "startClone": case "cloneToMachine": {
           if (params.protocol !== "ssh" && params.protocol !== "https") throw new Error("Choose SSH or HTTPS.");
           if (!Array.isArray(params.files) || !params.files.every((file) => typeof file === "string") || params.files.length > 200) throw new Error("Invalid files to copy.");
-          await this.hostState.startClone({ environmentId: stringParam(params, "environmentId"), destinationPath: stringParam(params, "destinationPath"), protocol: params.protocol, files: params.files as string[] }, viewId);
+          const input = { environmentId: stringParam(params, "environmentId"), destinationPath: stringParam(params, "destinationPath"), protocol: params.protocol as "ssh" | "https", files: params.files as string[] };
+          await (message.method === "cloneToMachine" ? this.hostState.cloneToMachine(input, viewId) : this.hostState.startClone(input, viewId));
           break;
         }
+        case "machineCloneAction": await this.hostState.machineCloneAction(stringParam(params, "environmentId"), stringParam(params, "action")); break;
         case "cloneAction": await this.hostState.cloneAction(stringParam(params, "action"), viewId); break;
         case "sendMessage": {
           if (params.attachmentIds !== undefined && (!Array.isArray(params.attachmentIds) || params.attachmentIds.length > 100 || !params.attachmentIds.every((id) => typeof id === "string"))) throw new Error("Invalid message attachments.");

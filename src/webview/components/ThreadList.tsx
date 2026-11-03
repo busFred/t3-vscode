@@ -6,7 +6,7 @@ import { compareSessions } from "../../shared/sessionSort";
 import { UserIcon } from "lucide-react";
 import { useDateTimeFormat } from "../timeFormat";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArchiveIcon, CheckIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, SettingsIcon, RefreshCwIcon, XIcon, MessageCircleQuestionIcon, CircleDashedIcon, HourglassIcon, LoaderCircleIcon, ChevronRightIcon, CircleXIcon, CircleStopIcon, BotIcon, ArrowDownUpIcon, ServerIcon, WandSparklesIcon, AlarmClockIcon, CircleCheckIcon, TagIcon } from "lucide-react";
+import { ArchiveIcon, CheckIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, XIcon, MessageCircleQuestionIcon, CircleDashedIcon, HourglassIcon, LoaderCircleIcon, ChevronRightIcon, CircleXIcon, CircleStopIcon, BotIcon, ArrowDownUpIcon, ServerIcon, WandSparklesIcon, AlarmClockIcon, CircleCheckIcon, TagIcon } from "lucide-react";
 import { snoozeWakeLabel } from "@t3tools/client-runtime/state/thread-settled";
 import type { HostStateSnapshot, ThreadSearchMatch, ThreadSummary } from "../../shared/bridge";
 import { searchThreads } from "../../shared/composerSuggestions";
@@ -30,9 +30,8 @@ function elapsedLabel(start: string | null | undefined, now: number): string {
   return seconds < 60 ? "<1m" : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h ${Math.floor(seconds / 60) % 60}m`;
 }
 
-export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
+export function ThreadList({ state, onSelect, compact = false }: {
   readonly state: HostStateSnapshot;
-  readonly onAppearance?: () => void;
   readonly onSelect?: (threadId: string) => void;
   readonly compact?: boolean;
 }) {
@@ -150,7 +149,7 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
       <details className="history-shelf" key={`settled:${!!query}`} open={query ? settled.length > 0 : undefined}><summary><CheckIcon size={13} /><span>Settled</span><span className="shelf-count">{settled.length}</span></summary><div>{settled.map((node) => treeRow(node, "settled"))}{!settled.length ? <p className="empty-list">No settled threads.</p> : null}</div></details>
       <details className="history-shelf" open={archiveOpen} onToggle={(event) => { const open = event.currentTarget.open; setArchiveOpen(open); if (open && !state.archiveLoaded) void run("loadArchive"); }}><summary><ArchiveIcon size={13} /><span>Archive</span><span className="shelf-count">{state.archiveLoading ? <LoaderCircleIcon size={12} className="animate-spin" aria-label="Loading archive" /> : state.archiveLoaded ? archived.length : null}</span></summary><div>{state.archiveError ? <p className="empty-list" role="status">Could not load archive. <button className="text-button" onClick={() => { void run("loadArchive"); }}>Retry</button></p> : null}{archived.map((node) => treeRow(node, "archive"))}{state.archiveLoaded && !state.archiveLoading && !state.archiveError && !archived.length ? <p className="empty-list">No archived threads.</p> : null}</div></details>
     </div></div>
-    {compact ? <div className="history-picker-hint">Switch this tab · drafts stay with each conversation</div> : <div className="history-settings"><button className="icon-button" aria-label="T3 VSCode settings" title="T3 VSCode settings" onClick={onAppearance}><SettingsIcon size={15} /></button><span>Current workspace only</span><button className="icon-button" aria-label="Refresh connection" title="Reconnect" onClick={() => { void run("reconnect"); }}><RefreshCwIcon size={14} /></button></div>}
+    {compact ? <div className="history-picker-hint">Switch this tab · drafts stay with each conversation</div> : null}
     {tagOpen && tagAnchor.current ? <SessionTagMenu anchor={tagAnchor.current} tags={tags} selected={tagFilter} onChange={setTagFilter} environments={hiddenEnvironments} onToggle={threadId => { void run("threadAction", { threadId, action: "toggle-tag-hiding" }); }} onClose={closeTags} /> : null}
     {sortOpen && sortAnchor.current ? <SessionSortMenu anchor={sortAnchor.current} value={sort} onChange={setSort} onClose={closeSort} /> : null}
     {menu && menuThread ? <ThreadActionsMenu thread={menuThread} workspaceRoot={state.projects.find((project) => project.id === menuThread.projectId)?.workspaceRoot} position={menu} onClose={closeMenu} /> : null}

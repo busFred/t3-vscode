@@ -182,6 +182,11 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 - The sidebar itself never scrolls; Sessions keep a few rows (up to 96 px) and the setup notice shrinks too, so neither pushes the tabs away.
 - Validation: browser fixture with 40 machines and both sections open at 820, 420 and 260 px high checks that all three titles stay on screen, including after the document and sidebar are scrolled. A plain click on the separator keeps the automatic height. It also checks keyboard and drag resizing and the double-click reset. Screenshot: `sections-pinned.png`.
 
+#### Unreleased (after v0.3.9) — title-bar actions and solid colors
+
+- **Reconnect** and **Settings** moved from the sidebar's bottom bar to its title bar beside **Open Web UI** (commands `t3-vscode.reconnect` and `t3-vscode.settings`); the sidebar has no footer. Editor-tab session drawers never had this footer (they show the compact history list).
+- Colors are more solid: status icons and labels (Done, Failed, Woke, branch, machine) draw at full strength instead of 70–85% opacity, chips use VS Code's opaque badge colors, and restore badges are filled.
+
 ### Scheduled task management
 
 #### v0.3.7
@@ -230,6 +235,10 @@ Task entries open independent editor tabs with the same preview/keep behavior. E
 #### v0.1.22
 
 - Use the same icon-only Scheduled tasks button as adjacent chat-header actions; preserve its accessible name, drawer toggle and session task count in the tooltip.
+
+#### Unreleased (after v0.3.9)
+
+- Project pickers (Tasks, New worktree chat) name the machine when a project's name is not unique or the project is on a paired machine, e.g. "t3-vscode · GPU box", and are as tall as the other sidebar inputs.
 
 ### Workspace scope
 
@@ -1606,6 +1615,10 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - The Machines description moved to an ⓘ beside the title (shown in the list only while no other machine is added).
 - One remove (trash) button per machine opens a menu: **Remove from VS Code** (the existing VS Code confirmation) and **Remove agent access** (confirmed in the menu). Each option describes its effect on hover and in the menu; the separate inline "Remove agent access" link is gone. Machines with agent access only get the same button.
 - Agent chips read **Agents (Auto)**, **Agents (Read only)**, … or **Agents (expired)**. Machine rows have more line spacing.
+
+#### Unreleased (after v0.3.9)
+
+- Each machine with Conversations shows whether this window's project is on it, or offers **Add *project*…** to clone it there from the sidebar, using the composer's clone form and pipeline without starting a chat. Clone progress, Cancel, Retry and Remove show on the machine's row.
 
 ### Managed policy
 

@@ -1,6 +1,7 @@
 import { mergeMachines, type MachineRow } from "../machines";
 import { AddMachineForm, MachineCapabilities, peerHealthLabel } from "./PeerLinksSection";
 import { MachineRemoveButton } from "./MachineRemoveMenu";
+import { MachineProject } from "./MachineProject";
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useEnvironmentsHeight } from "../environmentsHeight";
 import { clampSectionHeight } from "../sectionHeight";
@@ -85,7 +86,7 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
         <div className="env-name"><span title={machine.label}>{machine.label}</span>{machine.local && <span className="env-chip">This computer</span>}</div>
         <div className={`env-state ${machine.conversation?.status ?? ""}`}>{machine.conversation ? stateOf(machine.conversation) : machine.local ? <span className="env-resting"><Dot tone="ok" />Connected</span> : machine.agents ? <><span className="env-resting">{peerHealthLabel(machine.agents.status)}</span><span className="env-hover-actions"><MachineRemoveButton machine={machine} peers={state.peerLinks} removeConversations={() => undefined} /></span></> : null}</div>
         <div className="env-meta" title={machine.conversation?.detail}>{machine.local ? meta(local?.host, local?.serverVersion) : meta(machine.conversation?.host, machine.conversation?.serverVersion)}{(machine.conversation?.managedOrganization ?? (machine.local ? state.localManagedPolicy?.organization : undefined)) && <span className="env-managed">Managed by {machine.conversation?.managedOrganization ?? state.localManagedPolicy?.organization}</span>}</div>
-        <MachineCapabilities machine={machine} peers={state.peerLinks} pair={() => setAdding(machine)} />
+        <MachineCapabilities machine={machine} peers={state.peerLinks} pair={() => setAdding(machine)} project={<MachineProject state={state} machine={machine} />} />
       </div>)}
       {adding ? <AddMachineForm key={adding === true ? "new" : adding.environmentId} peers={state.peerLinks} machine={adding === true ? undefined : adding} close={() => setAdding(null)} /> : <button className="text-button env-add" onClick={() => setAdding(true)}><PlusIcon size={13} />Add machine…</button>}
     </div>

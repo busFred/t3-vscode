@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDownIcon, ChevronRightIcon, GitBranchIcon, LoaderCircleIcon, MonitorIcon, PlusIcon, ServerIcon, CircleXIcon } from "lucide-react";
-import type { AddMachineTarget, HostStateSnapshot, MachineChoice } from "../../shared/bridge";
+import type { AddMachineTarget, CloneSource, HostStateSnapshot, MachineChoice } from "../../shared/bridge";
 import { choosingMachine } from "../../shared/machineChoice";
 import { updateDraft } from "../composerDrafts";
 import { useActions } from "../actions";
@@ -37,22 +37,25 @@ export function draftSendBlock(state: HostStateSnapshot): string | undefined {
   return clone.copy?.phase === "pending" || clone.copy?.phase === "copying" ? "Copying files" : undefined;
 }
 
-/** Confirms cloning this repository onto a machine that lacks it, as T3 Code's "Add to another machine" does. */
-function ClonePopover({ state, target, anchor, onClose }: { readonly state: HostStateSnapshot; readonly target: AddMachineTarget; readonly anchor: HTMLButtonElement; readonly onClose: () => void }) {
-  const source = state.draft.cloneSource;
+/**
+ * Confirms cloning this repository onto a machine that lacks it, as T3 Code's "Add to another machine" does. From a new
+ * chat the clone becomes that chat's machine; from the Machines list it only adds the repository there.
+ */
+export function ClonePopover({ state, target, anchor, onClose, source = state.draft.cloneSource, forNewChat = true }: { readonly state: HostStateSnapshot; readonly target: AddMachineTarget; readonly anchor: HTMLButtonElement; readonly onClose: () => void; readonly source?: CloneSource | undefined; readonly forNewChat?: boolean }) {
   const [destination, setDestination] = useState(target.defaultDestination);
   const [protocol, setProtocol] = useState<"ssh" | "https">(source?.protocol ?? (source?.sshUrl ? "ssh" : "https"));
-  const files = useBridgeQuery<ReadonlyArray<{ readonly path: string; readonly checked: boolean }>>("listCopyableFiles", {}, "copyable");
+  const files = useBridgeQuery<ReadonlyArray<{ readonly path: string; readonly checked: boolean }>>("listCopyableFiles", forNewChat ? {} : { windowSource: true }, forNewChat ? "copyable" : "copyable-window");
   const [chosen, setChosen] = useState<ReadonlySet<string> | null>(null);
   const checked = chosen ?? new Set(files.data?.filter((file) => file.checked).map((file) => file.path));
   const [busy, setBusy] = useState(false), [failed, setFailed] = useState(false); const run = useActions();
   const submit = async () => {
     if (busy || !destination.trim()) return;
     setBusy(true); setFailed(false);
-    const ok = await run("startClone", { environmentId: target.environmentId, destinationPath: destination.trim(), protocol, files: [...checked] });
+    const ok = await run(forNewChat ? "startClone" : "cloneToMachine", { environmentId: target.environmentId, destinationPath: destination.trim(), protocol, files: [...checked] });
     setBusy(false);
     if (ok === false) { setFailed(true); return; }
-    rehomeAttachments(target.environmentId); close();
+    if (forNewChat) rehomeAttachments(target.environmentId);
+    close();
   };
   const close = () => { onClose(); anchor.focus(); };
   return <WorktreePopover anchor={anchor} title={`Add ${source?.title ?? "this repository"} to ${target.label}`} onClose={close}>

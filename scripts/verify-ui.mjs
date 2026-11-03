@@ -206,6 +206,35 @@ try {
   assert.deepEqual(await page.getByRole('menu', { name: 'Remove Agent VPS' }).getByRole('menuitem').evaluateAll(items => items.map(item => item.querySelector('strong')?.textContent)), ['Remove agent access']);
   await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Remove Agent VPS…', 'Escape returns focus to the remove button');
+  // Each machine shows whether this window's project is there, and offers to add it.
+  await page.evaluate(() => window.__replace({ projectMachines: { title: 't3-vscode', present: ['both'], targets: [{ environmentId: 'conversations', label: 'Conversation machine', available: true, defaultDestination: '~/code/t3-vscode' }], clones: [], cloneSource: { title: 't3-vscode', sshUrl: 'git@github.com:busFred/t3-vscode.git', httpsUrl: 'https://github.com/busFred/t3-vscode.git', protocol: 'ssh' } } }));
+  await page.locator('.environments .env-project').first().waitFor();
+  assert.deepEqual(await page.locator('.environments .env-row').evaluateAll(rows => rows.map(row => [row.querySelector('.env-name span')?.textContent, row.querySelector('.env-project')?.textContent ?? row.querySelector('.env-project-add')?.textContent ?? null])),
+    [['Local workstation', 't3-vscode'], ['Build machine', 't3-vscode'], ['Conversation machine', 'Add t3-vscode…'], ['Agent VPS', null]]);
+  await page.getByRole('button', { name: 'Add t3-vscode…' }).click();
+  await page.getByRole('button', { name: 'Clone to Conversation machine' }).click();
+  await page.waitForFunction(() => window.__requests.some(request => request.method === 'cloneToMachine' && request.params.environmentId === 'conversations' && request.params.destinationPath === '~/code/t3-vscode'));
+  await page.screenshot({ path: `${evidence}/machines-project.png` });
+  await page.evaluate(() => window.__replace({ projectMachines: { title: 't3-vscode', present: ['both'], targets: [], clones: [{ environmentId: 'conversations', label: 'Conversation machine', projectId: 'p', name: 't3-vscode', phase: 'running', stage: 'Receiving objects', percent: 42, detail: null, error: null }] } }));
+  await page.locator('.env-project-clone', { hasText: 'Adding t3-vscode · Receiving objects 42%' }).waitFor();
+  await page.getByRole('button', { name: 'Cancel adding t3-vscode to Conversation machine' }).click();
+  await page.waitForFunction(() => window.__requests.some(request => request.method === 'machineCloneAction' && request.params.environmentId === 'conversations' && request.params.action === 'cancel'));
+  await page.evaluate(() => window.__replace({ projectMachines: { title: 't3-vscode', present: [], targets: [], clones: [{ environmentId: 'conversations', label: 'Conversation machine', projectId: 'p', name: 't3-vscode', phase: 'failed', stage: 'Receiving objects', percent: null, detail: null, error: 'Permission denied (publickey).' }] } }));
+  await page.getByRole('alert').filter({ hasText: 'Adding t3-vscode failed: Permission denied (publickey).' }).waitFor();
+  for (const action of ['retry', 'remove']) {
+    await page.getByRole('button', { name: `${action[0].toUpperCase()}${action.slice(1)} adding t3-vscode to Conversation machine` }).click();
+    await page.waitForFunction((action) => window.__requests.some(request => request.method === 'machineCloneAction' && request.params.action === action), action);
+  }
+  await page.evaluate(() => window.__replace({ projectMachines: undefined }));
+  // Projects with the same name on several machines name their machine in project pickers.
+  const savedProjects = await page.evaluate(() => window.__state.projects);
+  await page.evaluate(() => window.__replace({ projects: [{ id: 'project-one', title: 't3-vscode', workspaceRoot: '/tmp/t3-vscode' }, { id: 'remote-one', title: 't3-vscode', workspaceRoot: '/home/me/t3-vscode', environmentLabel: 'GPU box' }, { id: 'project-two', title: 'myt3code', workspaceRoot: '/tmp/myt3code' }] }));
+  await page.getByRole('tab', { name: 'Tasks' }).click();
+  assert.deepEqual(await page.getByLabel('Task project').locator('option').allTextContents(), ['t3-vscode · Local workstation', 't3-vscode · GPU box', 'myt3code']);
+  assert.ok((await page.getByLabel('Task project').boundingBox()).height >= 26, 'the project picker is as tall as the other sidebar inputs');
+  await page.screenshot({ path: `${evidence}/tasks-project-picker.png` });
+  await page.getByRole('tab', { name: 'Sessions' }).click();
+  await page.evaluate((projects) => window.__replace({ projects }), savedProjects);
   const localMachine = page.locator('.environments .env-row').filter({ hasText: 'Local workstation' });
   assert.equal(await localMachine.getByText('Let agents use this…').count(), 0);
   await page.screenshot({ path: `${evidence}/machines-merged.png` });
@@ -498,6 +527,12 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.getByRole('button', { name: 'Preview clipboard.png', exact: true }).waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('.composer-attachment img')].some(image => image.complete && image.naturalWidth > 0));
   assert.match(await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue(), /^Compare here!\[clipboard\.png\]\(t3-context:\/\/v1\/image\/image_[a-z0-9_-]+\) then explain\.$/);
+  // Regression guard: undo removes a pasted image reference as one native step, and redo restores it.
+  const pastedText = await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue();
+  await page.getByRole('textbox', { name: 'Message', exact: true }).press('Control+z');
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message"]').value === 'Compare here then explain.', null, { timeout: 3000 }).catch(async () => { throw new Error(`Ctrl+Z after pasting an image left ${JSON.stringify(await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue())}`); });
+  await page.getByRole('textbox', { name: 'Message', exact: true }).press('Control+y');
+  await page.waitForFunction(value => document.querySelector('textarea[aria-label="Message"]').value === value, pastedText, { timeout: 3000 });
   // A plain click only moves the caret, so an image reference can be retyped by hand; Ctrl+click edits its caption.
   await page.getByRole('textbox', { name: 'Message', exact: true }).evaluate(element => { element.setSelectionRange(30, 30); element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   assert.equal(await page.getByRole('dialog', { name: 'clipboard.png', exact: true }).count(), 0, 'A plain click must not open the image preview');
@@ -675,8 +710,9 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
       document.documentElement.style.fontSize = `${size}px`;
       return [...document.querySelectorAll('.sidebar-tabs, .dedicated-sessions .history-shelf > summary, .dedicated-sessions .history-settings')].map(element => ({ height: element.getBoundingClientRect().height + (element.tagName === 'SUMMARY' ? 1 : 0) }));
     }, fontSize);
-    assert.equal(bands.length, 4);
-    assert.ok(bands.every(band => Math.abs(band.height - bands[0].height) < 1), `Sidebar footer bands match tab height at ${fontSize}px`);
+    // The sidebar has no footer band any more: Settings and Reconnect are title-bar actions.
+    assert.equal(bands.length, 3);
+    assert.ok(bands.every(band => Math.abs(band.height - bands[0].height) < 1), `Sidebar shelf bands match tab height at ${fontSize}px`);
   }
   await page.evaluate(() => { document.documentElement.style.fontSize = '16px'; });
   assert.equal(await page.locator('.project-heading').count(), 0);
