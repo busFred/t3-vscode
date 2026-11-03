@@ -8,8 +8,8 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with tags, pinned ordering, a Snoozed shelf and chat in editor tabs. | v0.0.7 | v0.3.8 |
-| [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector, once and webhook schedules, and independent editor tabs. | v0.1.16 | v0.3.7 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with tags, pinned ordering, a Snoozed shelf and chat in editor tabs. | v0.0.7 | v0.3.10 |
+| [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector, once and webhook schedules, and independent editor tabs. | v0.1.16 | v0.3.10 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
 | [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | v0.3.7 |
@@ -23,7 +23,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation, centred in the whole conversation; earlier pages load at the top. | v0.0.8 | v0.3.4 |
 | [Subagent conversations](#subagent-conversations) | Nested local and remote child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.7 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
-| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | Unreleased |
+| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.3.10 |
 | [Context window meter](#context-window-meter) | Ring + percent in the composer toolbar showing live provider usage against the model's context window. | v0.2.2 | v0.2.2 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.3.7 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
@@ -53,7 +53,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.7 |
-| [Remote environments](#remote-environments) | One Machines list shows Conversations and agent access independently; add either or both, start remote chats with Run on, and clone missing repositories. | v0.3.0 | v0.3.9 |
+| [Remote environments](#remote-environments) | One Machines list shows Conversations and agent access independently; add either or both, start remote chats with Run on, and clone missing repositories. | v0.3.0 | v0.3.10 |
 | [Managed policy](#managed-policy) | Shows the managing organization and applies server policy restrictions. | v0.3.7 | v0.3.7 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
@@ -182,7 +182,7 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 - The sidebar itself never scrolls; Sessions keep a few rows (up to 96 px) and the setup notice shrinks too, so neither pushes the tabs away.
 - Validation: browser fixture with 40 machines and both sections open at 820, 420 and 260 px high checks that all three titles stay on screen, including after the document and sidebar are scrolled. A plain click on the separator keeps the automatic height. It also checks keyboard and drag resizing and the double-click reset. Screenshot: `sections-pinned.png`.
 
-#### Unreleased (after v0.3.9) — title-bar actions and solid colors
+#### v0.3.10 — title-bar actions and solid colors
 
 - **Reconnect** and **Settings** moved from the sidebar's bottom bar to its title bar beside **Open Web UI** (commands `t3-vscode.reconnect` and `t3-vscode.settings`); the sidebar has no footer. Editor-tab session drawers never had this footer (they show the compact history list).
 - Colors are more solid: status icons and labels (Done, Failed, Woke, branch, machine) draw at full strength instead of 70–85% opacity, chips use VS Code's opaque badge colors, and restore badges are filled.
@@ -236,7 +236,7 @@ Task entries open independent editor tabs with the same preview/keep behavior. E
 
 - Use the same icon-only Scheduled tasks button as adjacent chat-header actions; preserve its accessible name, drawer toggle and session task count in the tooltip.
 
-#### Unreleased (after v0.3.9)
+#### v0.3.10
 
 - Project pickers (Tasks, New worktree chat) name the machine when a project's name is not unique or the project is on a paired machine, e.g. "t3-vscode · GPU box", and are as tall as the other sidebar inputs.
 
@@ -577,13 +577,13 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Compact composer
 
-#### Unreleased (v0.3.9 base)
+#### v0.3.10
 
 - Keep real VS Code image paste and rich clipboard references in native undo history. VS Code forwards Ctrl+V through `execCommand('paste')`; replaying `insertText` inside that command is rejected, and the old `setRangeText` fallback loses history. Custom paste now waits one task before replaying the captured insertion. Synthetic clipboard events alone did not expose this nesting.
 - Insert quotes with their final citation numbers in one native edit, including repeated passages and a new quote placed before an existing one. Previously a layout-effect label correction added another edit (or attempted a nested native command), so one Ctrl+Z did not remove just the quote.
 - Historical comparison: real OS paste fails on `c5e8f9b` (v0.3.9 plus a documentation-only commit), tag `v0.3.7` (`33399a4`), and `9238e95` (the undo-routing fix shipped in v0.2.4; that source commit still declares v0.2.3). The replay/fallback and quote-label mechanism originated in `0517532` (v0.1.21, Hung-Tien Huang, co-authored by Claude Opus 5). No passing historical boundary was established; these failures must not be attributed to the recent hidden-view or memoization changes.
 - Extend `verify-edh.mjs --undo-only` to check real OS and dispatched image paste with completed uploads, first/repeated assistant quotes through the selection menu, and native editor references in both a new plain panel and a Sessions custom-editor tab. Check immediate undo, both redo shortcuts, earlier typing, sidebar focus, and hide/reveal. Browser guards model a paste nested inside a native command and cover repeated/reordered quotes; both fail before the fix.
-- Validation: `tsc --noEmit`, 732/732 unit tests, production build, `verify-ui.mjs`, and the extended native undo suite pass (re-run independently by the main agent, which also confirmed both new-chat scenarios fail without the product fix). Sending also waits while a paste is still placing its reference. Native verification used a disposable VS Code profile, isolated T3 home and nested X display/clipboard, without provider calls. The browser undo guards pass; the full `verify-views.ts` suite still times out at “Steer with queued message” (line 876), also reproduced at v0.3.7. Native clicks wait for webview painting after reveal, and reference checks wait for the tab's focus handoff. No VSIX was packaged; independent regression review and macOS/Windows verification remain outstanding.
+- Validation: `tsc --noEmit`, 732/732 unit tests, production build, `verify-ui.mjs`, and the extended native undo suite pass (re-run independently by the main agent, which also confirmed both new-chat scenarios fail without the product fix). Sending also waits while a paste is still placing its reference. Native verification used a disposable VS Code profile, isolated T3 home and nested X display/clipboard, without provider calls. The browser undo guards pass; the full `verify-views.ts` suite still times out at “Steer with queued message” (line 876), also reproduced at v0.3.7. Native clicks wait for webview painting after reveal, and reference checks wait for the tab's focus handoff. macOS/Windows remain unverified. A fresh-context Opus regression review approved with three nits (a second manifest declaration of `t3-vscode.reconnect`, Send during the paste deferral, a test count), all fixed and re-approved.
 
 #### v0.2.4
 
@@ -1624,7 +1624,7 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - One remove (trash) button per machine opens a menu: **Remove from VS Code** (the existing VS Code confirmation) and **Remove agent access** (confirmed in the menu). Each option describes its effect on hover and in the menu; the separate inline "Remove agent access" link is gone. Machines with agent access only get the same button.
 - Agent chips read **Agents (Auto)**, **Agents (Read only)**, … or **Agents (expired)**. Machine rows have more line spacing.
 
-#### Unreleased (after v0.3.9)
+#### v0.3.10
 
 - Each machine with Conversations shows whether this window's project is on it, or offers **Add *project*…** to clone it there from the sidebar, using the composer's clone form and pipeline without starting a chat. Clone progress, Cancel, Retry and Remove show on the machine's row.
 
