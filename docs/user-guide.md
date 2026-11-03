@@ -22,11 +22,15 @@ A remote session appears in Sessions only when its project's Git repository (ups
 
 Not yet available for remote sessions: starting new sessions, checkout, branch and worktree actions, saved-turn diffs and **Restore files to this point**. Local sessions are unchanged.
 
+**Linked environments · T3 server** in Environments manages links used by agents to work on another machine, separately from VS Code pairings. Choose **Link a machine…**, enter its address and a pairing code from its **Settings → Connections → Create link** or `t3 pair`, choose access and select **Link**. The list shows health and access and marks machines also paired in VS Code. **Unlink** asks for confirmation; to end the session on the other machine too, revoke the indicated T3 Code connection there. Availability depends on the server’s linked-environment settings and policy.
+
 ### Connection diagnostics
 
 Setup distinguishes a missing server, a stopped process, an unanswered probe, incompatible versions and pairing errors. **Connection details** shows the failed stage and diagnostic. Copyable startup commands target the configured data directory; isolated/custom homes keep their own startup guidance and do not suggest installing the normal background service.
 
 ## Settings
+
+A managed server shows **Managed by** its organization in Status and Environments. Its policy can disable provider choices, permission modes, webhook tasks or worktree settings; the affected controls show an explanation.
 
 Settings live in **Preferences → Settings → Extensions → T3 VSCode**, grouped under **Appearance**, **Reading**, **Usage**, **Refresh** and **Connection**. Use the native User/Workspace tabs to choose where values are saved, and each setting's **Reset Setting** action to restore its default.
 
@@ -56,11 +60,13 @@ The sidebar has **Sessions**, **Worktrees** and **Tasks** tabs, each with its ow
 
 Use the sort button beside **+** to order sessions by last activity or title, ascending or descending. The menu floats over the list; the view remembers your choice. Pins stay first and subagents stay with their parent.
 
+Use a session’s actions menu → **Tags → Add tag…** to add a tag, or remove an existing tag from the same menu. Use the **Tag** selector to filter Sessions. To hide threads with a tag, choose **Hide threads tagged** that tag in the menu; the **Hide tagged threads** checkbox toggles hiding for the environment. Drag a pinned session’s grip to reorder it, or focus the grip and use the up/down arrow keys.
+
 Select a session to open its editor tab; if it is already open, the extension reveals that tab. Use VS Code's editor groups, group locking and tab/window movement to arrange chat beside your code. The globe opens the current session in your default browser, using localhost for a loopback server so it can reuse your paired browser session. Working sessions show a static icon and elapsed minutes; a session that is only waiting on delegated subagents or other background work shows a calmer, muted "Waiting" badge instead; Input/Approval badges and VS Code notifications highlight sessions needing a response.
 
 The sidebar title keeps **Open Web UI** and its overflow actions. Right-click a session to rename, pin, settle, archive, restore or delete it. The editor has its conversation breadcrumb, browser shortcut and thread actions.
 
-Subagents appear beneath their parent session in a tree whose branches start collapsed. Expand a parent to inspect its children; expand a session to see independently collapsible **Subagents** and **Scheduled tasks** groups. Active, Settled and Archive list and count ordinary conversations only, according to each conversation’s own state. Subagents of every state stay beneath their parent; archived summaries load automatically after connection. A parent is never duplicated into another section because of a child’s state. Search expands the ancestors of matching children. Hover or focus a subagent transcript row for its provider, model, current status and elapsed time; click it to open the child, then use **Subagent of** to return. Provider-native child conversations are read-only; T3-owned delegated conversations accept follow-ups. Remote delegated tasks also appear under **Subagents**: open a paired child on its machine, or use the pairing hint on an unpaired task.
+Subagents appear beneath their parent session in a tree whose branches start collapsed. Expand a parent to inspect its children; expand a session to see independently collapsible **Subagents** and **Scheduled tasks** groups. Active, Settled and Archive list and count ordinary conversations only, according to each conversation’s own state. Subagents of every state stay beneath their parent; archived summaries load automatically after connection. A parent is never duplicated into another section because of a child’s state. Search expands the ancestors of matching children. Hover or focus a subagent transcript row for its provider, model, current status and elapsed time; click it to open the child, then use **Subagent of** to return. Provider-native child conversations are read-only; T3-owned delegated conversations accept follow-ups. Eligible running subagents have a **Stop** control in Sessions and on their transcript card. Remote delegated tasks also appear under **Subagents**: open a paired child on its machine, or use the pairing hint on an unpaired task.
 
 ### Guest sharing
 
@@ -70,7 +76,7 @@ Guest messages and attachments wait for your review. Choose **Send** or **Dismis
 
 ### Link requests
 
-When a conversation requests a link to another environment, choose **Review link…** or **Choose machine…**. Enter the environment address, access level and a pairing code from the other machine's Connections settings or `t3 pair`; alternatively enter an already linked environment ID. Choose **Link**, **Use existing link**, or **Decline**.
+When a conversation requests a link to another environment, choose **Review link…** or **Choose machine…**. Choose an already linked environment to use it without another code, or choose a known paired machine and provide its pairing code and access level. For another machine, enter its address, access level and a pairing code from its Connections settings or `t3 pair`; alternatively enter an already linked environment ID. Choose **Link**, **Use existing link**, or **Decline**.
 
 ## Workspace scope
 
@@ -147,6 +153,12 @@ Message footers show their recorded date and time in your local timezone. Assist
 
 Use **Fork** at the end of a settled assistant run to continue from that run in a new conversation. Interim answers keep their Copy action; they do not offer a separate fork point. The fork opens in that view and preserves the source conversation; the button is available when T3 supports native forking or its portable history fallback. File links in chat open a native VS Code editor, including links to a line or range such as `src/main.ts#L24-L25`.
 
+### Pull requests on conversations
+
+When a conversation has a linked pull or merge request, its header shows a request label; select it to see linked requests, their state, checks, file and line counts, and change breakdown. **Open** opens the request in your browser; **Refresh** reloads details.
+
+Use **Generate review guide** or **Regenerate review guide** to inspect its stops, file references and questions. A notice identifies a guide for an earlier revision. If credentials are needed, choose **Sign in** where offered, open the verification URL and enter the displayed code; you can cancel while waiting. Otherwise configure credentials on the conversation’s T3 server and refresh. If the repository is not covered by the source-control app, use **Install app**.
+
 ## Composer and editing
 
 The composer keeps Markdown as editable text with a permanent grouped toolbar. Links stay as `[text](url)` and backticks stay visible. **Shift+Enter** continues lists, **Tab/Shift+Tab** indent or outdent lists, code and multiline selections, and **List assist** enables automatic continuation and numbering repair. Inserting a line into an ordered list repairs the following numbers; Undo first reverses the repair while keeping the inserted line. Selected text can be wrapped by quotes, brackets, backticks or dollar signs; colon and semicolon remain ordinary punctuation. Paste, code fences, math, IME and autocomplete retain their usual behavior. A small ring and percent immediately left of **List assist** tracks the active thread's context window usage once the provider reports it; hover or focus it for exact token counts, and watch for it to turn to the warning or error color as usage climbs.
@@ -155,7 +167,7 @@ Model, effort and permission controls sit inside the composer, with shortcut hin
 
 ### Queue and steer
 
-While an agent is responding, **Enter** or the send button queues a follow-up after its turn. **Ctrl+Enter** (Cmd+Enter on macOS) steers the running turn when supported; otherwise the message queues. When the agent is idle, Enter sends normally. **Shift+Enter** inserts a new line. Queued messages and the current turn's task plan appear above the input. You can edit or cancel queued messages, reorder them by dragging or using the handle's arrow keys, and promote one to Steer. The inline queued-message editor uses the same prompt font size and line spacing as the main message box; previews stay compact and your current draft stays in place. Stopping generation pauses the queue; **Resume queue** continues it.
+While an agent is responding, **Enter** or the send button queues a follow-up after its turn. **Ctrl+Enter** (Cmd+Enter on macOS) steers the running turn when supported; otherwise the message queues. When the agent is idle, Enter sends normally. **Shift+Enter** inserts a new line. Queued messages and the current turn's task plan appear above the input. You can edit or cancel queued messages, reorder them by dragging or using the handle's arrow keys, and promote one to Steer. The inline queued-message editor uses the same prompt font size and line spacing as the main message box; previews stay compact and your current draft stays in place. **Send now** on a queued message starts it when the workflow permits, or sends it into the active turn when steering is supported. Stopping generation pauses the queue; **Resume queue** continues it.
 
 ### Slash commands and file suggestions
 

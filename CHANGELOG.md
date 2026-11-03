@@ -2,6 +2,12 @@
 
 ## 0.3.7 — Release
 
+- Tag conversations, filter or hide tagged threads, and reorder pinned conversations.
+- Send a selected queued message now when the workflow permits.
+- Stop eligible running subagents from Sessions or their transcript cards.
+- View linked pull requests, checks and review guides, with supported sign-in.
+- Manage T3 linked environments and choose known machines in link requests.
+- See managed policy restrictions and the managing organization; webhook task controls now follow the VS Code theme.
 - Require T3 Code 0.1.5 or newer and update compatibility with the 0.1.6 server contracts.
 - Create guest links and review guest messages before sending or dismissing them.
 - Use interactive MCP Apps in the transcript, with approval for tool writes, messages and downloads.

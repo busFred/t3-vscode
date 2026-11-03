@@ -8,11 +8,12 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with compact last-active times, unread dots shared with T3 Code, a Snoozed shelf and chat in editor tabs. | v0.0.7 | v0.3.4 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with tags, pinned ordering, a Snoozed shelf and chat in editor tabs. | v0.0.7 | v0.3.7 |
 | [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector, once and webhook schedules, and independent editor tabs. | v0.1.16 | v0.3.7 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
 | [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | v0.3.7 |
+| [Pull requests on conversations](#pull-requests-on-conversations) | Linked change requests, checks, review guides and sign-in. | v0.3.7 | v0.3.7 |
 | [Guest sharing](#guest-sharing) | Guest links and owner review of guest messages. | v0.3.7 | v0.3.7 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.3.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
@@ -26,7 +27,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Context window meter](#context-window-meter) | Ring + percent in the composer toolbar showing live provider usage against the model's context window. | v0.2.2 | v0.2.2 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.3.7 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
-| [Queue controls and task progress](#queue-controls-and-task-progress) | Edits queued text at the prompt font size; reorders follow-ups and shows current tasks. | v0.0.6 | v0.1.16 |
+| [Queue controls and task progress](#queue-controls-and-task-progress) | Edits, reorders and sends queued follow-ups; shows current tasks. | v0.0.6 | v0.3.7 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.23 |
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.3.2 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.3.2 |
@@ -52,7 +53,8 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.7 |
-| [Remote environments](#remote-environments) | Pairs other machines by link, lists their matching-repository sessions, starts new chats on them (including their worktrees) from a Run on chip, and clones the repository onto machines that lack it. | v0.3.0 | v0.3.6 |
+| [Remote environments](#remote-environments) | Pairs other machines by link, lists their matching-repository sessions, starts new chats on them (including their worktrees) from a Run on chip, and clones the repository onto machines that lack it. | v0.3.0 | v0.3.7 |
+| [Managed policy](#managed-policy) | Shows the managing organization and applies server policy restrictions. | v0.3.7 | v0.3.7 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
@@ -95,6 +97,11 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 - Preserve existing tabs, drafts, attachment ownership and current-conversation links while removing untouched new chats when closed.
 
 ### Sessions sidebar
+
+#### v0.3.7
+
+- Show conversation tags, filter sessions by tag and reorder pinned conversations by dragging or using arrow keys on the grip.
+- Validation: pending the v0.3.7 release review.
 
 #### v0.1.23 — same-version rebuild
 
@@ -168,6 +175,7 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 
 #### v0.3.7
 
+- Style once and webhook controls and policy notices with VS Code theme colors; managed policy can restrict webhook tasks.
 - Add once and webhook schedules, filter editing, endpoint and token controls, delivery history, and policy notices. Unsupported schedule fields remain read-only.
 - T3 reference: `packages/contracts/src/scheduledTask.ts` and `packages/client-runtime/src/scheduledTaskWebhook.ts`.
 - Validation: pending the v0.3.7 release review.
@@ -278,8 +286,9 @@ Session resources retain the current History selection for restoration. Opening 
 
 #### v0.3.7
 
+- Add and remove tags from thread actions; choose tags to hide and toggle hiding per environment.
 - Use T3 snooze and wake rules for pending requests, guest attention and child approvals. Stop also addresses background work; **Force stop** appears for an unresponsive run when supported.
-- Preserve tags and pull-request links in conversation summaries as data; this change does not add tag or pull-request display controls.
+- Preserve tags and pull-request links in conversation summaries for the display controls added later in v0.3.7.
 - Validation: pending the v0.3.7 release review.
 
 #### v0.0.1
@@ -320,6 +329,14 @@ Session resources retain the current History selection for restoration. Opening 
 
 - **Auto-settle ›** (and the quick pick's auto-settle action) is now hidden when the thread's machine never auto-settles anything: `sidebarAutoSettleAfterDays` is null, `sidebarAutoSettleOnMerge` is off, and no project override turns either on. This mirrors T3's `autoSettlementConfigured` gate (`apps/server/src/orchestration-v2/ThreadSettlementService.ts`). It is machine-wide, not per project, because once T3's sweep runs it also settles threads whose pull request was closed whatever their own project's settings. The settings come from each server's own config stream, paired machines included, and changes apply live. Owner request: the per-thread "Enabled" check read as auto-settle being on while every machine had it off. T3 Code's own menu still shows the opt-out in that case; the server's behaviour is unchanged.
 - Validation: typecheck and 605/605 unit tests, including override cases and a paired machine's config change reaching the redraw listener. Against an isolated T3 0.1.1 server with one GPT-6 Luna (low) turn, `verify-thread-attention-live.ts` passed 7/7; its new step turns auto-settle off and back on in that server's settings and checks the item hides and returns. The release regression review blocked a first per-project version, which hid the choice for threads T3 still settles on a closed pull request; fixed as above.
+
+### Pull requests on conversations
+
+#### v0.3.7
+
+- Show linked pull or merge requests in Sessions and the conversation header. The header opens details, checks, change breakdowns and review guides, with refresh and browser links.
+- Offer device sign-in where supported, show repository app access issues, and route requests through the conversation’s environment.
+- Validation: pending the v0.3.7 release review.
 
 ### Guest sharing
 
@@ -443,6 +460,7 @@ Session resources retain the current History selection for restoration. Opening 
 
 #### v0.3.7
 
+- Choose an already linked environment or a known paired machine in the request picker; new links still require a pairing code.
 - Review a requested machine link, choose access and enter an address and pairing code, use an existing environment ID, or decline. Resolved requests show their outcome.
 - T3 reference: `packages/client-runtime/src/linkRequest.ts`.
 - Validation: pending the v0.3.7 release review.
@@ -470,6 +488,7 @@ Session resources retain the current History selection for restoration. Opening 
 
 #### v0.3.7
 
+- Offer Stop for eligible running subagents in Sessions and transcript cards, including supported remote children.
 - List delegated tasks on other machines beneath their parent. Paired children open on their own machine; unpaired tasks show their status and a pairing hint.
 - Validation: pending the v0.3.7 release review.
 
@@ -659,6 +678,11 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 - Preserve uploaded attachments through both queue and steer dispatches, including image-only messages.
 
 ### Queue controls and task progress
+
+#### v0.3.7
+
+- **Send now** starts a selected queued message when permitted, or steers the active turn when supported.
+- Validation: pending the v0.3.7 release review.
 
 #### v0.0.6
 
@@ -1472,6 +1496,11 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 
 ### Remote environments
 
+#### v0.3.7
+
+- Manage T3 server linked environments separately from VS Code pairings: list health and access, link a machine with an address and pairing code, or confirm unlinking.
+- Validation: pending the v0.3.7 release review.
+
 #### v0.3.0
 
 - Add **T3 VSCode: Add Environment from Pairing Link**: paste a link from **Create link** in T3 Code on the other machine. HTTPS is required; loopback HTTP is allowed. **T3 VSCode: Manage Environments** enables, disables, reconnects or removes a paired machine.
@@ -1534,6 +1563,13 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - The row's text buttons became icon buttons at the owner's request (icon table reviewed in chat): Pair again = Link, Enable = Play, Ignore = BellOff, Unignore = Bell, each with a title and a machine-named label, at the same 22 px size as the hover icons. Review of this change: APPROVE WITH NITS (layout and hover swap measured unchanged; the icons are muted grey where Pair again used to be a coloured link; an ignored machine has no text cue beyond its dimmed status and the Bell icon; the Disabled row's Enable is now a Play icon). A Disabled row's Remove (trash) icon is always visible instead of appearing only on hover (owner request; checked in a 280 px render, not re-reviewed).
 - Reconnect timing (owner question): the extension's own backoff is 2 s doubling to a 60 s cap (T3's app uses jittered 2 s to 5 min); no periodic check runs while connected, a drop is noticed when the socket closes.
 - Validation: pure action-set tests for each status, an unignore persistence test in the catalog tests. A first approach that reserved icon width at rest squeezed the machine name out in narrow panels (review blocker) and was replaced by the hover swap. `verify-views.ts` already fails on unmodified `a203643` at "Snooze opens beside the parent".
+
+### Managed policy
+
+#### v0.3.7
+
+- Show the managing organization in Status and Environments. Apply policy restrictions to provider drivers, permission modes, webhook tasks and locked worktree settings, with explanations in the interface.
+- Validation: pending the v0.3.7 release review.
 
 ### Missing-server setup
 
