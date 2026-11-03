@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { getProviderAttachmentLimitError, type AttachmentCreateUploadUrlInput } from "@t3tools/contracts";
 import { attachmentUploadInput, insertAttachmentReferences, type TextSelection, type DraftAttachment, type AttachmentInsertionOptions } from "../shared/composerAttachments";
 import { planComposerPaste, type ComposerClipboardPayload } from "../shared/composerClipboard";
@@ -6,11 +7,18 @@ import { bridge } from "./bridge-client";
 import { readDraft, updateDraft } from "./composerDrafts";
 
 const pending = new Map<string, Set<Promise<unknown>>>();
+const workListeners = new Set<() => void>();
 export function trackAttachmentWork<T>(draftKey: string, work: Promise<T>): Promise<T> {
-  const jobs = pending.get(draftKey) ?? new Set(); jobs.add(work); pending.set(draftKey, jobs);
-  void work.finally(() => { jobs.delete(work); if (!jobs.size) pending.delete(draftKey); }).catch(() => undefined);
+  const jobs = pending.get(draftKey) ?? new Set(); jobs.add(work); pending.set(draftKey, jobs); workListeners.forEach((listener) => listener());
+  void work.finally(() => { jobs.delete(work); if (!jobs.size) pending.delete(draftKey); workListeners.forEach((listener) => listener()); }).catch(() => undefined);
   return work;
 }
+/** Re-renders while a draft's paste or drop work starts and finishes, so Send re-enables when it is done. */
+export function usePendingAttachmentWork(draftKey: string): boolean {
+  return useSyncExternalStore((listener) => { workListeners.add(listener); return () => { workListeners.delete(listener); }; }, () => hasPendingAttachmentWork(draftKey));
+}
+/** A paste or drop still placing its reference (or uploading); sending now would drop it from the message. */
+export function hasPendingAttachmentWork(draftKey: string): boolean { return (pending.get(draftKey)?.size ?? 0) > 0; }
 export async function settleDraftAttachments(draftKey: string): Promise<void> { await Promise.allSettled([...(pending.get(draftKey) ?? [])]); }
 export function addDraftAttachments(draftKey: string, attachments: ReadonlyArray<DraftAttachment>, selection?: TextSelection, options?: AttachmentInsertionOptions): number | undefined {
   const added = attachments.map((file) => ({ ...file, contextId: file.contextId ?? `${file.mimeType.startsWith("image/") ? "image" : "file"}_${crypto.randomUUID()}` }));
