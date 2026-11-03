@@ -2,7 +2,7 @@
 
 A VS Code client for a separately running [T3 Code](https://github.com/pingdotgg/t3code) server: workspace sessions and agent chat in editor tabs, beside your code instead of in a browser. Colors follow your VS Code theme.
 
-0.2.7 is on the [Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode) release channel.
+Install it from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hungtienhuang.t3-vscode); each version is also a [GitHub release](https://github.com/busFred/t3-vscode/releases) with its VSIX.
 
 ## In the editor
 

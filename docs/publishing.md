@@ -289,7 +289,7 @@ The owner reviewed these and chose to ship as they are. None is a regression aga
 
 ## Git tags and GitHub releases
 
-Owner policy since 0.3.7: every Marketplace publication also gets an annotated tag `vX.Y.Z` on the exact source commit of the published VSIX, pushed to `origin`, and a GitHub release for that tag (`--prerelease` for the Marketplace prerelease channel). Attach `target-installer/t3-vscode-X.Y.Z.vsix` and its `.sha256`, use the version's changelog section as notes, and confirm the release asset digest matches the published package. Earlier versions were not tagged.
+The README names no version (owner request, November 3, 2026): the Marketplace listing and the tags/GitHub releases show the latest one, so releases do not edit it. Owner policy since 0.3.7: every Marketplace publication also gets an annotated tag `vX.Y.Z` on the exact source commit of the published VSIX, pushed to `origin`, and a GitHub release for that tag (`--prerelease` for the Marketplace prerelease channel). Attach `target-installer/t3-vscode-X.Y.Z.vsix` and its `.sha256`, use the version's changelog section as notes, and confirm the release asset digest matches the published package. Earlier versions were not tagged.
 
 ## 0.3.7 release-channel publication
 
