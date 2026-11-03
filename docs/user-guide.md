@@ -56,7 +56,7 @@ Settings live in **Preferences → Settings → Extensions → T3 VSCode**, grou
 | Scheduled Tasks: Default Speed | `t3-vscode.scheduledTasks.defaultSpeed` | `standard` | Speed new tasks start with on models that offer a service tier or fast mode: `standard` pins the standard tier; `inherit` leaves it to the server or Codex config. |
 | T3 Home | `t3-vscode.t3Home` | empty | Empty uses the default T3 home; set it to your server's data directory and reload VS Code. |
 
-Font size changes apply immediately to every view and preserve conversations and drafts. The settings button at the bottom of the session manager and the **T3 VSCode: Font Settings** command open that native settings page. Existing setting keys and saved values are preserved across versions.
+Font size changes apply immediately to every view and preserve conversations and drafts. The ⚙ **Settings** button in the sidebar title bar and the **T3 VSCode: Font Settings** command open that native settings page. Existing setting keys and saved values are preserved across versions.
 
 ## Sessions sidebar
 
@@ -68,7 +68,7 @@ Use a session’s actions menu → **Tags → Add tag…** to add a tag, or remo
 
 Select a session to open its editor tab; if it is already open, the extension reveals that tab. Use VS Code's editor groups, group locking and tab/window movement to arrange chat beside your code. The globe opens the current session in your default browser, using localhost for a loopback server so it can reuse your paired browser session. Working sessions show a static icon and elapsed minutes; a session that is only waiting on delegated subagents or other background work shows a calmer, muted "Waiting" badge instead; Input/Approval badges and VS Code notifications highlight sessions needing a response.
 
-The sidebar title keeps **Open Web UI** and its overflow actions. Right-click a session to rename, pin, settle, archive, restore or delete it. The editor has its conversation breadcrumb, browser shortcut and thread actions.
+The sidebar title has **Reconnect**, **Open Web UI** and **Settings**, plus its overflow actions; the sidebar itself has no footer. Right-click a session to rename, pin, settle, archive, restore or delete it. The editor has its conversation breadcrumb, browser shortcut and thread actions.
 
 Subagents appear beneath their parent session in a tree whose branches start collapsed. Expand a parent to inspect its children; expand a session to see independently collapsible **Subagents** and **Scheduled tasks** groups. Active, Settled and Archive list and count ordinary conversations only, according to each conversation’s own state. Subagents of every state stay beneath their parent; archived summaries load automatically after connection. A parent is never duplicated into another section because of a child’s state. Search expands the ancestors of matching children. Hover or focus a subagent transcript row for its provider, model, current status and elapsed time; click it to open the child, then use **Subagent of** to return. Provider-native child conversations are read-only; T3-owned delegated conversations accept follow-ups. Eligible running subagents have a **Stop** control in Sessions and on their transcript card. Remote delegated tasks also appear under **Subagents**: open a paired child on its machine, or use the pairing hint on an unpaired task.
 

@@ -230,6 +230,9 @@ try {
     await verifyStreamingLayout(pages[1]!, host, client, evidence);
   } else {
   const manager = await browser.newPage({ viewport: { width: 360, height: 820 } });
+  // Settings and Reconnect moved to the view's title bar (VS Code commands); the sidebar sends the same requests a title-bar command would trigger.
+  const sidebarRequest = (method: string) => manager.evaluate(([method, view]) => fetch(`/rpc?view=${view}`, { method: "POST", body: JSON.stringify({ id: `title-${method}`, method }) })
+    .then((response) => response.json()).then((data) => { (window as unknown as { __completed: Array<{ method: string; data: unknown }> }).__completed.push({ method, data }); }), [method, SIDEBAR_VIEW_ID] as const);
   manager.on("pageerror", (error) => errors.push(error.message));
   await manager.goto(`http://127.0.0.1:${address.port}/?view=${SIDEBAR_VIEW_ID}`);
   await manager.locator(".dedicated-sessions").waitFor();
@@ -271,7 +274,8 @@ try {
   const selections = ["tab-one", "tab-two", "tab-three"].map((id) => host.snapshot(id).activeThreadId);
   const subscriptionsBeforeFonts = client.threadStarts; const commandsBeforeFonts = client.commands.length;
   const drafts = await Promise.all(pages.map((page) => page.getByRole("textbox", { name: "Message", exact: true }).inputValue()));
-  await manager.getByRole("button", { name: "T3 VSCode settings", exact: true }).click();
+  assert.equal(await manager.locator(".dedicated-sessions .history-settings").count(), 0, "The sidebar has no footer; Settings and Reconnect are title-bar actions");
+  await sidebarRequest("openSettings");
   await manager.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some((entry) => entry.method === "openSettings"));
   assert.equal(settingsOpened, 1); assert.equal(await first.getByRole("dialog").count(), 0);
   preferences = { fontSizeInterface: 20, fontSizePrompt: 18, fontSizeCode: 17 }; host.refreshAppearance();
@@ -529,7 +533,7 @@ try {
   assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in third tab");
   console.log("PASS: mouse-selected assistant quotes across inline formatting, optional comments, cancel/edit, independent draft contexts, scoped file references and exact send payloads; provider-instance search, favorites, keyboard selection, effort, legacy and unavailable models.");
   for (const [index, page] of pages.entries()) await page.screenshot({ path: `${evidence}/tab-${index + 1}.png` });
-  await manager.getByRole("button", { name: "Refresh connection", exact: true }).click();
+  await sidebarRequest("reconnect");
   await manager.waitForFunction(() => (window as unknown as { __completed: Array<{ method: string }> }).__completed.some((entry) => entry.method === "reconnect"));
   await manager.getByRole("complementary", { name: "Sessions", exact: true }).waitFor();
   assert.equal(await manager.locator(".server-setup").count(), 0, "The ready connection returns directly to Sessions.");

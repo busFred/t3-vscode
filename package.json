@@ -109,6 +109,18 @@
         "icon": "$(globe)"
       },
       {
+        "command": "t3-vscode.reconnect",
+        "title": "Reconnect",
+        "category": "T3 VSCode",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "t3-vscode.settings",
+        "title": "Settings",
+        "category": "T3 VSCode",
+        "icon": "$(gear)"
+      },
+      {
         "command": "t3-vscode.refreshUsage",
         "title": "Refresh Usage Meters",
         "category": "T3 VSCode",
@@ -176,9 +188,19 @@
           "group": "2_connection@3"
         },
         {
+          "command": "t3-vscode.reconnect",
+          "when": "view == t3.webview",
+          "group": "navigation@3"
+        },
+        {
           "command": "t3-vscode.openWebUi",
           "when": "view == t3.webview",
           "group": "navigation@4"
+        },
+        {
+          "command": "t3-vscode.settings",
+          "when": "view == t3.webview",
+          "group": "navigation@5"
         }
       ]
     },

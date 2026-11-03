@@ -73,7 +73,7 @@ export function App() {
   if (sidebar && state?.phase === "ready") lastSidebarState.current = state;
   let content;
   if (!state) content = <StatusView title="Opening T3 VSCode…" detail="Connecting to the extension host." />;
-  else if (state.phase === "ready") content = document.body.dataset.surface === "sidebar" ? <SidebarView navigationRequest={navigationRequest} taskRequest={taskRequest} state={state} usageRequest={usageRequest} onAppearance={() => { void run(Methods.openSettings); }} /> : document.body.dataset.surface === "task" ? <TaskEditorPanel state={state} request={taskRequest} /> : <ChatView state={state} />;
+  else if (state.phase === "ready") content = document.body.dataset.surface === "sidebar" ? <SidebarView navigationRequest={navigationRequest} taskRequest={taskRequest} state={state} usageRequest={usageRequest} /> : document.body.dataset.surface === "task" ? <TaskEditorPanel state={state} request={taskRequest} /> : <ChatView state={state} />;
   else if (state.phase === "no-server" || state.phase === "error") content = <ServerSetup state={state} />;
   else content = <StatusView
     title={state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}
@@ -83,7 +83,7 @@ export function App() {
   if (sidebar && lastSidebarState.current) {
     // Retain sidebar navigation, scroll, groups and task drafts during same-server recovery.
     const remembered = lastSidebarState.current;
-    content = <><div className="retained-sidebar" style={{ display: state?.phase === "ready" ? "flex" : "none" }}><SidebarView key={remembered.environment?.environmentId} navigationRequest={navigationRequest} taskRequest={taskRequest} state={remembered} usageRequest={usageRequest} onAppearance={() => { void run(Methods.openSettings); }} /></div>{state?.phase !== "ready" ? content : null}</>;
+    content = <><div className="retained-sidebar" style={{ display: state?.phase === "ready" ? "flex" : "none" }}><SidebarView key={remembered.environment?.environmentId} navigationRequest={navigationRequest} taskRequest={taskRequest} state={remembered} usageRequest={usageRequest} /></div>{state?.phase !== "ready" ? content : null}</>;
   }
   return <DateFormatContext.Provider value={state?.dateFormat ?? "yyyy-MM-dd"}><TimeFormatContext.Provider value={state?.timeFormat ?? "automatic"}><Actions value={run}><LinkRequestPeers value={state?.linkRequestPeers}><div className="app">
     {error ? <div className="error-banner" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError(null)}><XIcon size={14} /></button></div> : null}

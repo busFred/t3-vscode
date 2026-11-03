@@ -710,8 +710,9 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
       document.documentElement.style.fontSize = `${size}px`;
       return [...document.querySelectorAll('.sidebar-tabs, .dedicated-sessions .history-shelf > summary, .dedicated-sessions .history-settings')].map(element => ({ height: element.getBoundingClientRect().height + (element.tagName === 'SUMMARY' ? 1 : 0) }));
     }, fontSize);
-    assert.equal(bands.length, 4);
-    assert.ok(bands.every(band => Math.abs(band.height - bands[0].height) < 1), `Sidebar footer bands match tab height at ${fontSize}px`);
+    // The sidebar has no footer band any more: Settings and Reconnect are title-bar actions.
+    assert.equal(bands.length, 3);
+    assert.ok(bands.every(band => Math.abs(band.height - bands[0].height) < 1), `Sidebar shelf bands match tab height at ${fontSize}px`);
   }
   await page.evaluate(() => { document.documentElement.style.fontSize = '16px'; });
   assert.equal(await page.locator('.project-heading').count(), 0);

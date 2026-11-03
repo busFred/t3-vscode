@@ -66,7 +66,8 @@ export async function verifyEditorChat({ home, evidence, profile, workbench, sid
   await sidebar.evaluate(`document.querySelector('.account-usage [aria-label="Status meters"]').click()`);
   await workbench.locator('.quick-input-title').filter({ hasText: 'T3 VSCode: Configure Status Meters' }).waitFor();
   await workbench.keyboard.press('Escape');
-  await sidebar.evaluate(`document.querySelector('[aria-label="T3 VSCode settings"]').click()`);
+  // Settings sits in the view's title bar next to Open Web UI.
+  await runCommand('T3 VSCode: Settings');
   await workbench.locator('.settings-editor').waitFor();
   const categories = await workbench.locator('.settings-toc-container').textContent();
   for (const category of ['Appearance', 'Reading', 'Usage', 'Connection']) assert.ok(categories.includes(category), `Missing native settings category: ${category}`);

@@ -182,6 +182,10 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 - The sidebar itself never scrolls; Sessions keep a few rows (up to 96 px) and the setup notice shrinks too, so neither pushes the tabs away.
 - Validation: browser fixture with 40 machines and both sections open at 820, 420 and 260 px high checks that all three titles stay on screen, including after the document and sidebar are scrolled. A plain click on the separator keeps the automatic height. It also checks keyboard and drag resizing and the double-click reset. Screenshot: `sections-pinned.png`.
 
+#### Unreleased (after v0.3.9) — title-bar actions
+
+- **Reconnect** and **Settings** moved from the sidebar's bottom bar to its title bar beside **Open Web UI** (commands `t3-vscode.reconnect` and `t3-vscode.settings`); the sidebar has no footer. Editor-tab session drawers never had this footer (they show the compact history list).
+
 ### Scheduled task management
 
 #### v0.3.7
