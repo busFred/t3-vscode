@@ -228,7 +228,12 @@ export class T3Client {
     const decoded = Schema.decodeUnknownSync(ServerSettingsPatch)(patch);
     if (decoded.projectSettingsOverrides && this.config?.environment.capabilities.projectSettingsOverrides !== true)
       throw new Error("Update T3 Code to save shared project settings.");
-    return this.run(this.requireSession().client[WS_METHODS.serverUpdateSettings]({ patch: decoded }));
+    return this.run(this.requireSession().client[WS_METHODS.serverUpdateSettings]({ patch: decoded })).then((settings) => {
+      // The config stream catches up later; a second save in the meantime must not read stale settings.
+      this.configState = applyServerConfigProjection(this.configState, { version: 1, type: "settingsUpdated", payload: { settings } });
+      if (this.config) this.onConfig?.(this.config);
+      return settings;
+    });
   }
   subscribeWorktreeSetup(id: string, handler: (event: WorktreeSetupStreamEvent) => void) {
     return this.subscribe(this.requireSession().client[WS_METHODS.subscribeWorktreeSetup]({ threadId: threadId(id) }), handler);

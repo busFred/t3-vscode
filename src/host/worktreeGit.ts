@@ -220,6 +220,16 @@ export async function copyWorktreeConfig(projectRoot: string, worktreePath: stri
     await copyFile(source, join(destination, entry.name), constants.COPYFILE_EXCL).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'EEXIST') throw error; });
   }
 }
+/** Re-adds a checkout Git no longer lists at its original path; T3 0.1.5+ only creates checkouts in its managed folder. */
+export async function addCheckout(projectRoot: string, path: string, branch: string): Promise<void> {
+  if (!branch || branch.startsWith('-')) throw new Error('Invalid branch name');
+  await git(projectRoot, ['check-ref-format', '--branch', branch]);
+  await git(projectRoot, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]).catch(() => { throw new Error('The retained branch no longer exists'); });
+  if (await lstat(path).catch(() => null)) throw new Error('Checkout path already exists');
+  const parent = await realpath(dirname(path)).catch(() => { throw new Error('Checkout parent folder is missing'); });
+  if (join(parent, relative(dirname(path), path)) !== resolve(path)) throw new Error('Checkout parent contains a symlink');
+  await git(projectRoot, ['worktree', 'add', resolve(path), branch]);
+}
 export async function restoreCheckout(projectRoot: string, path: string, branch: string): Promise<void> {
   const tree = (await listLocalWorktrees(projectRoot)).find((entry) => entry.path === resolve(path));
   if (!tree || tree.root || tree.branch !== branch || !branch || tree.locked) throw new Error('Checkout identity does not match the requested branch');

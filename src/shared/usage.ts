@@ -67,7 +67,7 @@ export function usageAccounts(state: HostStateSnapshot): ReadonlyArray<UsageAcco
     const key = resolvedProviderKey(provider);
     if (accounts.has(key)) continue;
     const workspaceId = provider.auth?.workspaceId;
-    accounts.set(key, { key, workspaceId, legacyKey: workspaceId ? identity(provider.driver, provider.auth?.email, provider.usageLimits?.credentialFingerprint, key) : undefined, driver: provider.driver, displayName: provider.displayName || null, email: provider.auth?.email,
+    accounts.set(key, { key, workspaceId, legacyKey: workspaceId ? identity(provider.driver, provider.auth?.email, provider.usageLimits?.credentialFingerprint, `${environmentId}:${provider.instanceId}`) : undefined, driver: provider.driver, displayName: provider.displayName || null, email: provider.auth?.email,
       plan: provider.auth?.label, accentColor: provider.accentColor, sourceLabel: null, redeem: null,
       environments: [{ environmentId: environmentId as EnvironmentId, label: state.environment.label }],
       limits: provider.usageLimits ?? { checkedAt: provider.checkedAt, windows: [] },

@@ -59,6 +59,7 @@ async function fixture(t: { after: (action: () => Promise<void>) => void }) {
       createInputs.push(raw);
       state.creates++;
       const input = raw as { refName: string; newRefName?: string; path?: string | null };
+      if (input.path != null) throw new Error("vcs.createWorktree only accepts a null path (T3 0.1.5+)");
       if (state.failCreate) throw new Error("early creation failed");
       const branch = input.newRefName ?? input.refName;
       const path = input.path ?? join(home, branch.replaceAll("/", "-"));

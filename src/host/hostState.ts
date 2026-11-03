@@ -198,6 +198,8 @@ export class HostState {
   private readonly views = new Map<string, ViewState>([[SIDEBAR_VIEW_ID, blankView()]]);
   private archive: OrchestrationV2ArchivedShellSnapshot | null = null;
   private archiveRefresh: ReturnType<typeof setTimeout> | null = null;
+  /** A move arrived while an archive fetch was in flight; that fetch may predate it. */
+  private archiveStale = false;
   private archiveLoad: Promise<void> | null = null;
   private archiveGeneration = 0;
   private archiveError: string | undefined;
@@ -931,7 +933,7 @@ export class HostState {
   }
 
   private async stopSubscriptions(): Promise<void> {
-    this.archiveGeneration += 1; this.archiveLoad = null; this.archiveError = undefined;
+    this.archiveGeneration += 1; this.archiveLoad = null; this.archiveError = undefined; this.archiveStale = false;
     for (const viewId of this.sessionSearches.keys()) this.cancelSessionSearch(viewId);
     this.scheduledGeneration += 1;
     await this.scheduledSubscription?.(); this.scheduledSubscription = null;
@@ -1031,7 +1033,11 @@ export class HostState {
   /** Coalesces archive refetches; the server no longer streams archive changes. */
   private scheduleArchiveRefresh(): void {
     if (this.archive === null || this.disposed || this.archiveRefresh) return;
-    this.archiveRefresh = setTimeout(() => { this.archiveRefresh = null; void this.fetchArchive().catch(() => {}); }, this.options.archiveRefreshDelayMs ?? 300);
+    this.archiveRefresh = setTimeout(() => {
+      this.archiveRefresh = null;
+      if (this.archiveLoad) { this.archiveStale = true; return; }
+      void this.fetchArchive().catch(() => {});
+    }, this.options.archiveRefreshDelayMs ?? 300);
   }
   private fetchArchive(): Promise<void> {
     if (this.disposed) return Promise.resolve();
@@ -1049,7 +1055,10 @@ export class HostState {
         if (current()) this.archiveError = describeError(cause);
         throw cause;
       } finally {
-        if (current()) { this.archiveLoad = null; this.emit(); }
+        if (current()) {
+          this.archiveLoad = null; this.emit();
+          if (this.archiveStale) { this.archiveStale = false; this.scheduleArchiveRefresh(); }
+        }
       }
     })();
     this.emit();
@@ -1875,6 +1884,15 @@ export class HostState {
   interrupt(id: string): Promise<void> {
     return this.enqueue(async () => {
       this.requireThread(id);
+      // thread.stop only holds a run that is still queued, so a just-sent message is cancelled instead.
+      const accepted = this.acceptedMessages.get(id);
+      if (accepted) {
+        const run = (await this.client.getThreadProjection(id)).runs.find(run => run.userMessageId === accepted.messageId);
+        if (run?.status === "queued") {
+          await this.client.dispatch({ type: "queued-run.cancel", commandId: randomUUID(), threadId: id, runId: run.id });
+          this.acceptedMessages.delete(id); this.emit(); return;
+        }
+      }
       // Thread-wide Stop includes work omitted from paginated history and delegated tasks.
       await this.client.dispatch({ type: "thread.stop", commandId: randomUUID(), threadId: id });
     });
@@ -2615,6 +2633,8 @@ export class HostState {
     const projection = state?.projection;
     const descriptor = this.server?.descriptor;
     const threads = this.visibleThreads();
+    const delegatedChildren = new Map<string, OrchestrationV2ThreadShell[]>();
+    for (const child of threads) if (child.delegatedFrom) delegatedChildren.set(child.delegatedFrom.threadId, [...delegatedChildren.get(child.delegatedFrom.threadId) ?? [], child]);
     const threadById = new Map<string, OrchestrationV2ThreadShell>(threads.map((thread) => [thread.id, thread]));
     const visibleThreadIds = new Set(threadById.keys());
     const subagentActivity = this.subagentActivity();
@@ -2690,7 +2710,7 @@ export class HostState {
                 startedAt: agent.startedAt ? DateTime.formatIso(agent.startedAt) : null });
             }
             // Before expansion loads the parent's tasks, paired children can identify their parent themselves.
-            if (!projection) for (const child of threads) {
+            if (!projection) for (const child of delegatedChildren.get(thread.id) ?? []) {
               const from = child.delegatedFrom;
               if (from?.threadId !== thread.id || from.environmentId !== (remote?.environmentId ?? descriptor?.environmentId)) continue;
               const owner = this.remoteThread(child.id);

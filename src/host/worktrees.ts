@@ -9,7 +9,7 @@ import type { SessionBranchPolicy, WorktreeChoice, WorktreeSummary, WorktreePrep
 import type { T3Client } from "./t3Client.js";
 import { WorktreeEnvironmentManager, runEnvironmentCommand, sanitizeEnvironmentDiagnostic, acquireWorktreeLease, type EnvironmentRunner } from "./worktreeEnvironment.js";
 import { WorktreeSettingsStore, type WorktreeSettingsProject } from "./worktreeSettings.js";
-import { repositoryIdentity, listLocalWorktrees, worktreeChanges, applyWorktreeFiles, copyWorktreeConfig, restoreCheckout, readWorktreeStatus, readWorktreeDiffFile, worktreeCleanupIdentity, worktreeRemovalConfirmed, patchNumstat, type LocalWorktree } from "./worktreeGit.js";
+import { repositoryIdentity, listLocalWorktrees, worktreeChanges, applyWorktreeFiles, copyWorktreeConfig, restoreCheckout, addCheckout, readWorktreeStatus, readWorktreeDiffFile, worktreeCleanupIdentity, worktreeRemovalConfirmed, patchNumstat, type LocalWorktree } from "./worktreeGit.js";
 import { MergeRecordStore, parsePatchNumstat, resolveThreadForCheckout, type MergeRecord } from "./mergeRecords.js";
 
 export type WorktreeTransport = Pick<T3Client, "listRefs" | "createWorktree" | "removeWorktree" | "preparePullRequest" | "getSettings" | "updateSettings" | "gitAction"> & { readonly worktreeSettingsCapabilities?: { readonly worktreesDirectory: boolean; readonly cleanupRetention: boolean; readonly runOnSettle: boolean } };
@@ -582,10 +582,8 @@ export class WorktreeCoordinator {
     if (!saved || saved.root || !saved.missing || !saved.branch) throw new Error("Select a missing checkout with a retained branch.");
     const local = await listLocalWorktrees(project.workspaceRoot);
     if (local.some(w => resolve(w.path) === resolve(path))) await restoreCheckout(project.workspaceRoot, path, saved.branch);
-    else {
-      if (!this.options.client.createWorktree) throw new Error("This service cannot restore worktrees.");
-      await this.options.client.createWorktree({ cwd: project.workspaceRoot, refName: saved.branch, path });
-    }
+    // T3 0.1.5+ only creates managed checkouts, so a checkout at its original path is re-added locally.
+    else await addCheckout(project.workspaceRoot, path, saved.branch);
     const attempt = this.orderedAttempts().filter(a => a.preparation.projectId === projectId && a.path && resolve(a.path) === resolve(path)).at(-1);
     if (attempt) {
       attempt.created = true; attempt.completed = false; attempt.setupComplete = false;

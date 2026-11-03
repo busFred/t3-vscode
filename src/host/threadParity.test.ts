@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as Schema from "effect/Schema";
 import * as DateTime from "effect/DateTime";
 import { OrchestrationV2ThreadProjection, OrchestrationV2DomainEvent, OrchestrationV2ThreadShell, PROVIDER_WORKSPACE_SNAPSHOT_TTL_MS } from "@t3tools/contracts";
-import { viewsHarness } from "./testing/fakeTransport.js";
+import { harness, viewsHarness } from "./testing/fakeTransport.js";
 
 const projectionWith = (base: OrchestrationV2ThreadProjection, fields: object) => Schema.decodeUnknownSync(OrchestrationV2ThreadProjection)({ ...Schema.encodeSync(OrchestrationV2ThreadProjection)(base), ...fields });
 
@@ -103,4 +103,25 @@ test("Upstream reducers project tags, guest share and PR link deltas; shell summ
   assert.equal(summary.pullRequests?.[0]?.url, link.url);
   assert.equal(summary.linkedPullRequest?.number, 42);
   assert.deepEqual(summary.linkedPullRequest, projection.thread.linkedPullRequest ?? null);
+});
+
+test("Stop right after Send cancels the still-queued run instead of holding it", async (t) => {
+  const { host, client } = await harness(); t.after(() => host.dispose());
+  const id = host.snapshot().activeThreadId!;
+  await host.sendMessage("just sent", id);
+  const sent = client.commands.findLast((command) => command.type === "message.dispatch") as { messageId: string } | undefined;
+  assert.ok(sent, "the message was dispatched");
+  assert.ok(host.snapshot().acknowledgedWorking, "the composer shows Working for the just-sent message");
+  // thread.stop would only hold a queued run; the host must cancel it and clear the accepted state.
+  client.getThreadProjection = async () => ({ runs: [{ id: "queued-run", userMessageId: sent.messageId, status: "queued" }] }) as never;
+  await host.interrupt(id);
+  assert.deepEqual(client.commands.at(-1) && { type: client.commands.at(-1)!.type, runId: (client.commands.at(-1) as { runId?: string }).runId }, { type: "queued-run.cancel", runId: "queued-run" });
+  assert.equal(client.commands.some((command) => command.type === "thread.stop"), false);
+  assert.equal(host.snapshot().acknowledgedWorking, undefined, "Working clears once the queued run is cancelled");
+  // Once the run has started, Stop is thread-wide.
+  await host.sendMessage("second", id);
+  const second = client.commands.findLast((command) => command.type === "message.dispatch") as { messageId: string };
+  client.getThreadProjection = async () => ({ runs: [{ id: "running-run", userMessageId: second.messageId, status: "running" }] }) as never;
+  await host.interrupt(id);
+  assert.equal(client.commands.at(-1)?.type, "thread.stop");
 });

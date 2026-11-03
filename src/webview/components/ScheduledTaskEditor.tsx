@@ -109,7 +109,7 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
       {draft.scheduleType === "webhook" ? <div className="task-webhook">
         {webhookDenial ? <p className="task-status" role="alert">{webhookDenial}</p> : null}
         {saved?.webhook ? <><p className="task-webhook-endpoint">Endpoint: {rotated ?? saved.webhook.url ?? saved.webhook.path}</p>
-          <button type="button" disabled={!saved.webhook.url} onClick={() => { if (saved.webhook?.url) void navigator.clipboard.writeText(rotated ?? saved.webhook.url); }}>Copy endpoint</button>
+          <button type="button" disabled={!saved.webhook.url} onClick={() => { if (saved.webhook?.url) void run("copyText", { text: rotated ?? saved.webhook.url }); }}>Copy endpoint</button>
           {!saved.webhook.url ? <small>Link this environment to T3 Connect for a public URL.</small> : null}
           <p className="task-webhook-secret">Secret: {saved.webhook.hasSecret ? "Set" : "Not set"}</p>
           <button type="button" onClick={() => {
