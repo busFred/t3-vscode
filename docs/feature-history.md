@@ -1597,6 +1597,12 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - Reconnect timing (owner question): the extension's own backoff is 2 s doubling to a 60 s cap (T3's app uses jittered 2 s to 5 min); no periodic check runs while connected, a drop is noticed when the socket closes.
 - Validation: pure action-set tests for each status, an unignore persistence test in the catalog tests. A first approach that reserved icon width at rest squeezed the machine name out in narrow panels (review blocker) and was replaced by the hover swap. `verify-views.ts` already fails on unmodified `a203643` at "Snooze opens beside the parent".
 
+#### v0.3.9
+
+- The Machines description moved to an ⓘ beside the title (shown in the list only while no other machine is added).
+- One remove (trash) button per machine opens a menu: **Remove from VS Code** (the existing VS Code confirmation) and **Remove agent access** (confirmed in the menu). Each option describes its effect on hover and in the menu; the separate inline "Remove agent access" link is gone. Machines with agent access only get the same button.
+- Agent chips read **Agents (Auto)**, **Agents (Read only)**, … or **Agents (expired)**. Machine rows have more line spacing.
+
 ### Managed policy
 
 #### v0.3.7

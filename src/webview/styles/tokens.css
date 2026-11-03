@@ -1027,3 +1027,17 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .account-limit-group > summary > span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-limit-group:not([open]) > summary > .account-limit-value { color: var(--muted-foreground); }
 .account-limit-accounts { display: grid; row-gap: 3px; }
+/* Machines: roomier rows, a help icon instead of a standing description, and one remove menu per machine. */
+.env-info { display: inline-flex; color: var(--muted-foreground); cursor: help; }
+.env-row { padding: 4px 6px; gap: 2px 6px; line-height: 1.4; }
+.env-row .env-name, .env-row .env-meta { line-height: 1.4; }
+.machine-capabilities { gap: 3px 8px; line-height: 1.4; }
+.machine-capabilities .text-button { line-height: 1.4; }
+.env-chip { line-height: 1.5; }
+.machine-remove-menu { width: min(260px, calc(100vw - 12px)); }
+.machine-remove-menu > button { display: grid; gap: 2px; width: 100%; text-align: left; white-space: normal; }
+.machine-remove-menu > button > small { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.35; }
+.machine-remove-confirm { display: grid; gap: 6px; padding: 4px; font-size: .75rem; white-space: normal; }
+.machine-remove-confirm p { margin: 0; line-height: 1.4; }
+.machine-remove-confirm > div { display: flex; justify-content: flex-end; gap: 6px; }
+.machine-remove-confirm .danger { color: var(--destructive); }

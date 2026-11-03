@@ -8,7 +8,7 @@ export function MachineCapabilities({ machine, peers, pair }: { readonly machine
   const run = useActions();
   const [editing, setEditing] = useState(false), [manual, setManual] = useState(false), [code, setCode] = useState("");
   const [address, setAddress] = useState(machine.address ?? ""), [access, setAccess] = useState<AuthMcpClientAccess>("approval-required");
-  const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [forget, setForget] = useState(false);
+  const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
   const submit = async () => {
     if (inFlight.current) return;
@@ -22,16 +22,8 @@ export function MachineCapabilities({ machine, peers, pair }: { readonly machine
   return <div className="env-meta machine-capabilities">
     {machine.conversations ? <span className="env-chip">Conversations</span> : <button className="text-button" onClick={pair}>Pair to see conversations</button>}
     {!machine.local && (machine.agents ? <>
-      <span className="env-chip" title={peerHealthLabel(machine.agents.status)}>{machine.agents.status === "expired" ? "Agent access expired" : `Agents can use · ${peerAccessLabels[machine.agents.access]}`}</span>
+      <span className="env-chip" title={peerHealthLabel(machine.agents.status)}>{agentChipLabel(machine.agents)}</span>
       {machine.agents.status === "expired" && <button className="text-button" disabled={!peers || !!peers.denial || !peers.loaded} title={peers?.denial} onClick={() => setEditing(true)}>Let agents use this…</button>}
-      {!peers?.denial && <button className="text-button danger" disabled={busy} onClick={() => setForget(true)}>Remove agent access</button>}
-      {forget && <div><p className="env-hint">Agents here stop working there. To end the session there too, revoke “T3 Code · …” in that machine’s Connections.</p><button className="btn" onClick={() => setForget(false)}>Cancel</button><button className="btn danger" disabled={busy} onClick={async () => {
-        if (inFlight.current) return;
-        inFlight.current = true; setBusy(true);
-        try { if (await run("unlinkPeer", { environmentId: machine.environmentId })) setForget(false); else setError("Could not remove agent access."); }
-        catch { setError("Could not remove agent access."); }
-        finally { setBusy(false); inFlight.current = false; }
-      }}>Confirm removal</button></div>}
     </> : <button className="text-button" disabled={!peers || !!peers.denial || !peers.loaded} title={peers?.denial} onClick={() => setEditing(true)}>Let agents use this…</button>)}
     {editing && <form autoComplete="off" onSubmit={event => { event.preventDefault(); void submit(); }}><fieldset disabled={busy}>
       <AccessChoice access={access} setAccess={setAccess} />
@@ -41,6 +33,10 @@ export function MachineCapabilities({ machine, peers, pair }: { readonly machine
     </fieldset></form>}
     {error && <p role="alert">{error}</p>}
   </div>;
+}
+/** "Agents (Auto)", or "Agents (expired)" once the link needs renewing. */
+export function agentChipLabel(agents: { readonly status: string; readonly access: AuthMcpClientAccess }): string {
+  return `Agents (${agents.status === "expired" ? "expired" : peerAccessLabels[agents.access]})`;
 }
 /** Readable agent-link health for the status column and tooltips. */
 export function peerHealthLabel(status: string): string {

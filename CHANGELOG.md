@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.9 — Local build
+
+- Machines: one remove menu per machine that asks whether to remove the conversations from VS Code or the agent access, describing each; an ⓘ replaces the standing description; chips read "Agents (Auto)"; roomier rows.
+
 ## 0.3.8 — Local build
 
 - Replace separate machine lists with one Machines list, showing Conversations and agent access independently.

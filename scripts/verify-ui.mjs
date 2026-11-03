@@ -186,7 +186,25 @@ try {
   await page.locator('.environments summary').click();
   assert.equal(await page.locator('.environments .env-row').count(), 4);
   assert.equal(await page.locator('.environments .env-chip').filter({ hasText: /^Conversations$/ }).count(), 3);
-  assert.equal(await page.locator('.environments .env-chip').filter({ hasText: /Agents can use/ }).count(), 2);
+  assert.deepEqual(await page.locator('.environments .env-chip').filter({ hasText: /^Agents/ }).allTextContents(), ['Agents (Read only)', 'Agents (Supervised)']);
+  // The explanation lives in the title's info icon once machines are listed.
+  assert.match(await page.locator('.environments .env-info').getAttribute('title'), /Conversations: .*Agents: /);
+  assert.equal(await page.locator('.environments-body > .env-hint').filter({ hasText: /^Conversations:/ }).count(), 0);
+  // One remove per machine asks which capability to remove and describes each.
+  const both = page.locator('.environments .env-row').filter({ hasText: 'Build machine' });
+  await both.hover(); await both.getByRole('button', { name: 'Remove Build machine…' }).click();
+  const removeMenu = page.getByRole('menu', { name: 'Remove Build machine' });
+  assert.deepEqual(await removeMenu.getByRole('menuitem').evaluateAll(items => items.map(item => item.querySelector('strong')?.textContent)), ['Remove from VS Code', 'Remove agent access']);
+  assert.match(await removeMenu.getByRole('menuitem', { name: /Remove agent access/ }).getAttribute('title'), /can no longer launch or drive threads/);
+  assert.match(await removeMenu.getByRole('menuitem', { name: /Remove from VS Code/ }).getAttribute('title'), /Nothing is deleted on that machine/);
+  await page.screenshot({ path: `${evidence}/machines-remove-menu.png` });
+  await removeMenu.getByRole('menuitem', { name: /Remove agent access/ }).click();
+  await removeMenu.getByRole('menuitem', { name: 'Remove agent access', exact: true }).click();
+  await page.waitForFunction(() => window.__requests.some(request => request.method === 'unlinkPeer' && request.params.environmentId === 'both'));
+  const vps = page.locator('.environments .env-row').filter({ hasText: 'Agent VPS' });
+  await vps.hover(); await vps.getByRole('button', { name: 'Remove Agent VPS…' }).click();
+  assert.deepEqual(await page.getByRole('menu', { name: 'Remove Agent VPS' }).getByRole('menuitem').evaluateAll(items => items.map(item => item.querySelector('strong')?.textContent)), ['Remove agent access']);
+  await page.keyboard.press('Escape');
   const localMachine = page.locator('.environments .env-row').filter({ hasText: 'Local workstation' });
   assert.equal(await localMachine.getByText('Let agents use this…').count(), 0);
   await page.screenshot({ path: `${evidence}/machines-merged.png` });
