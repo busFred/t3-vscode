@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.11 — Unreleased
+
+- Fix finished tasks delegated to another machine appearing as top-level sessions once their (long) parent conversation was opened; they stay under the parent's Subagents.
+
 ## 0.3.10 — Release
 
 - Worktrees groups by machine name and loads paired machines’ checkouts from their own servers. Multi-root machines retain repository headings; **Machines** controls visibility.

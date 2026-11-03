@@ -120,6 +120,12 @@ test("Subagent stop validates the parent task and routes app-owned children to t
   assert.deepEqual(client.commands.at(-1) && { type: client.commands.at(-1)!.type, threadId: (client.commands.at(-1) as { threadId: string }).threadId }, { type: "thread.stop", threadId: "second" });
   const rows = withRemoteSubagents(host.snapshot().threads);
   assert.deepEqual(rows.find(thread => thread.id === "second")?.stopSubagent, { threadId: "first", subagentId: "agent" });
+  // A child the loaded task list already names is listed once, and keeps that task's Stop, even when it also names its parent.
+  client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1, threads: client.shell.threads.map(thread => thread.id === "second"
+    ? { ...thread, delegatedFrom: { title: "Parent", threadId: ThreadId.make("first"), environmentId: EnvironmentId.make(host.snapshot().environment!.environmentId) } } : thread) };
+  client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
+  const tasks = host.snapshot().threads.find(thread => thread.id === "first")?.remoteSubagents;
+  assert.deepEqual(tasks?.map(task => [task.id, task.environmentId, task.threadId, task.stopSubagent]), [["agent", "studio", "second", { threadId: "first", subagentId: "agent" }]]);
 });
 
 test("Native Stop requires a running Claude task with strong native identity and a run", () => {
