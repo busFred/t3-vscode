@@ -105,3 +105,25 @@ test("Conversation peer choices query the owning environment and omit client-loc
   client.configForThread = () => null;
   assert.ok(host.snapshot().linkRequestPeers?.denial, "unavailable remote config must not use primary settings");
 });
+
+
+test("Known-machine link mints host-only code, masks failures and retains manual fallback", async t => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  client.config = { ...client.config, ...config() };
+  client.remoteStatuses = () => [{ environmentId: "build", label: "Build", httpBaseUrl: input.url, enabled: true, state: "connected", expiresAt: null }];
+  client.listPeerLinks = async () => ({ links: [] });
+  const minted: unknown[] = [], linked: unknown[] = [];
+  client.mintPeerPairingCodeOn = async (...args) => { minted.push(args); return input.pairingCode; };
+  client.linkPeer = async value => { linked.push(value); };
+  const registry = new WebviewRegistry(), bridge = new BridgeHandler(host, registry), view = new FakeWebview();
+  registry.add(SIDEBAR_VIEW_ID, view.webview); bridge.attach(view.webview, SIDEBAR_VIEW_ID);
+  await view.request("linkPeer", { environmentId: "build", access: "approval-required" });
+  assert.deepEqual(minted, [["build", "approval-required"]]); assert.deepEqual(linked, [{ ...input, alternateUrls: [], expectedEnvironmentId: "build", expectedLabel: "Build" }]);
+  assert.equal(JSON.stringify(view.messages).includes(input.pairingCode), false);
+  assert.equal(JSON.stringify(host.snapshot()).includes(input.pairingCode), false);
+  client.mintPeerPairingCodeOn = async () => { throw new Error(input.pairingCode); };
+  await assert.rejects(view.request("linkPeer", { environmentId: "build", access: "read-only" }), error => error instanceof Error && !error.message.includes(input.pairingCode));
+  assert.equal(linked.length, 1);
+  await view.request("linkPeer", input); assert.equal(linked.length, 2);
+  await assert.rejects(view.request("linkPeer", { environmentId: "audit", access: "read-only" }));
+});

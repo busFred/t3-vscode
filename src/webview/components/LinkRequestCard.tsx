@@ -51,15 +51,15 @@ function PendingLinkRequest({ item }: { item: LinkItem }) {
     {review ? <fieldset disabled={busy || !!peers?.denial}>
       {picksMachine ? <label>Machine<select value={selected} onChange={event => { setChoice(event.target.value); setCode(""); }}>
         <option value="">Another address…</option>
-        {machines.map(machine => <option key={machine.environmentId} value={machine.environmentId}>{machine.label}{machine.linked ? " · Already linked" : " · Paired in VS Code"}</option>)}
+        {machines.map(machine => <option key={machine.environmentId} value={machine.environmentId}>{machine.label}{machine.linked ? " · Agents can use" : " · Conversations in VS Code"}</option>)}
       </select></label> : null}
       {peers?.error ? <p role="alert">{peers.error}</p> : null}
-      {machine?.linked ? <p className="subtle">This environment is already linked to {machine?.label}. The agent can use that link as it is; change its access in Settings → Connections.</p> : <>
+      {machine?.linked ? <p className="subtle">Agents here can already use {machine?.label}. Change their access in Settings → Connections.</p> : <>
       {!machine?.urls.length ? <label>Environment address<input className="question-custom" value={address} onChange={event => setAddress(event.target.value)} placeholder="https://…" /></label> : null}
       <label>Access<select value={access} onChange={event => setAccess(event.target.value as AuthMcpClientAccess)}>{Object.entries(accessLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Pairing code<input type="password" className="question-custom secret-input" value={code} autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" onChange={event => setCode(event.target.value)} /></label>
       <p className="subtle">Get a pairing code from the other machine’s Connections settings or t3 pair.</p>
-      {!selected ? <label>Or use an already linked environment ID<input className="question-custom" value={manualExisting} onChange={event => setManualExisting(event.target.value)} /></label> : null}
+      {!selected ? <label>Or use an environment ID agents can already use<input className="question-custom" value={manualExisting} onChange={event => setManualExisting(event.target.value)} /></label> : null}
       </>}
     </fieldset> : null}
     {peers?.denial ? <p className="subtle">{peers.denial}</p> : null}

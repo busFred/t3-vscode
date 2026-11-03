@@ -1,3 +1,4 @@
+import { throttle } from "./renderScheduling";
 import { matchesSearchFilters, searchableFields, searchPattern, type SessionSearchOptions } from "../shared/sessionSearch";
 import type { TranscriptItem } from "../shared/bridge";
 import { isCitationExpanded, setCitationExpanded } from "./citationExpansion";
@@ -38,11 +39,11 @@ function setHighlight(name: string, ranges: Range[], priority: number) {
 }
 
 /** Redraw on virtual row mounting, streamed text and disclosure expansion, without scrolling. */
-export function observeSearchHighlights(root: HTMLElement, rows: readonly TranscriptItem[], options: SessionSearchOptions, target: SearchTarget | null): () => void {
-  const eligible = new Map(rows.filter(row => matchesSearchFilters(row, options)).map(row => [row.key, row]));
-  let frame = 0;
+export function observeSearchHighlights(root: HTMLElement, rows: readonly TranscriptItem[], options: SessionSearchOptions, target: SearchTarget | null) {
+  let currentRows = rows;
+  let eligible = new Map(rows.filter(row => matchesSearchFilters(row, options)).map(row => [row.key, row]));
   const paint = () => {
-    frame = 0; const all: Range[] = [], active: Range[] = [];
+    const all: Range[] = [], active: Range[] = [];
     for (const element of root.querySelectorAll<HTMLElement>("[data-search-row]")) {
       const row = eligible.get(element.dataset.searchRow!); if (!row) continue;
       for (const { field } of searchableFields(row, options.scope)) {
@@ -52,10 +53,16 @@ export function observeSearchHighlights(root: HTMLElement, rows: readonly Transc
     }
     setHighlight("t3-session-matches", all, 0); setHighlight("t3-session-match", active, 1);
   };
-  const schedule = () => { if (!frame) frame = requestAnimationFrame(paint); };
+  const schedule = throttle(paint, 200);
   const observer = new MutationObserver(schedule); observer.observe(root, { childList: true, subtree: true, characterData: true });
-  paint();
-  return () => { observer.disconnect(); cancelAnimationFrame(frame); CSS.highlights?.delete("t3-session-matches"); CSS.highlights?.delete("t3-session-match"); };
+  schedule();
+  const dispose = () => { observer.disconnect(); schedule.cancel(); CSS.highlights?.delete("t3-session-matches"); CSS.highlights?.delete("t3-session-match"); };
+  return Object.assign(dispose, { refresh: (next: readonly TranscriptItem[]) => {
+    if (currentRows === next) return;
+    currentRows = next;
+    eligible = new Map(next.filter(row => matchesSearchFilters(row, options)).map(row => [row.key, row]));
+    schedule();
+  } });
 }
 
 export function highlightSearchResult(root: HTMLElement, target: SearchTarget): boolean {

@@ -121,7 +121,7 @@ function DynamicTool({ row, threadId }: { row: TranscriptItem; threadId: string 
   const app = mcpAppFromToolItem(row.item);
   return app ? <McpAppFrame key={app.attachmentId} app={app} threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} revision={row.item.updatedAt} fallback={fallback} /> : fallback;
 }
-function WorkGroup({ rows, threadId, environmentId }: { rows: ReadonlyArray<TranscriptItem>; threadId: string; environmentId: string }) {
+const WorkGroup = memo(function WorkGroup({ rows, threadId, environmentId }: { rows: ReadonlyArray<TranscriptItem>; threadId: string; environmentId: string }) {
   const [open, setOpen] = useState(false), [now, setNow] = useState(Date.now);
   const running = rows.filter(row => row.item.status === "running" || row.item.status === "pending").length;
   useEffect(() => { if (!running) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [running]);
@@ -132,7 +132,7 @@ function WorkGroup({ rows, threadId, environmentId }: { rows: ReadonlyArray<Tran
   return <section className="work-group"><button className="work-group-toggle" aria-label={`${label} · ${description}`} title={description} aria-expanded={open} onClick={() => setOpen(!open)}><ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /><span>{label}</span>{running ? <span className="work-running">{running} running</span> : null}{failures ? <span className="work-group-failures">{failures} failed</span> : null}</button>
     {open ? <div className="work-group-items">{rows.map((row) => <TurnItem key={row.key} row={row} threadId={threadId} environmentId={environmentId} />)}</div> : null}
   </section>;
-}
+});
 const TurnItem = memo(function TurnItem(props: { row: TranscriptItem; threadId: string; environmentId: string }) {
   const target = useContext(SearchTargetContext);
   return <div data-search-row={props.row.key} className={target?.rowKey === props.row.key ? "session-match-row" : undefined}><TurnContent {...props} /></div>;
@@ -142,7 +142,7 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
   // References come out before quotes are stripped: the stripper matches `> ` lines anywhere, so running it
   // first can rewrite a snapshot that repeats a quote, and the section then stops being attributable.
   const sent = useMemo(() => splitMessageReferences(item.type === "user_message" ? item.text : ""), [item]);
-  const assetSource = { sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id };
+  const assetSource = useMemo(() => ({ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }), [row.sourceThreadId, row.sourceItemId, row.item.id]);
   const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} assetSource={assetSource} {...(item.type === "user_message" ? { context: item.context, attachments: item.attachments, source: { environmentId, threadId: row.sourceThreadId, messageId: item.messageId, author: "user" as const } } : {})} />;
   const openThread = (id: string) => { void run("selectThread", { threadId: id }); };
   switch (item.type) {
@@ -216,7 +216,17 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   const id = state.activeThreadId;
   const list = useRef<LegendListRef>(null);
   const transcript = useMemo(() => finalResponseCheckpoints(state.transcript), [state.transcript]);
-  const rows = useMemo(() => transcriptRows(transcript), [transcript]);
+  const displayCache = useRef(new Map<string, DisplayRow>());
+  const rows = useMemo(() => {
+    const next = new Map<string, DisplayRow>();
+    const result = transcriptRows(transcript).map(row => {
+      const previous = displayCache.current.get(row.key);
+      const stable = previous && previous.firstIndex === row.firstIndex && previous.rows.length === row.rows.length && previous.rows.every((item, index) => item === row.rows[index]) ? previous : row;
+      next.set(row.key, stable); return stable;
+    });
+    displayCache.current = next; return result;
+  }, [transcript]);
+  const subagentState = useMemo(() => ({ threads: state.threads, providers: state.providers, ...(state.activeThreadId ? { activeThreadId: state.activeThreadId } : {}) }), [state.threads, state.providers, state.activeThreadId]);
   const boundaries = useMemo(() => responseBoundaries(transcript), [transcript]);
   const thread = state.threads.find(thread => thread.id === id);
   const activeRun = thread?.activeRunId ?? state.queue?.activeRunId ?? (state.acknowledgedWorking ? state.transcript.find(row => row.item.type === "user_message" && row.item.messageId === state.acknowledgedWorking?.messageId)?.item.runId : null);
@@ -291,10 +301,15 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     frame = requestAnimationFrame(show);
     return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-session-match"); };
   }, [searchTarget, id, matchIndex]);
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
+  const highlights = useRef<ReturnType<typeof observeSearchHighlights> | null>(null);
   useEffect(() => {
-    if (!searchOptions?.query || !container.current) return;
-    return observeSearchHighlights(container.current, transcript, searchOptions, searchTarget ?? null);
-  }, [searchOptions, searchTarget, transcript, id]);
+    if (!searchOptions?.query || !viewport) return;
+    const observer = observeSearchHighlights(viewport, transcript, searchOptions, searchTarget ?? null);
+    highlights.current = observer;
+    return () => { observer(); highlights.current = null; };
+  }, [searchOptions, searchTarget, id, viewport]);
+  useEffect(() => { highlights.current?.refresh(transcript); }, [transcript]);
   useEffect(() => {
     if (!citationTarget || citationTarget.threadId !== id) return;
     if (attempts.current.target !== citationTarget) { attempts.current = { target: citationTarget, pages: 0 }; setCitationNotice(null); }
@@ -323,7 +338,6 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     frame = requestAnimationFrame(show);
     return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-assistant-citation"); };
   }, [citationTarget, id, sourceIndex, state.threadLoading, state.history.hasMore, state.history.loading, state.transcript.length, run]);
-  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const viewportRef = useCallback((element: HTMLDivElement | null) => { container.current = element; setViewport(element); onViewport?.(element); }, [onViewport]);
   const placement = state.messageNavigation ?? "left";
   const [railFrame, setRailFrame] = useState<RailFrame | null>(null);
@@ -359,7 +373,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source message…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading && !working)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length && !working) return <div className="chat-empty"><p>Loading conversation…</p></div>;
-  return <SearchTargetContext.Provider value={searchTarget ?? null}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><SubagentState value={state}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation"
+  return <SearchTargetContext.Provider value={searchTarget ?? null}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><SubagentState value={subagentState}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation"
     onPointerDown={startReading} onKeyDown={startReading} onTouchStart={startReading} onWheel={(event) => { startReading(); if (event.deltaY < 0) loadEarlierAtTop(); }}>
     {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
     {navigationNotice ? <div className="citation-source-notice" role="status">{navigationNotice}</div> : null}

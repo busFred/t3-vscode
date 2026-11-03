@@ -26,13 +26,17 @@ export class WebviewRegistry {
   private readonly pending = new Map<string, Array<{ event: BridgeEvent; data: unknown }>>();
   /** Keyed by webview, not view id: a view re-resolved under the same id gets a fresh webview and a late reply for the old one must not advance it. */
   private readonly encoders = new WeakMap<vscode.Webview, TranscriptEncoder>();
+  /** Views off screen receive no state pushes; `stale` ones get the latest state when shown again. */
+  private readonly hidden = new Set<string>();
+  private readonly stale = new Set<string>();
+  private stateSource: ((viewId: string) => HostStateSnapshot) | null = null;
   private focused = SIDEBAR_VIEW_ID;
   private readonly focusListeners = new Set<() => void>();
   get focusedViewId(): string { return this.chatViews.has(this.focused) ? this.focused : SIDEBAR_VIEW_ID; }
   focus(id: string): void { if (this.chatViews.has(id) && this.focused !== id) { this.focused = id; this.focusListeners.forEach((listener) => listener()); } }
   onDidFocusView(listener: () => void): () => void { this.focusListeners.add(listener); return () => this.focusListeners.delete(listener); }
-  add(id: string, webview: vscode.Webview, acceptsChatFocus = true): void { this.webviews.set(id, webview); if (acceptsChatFocus) this.chatViews.add(id); else this.chatViews.delete(id); this.ready.delete(id); }
-  remove(id: string): void { this.webviews.delete(id); this.chatViews.delete(id); this.ready.delete(id); this.pending.delete(id); if (this.focused === id) { this.focused = SIDEBAR_VIEW_ID; this.focusListeners.forEach((listener) => listener()); } }
+  add(id: string, webview: vscode.Webview, acceptsChatFocus = true): void { this.webviews.set(id, webview); this.hidden.delete(id); this.stale.delete(id); if (acceptsChatFocus) this.chatViews.add(id); else this.chatViews.delete(id); this.ready.delete(id); }
+  remove(id: string): void { this.webviews.delete(id); this.hidden.delete(id); this.stale.delete(id); this.chatViews.delete(id); this.ready.delete(id); this.pending.delete(id); if (this.focused === id) { this.focused = SIDEBAR_VIEW_ID; this.focusListeners.forEach((listener) => listener()); } }
   postWhenReady(id: string, event: BridgeEvent, data: unknown): void {
     if (this.ready.has(id)) { void this.webviews.get(id)?.postMessage({ event, data }); return; }
     const queue = this.pending.get(id) ?? []; queue.push({ event, data }); this.pending.set(id, queue);
@@ -43,10 +47,21 @@ export class WebviewRegistry {
     const queue = this.pending.get(id); this.pending.delete(id);
     for (const message of queue ?? []) void webview.postMessage(message);
   }
+  setVisible(id: string, visible: boolean): void {
+    if (!visible) { this.hidden.add(id); return; }
+    this.hidden.delete(id);
+    if (this.stale.delete(id) && this.stateSource) this.postState(id, this.stateSource);
+  }
   pushStates(stateForView: (viewId: string) => HostStateSnapshot): void {
-    for (const [viewId, webview] of this.webviews) {
-      void webview.postMessage({ event: Events.stateChanged, data: this.encodeState(webview, stateForView(viewId)) });
+    this.stateSource = stateForView;
+    for (const viewId of this.webviews.keys()) {
+      if (this.hidden.has(viewId)) { this.stale.add(viewId); continue; }
+      this.postState(viewId, stateForView);
     }
+  }
+  private postState(viewId: string, stateForView: (viewId: string) => HostStateSnapshot): void {
+    const webview = this.webviews.get(viewId);
+    if (webview) void webview.postMessage({ event: Events.stateChanged, data: this.encodeState(webview, stateForView(viewId)) });
   }
   /** Call immediately before posting, so each webview decodes states in the order they were encoded. */
   encodeState(webview: vscode.Webview, state: HostStateSnapshot, whole = false): WireState {
@@ -70,7 +85,7 @@ export class BridgeHandler {
   private readonly showSettings: () => PromiseLike<unknown>;
   private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean>; snoozeUntil?: () => PromiseLike<string | undefined> };
   private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
-  private readonly viewActions: { openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>; keepTab?: (viewId: string) => PromiseLike<unknown>; closeTaskTab?: (viewId: string) => void; editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown>; environmentAction?: (action: string, environmentId?: string) => PromiseLike<unknown> };
+  private readonly viewActions: { openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>; keepTab?: (viewId: string) => PromiseLike<unknown>; closeTaskTab?: (viewId: string) => void; editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown>; addMachine?: (input: unknown) => PromiseLike<unknown>; environmentAction?: (action: string, environmentId?: string) => PromiseLike<unknown> };
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:hungtienhuang.t3-vscode"),
     prompts: BridgeHandler["prompts"] = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
@@ -86,7 +101,7 @@ export class BridgeHandler {
       newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown;
       showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown;
       configureUsage?: () => PromiseLike<unknown>;
-      environmentAction?: (action: string, environmentId?: string) => PromiseLike<unknown>;
+      addMachine?: (input: unknown) => PromiseLike<unknown>; environmentAction?: (action: string, environmentId?: string) => PromiseLike<unknown>;
     } = {}) { this.hostState = hostState; this.registry = registry; this.showSettings = showSettings; this.prompts = prompts; this.openDiff = openDiff; this.viewActions = viewActions; }
   async performThreadAction(id: string, action: string, title?: string, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     const thread = this.hostState.snapshot(viewId).threads.find((thread) => thread.id === id);
@@ -350,6 +365,11 @@ export class BridgeHandler {
           break;
         }
         case "refreshPeerLinks": await this.hostState.refreshPeerLinks(typeof params.threadId === "string" ? id() : undefined); break;
+        case "addMachine":
+          if (!this.viewActions.addMachine) throw new Error("Machines are unavailable.");
+          await this.viewActions.addMachine(params);
+          await this.hostState.refreshPeerLinks();
+          break;
         case "linkPeer": await this.hostState.linkPeer(params); break;
         case "unlinkPeer": await this.hostState.unlinkPeer(stringParam(params, "environmentId")); break;
         case "answerLinkRequest": {

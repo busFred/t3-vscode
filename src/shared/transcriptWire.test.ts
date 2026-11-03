@@ -32,3 +32,20 @@ test("A webview missing rows reports an incomplete state until a whole state arr
   assert.equal(reloaded.decode(whole).complete, true);
   assert.equal(isWireState({ revision: 1, phase: "ready" }), false);
 });
+
+test("Unchanged thread summaries keep their identity across decoded states", () => {
+  const decoder = new TranscriptDecoder();
+  const summary = (id: string, title: string) => ({ id, title, tags: ["a"], pullRequests: [{ number: 1 }] });
+  const withThreads = (revision: number, threads: unknown[]) => ({ ...state(revision, []), threads }) as unknown as HostStateSnapshot;
+  const first = decoder.decode(withThreads(1, [summary("x", "X"), summary("y", "Y")])).state.threads;
+  const second = decoder.decode(withThreads(2, [summary("x", "X"), summary("y", "Y")])).state.threads;
+  assert.equal(second, first);
+  const third = decoder.decode(withThreads(3, [summary("x", "X"), summary("y", "Y renamed")])).state.threads;
+  assert.notEqual(third, first);
+  assert.equal(third[0], first[0]);
+  assert.notEqual(third[1], first[1]);
+  assert.equal(third[1]!.tags, first[1]!.tags);
+  assert.equal(third[1]!.title, "Y renamed");
+  const reordered = decoder.decode(withThreads(4, [third[1], summary("x", "X")])).state.threads;
+  assert.equal(reordered[1], first[0]);
+});

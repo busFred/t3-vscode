@@ -12,6 +12,7 @@ export const credentials = { get: async () => ({ origin: server.origin, environm
 export class FakeTransport implements HostTransport {
   pullRequestRequest: HostTransport["pullRequestRequest"] = async () => { throw new Error("No pull request fixture."); };
   listPeerLinks?: NonNullable<HostTransport["listPeerLinks"]>;
+  mintPeerPairingCodeOn?: NonNullable<HostTransport["mintPeerPairingCodeOn"]>;
   linkPeer?: NonNullable<HostTransport["linkPeer"]>;
   unlinkPeer?: NonNullable<HostTransport["unlinkPeer"]>;
   remoteStatuses?: NonNullable<HostTransport["remoteStatuses"]>;

@@ -92,13 +92,16 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
     this.registry.add(id, webviewView.webview, false);
     this.bridge.attach(webviewView.webview, id);
     webviewView.webview.html = this.htmlFor(webviewView.webview, "sidebar");
+    // Hidden views skip state pushes and catch up when shown again.
+    this.registry.setVisible(id, webviewView.visible);
+    webviewView.onDidChangeVisibility(() => { if (this.sidebar === webviewView) this.registry.setVisible(id, webviewView.visible); });
     webviewView.onDidDispose(() => { if (this.sidebar === webviewView) { this.registry.remove(id); this.sidebar = undefined; } });
     this.updateTitles();
   }
 
   updateTitles(): void {
     if (this.sidebar) this.sidebar.title = "T3 VSCode";
-    for (const [id, panel] of this.panels) { const state = this.host.snapshot(id);
+    for (const [id, panel] of this.panels) { const state = this.host.viewTitle(id, this.taskRequests.get(id)?.taskId);
       const resource = this.editorUris.get(id)?.toString();
       if (resource && !this.taskRequests.has(id) && state.activeThreadId && this.restoredSelections[resource] !== state.activeThreadId) {
         delete this.restoredSelections[resource];
@@ -108,7 +111,7 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
         for (const stale of entries.slice(0, Math.max(0, entries.length - 500))) if (![...this.editorUris.values()].some(uri => uri.toString() === stale)) delete this.restoredSelections[stale];
         void this.selectionStorage?.update("editorSessionSelections", this.restoredSelections);
       }
-      panel.title = this.taskRequests.has(id) ? state.scheduledTasks?.tasks.find(task => task.id === this.taskRequests.get(id)?.taskId)?.title || "New task" : state.threads.find((thread) => thread.id === state.activeThreadId)?.title.trim() || "New conversation"; }
+      panel.title = this.taskRequests.has(id) ? state.taskTitle || "New task" : state.threadTitle?.trim() || "New conversation"; }
   }
 
   async editScheduledTask(request: ScheduledTaskEditorRequest, preview = false): Promise<void> {
@@ -192,8 +195,8 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
     panel.webview.html = this.htmlFor(panel.webview, this.taskRequests.has(id) ? "task" : "panel");
     this.updateTitles();
     // A conversation counts as read only while its tab is on screen.
-    this.host.setViewVisible(id, panel.visible);
-    panel.onDidChangeViewState(({ webviewPanel }) => { if (webviewPanel.active) this.registry.focus(id); this.host.setViewVisible(id, webviewPanel.visible); });
+    this.host.setViewVisible(id, panel.visible); this.registry.setVisible(id, panel.visible);
+    panel.onDidChangeViewState(({ webviewPanel }) => { if (webviewPanel.active) this.registry.focus(id); this.host.setViewVisible(id, webviewPanel.visible); this.registry.setVisible(id, webviewPanel.visible); });
     panel.onDidDispose(() => {
       this.host.setViewVisible(id, false);
       this.registry.remove(id); this.panels.delete(id); this.editorUris.delete(id); this.taskRequests.delete(id);

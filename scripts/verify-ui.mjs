@@ -179,6 +179,104 @@ try {
   await page.getByRole("textbox", { name: "Search threads" }).waitFor();
   assert.equal(await page.locator('.account-usage').evaluate(element => element.open), false);
   assert.equal(await page.getByRole("button", { name: "Chat", exact: true }).count(), 0);
+  await page.evaluate(() => window.__replace({
+    environments: { local: { label: "Local workstation", host: "localhost" }, indicator: "ok", rows: ["both", "conversations"].map(environmentId => ({ environmentId, label: environmentId === "both" ? "Build machine" : "Conversation machine", host: `${environmentId}.example`, status: "connected", expiresAt: null, ignored: false })) },
+    peerLinks: { environmentId: "fixture", loaded: true, machines: [{ environmentId: "both", label: "Build machine", urls: ["https://both.example"], paired: true, linked: true }], links: [{ environmentId: "both", label: "Build machine", status: "reachable", access: "read-only", paired: true }, { environmentId: "vps", label: "Agent VPS", status: "reachable", access: "approval-required", paired: false }] }
+  }));
+  await page.locator('.environments summary').click();
+  assert.equal(await page.locator('.environments .env-row').count(), 4);
+  assert.equal(await page.locator('.environments .env-chip').filter({ hasText: /^Conversations$/ }).count(), 3);
+  assert.equal(await page.locator('.environments .env-chip').filter({ hasText: /Agents can use/ }).count(), 2);
+  const localMachine = page.locator('.environments .env-row').filter({ hasText: 'Local workstation' });
+  assert.equal(await localMachine.getByText('Let agents use this…').count(), 0);
+  await page.screenshot({ path: `${evidence}/machines-merged.png` });
+  await page.getByRole('button', { name: 'Let agents use this…', exact: true }).click();
+  assert.equal(await page.getByLabel('Pairing code', { exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Let agents use this', exact: true }).click();
+  await page.waitForFunction(() => window.__requests.some(request => request.method === 'linkPeer' && request.params.environmentId === 'conversations' && !request.params.pairingCode));
+  await page.getByRole('button', { name: 'Add machine…', exact: true }).click();
+  await page.getByLabel('Machine address', { exact: true }).fill('https://new.example');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  assert.equal(await page.getByLabel('Conversations in VS Code', { exact: true }).isChecked(), true);
+  assert.equal(await page.getByLabel('Let agents use it', { exact: true }).isChecked(), true);
+  await page.screenshot({ path: `${evidence}/machines-add.png` });
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  // Section titles stay on screen however long the lists are; the Machines list height is adjustable.
+  await page.evaluate(() => window.__replace({ environments: { local: { label: "Local workstation", host: "localhost" }, indicator: "ok", rows: Array.from({ length: 40 }, (_, index) => ({ environmentId: `machine-${index}`, label: `Machine ${index}`, host: `machine-${index}.example`, status: "connected", expiresAt: null, ignored: false })) } }));
+  if (!await page.locator('.account-usage').evaluate(element => element.open)) await page.locator('.account-usage > summary').click();
+  const titlesOnScreen = async () => {
+    const viewport = page.viewportSize();
+    for (const target of [page.locator('.account-usage > summary'), page.locator('.environments > summary'), page.getByRole('tab', { name: 'Sessions' })]) {
+      const box = await target.boundingBox();
+      assert.ok(box && box.y >= 0 && box.y + box.height <= viewport.height + 0.5 && box.height >= 18, `section title off screen at ${viewport.height}px: ${JSON.stringify(box)} ${await page.evaluate(() => JSON.stringify([...document.querySelectorAll('.sidebar-front, .sidebar-front > *')].map(element => [element.className, Math.round(element.getBoundingClientRect().height), getComputedStyle(element).minHeight, getComputedStyle(element).display])))}`);
+    }
+  };
+  for (const height of [820, 420, 260]) {
+    await page.setViewportSize({ width: 360, height });
+    await page.locator('.environments .env-row').nth(5).hover(); await page.mouse.wheel(0, 4000);
+    await page.locator('.sidebar-front').evaluate(element => element.scrollTo(0, 99999));
+    await page.evaluate(() => document.scrollingElement.scrollTo(0, 99999));
+    await page.mouse.move(180, height - 5); await page.mouse.wheel(0, 4000);
+    await titlesOnScreen();
+  }
+  await page.setViewportSize({ width: 360, height: 820 });
+  const separator = page.getByRole('separator', { name: 'Resize machines list' });
+  const listHeight = () => page.locator('.environments').evaluate(element => element.getBoundingClientRect().height);
+  const before = await listHeight();
+  // A click without movement keeps the automatic (capped) height; arrow keys start from the visible height.
+  await separator.click();
+  assert.equal(await page.locator('.environments').getAttribute('data-sized'), null);
+  assert.ok(Math.abs(await listHeight() - before) <= 1, 'clicking the separator does not resize the list');
+  await separator.press('ArrowUp');
+  assert.ok(Math.abs(await listHeight() - (before - 20)) <= 2, `ArrowUp shrinks from the visible height: ${before} -> ${await listHeight()}`);
+  await separator.focus(); await separator.press('Home');
+  assert.equal(await page.locator('.environments').getAttribute('data-sized'), 'true');
+  assert.ok(await listHeight() < before && await listHeight() <= 22 + 60 + 2, 'Home shrinks the machines list to its minimum');
+  for (let index = 0; index < 5; index++) await separator.press('ArrowDown');
+  assert.ok(Math.abs(await listHeight() - (22 + 160)) <= 2, `arrow keys grow the list in 20 px steps: ${await listHeight()}`);
+  const box = await separator.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + 3); await page.mouse.down(); await page.mouse.move(box.x + box.width / 2, box.y + 103, { steps: 4 }); await page.mouse.up();
+  assert.ok(Math.abs(await listHeight() - (22 + 260)) <= 3, `dragging resizes the list: ${await listHeight()}`);
+  await titlesOnScreen();
+  await page.screenshot({ path: `${evidence}/sections-pinned.png` });
+  await separator.press('End'); await titlesOnScreen();
+  await separator.dblclick();
+  assert.equal(await page.locator('.environments').getAttribute('data-sized'), null);
+  // Per-account usage and machine rows stay compact.
+  await separator.dblclick();
+  await page.evaluate(() => {
+    const at = (hours) => new Date(Date.now() + hours * 3_600_000).toISOString();
+    const account = (email, values) => ({ id: `${email}.json`, driver: "claudeAgent", email, plan: "Claude Subscription", usageLimits: { checkedAt: at(0), windows: [
+      { id: "five_hour", kind: "session", label: "Session", usedPercent: values[0], resetsAt: at(4) }, { id: "seven_day", kind: "weekly", label: "Weekly", usedPercent: values[1], resetsAt: at(100) }, { id: "seven_day_fable", kind: "weekly", label: "Fable", usedPercent: values[2], resetsAt: at(102) }] } });
+    window.__replace({ usagePanelAccounts: "perAccount", environments: { local: { label: "Local workstation", host: "localhost" }, indicator: "ok", rows: ["Build machine", "GPU box"].map((label, index) => ({ environmentId: `compact-${index}`, label, host: `compact-${index}.example`, status: "connected", expiresAt: null, ignored: false })) },
+      usageLimitSources: [{ id: "hub", kind: "cliproxy", label: "CLI Proxy", checkedAt: at(0), accounts: [account("a@example.test", [3, 47, 2]), account("b@example.test", [0, 100, 0]), account("c@example.test", [100, 100, 4])] }] });
+  });
+  const usageChoice = page.getByLabel('Usage provider');
+  if (await usageChoice.count()) { const claude = await usageChoice.locator('option', { hasText: 'Claude' }).first().getAttribute('value'); if (claude) await usageChoice.selectOption(claude); }
+  if (await page.getByLabel('Multiple accounts').count()) await page.getByLabel('Multiple accounts').selectOption('perAccount');
+  await page.screenshot({ path: `${evidence}/sidebar-compact.png` });
+  const rowGap = await page.locator('.account-limit-account').evaluateAll(rows => rows.length > 1 ? rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().bottom : 0);
+  assert.ok(rowGap >= 2 && rowGap <= 5, `per-account usage bars keep a small gap: ${rowGap}px apart`);
+  // Each window folds to its title, which then shows the lowest remaining share.
+  const sessionGroup = page.locator('.account-limit-group').filter({ hasText: 'Session' });
+  await sessionGroup.locator('summary').click();
+  assert.equal(await sessionGroup.evaluate(element => element.open), false);
+  await sessionGroup.locator('summary', { hasText: /lowest 0%/ }).waitFor();
+  assert.equal(await sessionGroup.locator('.account-limit-account').first().isVisible(), false);
+  await page.screenshot({ path: `${evidence}/usage-folded.png` });
+  await sessionGroup.locator('summary').click();
+  assert.equal(await sessionGroup.evaluate(element => element.open), true);
+  // Pooled windows fold too (the title keeps the value); a provider with a single kind of limit never folds.
+  await page.getByLabel('Multiple accounts').selectOption('pooled');
+  const pooledWeek = page.locator('.account-limit-group').filter({ hasText: 'Week' });
+  await pooledWeek.locator('summary').click();
+  assert.equal(await pooledWeek.locator('.account-limit-bar').isVisible(), false);
+  await pooledWeek.locator('summary', { hasText: /\d+% left/ }).waitFor();
+  await pooledWeek.locator('summary').click();
+  await page.evaluate(() => window.__replace({ usageLimitSources: [{ id: "hub", kind: "cliproxy", label: "CLI Proxy", checkedAt: new Date().toISOString(), accounts: [{ id: "solo.json", driver: "claudeAgent", email: "solo@example.test", plan: "Claude Subscription", usageLimits: { checkedAt: new Date().toISOString(), windows: [{ id: "seven_day", kind: "weekly", label: "Weekly", usedPercent: 40, resetsAt: new Date(Date.now() + 3_600_000).toISOString() }] } }] }] }));
+  await page.waitForFunction(() => document.querySelectorAll('.account-limit-group').length === 0 && document.querySelectorAll('.account-limit-bar').length === 1, null, { timeout: 5000 });
+  await page.locator('.account-usage > summary').click();
+  await page.evaluate(() => window.__replace({ environments: undefined, peerLinks: undefined, usageLimitSources: undefined }));
   await page.evaluate(() => { document.body.dataset.surface = "panel"; window.__replace({}); });
   await page.getByRole("textbox", { name: "Search threads" }).waitFor({ state: "hidden" });
   await page.screenshot({ path: `${evidence}/chat-sidebar.png` });

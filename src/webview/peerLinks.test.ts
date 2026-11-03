@@ -3,17 +3,26 @@ import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { PeerLinksState } from "../shared/peerLinks";
-import { PeerLinksSection } from "./components/PeerLinksSection";
-const peers: PeerLinksState = { environmentId: "local", loaded: true, machines: [], links: [{ environmentId: "build", label: "Build", access: "read-only", status: "reachable", paired: true }] };
-test("Peer UI identifies T3 server links, status, access and extension pairing separately", () => {
-  const html = renderToStaticMarkup(createElement(PeerLinksSection, { peers }));
-  for (const text of ["Linked environments · T3 server", "reachable", "Read only", "Also paired in VS Code", "Unlink", "Link a machine"]) assert.ok(html.includes(text), text);
-  assert.doesNotMatch(html, /Pairing code/);
-});
-test("Peer UI shows setting or policy denial and offers no link actions", () => {
-  for (const denial of ["Enable Linked environments in T3 Code Settings → Labs.", "Acme does not allow connecting from other devices."]) {
-    const html = renderToStaticMarkup(createElement(PeerLinksSection, { peers: { ...peers, denial } }));
-    assert.ok(html.includes(denial));
-    assert.doesNotMatch(html, /Unlink|Link a machine|Build|Refresh links/);
+import { MachineCapabilities } from "./components/PeerLinksSection";
+import { mergeMachines } from "./machines";
+const peers: PeerLinksState = { environmentId: "local", loaded: true, machines: [], links: [{ environmentId: "both", label: "Both", access: "read-only", status: "reachable", paired: true }, { environmentId: "agents", label: "VPS", access: "approval-required", status: "reachable", paired: false }] };
+test("Machines merge local, conversations only, agents only and both by identity", () => {
+  const rows = mergeMachines({ local: { label: "Local", host: "localhost" }, indicator: "ok", rows: ["both", "conversations"].map(environmentId => ({ environmentId, label: "Same name", host: "host", status: "connected", expiresAt: null, ignored: false })) }, peers);
+  assert.equal(rows.length, 4);
+  assert.deepEqual(rows.map(row => [row.environmentId, row.local, row.conversations, row.agents?.access]), [["local", true, true, undefined], ["both", false, true, "read-only"], ["conversations", false, true, undefined], ["agents", false, false, "approval-required"]]);
+  for (const row of rows) {
+    const html = renderToStaticMarkup(createElement(MachineCapabilities, { machine: row, peers, pair: () => {} }));
+    assert.equal(html.includes("Conversations</span>"), row.conversations);
+    assert.equal(html.includes("Agents can use"), !!row.agents);
+    assert.equal(html.includes("Let agents use this"), !row.local && !row.agents);
+    assert.equal(html.includes("Pair to see conversations"), !row.conversations);
   }
+});
+test("Local machine never receives self agent access", () => {
+  const rows = mergeMachines({ local: { label: "Local", host: "localhost" }, indicator: "ok", rows: [] }, { ...peers, links: [{ ...peers.links[0]!, environmentId: "local" }] });
+  assert.equal(rows[0]?.agents, undefined);
+});
+test("Policy denial disables missing agent capability", () => {
+  const html = renderToStaticMarkup(createElement(MachineCapabilities, { machine: { environmentId: "remote", label: "Remote", local: false, conversations: true }, peers: { ...peers, denial: "Acme does not allow connecting from other devices." }, pair: () => {} }));
+  assert.match(html, /disabled=""/); assert.match(html, /Acme/);
 });

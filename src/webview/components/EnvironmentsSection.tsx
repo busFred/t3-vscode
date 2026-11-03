@@ -1,5 +1,8 @@
-import { PeerLinksSection } from "./PeerLinksSection";
-import { Fragment, useState, type ReactNode } from "react";
+import { mergeMachines, type MachineRow } from "../machines";
+import { AddMachineForm, MachineCapabilities, peerHealthLabel } from "./PeerLinksSection";
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEnvironmentsHeight } from "../environmentsHeight";
+import { clampSectionHeight } from "../sectionHeight";
 import { BellIcon, BellOffIcon, ChevronDownIcon, LaptopMinimalIcon, LinkIcon, PlayIcon, PlusIcon, PowerIcon, RefreshCwIcon, ServerIcon, Trash2Icon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import type { EnvironmentRow } from "../../shared/environmentStatus";
@@ -15,6 +18,19 @@ function Dot({ tone, label }: { readonly tone: "ok" | "warn" | "error" | "off"; 
 export function EnvironmentsSection({ state }: { readonly state: HostStateSnapshot }) {
   const run = useActions();
   const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState<MachineRow | true | null>(null);
+  const [height, setHeight] = useEnvironmentsHeight();
+  const section = useRef<HTMLDetailsElement>(null), drag = useRef<{ y: number; height: number; moved: boolean } | null>(null), dragHeight = useRef<number | null>(null);
+  const [live, setLive] = useState<number | null>(null);
+  // Leave the Sessions tabs and a few rows below; the list's own title never scrolls (see .environments CSS).
+  const maxHeight = () => { const front = section.current?.parentElement; const summary = section.current?.querySelector("summary"); return front ? front.clientHeight - (summary?.offsetHeight ?? 20) - 140 : 600; };
+  const listHeight = live ?? (height === null ? null : clampSectionHeight(height, maxHeight()));
+  const resize = (next: number) => { const value = clampSectionHeight(next, maxHeight())!; dragHeight.current = value; setLive(value); return value; };
+  // A click without movement keeps the automatic height rather than saving one.
+  const finishResize = () => { const current = drag.current; if (current) { drag.current = null; if (current.moved) setHeight(dragHeight.current); setLive(null); } };
+  /** The list's visible height (not its full content height), so resizing starts from what is on screen. */
+  const shownHeight = () => { const element = section.current; if (!element) return 200; const summary = element.querySelector("summary"); return element.getBoundingClientRect().height - (summary?.getBoundingClientRect().height ?? 22) - 1; };
+  useEffect(() => { if (open && state.peerLinks && !state.peerLinks.denial) void run("refreshPeerLinks"); }, [open, state.peerLinks?.environmentId, state.peerLinks?.denial, run]);
   const environments = state.environments;
   if (!environments) return null;
   const act = (action: EnvironmentActionName, environmentId?: string) => { void run("environmentAction", { action, environmentId }); };
@@ -53,27 +69,30 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
     }
   };
   const local = environments.local;
-  return <details className="environments" onToggle={event => { const next = event.currentTarget.open; setOpen(next); }}>
-    <summary><ChevronDownIcon size={12} /><strong>ENVIRONMENTS</strong><span className="env-summary-dot"><Dot tone={environments.indicator} label={summary} /></span></summary>
+  return <><details ref={section} className="environments" data-sized={listHeight !== null || undefined} style={listHeight !== null ? { "--env-list-height": `${listHeight}px` } as CSSProperties : undefined} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary><ChevronDownIcon size={12} /><strong>MACHINES</strong><span className="env-summary-dot"><Dot tone={environments.indicator} label={summary} /></span></summary>
     <div className="environments-body">
-      <strong>Paired with this extension</strong>
-      <p className="env-hint">These machines share their conversations with VS Code.</p>
-      {local ? <div className="env-row">
-        <LaptopMinimalIcon size={14} />
-        <div className="env-name"><span>{local.label}</span><span className="env-chip">This computer</span></div>
-        <div className="env-state"><span className="env-resting"><Dot tone="ok" />Connected</span></div>
-        <div className="env-meta">{meta(local.host, local.serverVersion)}{state.localManagedPolicy ? <span className="env-managed">Managed by {state.localManagedPolicy.organization}</span> : null}</div>
-      </div> : null}
-      {environments.rows.map((row) => <div className={`env-row${row.ignored ? " ignored" : ""}`} key={row.environmentId}>
-        <ServerIcon size={14} />
-        <div className="env-name"><span title={row.label}>{row.label}</span></div>
-        <div className={`env-state ${row.status}`}>{stateOf(row)}</div>
-        {/* Error text can be long and technical, so the address stays visible and the reason sits in the tooltip. */}
-        <div className="env-meta" title={row.status === "expiring" ? undefined : row.detail}>{meta(row.host, row.serverVersion)}{row.managedOrganization ? <span className="env-managed">Managed by {row.managedOrganization}</span> : null}</div>
+      <p className="env-hint">Conversations appear in VS Code. Agents can use machines to launch and drive threads.</p>
+      {state.peerLinks?.denial && <p className="env-hint">{state.peerLinks.denial}</p>}
+      {state.peerLinks?.error && <p role="alert">{state.peerLinks.error}</p>}
+      {mergeMachines(environments, state.peerLinks).map(machine => <div className={`env-row${machine.conversation?.ignored ? " ignored" : ""}`} key={machine.environmentId}>
+        {machine.local ? <LaptopMinimalIcon size={14} /> : <ServerIcon size={14} />}
+        <div className="env-name"><span title={machine.label}>{machine.label}</span>{machine.local && <span className="env-chip">This computer</span>}</div>
+        <div className={`env-state ${machine.conversation?.status ?? ""}`}>{machine.conversation ? stateOf(machine.conversation) : machine.local ? <span className="env-resting"><Dot tone="ok" />Connected</span> : machine.agents ? peerHealthLabel(machine.agents.status) : null}</div>
+        <div className="env-meta" title={machine.conversation?.detail}>{machine.local ? meta(local?.host, local?.serverVersion) : meta(machine.conversation?.host, machine.conversation?.serverVersion)}{(machine.conversation?.managedOrganization ?? (machine.local ? state.localManagedPolicy?.organization : undefined)) && <span className="env-managed">Managed by {machine.conversation?.managedOrganization ?? state.localManagedPolicy?.organization}</span>}</div>
+        <MachineCapabilities machine={machine} peers={state.peerLinks} pair={() => setAdding(machine)} />
       </div>)}
-      <button className="text-button env-add" onClick={() => act("add")}><PlusIcon size={13} />Add machine…</button>
-      {environments.rows.length === 0 ? <p className="env-hint">In T3 Code on the other machine, choose Create link, then paste the link here. Its sessions for this repository appear in Sessions.</p> : null}
-      {open && state.peerLinks ? <PeerLinksSection peers={state.peerLinks} /> : null}
+      {adding ? <AddMachineForm key={adding === true ? "new" : adding.environmentId} peers={state.peerLinks} machine={adding === true ? undefined : adding} close={() => setAdding(null)} /> : <button className="text-button env-add" onClick={() => setAdding(true)}><PlusIcon size={13} />Add machine…</button>}
     </div>
-  </details>;
+  </details>
+  {open ? <div className="section-resize" role="separator" tabIndex={0} aria-label="Resize machines list" aria-orientation="horizontal" aria-valuemin={60} aria-valuemax={Math.max(60, maxHeight())} {...(listHeight !== null ? { "aria-valuenow": listHeight } : {})} title="Drag or use arrow keys to resize; double-click to fit the list"
+    onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); const start = listHeight ?? shownHeight(); drag.current = { y: event.clientY, height: start, moved: false }; dragHeight.current = start; event.currentTarget.setPointerCapture(event.pointerId); }}
+    onPointerMove={(event) => { const current = drag.current; if (!current || event.clientY === current.y && !current.moved) return; current.moved = true; resize(current.height + event.clientY - current.y); }}
+    onPointerUp={(event) => { finishResize(); if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}
+    onPointerCancel={finishResize} onLostPointerCapture={finishResize}
+    onDoubleClick={() => { setLive(null); setHeight(null); }}
+    onKeyDown={(event) => { if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return; event.preventDefault();
+      const current = listHeight ?? shownHeight();
+      setHeight(resize(event.key === "Home" ? 60 : event.key === "End" ? maxHeight() : current + (event.key === "ArrowDown" ? 20 : -20))); setLive(null); }}><span className="find-grip" /></div> : null}
+  </>;
 }

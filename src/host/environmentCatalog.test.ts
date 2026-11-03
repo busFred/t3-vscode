@@ -228,3 +228,11 @@ test("unignore clears the ignored status and the cleared state persists", async 
   assert.equal("ignoredStatus" in reread[0]!, false);
   assert.deepEqual(reread[0], record("a"));
 });
+
+test("pairRemoteEnvironment rejects a different machine before signing in there", async () => {
+  let signedIn = false;
+  const deps = okDeps({ bootstrap: async () => { signedIn = true; return { access_token: "bearer-1", expires_in: 100, scope: "read write" }; } });
+  await assert.rejects(pairRemoteEnvironment(link, { expectedEnvironmentId: "env-other", deps }), (error: Error) => /different T3 machine/.test(error.message) && !error.message.includes(TOKEN));
+  assert.equal(signedIn, false);
+  assert.equal((await pairRemoteEnvironment(link, { expectedEnvironmentId: "env-remote", deps })).environmentId, "env-remote");
+});

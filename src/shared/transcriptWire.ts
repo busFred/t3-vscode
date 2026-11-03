@@ -27,11 +27,52 @@ export class TranscriptEncoder {
   }
 }
 
+/**
+ * Returns `previous` when it is structurally equal to `next`; otherwise `next` with every equal
+ * nested value replaced by its previous counterpart, so memoized consumers keep identity.
+ */
+export function shareStructure<T>(previous: unknown, next: T): T {
+  if (previous === next) return next;
+  if (!previous || !next || typeof previous !== "object" || typeof next !== "object") return next;
+  if (Array.isArray(next)) {
+    if (!Array.isArray(previous)) return next;
+    let same = previous.length === next.length;
+    const result = next.map((item, index) => { const shared = shareStructure(previous[index], item); if (shared !== previous[index]) same = false; return shared; });
+    return (same ? previous : result) as T;
+  }
+  if (Array.isArray(previous)) return next;
+  const before = previous as Record<string, unknown>, after = next as Record<string, unknown>;
+  const keys = Object.keys(after);
+  let same = keys.length === Object.keys(before).length;
+  const result: Record<string, unknown> = {};
+  for (const key of keys) {
+    const shared = shareStructure(before[key], after[key]);
+    if (shared !== before[key] || !(key in before)) same = false;
+    result[key] = shared;
+  }
+  return (same ? previous : result) as T;
+}
+
 /** Webview side; mirrors the encoder by decoding every state in arrival order. */
 export class TranscriptDecoder {
   private rows: ReadonlyMap<string, TranscriptItem> = new Map();
+  private threads: ReadonlyMap<string, HostStateSnapshot["threads"][number]> = new Map();
+  private previousThreads: HostStateSnapshot["threads"] = [];
   /** `complete` is false when a patch names a row this webview never received; request a whole state then. */
   decode(state: WireState): { state: HostStateSnapshot; complete: boolean } {
+    const decoded = this.decodeTranscript(state);
+    if (!Array.isArray(decoded.state.threads)) return decoded;
+    return { ...decoded, state: { ...decoded.state, threads: this.shareThreads(decoded.state.threads) } };
+  }
+  /** Unchanged thread summaries keep their identity across pushes so memoized session rows skip re-rendering. */
+  private shareThreads(threads: HostStateSnapshot["threads"]): HostStateSnapshot["threads"] {
+    const shared = threads.map((thread) => shareStructure(this.threads.get(thread.id), thread));
+    const result = shared.length === this.previousThreads.length && shared.every((thread, index) => thread === this.previousThreads[index]) ? this.previousThreads : shared;
+    this.threads = new Map(result.map((thread) => [thread.id, thread]));
+    this.previousThreads = result;
+    return result;
+  }
+  private decodeTranscript(state: WireState): { state: HostStateSnapshot; complete: boolean } {
     if (!("transcriptPatch" in state)) { this.rows = new Map(state.transcript.map((row) => [row.key, row])); return { state, complete: true }; }
     const { transcriptPatch, ...rest } = state;
     const changed = new Map(transcriptPatch.rows.map((row) => [row.key, row]));

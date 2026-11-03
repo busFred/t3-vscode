@@ -5,7 +5,7 @@ import { filterThreadListTags } from "../../shared/threadListTags";
 import { compareSessions } from "../../shared/sessionSort";
 import { UserIcon } from "lucide-react";
 import { useDateTimeFormat } from "../timeFormat";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArchiveIcon, CheckIcon, MessageSquareIcon, PlusIcon, SearchIcon, PinIcon, SettingsIcon, RefreshCwIcon, XIcon, MessageCircleQuestionIcon, CircleDashedIcon, HourglassIcon, LoaderCircleIcon, ChevronRightIcon, CircleXIcon, CircleStopIcon, BotIcon, ArrowDownUpIcon, ServerIcon, WandSparklesIcon, AlarmClockIcon, CircleCheckIcon, TagIcon } from "lucide-react";
 import { snoozeWakeLabel } from "@t3tools/client-runtime/state/thread-settled";
 import type { HostStateSnapshot, ThreadSearchMatch, ThreadSummary } from "../../shared/bridge";
@@ -36,7 +36,6 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   readonly onSelect?: (threadId: string) => void;
   readonly compact?: boolean;
 }) {
-  const { dateTime } = useDateTimeFormat();
   const [sort, setSort] = useSessionSort();
   const [sortOpen, setSortOpen] = useState(false);
   const sortAnchor = useRef<HTMLButtonElement>(null);
@@ -96,32 +95,19 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   };
   const matching = useMemo(() => searchThreads(sessionThreads, query, new Set(hits.data?.map((hit) => hit.threadId))), [sessionThreads, query, hits.data]);
   const { active, snoozed, settled, archived } = useMemo(() => sessionShelves(sessionThreads, matching, sort), [sessionThreads, matching, sort]);
-  const row = (thread: ThreadSummary) => {
-    const match = hits.data?.find((hit) => hit.threadId === thread.id);
-    const provider = state.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId);
-    const activity = sessionActivityLabel(thread.lastActiveAt, now, dateTime);
-    const exactActivity = activity ? dateTime(new Date(thread.lastActiveAt!)) : "";
-    const isWorking = working(thread);
-    const isWaiting = !isWorking && waiting(thread);
-    const elapsedStart = thread.backgroundWork?.startedAt ?? thread.workingStartedAt;
-    // What needs the person, most urgent first; a coloured dot marks it beside the title.
-    const attention = thread.pendingRuntimeRequest ? "input" : isWorking || isWaiting ? null : thread.unseen === "failed" ? "failed" : thread.woke ? "woke" : thread.unseen === "done" ? "done" : null;
-    const attentionLabel = { input: "Input needed", failed: "Unread: failed", woke: "Unread: woke from snooze", done: "Unread: finished" };
-    return <button key={thread.id} data-thread-id={thread.id} disabled={!!thread.readOnlyHint} title={thread.readOnlyHint} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} onClick={(event) => { if (onSelect) onSelect(thread.id); else void run("openSessionTab", { threadId: thread.id, preview: event.detail < 2 }); }} onDoubleClick={onSelect ? undefined : () => { void run("openSessionTab", { threadId: thread.id, preview: false }); }} onContextMenu={compact || thread.readOnlyHint ? undefined : (event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
-      if (!compact && !thread.readOnlyHint && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }
-    }} aria-label={thread.title || "Untitled"} aria-description={thread.pendingRuntimeRequest ? "Input needed" : isWorking ? "Working" : isWaiting ? waitingSummary(thread) : thread.subagentOutcome === "failed" ? "Subagent failed" : thread.subagentOutcome === "stopped" ? "Subagent stopped" : attention ? attentionLabel[attention] : undefined} aria-current={thread.id === state.activeThreadId ? "page" : undefined}>
-      <span className="thread-title-line">{thread.guestShare ? <span title="Shared with guest" aria-label="Shared with guest"><UserIcon size={12} /></span> : null}{thread.pendingGuestMessageCount ? <span className="guest-message-badge" title="Guest messages waiting" aria-label={`${thread.pendingGuestMessageCount} guest messages waiting`}>{thread.pendingGuestMessageCount}</span> : null}{attention ? <span className={`thread-dot ${attention}`} aria-hidden="true" /> : null}<span className="thread-title" title={thread.title || "Untitled"}>{thread.title || "Untitled"}</span>{thread.titleRegenerating ? <span className="thread-retitling" title="Generating a new title…" aria-label="Generating a new title"><WandSparklesIcon size={12} /></span> : null}</span>{thread.tags?.length ? <span className="thread-tags">{thread.tags.map(tag => <small className="thread-tag" key={tag}>{tag}</small>)}</span> : null}
-      {thread.readOnlyHint ? <small className="subtle">Machine not paired · read-only · {thread.status}</small> : null}<span className="thread-meta">{thread.pendingRuntimeRequest ? <span className="thread-input" title={thread.pendingRuntimeRequest.kind === "user_input" ? "Input needed" : "Approval needed"} aria-label="Input needed"><MessageCircleQuestionIcon size={13} /><span>{thread.pendingRuntimeRequest.kind === "user_input" ? "Input" : "Approval"}</span></span> : isWorking ? <span className="thread-working" aria-label="Working"><CircleDashedIcon size={13} /><span>Working</span><time title={thread.workingStartedAt ?? undefined}>{elapsedLabel(thread.workingStartedAt, now)}</time></span> : isWaiting ? <span className="thread-waiting" title={waitingSummary(thread)} aria-label={waitingSummary(thread)}><HourglassIcon size={13} /><span>Waiting</span><time title={elapsedStart ?? undefined}>{elapsedLabel(elapsedStart, now)}</time></span> : thread.subagentOutcome === "failed" ? <span className="thread-outcome failed" title="Subagent failed" aria-label="Subagent failed"><CircleXIcon size={13} /><span>Failed</span></span> : thread.subagentOutcome === "stopped" ? <span className="thread-outcome stopped" title="Subagent stopped" aria-label="Subagent stopped"><CircleStopIcon size={13} /><span>Stopped</span></span>
-        : attention === "failed" ? <span className="thread-outcome failed" title="Failed since you last looked"><CircleXIcon size={13} /><span>Failed</span></span>
-        : attention === "woke" ? <span className="thread-outcome woke" title="Woke from snooze"><AlarmClockIcon size={13} /><span>Woke</span></span>
-        : attention === "done" ? <span className="thread-outcome done" title="Finished since you last looked"><CircleCheckIcon size={13} /><span>Done</span></span>
-        : thread.snoozedUntil ? <span className="thread-snoozed" title={`Snoozed until ${dateTime(new Date(thread.snoozedUntil))}`}><AlarmClockIcon size={13} /><span>wakes in {snoozeWakeLabel(thread.snoozedUntil, { now: new Date(Math.max(now, Date.now())).toISOString() })}</span></span> : null}{pullRequestLabel(thread) ? <span className="thread-pr" title={pullRequestLabel(thread) ?? undefined}>{pullRequestLabel(thread)}</span> : null}{thread.environmentLabel ? <span className="thread-machine" title={`Runs on ${thread.environmentLabel}`}><ServerIcon size={12} /><span>{thread.environmentLabel}</span></span> : null}{match ? <small className="thread-match">{match.source === "user" ? "You" : "Assistant"}: {match.snippet}</small> : <small className="thread-branch">{thread.branch}</small>}{activity ? <time className="thread-age" dateTime={thread.lastActiveAt!} title={`Last active: ${exactActivity}`} aria-label={`Last active: ${exactActivity}`}>{activity}</time> : null}{thread.pinned ? <PinIcon size={12} /> : thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : <MessageSquareIcon size={12} />}<ProviderIcon brand={providerBrand(provider?.driver ?? "", provider?.displayName)} /></span>
-    </button>;
-  };
+  const matchesById = useMemo(() => new Map<string, ThreadSearchMatch>(hits.data?.map(hit => [hit.threadId, hit])), [hits.data]);
+  const brandsById = useMemo(() => new Map<string, ReturnType<typeof providerBrand>>(state.providers.map(provider => [provider.instanceId, providerBrand(provider.driver, provider.displayName)])), [state.providers]);
+  const tasksByThread = useMemo(() => {
+    const groups = new Map<string, NonNullable<HostStateSnapshot["scheduledTasks"]>["tasks"][number][]>();
+    for (const task of state.scheduledTasks?.tasks ?? []) { const key = JSON.stringify([task.originThreadId, task.projectId]); const group = groups.get(key) ?? []; group.push(task); groups.set(key, group); }
+    return groups;
+  }, [state.scheduledTasks?.tasks]);
+  const selectRef = useRef(onSelect); selectRef.current = onSelect;
+  const openThread = useCallback((threadId: string, preview: boolean) => { if (selectRef.current) selectRef.current(threadId); else void run("openSessionTab", { threadId, preview }); }, [run]);
   const treeRow = (node: SessionTreeNode, section: string, depth = 0): ReactNode => {
     const expansionKey = `${section}:${node.thread.id}`;
     const open = !!query || expanded.has(expansionKey);
-    const tasks = state.scheduledTasks?.tasks.filter((task) => task.originThreadId === node.thread.id && task.projectId === node.thread.projectId) ?? [];
+    const tasks = tasksByThread.get(JSON.stringify([node.thread.id, node.thread.projectId])) ?? EMPTY_TASKS;
     const group = (name: string, count: number, children: ReactNode, nested = false, defaultOpen = true) => <details className={`session-task-group${nested ? " nested" : ""}`} open={!!query || (defaultOpen ? !collapsedGroups.has(`${expansionKey}:${name}`) : openedGroups.has(`${expansionKey}:${name}`))} onToggle={(event) => {
       const isOpen = event.currentTarget.open; const key = `${expansionKey}:${name}`;
       if (defaultOpen) setCollapsedGroups((previous) => { if (previous.has(key) === !isOpen) return previous; const next = new Set(previous); if (isOpen) next.delete(key); else next.add(key); return next; });
@@ -131,7 +117,7 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
     const isRunning = (child: SessionTreeNode) => working(child.thread) || waiting(child.thread) || !!child.thread.pendingRuntimeRequest;
     const runningChildren = compact ? [] : node.children.filter(isRunning);
     const pastChildren = compact ? [] : node.children.filter((child) => !isRunning(child));
-    const subagentRows = runningChildren.length && pastChildren.length
+    const subagentRows = () => runningChildren.length && pastChildren.length
       ? <div className="session-tree-children" aria-label={subagentLabel}>{group("Running", runningChildren.length, <div className="session-tree-children">{runningChildren.map((child) => treeRow(child, section, depth + 1))}</div>, true)}{group("Past", pastChildren.length, <div className="session-tree-children">{pastChildren.map((child) => treeRow(child, section, depth + 1))}</div>, true, false)}</div>
       : <div className="session-tree-children" aria-label={subagentLabel}>{node.children.map((child) => treeRow(child, section, depth + 1))}{!node.children.length ? <p className="empty-list">No subagents.</p> : null}</div>;
     return <div className="session-tree-node" key={node.thread.id} data-session-depth={depth}>
@@ -140,9 +126,9 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
           const index = pins.findIndex(thread => thread.id === node.thread.id);
           if (event.key === "ArrowUp" && index > 0) { event.preventDefault(); void reorderPin(node.thread.id, pins[index - 1]!.id); }
           if (event.key === "ArrowDown" && index < pins.length - 1) { event.preventDefault(); void reorderPin(node.thread.id, pins[index + 2]?.id ?? null); }
-        }}><GripVerticalIcon size={12} /></button> : null}{!compact || node.children.length || !state.archiveLoaded ? <button className="session-tree-toggle icon-button" aria-label={`${open ? "Collapse" : "Expand"} ${compact ? "subagents" : "session"} of ${node.thread.title || "Untitled"}`} aria-expanded={open} onClick={() => { if (!open && !state.archiveLoaded) void run("loadArchive"); setExpanded((previous) => { const next = new Set(previous); if (next.has(expansionKey)) next.delete(expansionKey); else next.add(expansionKey); return next; }); }}><ChevronRightIcon size={12} className={open ? "rotate-90" : ""} /></button> : <span className="session-tree-spacer" />}{row(node.thread)}{!compact && node.thread.stopSubagent ? <button className="icon-button subagent-stop" aria-label={`Stop subagent ${node.thread.title}`} title="Stop subagent" disabled={stopping !== null} onClick={() => { void stopAgent(node.thread); }}><CircleStopIcon size={13} /></button> : null}</div>
+        }}><GripVerticalIcon size={12} /></button> : null}{!compact || node.children.length || !state.archiveLoaded ? <button className="session-tree-toggle icon-button" aria-label={`${open ? "Collapse" : "Expand"} ${compact ? "subagents" : "session"} of ${node.thread.title || "Untitled"}`} aria-expanded={open} onClick={() => { if (!open && !state.archiveLoaded) void run("loadArchive"); setExpanded((previous) => { const next = new Set(previous); if (next.has(expansionKey)) next.delete(expansionKey); else next.add(expansionKey); return next; }); }}><ChevronRightIcon size={12} className={open ? "rotate-90" : ""} /></button> : <span className="session-tree-spacer" />}<ThreadRow thread={node.thread} match={matchesById.get(node.thread.id)} brand={brandsById.get(node.thread.modelSelection.instanceId) ?? FALLBACK_BRAND} selected={node.thread.id === state.activeThreadId} compact={compact} now={now} selectionOnly={!!onSelect} openThread={openThread} setMenu={setMenu} />{!compact && node.thread.stopSubagent ? <button className="icon-button subagent-stop" aria-label={`Stop subagent ${node.thread.title}`} title="Stop subagent" disabled={stopping !== null} onClick={() => { void stopAgent(node.thread); }}><CircleStopIcon size={13} /></button> : null}</div>
       {open ? compact ? node.children.length ? <div className="session-tree-children" aria-label={`Subagents of ${node.thread.title || "Untitled"}`}>{node.children.map((child) => treeRow(child, section, depth + 1))}</div> : null
-        : <div className="session-expanded-groups">{group("Subagents", node.children.length, subagentRows)}{group("Scheduled tasks", tasks.length, <ScheduledTaskRows state={state} tasks={tasks} />)}</div> : null}
+        : <div className="session-expanded-groups">{group("Subagents", node.children.length, subagentRows())}{group("Scheduled tasks", tasks.length, <ScheduledTaskRows state={state} tasks={tasks} />)}</div> : null}
     </div>;
   };
   return <aside className={compact ? "compact-history" : "projects-sidebar dedicated-sessions"} aria-label={compact ? "Conversation history" : "Sessions"}>
@@ -170,3 +156,31 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
     {menu && menuThread ? <ThreadActionsMenu thread={menuThread} workspaceRoot={state.projects.find((project) => project.id === menuThread.projectId)?.workspaceRoot} position={menu} onClose={closeMenu} /> : null}
   </aside>;
 }
+
+const FALLBACK_BRAND = providerBrand("");
+const EMPTY_TASKS: NonNullable<HostStateSnapshot["scheduledTasks"]>["tasks"] = [];
+const ThreadRow = memo(function ThreadRow({ thread, match, brand, selected, compact, now, selectionOnly, openThread, setMenu }: {
+  thread: ThreadSummary; match: ThreadSearchMatch | undefined; brand: ReturnType<typeof providerBrand>; selected: boolean; compact: boolean; now: number; selectionOnly: boolean;
+  openThread: (threadId: string, preview: boolean) => void;
+  setMenu: (menu: { threadId: string; x: number; y: number }) => void;
+}) {
+  const { dateTime } = useDateTimeFormat();
+  const activity = sessionActivityLabel(thread.lastActiveAt, now, dateTime);
+  const exactActivity = activity ? dateTime(new Date(thread.lastActiveAt!)) : "";
+  const isWorking = working(thread);
+  const isWaiting = !isWorking && waiting(thread);
+  const elapsedStart = thread.backgroundWork?.startedAt ?? thread.workingStartedAt;
+  // What needs the person, most urgent first; a coloured dot marks it beside the title.
+  const attention = thread.pendingRuntimeRequest ? "input" : isWorking || isWaiting ? null : thread.unseen === "failed" ? "failed" : thread.woke ? "woke" : thread.unseen === "done" ? "done" : null;
+  const attentionLabel = { input: "Input needed", failed: "Unread: failed", woke: "Unread: woke from snooze", done: "Unread: finished" };
+  return <button key={thread.id} data-thread-id={thread.id} disabled={!!thread.readOnlyHint} title={thread.readOnlyHint} className={`thread${selected ? " active" : ""}`} onClick={(event) => { openThread(thread.id, event.detail < 2); }} onDoubleClick={selectionOnly ? undefined : () => openThread(thread.id, false)} onContextMenu={compact || thread.readOnlyHint ? undefined : (event) => { event.preventDefault(); setMenu({ threadId: thread.id, x: event.clientX, y: event.clientY }); }} onKeyDown={(event) => {
+    if (!compact && !thread.readOnlyHint && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const box = event.currentTarget.getBoundingClientRect(); setMenu({ threadId: thread.id, x: box.left + 16, y: box.bottom }); }
+  }} aria-label={thread.title || "Untitled"} aria-description={thread.pendingRuntimeRequest ? "Input needed" : isWorking ? "Working" : isWaiting ? waitingSummary(thread) : thread.subagentOutcome === "failed" ? "Subagent failed" : thread.subagentOutcome === "stopped" ? "Subagent stopped" : attention ? attentionLabel[attention] : undefined} aria-current={selected ? "page" : undefined}>
+    <span className="thread-title-line">{thread.guestShare ? <span title="Shared with guest" aria-label="Shared with guest"><UserIcon size={12} /></span> : null}{thread.pendingGuestMessageCount ? <span className="guest-message-badge" title="Guest messages waiting" aria-label={`${thread.pendingGuestMessageCount} guest messages waiting`}>{thread.pendingGuestMessageCount}</span> : null}{attention ? <span className={`thread-dot ${attention}`} aria-hidden="true" /> : null}<span className="thread-title" title={thread.title || "Untitled"}>{thread.title || "Untitled"}</span>{thread.titleRegenerating ? <span className="thread-retitling" title="Generating a new title…" aria-label="Generating a new title"><WandSparklesIcon size={12} /></span> : null}</span>{thread.tags?.length ? <span className="thread-tags">{thread.tags.map(tag => <small className="thread-tag" key={tag}>{tag}</small>)}</span> : null}
+    {thread.readOnlyHint ? <small className="subtle">Machine not paired · read-only · {thread.status}</small> : null}<span className="thread-meta">{thread.pendingRuntimeRequest ? <span className="thread-input" title={thread.pendingRuntimeRequest.kind === "user_input" ? "Input needed" : "Approval needed"} aria-label="Input needed"><MessageCircleQuestionIcon size={13} /><span>{thread.pendingRuntimeRequest.kind === "user_input" ? "Input" : "Approval"}</span></span> : isWorking ? <span className="thread-working" aria-label="Working"><CircleDashedIcon size={13} /><span>Working</span><time title={thread.workingStartedAt ?? undefined}>{elapsedLabel(thread.workingStartedAt, now)}</time></span> : isWaiting ? <span className="thread-waiting" title={waitingSummary(thread)} aria-label={waitingSummary(thread)}><HourglassIcon size={13} /><span>Waiting</span><time title={elapsedStart ?? undefined}>{elapsedLabel(elapsedStart, now)}</time></span> : thread.subagentOutcome === "failed" ? <span className="thread-outcome failed" title="Subagent failed" aria-label="Subagent failed"><CircleXIcon size={13} /><span>Failed</span></span> : thread.subagentOutcome === "stopped" ? <span className="thread-outcome stopped" title="Subagent stopped" aria-label="Subagent stopped"><CircleStopIcon size={13} /><span>Stopped</span></span>
+      : attention === "failed" ? <span className="thread-outcome failed" title="Failed since you last looked"><CircleXIcon size={13} /><span>Failed</span></span>
+      : attention === "woke" ? <span className="thread-outcome woke" title="Woke from snooze"><AlarmClockIcon size={13} /><span>Woke</span></span>
+      : attention === "done" ? <span className="thread-outcome done" title="Finished since you last looked"><CircleCheckIcon size={13} /><span>Done</span></span>
+      : thread.snoozedUntil ? <span className="thread-snoozed" title={`Snoozed until ${dateTime(new Date(thread.snoozedUntil))}`}><AlarmClockIcon size={13} /><span>wakes in {snoozeWakeLabel(thread.snoozedUntil, { now: new Date(Math.max(now, Date.now())).toISOString() })}</span></span> : null}{pullRequestLabel(thread) ? <span className="thread-pr" title={pullRequestLabel(thread) ?? undefined}>{pullRequestLabel(thread)}</span> : null}{thread.environmentLabel ? <span className="thread-machine" title={`Runs on ${thread.environmentLabel}`}><ServerIcon size={12} /><span>{thread.environmentLabel}</span></span> : null}{match ? <small className="thread-match">{match.source === "user" ? "You" : "Assistant"}: {match.snippet}</small> : <small className="thread-branch">{thread.branch}</small>}{activity ? <time className="thread-age" dateTime={thread.lastActiveAt!} title={`Last active: ${exactActivity}`} aria-label={`Last active: ${exactActivity}`}>{activity}</time> : null}{thread.pinned ? <PinIcon size={12} /> : thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : <MessageSquareIcon size={12} />}<ProviderIcon brand={brand} /></span>
+  </button>;
+});

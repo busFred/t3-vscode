@@ -1,51 +1,83 @@
 import { useEffect, useRef, useState } from "react";
 import type { AuthMcpClientAccess } from "@t3tools/contracts";
 import { peerAccessLabels, type PeerLinksState } from "../../shared/peerLinks";
+import type { MachineRow } from "../machines";
 import { useActions } from "../actions";
 
-export function PeerLinksSection({ peers }: { readonly peers: PeerLinksState }) {
+export function MachineCapabilities({ machine, peers, pair }: { readonly machine: MachineRow; readonly peers?: PeerLinksState | undefined; readonly pair: () => void }) {
   const run = useActions();
-  const [editing, setEditing] = useState(false), [address, setAddress] = useState(""), [code, setCode] = useState("");
-  const [access, setAccess] = useState<AuthMcpClientAccess>("approval-required");
-  const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
-  const [forget, setForget] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false), [manual, setManual] = useState(false), [code, setCode] = useState("");
+  const [address, setAddress] = useState(machine.address ?? ""), [access, setAccess] = useState<AuthMcpClientAccess>("approval-required");
+  const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [forget, setForget] = useState(false);
   const inFlight = useRef(false);
-  useEffect(() => { setEditing(false); setCode(""); setForget(null); if (!peers.denial) void run("refreshPeerLinks"); }, [peers.environmentId, peers.denial, run]);
   const submit = async () => {
-    if (inFlight.current || peers.denial || !address.trim() || !code.trim()) return;
+    if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError(null);
-    try { if (await run("linkPeer", { url: address.trim(), pairingCode: code.trim(), access })) { setEditing(false); setAddress(""); } else setError("Could not link the machine. Check its address and pairing code."); }
-    catch { setError("Could not link the machine. Check its address and pairing code."); }
+    try {
+      if (await run("linkPeer", machine.conversations && !manual ? { environmentId: machine.environmentId, access } : { url: address.trim(), pairingCode: code.trim(), access })) setEditing(false);
+      else { setManual(true); setError("Could not enable agent access. Paste a fresh code from that machine instead."); }
+    } catch { setManual(true); setError("Could not enable agent access. Paste a fresh code from that machine instead."); }
     finally { setCode(""); setBusy(false); inFlight.current = false; }
   };
-  return <section aria-label="Linked environments" className="peer-links">
-    <strong>Linked environments · T3 server</strong>
-    <p className="env-hint">Link another machine running T3 Code, such as a VPS, so agents here can launch and drive threads there.</p>
-    {peers.denial ? <p className="env-hint">{peers.denial}</p> : <>
-      <button className="text-button" disabled={busy} onClick={() => void run("refreshPeerLinks")}>Refresh links</button>
-      {peers.error ? <p role="alert">{peers.error}</p> : !peers.loaded ? <p role="status">Loading linked environments…</p> : peers.links.length === 0 ? <p className="env-hint">No linked environments</p> : null}
-      {peers.links.map(link => <div className="env-row" key={link.environmentId}>
-        <div className="env-name"><span>{link.label}</span>{link.paired ? <span className="env-chip">Also paired in VS Code</span> : null}</div>
-        <div className="env-meta">{link.status} · {peerAccessLabels[link.access]}</div>
-        {forget === link.environmentId ? <div>
-          <p className="env-hint">Agents here stop working there. Revoke “T3 Code · …” in {link.label}’s Connections to end the session there too.</p>
-          <button className="btn" disabled={busy} onClick={() => setForget(null)}>Cancel</button>
-          <button className="btn danger" disabled={busy} onClick={() => {
-            if (inFlight.current) return;
-            inFlight.current = true; setBusy(true); setError(null);
-            void run("unlinkPeer", { environmentId: link.environmentId }).then(ok => { if (ok) setForget(null); else setError("Could not unlink the machine."); }).catch(() => setError("Could not unlink the machine.")).finally(() => { setBusy(false); inFlight.current = false; });
-          }}>Confirm unlink</button>
-        </div> : <button className="text-button danger" disabled={busy} onClick={() => setForget(link.environmentId)}>Unlink</button>}
-      </div>)}
-      {editing ? <form autoComplete="off" onSubmit={event => { event.preventDefault(); void submit(); }}><fieldset disabled={busy}>
-        <label>Machine address<input className="question-custom" value={address} onChange={event => setAddress(event.target.value)} placeholder="https://machine.tailnet.ts.net" /></label>
-        <label>Pairing code<input type="password" className="question-custom secret-input" value={code} autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" onChange={event => setCode(event.target.value)} /></label>
-        <p className="env-hint">Create a link on the other machine: Settings → Connections → Create link, or t3 pair.</p>
-        <label>Access<select value={access} onChange={event => setAccess(event.target.value as AuthMcpClientAccess)}>{Object.entries(peerAccessLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <button className="btn" type="button" onClick={() => { setCode(""); setEditing(false); setError(null); }}>Cancel</button>
-        <button className="btn primary" disabled={!address.trim() || !code.trim()}>{busy ? "Linking…" : "Link"}</button>
-      </fieldset></form> : <button className="text-button env-add" onClick={() => setEditing(true)}>Link a machine…</button>}
-      {error ? <p role="alert">{error}</p> : null}
+  return <div className="env-meta machine-capabilities">
+    {machine.conversations ? <span className="env-chip">Conversations</span> : <button className="text-button" onClick={pair}>Pair to see conversations</button>}
+    {!machine.local && (machine.agents ? <>
+      <span className="env-chip" title={peerHealthLabel(machine.agents.status)}>{machine.agents.status === "expired" ? "Agent access expired" : `Agents can use · ${peerAccessLabels[machine.agents.access]}`}</span>
+      {machine.agents.status === "expired" && <button className="text-button" disabled={!peers || !!peers.denial || !peers.loaded} title={peers?.denial} onClick={() => setEditing(true)}>Let agents use this…</button>}
+      {!peers?.denial && <button className="text-button danger" disabled={busy} onClick={() => setForget(true)}>Remove agent access</button>}
+      {forget && <div><p className="env-hint">Agents here stop working there. To end the session there too, revoke “T3 Code · …” in that machine’s Connections.</p><button className="btn" onClick={() => setForget(false)}>Cancel</button><button className="btn danger" disabled={busy} onClick={async () => {
+        if (inFlight.current) return;
+        inFlight.current = true; setBusy(true);
+        try { if (await run("unlinkPeer", { environmentId: machine.environmentId })) setForget(false); else setError("Could not remove agent access."); }
+        catch { setError("Could not remove agent access."); }
+        finally { setBusy(false); inFlight.current = false; }
+      }}>Confirm removal</button></div>}
+    </> : <button className="text-button" disabled={!peers || !!peers.denial || !peers.loaded} title={peers?.denial} onClick={() => setEditing(true)}>Let agents use this…</button>)}
+    {editing && <form autoComplete="off" onSubmit={event => { event.preventDefault(); void submit(); }}><fieldset disabled={busy}>
+      <AccessChoice access={access} setAccess={setAccess} />
+      {(!machine.conversations || manual) && <><label>Machine address<input className="question-custom" value={address} onChange={event => setAddress(event.target.value)} /></label><CodeInput code={code} setCode={setCode} /></>}
+      <button className="btn" type="button" onClick={() => { setCode(""); setEditing(false); setError(null); }}>Cancel</button>
+      <button className="btn primary" disabled={(!machine.conversations || manual) && (!address.trim() || !code.trim())}>Let agents use this</button>
+    </fieldset></form>}
+    {error && <p role="alert">{error}</p>}
+  </div>;
+}
+/** Readable agent-link health for the status column and tooltips. */
+export function peerHealthLabel(status: string): string {
+  return ({ reachable: "Reachable", unreachable: "Unreachable", failing: "Failing", expired: "Expired" } as Record<string, string>)[status] ?? status;
+}
+function AccessChoice({ access, setAccess }: { access: AuthMcpClientAccess; setAccess: (value: AuthMcpClientAccess) => void }) {
+  return <label>Agent access<select value={access} onChange={event => setAccess(event.target.value as AuthMcpClientAccess)}>{Object.entries(peerAccessLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>;
+}
+function CodeInput({ code, setCode }: { code: string; setCode: (value: string) => void }) {
+  return <><label>Pairing code<input type="password" className="question-custom secret-input" value={code} autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" onChange={event => setCode(event.target.value)} /></label><p className="env-hint">Create a fresh code on that machine: Settings → Connections → Create link, or t3 pair.</p></>;
+}
+export function AddMachineForm({ peers, machine, close }: { readonly peers?: PeerLinksState | undefined; readonly machine?: MachineRow | undefined; readonly close: () => void }) {
+  const run = useActions();
+  const [address, setAddress] = useState(machine?.address ?? ""), [next, setNext] = useState(false), [code, setCode] = useState("");
+  const [conversations, setConversations] = useState(true), [agents, setAgents] = useState(!machine?.agents && !peers?.denial);
+  const [access, setAccess] = useState<AuthMcpClientAccess>("approval-required"), [busy, setBusy] = useState(false), [error, setError] = useState(false);
+  const inFlight = useRef(false), details = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (next) details.current?.scrollIntoView({ block: "nearest" }); }, [next]);
+  return <form autoComplete="off" onSubmit={async event => {
+    event.preventDefault();
+    if (!next) { setNext(true); return; }
+    if (inFlight.current) return;
+    inFlight.current = true; setBusy(true); setError(false);
+    try { if (await run("addMachine", { address: address.trim(), code: code.trim(), conversations, agents: agents && !peers?.denial && !machine?.agents, access, environmentId: machine?.environmentId })) close(); else setError(true); }
+    catch { setError(true); }
+    finally { setCode(""); setBusy(false); inFlight.current = false; }
+  }}><fieldset disabled={busy}>
+    <label>Machine address<input className="question-custom" value={address} onChange={event => setAddress(event.target.value)} placeholder="https://machine.tailnet.ts.net" required /></label>
+    {next && <>
+      <label><input type="checkbox" checked={conversations} onChange={event => setConversations(event.target.checked)} />Conversations in VS Code</label>
+      <label><input type="checkbox" checked={agents} disabled={!!peers?.denial || !!machine?.agents} onChange={event => setAgents(event.target.checked)} />Let agents use it</label>
+      {agents && <AccessChoice access={access} setAccess={setAccess} />}
+      <CodeInput code={code} setCode={setCode} />
     </>}
-  </section>;
+    {peers?.denial && <p className="env-hint">{peers.denial}</p>}
+    <div ref={details}><button className="btn" type="button" onClick={close}>Cancel</button>
+    <button className="btn primary" disabled={!address.trim() || (next && (!code.trim() || (!conversations && !(agents && !peers?.denial && !machine?.agents))))}>{next ? busy ? "Adding…" : "Add capabilities" : "Next"}</button></div>
+    {error && <p role="alert">Could not finish adding capabilities. Conversations already added are kept. Check the address and use a fresh code.</p>}
+  </fieldset></form>;
 }

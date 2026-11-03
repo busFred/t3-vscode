@@ -203,7 +203,7 @@ const isLoopbackHost = (hostname: string): boolean =>
  */
 export async function pairRemoteEnvironment(
   link: string,
-  options: { localEnvironmentId?: string; deps?: Partial<EnvironmentPairingDeps> } = {},
+  options: { localEnvironmentId?: string; expectedEnvironmentId?: string; deps?: Partial<EnvironmentPairingDeps> } = {},
 ): Promise<RemoteEnvironmentRecord> {
   const deps: EnvironmentPairingDeps = { ...defaultDeps, ...options.deps };
 
@@ -229,6 +229,10 @@ export async function pairRemoteEnvironment(
   }
   if (options.localEnvironmentId && descriptor.environmentId === options.localEnvironmentId) {
     throw new EnvironmentPairingError("This link is for the local T3 server, which is already connected.");
+  }
+  // Checked before signing in, so no session is left on a machine other than the one being completed.
+  if (options.expectedEnvironmentId && descriptor.environmentId !== options.expectedEnvironmentId) {
+    throw new EnvironmentPairingError("That address is a different T3 machine.");
   }
 
   let session: RemoteBearerSession;

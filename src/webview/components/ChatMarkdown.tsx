@@ -1,5 +1,5 @@
 /** T3 markdown/media presentation, with native file and external-link actions. */
-import { createContext, memo, useContext, useMemo, type ReactNode } from "react";
+import { Fragment, createContext, memo, useCallback, useContext, useMemo, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -20,6 +20,8 @@ import { parseComposerContextHref } from "@t3tools/shared/composerContextReferen
 import * as Schema from "effect/Schema";
 import { InlineAttachment } from "./InlineAttachment";
 import { previewEquation } from "./EquationPreview";
+import { splitMarkdownBlocks } from "../markdownBlocks";
+const EMPTY_ATTACHMENTS: ReadonlyArray<Pick<ChatAttachment, "id" | "name" | "mimeType" | "sizeBytes">> = [];
 const sanitizeSchema = { ...defaultSchema, tagNames: [...(defaultSchema.tagNames ?? []), "video", "audio", "source", "u"],
   attributes: { ...defaultSchema.attributes, code: [["className", /^language-./, "math-inline", "math-display"]], video: ["src", "controls", "poster"], audio: ["src", "controls"], source: ["src", "type"] },
   protocols: { ...defaultSchema.protocols, href: [...(defaultSchema.protocols?.href ?? []), "file", "t3-citation", "t3-context"], src: [...(defaultSchema.protocols?.src ?? []), "file", "data", "t3-context"] } };
@@ -60,18 +62,24 @@ const components: Components = {
     return <pre>{children}</pre>;
   },
 };
-export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source, assetSource, streaming = false, context, attachments = [] }: {
+export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source, assetSource, streaming = false, context, attachments = EMPTY_ATTACHMENTS }: {
   text: string; threadId: string; source?: { environmentId: string; threadId: string; messageId: string; author?: "user" }; assetSource?: ChatAssetSource; streaming?: boolean; context?: unknown; attachments?: ReadonlyArray<Pick<ChatAttachment, "id" | "name" | "mimeType" | "sizeBytes">>;
 }) {
   const parsedContext = useMemo(() => { try { return context ? Schema.decodeUnknownSync(OrchestrationMessageContext)(context) : undefined; } catch { return undefined; } }, [context]);
   const citationNumbers = useMemo(() => { const numbers = new Map<string, number>(); for (const { citation } of collectAssistantCitations(text)) { const key = citationKey(citation); if (!numbers.has(key)) numbers.set(key, numbers.size + 1); } return numbers; }, [text]);
-  const inlineAttachment = (href: string | undefined) => {
+  const inlineAttachment = useCallback((href: string | undefined) => {
     const reference = href ? parseComposerContextHref(href) : null;
     const record = reference ? parsedContext?.records.find((record) => record.contextId === reference.contextId && record.kind === reference.kind) : undefined;
     const attachment = record && "attachmentId" in record && typeof record.attachmentId === "string" ? attachments.find((attachment) => attachment.id === record.attachmentId) : undefined;
     return attachment ? <InlineAttachment attachment={attachment} threadId={threadId} source={assetSource} /> : null;
-  };
-  return <MarkdownScopeContext.Provider value={{ threadId, assetSource, streaming, inlineAttachment }}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeKatex, { strict: "ignore", trust: false, throwOnError: false }]]}
+  }, [parsedContext, attachments, threadId, assetSource]);
+  const scope = useMemo(() => ({ threadId, assetSource, streaming, inlineAttachment }), [threadId, assetSource, streaming, inlineAttachment]);
+  const blocks = useMemo(() => splitMarkdownBlocks(normalizeMathMarkdown(text)), [text]);
+  return <MarkdownScopeContext.Provider value={scope}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}>{blocks.map((block, index) => <Fragment key={index}>{index ? "\n" : null}<MarkdownBlock text={block} /></Fragment>)}</div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
+});
+
+const MarkdownBlock = memo(function MarkdownBlock({ text }: { text: string }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeKatex, { strict: "ignore", trust: false, throwOnError: false }]]}
     urlTransform={(url, key) => url.startsWith("file:") || url.startsWith("t3-citation:") || url.startsWith("t3-context:") || (key === "src" && /^data:(image|video|audio)\//i.test(url)) ? url : defaultUrlTransform(url)}
-    components={components}>{normalizeMathMarkdown(text)}</ReactMarkdown></div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
+    components={components}>{text}</ReactMarkdown>;
 });
