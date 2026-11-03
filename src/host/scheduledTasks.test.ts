@@ -4,7 +4,7 @@ import { ScheduledTaskUpsertInput } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { FakeTransport, harness, provider, server } from "./testing/fakeTransport.js";
 import { scheduledTaskFixture } from "./testing/scheduledTaskFixture.js";
-import { newTaskModel, taskEditVersion, type TaskOrigin } from "../shared/scheduledTasks.js";
+import { newTaskModel, resolveTaskDefaultSpeed, taskEditVersion, type TaskOrigin } from "../shared/scheduledTasks.js";
 
 function fixture() {
   const client = new FakeTransport();
@@ -87,4 +87,26 @@ test("Task efforts reject new prompt-injected choices while preserving already s
   await host.saveScheduledTask({ ...legacy, existing: true, editVersion: taskEditVersion(legacy), title: "Rename only" });
   assert.deepEqual(client.scheduledTasks[0]!.modelSelection, legacy.modelSelection);
   assert.equal(client.scheduledTasks[0]!.prompt, legacy.prompt);
+});
+
+test("New tasks pin Standard speed by default, and the setting can leave it to the server", async (t) => {
+  const { client } = fixture();
+  const withTier = client.config!.providers.map((provider) => ({ ...provider, models: provider.models.map((model) => model.slug !== "gpt-6-luna" ? model
+    : { ...model, capabilities: { optionDescriptors: [...model.capabilities!.optionDescriptors!, { id: "serviceTier", type: "select" as const, label: "Service Tier", currentValue: "fast", options: [{ id: "default", label: "Standard" }, { id: "fast", label: "Fast", isDefault: true }] }] } }) }));
+  assert.deepEqual(newTaskModel(withTier, "standard")?.options, [{ id: "reasoningEffort", value: "low" }, { id: "serviceTier", value: "default" }]);
+  assert.deepEqual(newTaskModel(withTier, "inherit")?.options, [{ id: "reasoningEffort", value: "low" }]);
+  assert.deepEqual(newTaskModel(withTier)?.options, [{ id: "reasoningEffort", value: "low" }]);
+  assert.deepEqual(newTaskModel(client.config!.providers, "standard")?.options, [{ id: "reasoningEffort", value: "low" }]);
+  assert.equal(resolveTaskDefaultSpeed(undefined), "standard"); assert.equal(resolveTaskDefaultSpeed("fast"), "standard"); assert.equal(resolveTaskDefaultSpeed("inherit"), "inherit");
+  const { host } = await harness({ taskDefaultSpeed: () => "inherit" }, client); t.after(() => host.dispose());
+  assert.equal(host.snapshot().taskDefaultSpeed, "inherit");
+});
+test("A saved task keeps an explicit speed and rejects one the model does not advertise", async (t) => {
+  const { client, options, edit } = fixture();
+  client.config = { providers: client.config!.providers.map((provider) => ({ ...provider, models: provider.models.map((model) => ({ ...model, capabilities: { optionDescriptors: [...(model.capabilities?.optionDescriptors ?? []), { id: "serviceTier", type: "select" as const, label: "Service Tier", options: [{ id: "default", label: "Standard" }, { id: "fast", label: "Fast" }] }] } })) })) };
+  const { host } = await harness(options, client); t.after(() => host.dispose());
+  const modelSelection = (value: string) => ({ ...client.scheduledTasks[0]!.modelSelection, options: [{ id: "serviceTier", value }] });
+  await host.saveScheduledTask({ ...edit(), modelSelection: modelSelection("default") });
+  assert.deepEqual(client.scheduledTasks[0]!.modelSelection.options, [{ id: "serviceTier", value: "default" }]);
+  await assert.rejects(host.saveScheduledTask({ ...edit(), editVersion: taskEditVersion(client.scheduledTasks[0]!), modelSelection: modelSelection("warp") }), /advertised/);
 });

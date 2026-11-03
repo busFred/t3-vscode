@@ -1,7 +1,7 @@
 import { ImageCaptionEditor } from "./ImageCaptionEditor";
 import { bridge } from "../bridge-client";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon } from "lucide-react";
+import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon, ZapIcon } from "lucide-react";
 import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
@@ -9,7 +9,7 @@ import { clearDraft, readDraftSelection, registerDraftTextEditor, rememberDraftS
 import { assistantQuoteLabel, assistantQuoteNumbers, contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, insertFileReference, removeContextReference, syncAssistantQuoteLabels, type FileReference } from "../../shared/composerContext";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
-import { effortDescriptor, effortOptionLabel } from "../../shared/modelOptions";
+import { effortDescriptor, effortOptionLabel, isPremiumSpeed, speedChoiceLabel, speedControl } from "../../shared/modelOptions";
 import { ModelPicker } from "./ModelPicker";
 import { detectComposerTrigger } from "../../shared/composerSuggestions";
 import { replaceTextRange } from "@t3tools/shared/composerTrigger";
@@ -113,6 +113,8 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const target = thread ? { threadId: thread.id } : {};
   const runtimeMode = thread?.runtimeMode ?? state.draft.runtimeMode;
   const effort = effortDescriptor(model, selection);
+  const speed = speedControl(model, selection);
+  const speedLabel = speed?.current ? speedChoiceLabel(speed.current) : speed?.explicit ? "Unavailable" : "Default";
   const promptEffort = effort?.promptInjectedValues?.includes("ultrathink") && isClaudeUltrathinkPrompt(text);
   const modelLabel = model?.name ?? selection?.model ?? "Choose model";
   const effortValue = promptEffort ? "ultrathink" : String(effort ? getProviderOptionCurrentValue(effort) ?? "" : "");
@@ -278,13 +280,14 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       context.font = `400 ${style.fontSize} ${style.fontFamily}`;
       const traitsWidth = context.measureText(runtimeLabels[runtimeMode] ?? runtimeMode).width + 24
         + (effort ? context.measureText(effortLabel).width + 24 : 0)
+        + (speed ? context.measureText(speedLabel).width + 24 + (isPremiumSpeed(speed.current) ? 16 : 0) : 0)
         + (state.worktrees && (state.draft.projectId || thread?.projectId) ? context.measureText(worktreeLabel).width + 44 : 0);
       setCompactControls(modelWidth + traitsWidth + 12 > row.clientWidth);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(row); measure();
     return () => observer.disconnect();
-  }, [modelLabel, effortLabel, Boolean(effort), runtimeMode, worktreeLabel, Boolean(state.worktrees), state.draft.projectId, thread?.projectId, state.appearance.fontSizeInterface]);
+  }, [modelLabel, effortLabel, Boolean(effort), speedLabel, Boolean(speed), runtimeMode, worktreeLabel, Boolean(state.worktrees), state.draft.projectId, thread?.projectId, state.appearance.fontSizeInterface]);
   const running = Boolean(thread?.activeRunId || state.queue?.activeRunId || state.acknowledgedWorking);
   const shortcutHint = `${running ? `Enter to queue${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Enter to send"} · Shift+Enter for a new line`;
   const send = async (steer = false) => {
@@ -357,6 +360,10 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       }
       setBusy(true); void run("setModelOption", { ...target, optionId: effort.id, value: event.target.value }).finally(() => setBusy(false));
     }}>{getProviderOptionCurrentValue(effort) === undefined ? <option value="" disabled>Default</option> : null}{effort.options.map((option) => <option key={option.id} value={option.id} title={option.description}>{effortOptionLabel(option)}</option>)}</select></label> : null}
+    {speed ? <label className={`speed-control${isPremiumSpeed(speed.current) ? " premium" : ""}`} title={isPremiumSpeed(speed.current) ? `${speed.current!.description ?? speed.current!.label}: costs more per request` : speed.label}>{isPremiumSpeed(speed.current) ? <ZapIcon size={12} aria-hidden="true" /> : null}<select aria-label="Speed" value={speed.current?.id ?? ""} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => {
+      const choice = speed.choices.find((item) => item.id === event.target.value); if (!choice) return;
+      setBusy(true); void run("setModelOption", { ...target, optionId: speed.optionId, value: choice.value }).finally(() => setBusy(false));
+    }}>{speed.current ? null : <option value="" disabled>{speed.explicit ? "Unavailable" : "Default"}</option>}{speed.choices.map((choice) => <option key={choice.id} value={choice.id} title={choice.description}>{speedChoiceLabel(choice)}</option>)}</select></label> : null}
     <select aria-label="Permission mode" value={runtimeMode} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => { void run("setModes", { ...target, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes ?? ["approval-required", "auto", "full-access"]).map((mode) => <option key={mode} value={mode}>{runtimeLabels[mode]}</option>)}</select>
     {state.remoteSession ? null : <WorktreeSelector state={state} disabled={busy || state.sending || thread?.providerNativeSubagent === true} />}
   </div>;

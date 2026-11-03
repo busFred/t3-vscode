@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.7 — Release
+
+- A **Speed** control next to Effort for models that offer a service tier (such as Codex Fast and Ultrafast) or fast mode. Tiers above Standard are marked because they cost more per request.
+- The scheduled task editor has the same Speed select. New setting `t3-vscode.scheduledTasks.defaultSpeed` (default `standard`) keeps new tasks from silently running on a fast tier; set it to `inherit` to follow the server or Codex config.
+
 ## 0.3.6 — Release
 
 - In **Pooled** usage meters, an account whose 7-day limit is used up no longer counts its 5-hour and model-week (such as Fable) limits towards the pooled figure. Its 7-day limit still counts; **Per account** is unchanged. A model week such as Fable resets with the earliest locked-out account.

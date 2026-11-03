@@ -66,6 +66,7 @@ import { unseenRun } from "../shared/threadAttention.js";
 import { ThreadVisits } from "./threadVisits.js";
 import { htmlVisual, type ChatAssetReference, type ChatAssetSource } from "../shared/chatVisuals.js";
 import { resolveMessageNavigation, type MessageNavigationPlacement } from "../shared/messageNavigation.js";
+import { resolveTaskDefaultSpeed } from "../shared/scheduledTasks.js";
 import { resolveAccountsDisplay, type AccountsDisplay } from "../shared/usage.js";
 import { classifyMarkdownImageSource } from "@t3tools/client-runtime/markdown-images";
 import { attachmentMessageContext, attachmentUploadInput, type AttachmentReference, type DraftAttachment } from "../shared/composerAttachments.js";
@@ -98,6 +99,7 @@ export interface HostStateOptions {
   readonly dateFormat?: () => DateFormat;
   readonly appearance?: () => AppearanceSettings;
   readonly messageNavigation?: () => MessageNavigationPlacement;
+  readonly taskDefaultSpeed?: () => unknown;
   readonly usagePanelAccounts?: () => unknown;
   readonly saveUsagePanelAccounts?: (value: AccountsDisplay) => PromiseLike<void>;
   readonly favoriteModels?: () => ReadonlyArray<FavoriteModel>;
@@ -2334,7 +2336,7 @@ export class HostState {
       connectionSetup: { ...this.setup, ...(this.connectionProblem ? { problem: this.connectionProblem } : {}) },
       searchPreferences: this.searchPreferences,
       ...(this.sessionSearches.get(viewId) ? { sessionSearch: this.sessionSearches.get(viewId)!.state } : {}),
-      workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()), usagePanelAccounts: resolveAccountsDisplay(this.options.usagePanelAccounts?.() ?? this.usagePanelAccounts),
+      workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()), taskDefaultSpeed: resolveTaskDefaultSpeed(this.options.taskDefaultSpeed?.()), usagePanelAccounts: resolveAccountsDisplay(this.options.usagePanelAccounts?.() ?? this.usagePanelAccounts),
       dateFormat: resolveDateFormat(this.options.dateFormat?.()), timeFormat: resolveTimeFormat(this.options.timeFormat?.()), appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
       ...(this.notice ? { notice: this.notice } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),

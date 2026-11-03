@@ -1,6 +1,6 @@
 import type { ScheduledTask, ScheduledTaskUpsertSchedule, ServerProvider } from "@t3tools/contracts";
 import type { ModelSelection } from "./bridge.js";
-import { effortDescriptor } from "./modelOptions.js";
+import { effortDescriptor, withStandardSpeed } from "./modelOptions.js";
 
 export type TaskOrigin = { readonly environmentId: string; readonly projectId: string; readonly taskId: string; readonly threadId: string | null };
 export type ScheduledTaskView = ScheduledTask & { readonly originThreadId: string | null; readonly originKnown: boolean; readonly editVersion: string };
@@ -24,15 +24,24 @@ export function taskScheduleLabel(schedule: unknown): string {
   return schedule.type === "interval" ? `Every ${schedule.everyMs / 60_000} min`
     : `${schedule.timeOfDay}${schedule.weekdays?.length ? ` · ${schedule.weekdays.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ")}` : " · Daily"}`;
 }
+/** Speed for new tasks: pin Standard, or leave the choice to the server and Codex config. */
+export type TaskDefaultSpeed = "standard" | "inherit";
+export function resolveTaskDefaultSpeed(value: unknown): TaskDefaultSpeed { return value === "inherit" ? "inherit" : "standard"; }
+/** Apply the default speed to a new task's model; saved tasks keep whatever they stored. */
+export function taskModelWithSpeed(providers: ReadonlyArray<ServerProvider>, selection: ModelSelection, speed: TaskDefaultSpeed): ModelSelection {
+  if (speed !== "standard") return selection;
+  const model = providers.find((provider) => provider.instanceId === selection.instanceId)?.models.find((model) => model.slug === selection.model);
+  return withStandardSpeed(model, selection);
+}
 /** Explicitly cheap advertised default; do not fall back to the conversation model. */
-export function newTaskModel(providers: ReadonlyArray<ServerProvider>): ModelSelection | null {
+export function newTaskModel(providers: ReadonlyArray<ServerProvider>, speed: TaskDefaultSpeed = "inherit"): ModelSelection | null {
   for (const provider of providers) {
     if (!provider.enabled || !provider.installed || provider.availability === "unavailable") continue;
     const model = provider.models.find((model) => model.slug === "gpt-6-luna");
     if (!model) continue;
     const effort = effortDescriptor(model, null);
     if (!effort?.options.some((option) => option.id === "low") || effort.promptInjectedValues?.includes("low")) continue;
-    return { instanceId: provider.instanceId, model: model.slug, options: [{ id: effort.id, value: "low" }] };
+    return taskModelWithSpeed(providers, { instanceId: provider.instanceId, model: model.slug, options: [{ id: effort.id, value: "low" }] }, speed);
   }
   return null;
 }

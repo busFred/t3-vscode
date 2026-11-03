@@ -3,8 +3,8 @@ import { useCallback, useRef, useState } from "react";
 import { ArrowLeftIcon, ChevronDownIcon } from "lucide-react";
 import type { HostStateSnapshot, ModelSelection } from "../../shared/bridge";
 import type { ScheduledTask } from "@t3tools/contracts";
-import { newTaskModel, supportedSchedule, type ScheduledTaskEditorRequest, type ScheduledTaskView } from "../../shared/scheduledTasks";
-import { effortDescriptor, effortOptionLabel } from "../../shared/modelOptions";
+import { newTaskModel, supportedSchedule, taskModelWithSpeed, type ScheduledTaskEditorRequest, type ScheduledTaskView } from "../../shared/scheduledTasks";
+import { effortDescriptor, effortOptionLabel, isPremiumSpeed, selectionWithSpeed, speedChoiceLabel, speedControl } from "../../shared/modelOptions";
 import { ModelPicker } from "./ModelPicker";
 import { useActions } from "../actions";
 
@@ -19,7 +19,7 @@ export function taskDraft(state: HostStateSnapshot, request: ScheduledTaskEditor
   if (request.taskId && !task) return null;
   const schedule = task && supportedSchedule(task.schedule) ? task.schedule : undefined;
   return { id: task?.id ?? crypto.randomUUID(), projectId: request.projectId, originThreadId: task?.originThreadId ?? request.originThreadId ?? null, base: task ?? null,
-    title: task?.title ?? "", prompt: task?.prompt ?? "", modelSelection: task?.modelSelection ?? newTaskModel(state.providers), enabled: task?.enabled ?? true,
+    title: task?.title ?? "", prompt: task?.prompt ?? "", modelSelection: task?.modelSelection ?? newTaskModel(state.providers, state.taskDefaultSpeed ?? "standard"), enabled: task?.enabled ?? true,
     threadId: task ? task.threadId : request.originThreadId ?? null, workspaceStrategy: task?.workspaceStrategy ?? { type: "root" },
     scheduleType: schedule?.type ?? (task ? "unsupported" : "interval"), minutes: String(schedule?.type === "interval" ? schedule.everyMs / 60_000 : 30),
     timeOfDay: schedule?.type === "fixed_time" ? schedule.timeOfDay : "09:00", weekdays: schedule?.type === "fixed_time" ? schedule.weekdays : undefined };
@@ -43,6 +43,8 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
   const effort = effortDescriptor(model, draft.modelSelection);
   const effortChoices = effort?.options.filter((option) => !effort.promptInjectedValues?.includes(option.id)) ?? [];
   const effortValue = draft.modelSelection?.options?.find((option) => option.id === effort?.id)?.value ?? (effortChoices.some((option) => option.id === effort?.currentValue) ? effort?.currentValue : undefined) ?? effortChoices.find((option) => option.isDefault)?.id ?? effortChoices[0]?.id ?? "";
+  const speed = speedControl(model, draft.modelSelection);
+  const speedValue = speed?.explicit ? speed.current?.id ?? "" : "";
   const origin = draft.originThreadId ? state.threads.find((thread) => thread.id === draft.originThreadId)?.title ?? "Origin session unavailable" : draft.base && !draft.base.originKnown ? "Origin unknown" : "Independent task";
   const interval = Number(draft.minutes) * 60_000;
   const scheduleValid = draft.scheduleType === "interval" ? Number.isSafeInteger(interval) && interval >= 60_000 : draft.scheduleType === "fixed_time" && /^([01]?\d|2[0-3]):[0-5]\d$/.test(draft.timeOfDay);
@@ -73,6 +75,15 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
         {!effortChoices.some((option) => option.id === effortValue) ? <option value={String(effortValue)}>Saved: {String(effortValue)}</option> : null}
         {effortChoices.map((option) => <option key={option.id} value={option.id}>{effortOptionLabel(option)}</option>)}
       </select></label> : null}
+      {speed && draft.modelSelection ? <label>{speed.label}<select aria-label="Task speed" className={isPremiumSpeed(speed.current) ? "premium-speed" : undefined} value={speedValue} onChange={(event) => {
+        patch({ modelSelection: selectionWithSpeed(draft.modelSelection!, speed, event.target.value || undefined) });
+      }}>
+        {/* A saved value the model stopped advertising stays visible instead of silently changing. */}
+        {speed.explicit && !speed.current ? <option value="" disabled>Saved: unavailable</option> : null}
+        <option value="">Server default{speed.current && !speed.explicit ? ` (${speed.current.label})` : ""}</option>
+        {speed.choices.map((choice) => <option key={choice.id} value={choice.id} title={choice.description}>{isPremiumSpeed(choice) ? "⚡ " : ""}{speedChoiceLabel(choice)}</option>)}
+      </select></label> : null}
+      {speed && isPremiumSpeed(speed.current) ? <small className="task-status">{speed.explicit ? "" : "The server default is "}{speed.current!.label} speed: each run costs more.</small> : null}
       <label>Schedule<select aria-label="Task schedule" value={draft.scheduleType} disabled={draft.scheduleType === "unsupported"} onChange={(event) => patch({ scheduleType: event.target.value as "interval" | "fixed_time" })}>
         <option value="interval">Every interval</option><option value="fixed_time">At a time</option>{draft.scheduleType === "unsupported" ? <option value="unsupported">Newer schedule — edit in T3 Web</option> : null}
       </select></label>
@@ -99,10 +110,12 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
     {pickerOpen && anchor.current ? <ModelPicker state={state} selection={draft.modelSelection} anchor={anchor.current} onClose={closePicker} onSelect={(modelSelection) => {
       if (modelSelection.instanceId === draft.modelSelection?.instanceId && modelSelection.model === draft.modelSelection.model) { patch({ modelSelection }); return; }
       const descriptors = state.providers.find((provider) => provider.instanceId === modelSelection.instanceId)?.models.find((model) => model.slug === modelSelection.model)?.capabilities?.optionDescriptors ?? [];
-      patch({ modelSelection: { ...modelSelection, ...(modelSelection.options ? { options: modelSelection.options.filter((option) => {
+      const next = { ...modelSelection, ...(modelSelection.options ? { options: modelSelection.options.filter((option) => {
         const descriptor = descriptors.find((descriptor) => descriptor.id === option.id);
         return !(descriptor?.type === "select" && typeof option.value === "string" && descriptor.promptInjectedValues?.includes(option.value));
-      }) } : {}) } });
+      }) } : {}) };
+      // A new task keeps its default speed across models; a saved task keeps what it stored.
+      patch({ modelSelection: draft.base ? next : taskModelWithSpeed(state.providers, next, state.taskDefaultSpeed ?? "standard") });
     }} /> : null}
   </form>;
 }

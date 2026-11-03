@@ -249,6 +249,8 @@ export interface HostStateSnapshot {
   readonly dateFormat?: DateFormat;
   readonly appearance: AppearanceSettings;
   readonly messageNavigation?: MessageNavigationPlacement;
+  /** Speed new scheduled tasks start with (`t3-vscode.scheduledTasks.defaultSpeed`). */
+  readonly taskDefaultSpeed?: import("./scheduledTasks.js").TaskDefaultSpeed;
   /** How Account & Usage shows a provider with several accounts. */
   readonly usagePanelAccounts?: import("./usage.js").AccountsDisplay;
   readonly notice?: string;

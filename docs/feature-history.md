@@ -36,7 +36,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Math rendering and copying](#math-rendering-and-copying) | Renders KaTeX with scrolling, floating previews and copy actions. | v0.0.8 | v0.0.9 |
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
-| [Effort and permission controls](#effort-and-permission-controls) | Advertised model options and runtime modes inside the composer. | v0.0.1 | v0.2.7 |
+| [Effort and permission controls](#effort-and-permission-controls) | Advertised model options, a Speed (service tier / fast mode) control and runtime modes inside the composer. | v0.0.1 | v0.3.7 |
 | [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.6 |
 | [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.3 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
@@ -968,6 +968,14 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Replace browser-copy instructions with the extension's local model controls. Validation is recorded below before the removal commit.
 
 ### Effort and permission controls
+
+#### v0.3.7
+
+- Add a **Speed** control beside Effort for models whose server catalog advertises a `serviceTier` select (Codex: Standard, Fast, Ultrafast…) or a `fastMode` boolean (Claude, Cursor). It is matched by descriptor id and type, not by provider, so a provider that starts advertising one gets the control with no extension change. Models with neither show nothing.
+- A tier above Standard is tinted with a bolt and a "costs more" tooltip; unrecognised tier ids count as premium. With nothing picked the control shows the server default (for Codex this reflects `service_tier` in the user Codex config) marked "(Default)". The server does not report the tier a running Codex thread actually used, so this is the configured default, not a guarantee. Picking a speed uses the existing `setModelOption` path and validation.
+- The scheduled task editor has the same Speed select with a "Server default" entry that clears the option. New setting `t3-vscode.scheduledTasks.defaultSpeed` (`standard`, default, or `inherit`) controls what new tasks start with: `standard` stores the model's own standard option (`serviceTier: "default"` or `fastMode: false`) so an unattended task does not silently inherit a fast tier; `inherit` stores nothing. Standard is the tier with id `default` (or `fastMode: false`); a model whose tiers lack one gets no pin and behaves like `inherit`. It applies only when creating a task (and when changing a new task's model); saved tasks keep what they stored.
+- Design reference: T3 Code's `CodexProvider.ts` (`serviceTier` descriptor), `codexModelOptions.ts` and `TraitsSpeed.tsx` at `pingdotgg/t3code@9826dbb9`, and the same code embedded in server 0.1.3.
+- Validation: typecheck clean; 622/622 unit tests (new: speed cases in `src/shared/modelOptions.test.ts` and `src/host/scheduledTasks.test.ts`); `pnpm build`. Fresh-context Opus regression review against `a6dc78e`: first BLOCK (choosing "Server default" did nothing when speed was the only option; fixed with a tested `selectionWithSpeed`) plus five nits (a stored tier the server stopped offering showed as the default, inconsistent setting fallback, compact-width measurement, docs order and overstated Standard pin; all fixed). Its re-review of the final tree: APPROVE WITH NITS, no regressions. Accepted nit: the composer cannot clear a stored tier the model stopped offering back to the server default (it can pick an offered tier), matching how Effort behaves. Not exercised against a live server advertising `serviceTier` or in a VS Code window.
 
 #### v0.2.7
 
@@ -1991,3 +1999,9 @@ The packaging workflow is recorded in [AGENTS.md](../AGENTS.md). User instructio
 - Fresh-context Opus regression review against `a203643`: APPROVE WITH NITS, no blockers. Nits: an empty fork still lets the worktree/checkout picker treat it as a draft (pre-existing, left unchanged by instruction); the exhausted test uses rounded remaining (≥ 99.5% used); providers whose 7-day window has an unrecognised id are never excluded.
 - Checks: typecheck, 614/614 unit tests; review nits above refer to the first two items only.
 - Follow-up review (Environments, Fable reset, title): BLOCK first, for icon width reserved at rest squeezing machine names in narrow panels, then BLOCK for text buttons shifting under the pointer on hover. Both fixed (status steps aside on hover; icons placed before the buttons) and measured in headless Chromium: rest layout equals the pre-change layout, Ignore and Pair again stay put on hover. The final reorder is the reviewer's own measured suggestion and was not given a third full review. Open nit: an expiring row's "Expires in…" text is hidden while hovered.
+
+### v0.3.7
+
+- Version bump to 0.3.7 (`preview: false`) as the owner requested ("build it to the next version number"). Adds the Speed control and the `t3-vscode.scheduledTasks.defaultSpeed` setting (see [Effort and permission controls](#effort-and-permission-controls)). Built locally as `target-installer/t3-vscode-0.3.7.vsix`; not published, not committed, and not installed into any profile.
+- Fresh-context Opus regression review against `a6dc78e` (the v0.3.6 release commit): BLOCK first, fixed, then APPROVE WITH NITS on the final tree. The version bump changed only `package.json`, `CHANGELOG.md` and this file after that review; no source changed.
+- Checks: typecheck, 622/622 unit tests, `pnpm build`.

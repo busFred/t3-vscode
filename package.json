@@ -2,7 +2,7 @@
   "name": "t3-vscode",
   "displayName": "T3 VSCode",
   "description": "Alpha client for local T3 Code servers: workspace sessions, editor chat, rich messages and account usage.",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "publisher": "hungtienhuang",
   "repository": {
     "type": "git",
@@ -397,8 +397,29 @@
         }
       },
       {
-        "title": "Connection",
+        "title": "Scheduled tasks",
         "order": 5,
+        "properties": {
+          "t3-vscode.scheduledTasks.defaultSpeed": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "inherit"
+            ],
+            "enumDescriptions": [
+              "New tasks run at the model's standard speed, even when the server or Codex config defaults to a faster, more expensive tier.",
+              "New tasks leave the speed unset, so the server or Codex config decides (this may be a faster, more expensive tier)."
+            ],
+            "default": "standard",
+            "scope": "window",
+            "markdownDescription": "Speed new scheduled tasks start with for models that offer a service tier or fast mode. Applies only when creating a task; saved tasks keep their stored speed and you can change it in the task editor. Changes apply immediately.",
+            "order": 1
+          }
+        }
+      },
+      {
+        "title": "Connection",
+        "order": 6,
         "properties": {
           "t3-vscode.t3Home": {
             "type": "string",
