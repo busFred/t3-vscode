@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (after v0.3.7)
+## 0.3.8 — Local build
 
 - Replace separate machine lists with one Machines list, showing Conversations and agent access independently.
 - Add either or both capabilities in one address-first flow; enable agent access for an existing conversation machine using a host-only minted code, with manual code fallback.
@@ -8,6 +8,7 @@
 - Keep the Account & Usage, Machines and Sessions titles in view however long their lists are; drag or use the keyboard to adjust the Machines list height.
 - Fold usage windows (Session, Week, Fable, Month…) when a provider reports more than one; tighter usage and machine rows.
 - Faster sidebar and transcript updates with many sessions and while replies stream; hidden views no longer receive updates until shown.
+- Validation: typecheck clean; 727/727 unit tests; `pnpm run build`; `scripts/verify-ui.mjs` passes, with new Machines, pinned-section, resize, compact and folding fixtures. Each feature had a fresh-context Opus regression review: performance and Machines APPROVE after fixes; pinned sections BLOCK → fixed → APPROVE WITH NITS (nit fixed); foldable usage APPROVE WITH NITS (all fixed). Not exercised in a live VS Code window; live minting against a second machine not run. Local installer `target-installer/t3-vscode-0.3.8.vsix` (SHA-256 `ee2f08c350e81f3a0a807fbe000620d95a3d8b596c1abd54902b536a5da8919e`), not installed or published.
 
 ## 0.3.7 — Release
 

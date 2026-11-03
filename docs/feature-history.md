@@ -8,7 +8,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with tags, pinned ordering, a Snoozed shelf and chat in editor tabs. | v0.0.7 | v0.3.7 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with tags, pinned ordering, a Snoozed shelf and chat in editor tabs. | v0.0.7 | v0.3.8 |
 | [Scheduled task management](#scheduled-task-management) | Compact project/session task lists, a multi-project selector, once and webhook schedules, and independent editor tabs. | v0.1.16 | v0.3.7 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
@@ -30,7 +30,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits, reorders and sends queued follow-ups; shows current tasks. | v0.0.6 | v0.3.7 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.23 |
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.3.2 |
-| [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.3.2 |
+| [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.3.8 |
 | [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.3.2 |
 | [Collapsed activity](#collapsed-activity) | Timed thought/tool groups separated by visible assistant messages and steers. | v0.0.1 | v0.1.13 |
 | [MCP Apps](#mcp-apps) | Interactive MCP tool apps in the transcript. | v0.3.7 | v0.3.7 |
@@ -41,7 +41,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options, a Speed (service tier / fast mode) control and runtime modes inside the composer. | v0.0.1 | v0.3.7 |
-| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.7 |
+| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.8 |
 | [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.7 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
@@ -53,7 +53,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.7 |
-| [Remote environments](#remote-environments) | One Machines list shows Conversations and agent access independently; add either or both, start remote chats with Run on, and clone missing repositories. | v0.3.0 | Unreleased (after v0.3.7) |
+| [Remote environments](#remote-environments) | One Machines list shows Conversations and agent access independently; add either or both, start remote chats with Run on, and clone missing repositories. | v0.3.0 | v0.3.8 |
 | [Managed policy](#managed-policy) | Shows the managing organization and applies server policy restrictions. | v0.3.7 | v0.3.7 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
@@ -175,7 +175,7 @@ Single-clicking an entry opens a native VS Code preview tab. Another preview rep
 - Unpublished installer `target-installer/t3-vscode-0.3.3-thread-menu-unread.vsix` (SHA-256 `0948da4f60119c5bf923f28005f07600f92528a08e8c5afaa62c20220c60d148`), built from the uncommitted working tree on `68a1105`; manifest unchanged at 0.3.3, not installed or published.
 
 
-#### Unreleased (after v0.3.7) — pinned section titles
+#### v0.3.8 — pinned section titles
 
 - The **Account & Usage**, **Machines** and **Sessions** titles never scroll away, however long their lists are or however short the sidebar is. Each section's title stays fixed while only its open content scrolls, and the sections above shrink down to their titles before the Sessions tabs are pushed off screen.
 - The Machines list height is adjustable: drag the separator under it, or focus it and use Up/Down (20 px steps), Home and End. Double-click returns to the automatic height. The chosen height is kept with the sidebar's view state, like the session sort.
@@ -855,7 +855,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Earlier pages loaded before a reconnect are stitched back onto the new snapshot when the windows overlap, and "Load earlier" continues from the oldest page already loaded.
 - Validation (covers this entry and the unreleased image-preview and composer-clipboard entries): typecheck clean; 574/574 unit tests (new: `src/shared/transcriptWire.test.ts`, `src/shared/composerClipboard.test.ts`, `src/webview/imageZoom.test.ts`, reconnect-history and encoder tests); `pnpm build`; `scripts/verify-views.ts` 16/16 PASS including the new `verify-composer-clipboard.ts`. Not exercised in a live VS Code window or against real Word/Paint/T3 web UI paste targets. Fresh-context Opus regression review against `d3fa97f` first blocked on two findings, both fixed: encoders keyed by view id let a late reply for a re-resolved sidebar desynchronise the new webview (now keyed by webview object), and forged clipboard HTML from any web page could add hidden file/quote contexts to a prompt (now only payloads carrying the host's per-session nonce keep contexts; text is capped). Its re-review: APPROVE WITH NITS. Accepted nit: the nonce travels in the clipboard HTML, so a copy round-tripped through a hostile page could expose it for that session.
 
-#### Unreleased (after v0.3.7) — performance
+#### v0.3.8 — performance
 
 - Building each view's state no longer re-derives the visible session list for every lookup; thread and project derivations are reused within one snapshot (about 33 ms → 3 ms at 400 sessions, now roughly linear).
 - Unchanged session summaries keep their object identity across updates, and session rows are memoized, so the Sessions list re-renders only rows that changed. A snoozed row's "wakes in" label now refreshes on the list's one-minute tick rather than on every update.
@@ -1195,7 +1195,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - The provider title for several accounts is `Claude · (3)` instead of `Claude · 3 accounts`, which did not fit a narrow side panel. Text only.
 - Validation: new unit tests covering three accounts with one exhausted, a 24 h/72 h Fable scenario, per-account columns, the all-exhausted fallback, a no-weekly account and a single exhausted account.
 
-#### Unreleased (after v0.3.7) — compact sections and foldable windows
+#### v0.3.8 — compact sections and foldable windows
 
 - When a provider reports more than one kind of limit (Claude's Session / Week / Fable, Kimi's week and month), each window folds to its title line, in both Pooled and Per account views. Folded, a per-account window shows the lowest remaining share and a pooled one keeps its value. A provider with a single window (for example Codex's weekly limit) never folds. Folded windows are remembered per provider in the sidebar's view state.
 - Usage rows and machine rows use less vertical space. Per-account bars keep a 3 px gap; machine rows, chips and actions are tighter.
@@ -1522,7 +1522,7 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 
 ### Remote environments
 
-#### Unreleased (after v0.3.7)
+#### v0.3.8
 
 - Merge conversation machines and T3 agent connections by environment identity into one **Machines** list. Each row shows **Conversations** and **Agents can use · access** independently; this computer never offers agent access to itself. Machines with only agent access remain visible, with **Pair to see conversations**.
 - **Add machine…** asks for an address, then Conversations / Let agents use it (both default on when allowed), agent access and a fresh code. Adding both signs in for conversations first, then mints a separate code for agent access; a partial failure keeps the conversation capability.
