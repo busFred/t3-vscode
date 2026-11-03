@@ -498,6 +498,12 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.getByRole('button', { name: 'Preview clipboard.png', exact: true }).waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('.composer-attachment img')].some(image => image.complete && image.naturalWidth > 0));
   assert.match(await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue(), /^Compare here!\[clipboard\.png\]\(t3-context:\/\/v1\/image\/image_[a-z0-9_-]+\) then explain\.$/);
+  // Regression guard: undo removes a pasted image reference as one native step, and redo restores it.
+  const pastedText = await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue();
+  await page.getByRole('textbox', { name: 'Message', exact: true }).press('Control+z');
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message"]').value === 'Compare here then explain.', null, { timeout: 3000 }).catch(async () => { throw new Error(`Ctrl+Z after pasting an image left ${JSON.stringify(await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue())}`); });
+  await page.getByRole('textbox', { name: 'Message', exact: true }).press('Control+y');
+  await page.waitForFunction(value => document.querySelector('textarea[aria-label="Message"]').value === value, pastedText, { timeout: 3000 });
   // A plain click only moves the caret, so an image reference can be retyped by hand; Ctrl+click edits its caption.
   await page.getByRole('textbox', { name: 'Message', exact: true }).evaluate(element => { element.setSelectionRange(30, 30); element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   assert.equal(await page.getByRole('dialog', { name: 'clipboard.png', exact: true }).count(), 0, 'A plain click must not open the image preview');

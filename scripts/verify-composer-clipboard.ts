@@ -80,7 +80,13 @@ export async function verifyComposerClipboard(page: Page, other: Page, client: F
 
   // Plain text from outside still pastes natively, and so does a pasted file.
   await message(page).fill(""); await message(page).focus();
-  await page.evaluate(() => navigator.clipboard.writeText("from **elsewhere**\nline two"));
+  // The copy above writes HTML and a PNG asynchronously; under load that write can land after this one, so keep writing
+  // until the clipboard holds only this plain text.
+  await page.waitForFunction(async () => {
+    await navigator.clipboard.writeText("from **elsewhere**\nline two"); await new Promise((resolve) => setTimeout(resolve, 150));
+    const items = await navigator.clipboard.read();
+    return items.length === 1 && items[0]!.types.length === 1 && items[0]!.types[0] === "text/plain";
+  }, undefined, { polling: 300, timeout: 10_000 });
   await page.keyboard.press("Control+v");
   assert.equal(await message(page).inputValue(), "from **elsewhere**\nline two");
   for (const label of ["shot.png", "shot.png"]) await page.getByRole("button", { name: `Remove ${label}`, exact: true }).first().click();
