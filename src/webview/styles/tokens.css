@@ -1067,6 +1067,7 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .env-icon { position: relative; grid-row: span 2; display: inline-flex; color: var(--muted-foreground); }
 .env-icon > .env-dot { position: absolute; right: -3px; bottom: -2px; width: 7px; height: 7px; box-shadow: 0 0 0 1.5px var(--sidebar, var(--vscode-sideBar-background)); }
 .env-icon > .env-dot.off { width: 5px; height: 5px; background: var(--sidebar, var(--vscode-sideBar-background)); }
+.env-icon > .env-project-missing { position: absolute; right: -6px; bottom: -3px; width: 17px; height: 17px; color: rgb(0, 130, 54); }
 /* Machine rows: actions always visible in solid colors on the name line; tags (and any problem) on the line below. */
 .env-row { grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; }
 .env-row > .env-icon { grid-row: 1 / span 2; align-self: start; margin-top: 3px; }

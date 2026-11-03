@@ -83,11 +83,19 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
       {state.peerLinks?.denial && <p className="env-hint">{state.peerLinks.denial}</p>}
       {state.peerLinks?.error && <p role="alert">{state.peerLinks.error}</p>}
       {machines.map(machine => { const { tone, label } = machineStatus(machine);
+        const project = state.projectMachines;
+        const missingProject = project && !machine.local && machine.conversation?.status === "connected" && !project.present.includes(machine.environmentId);
+        const canAdd = project?.cloneSource && project.targets.some(target => target.environmentId === machine.environmentId && target.available)
+          && !project.clones.some(clone => clone.environmentId === machine.environmentId);
+        const projectHint = missingProject ? `${project.title} is not on ${machine.label}.${canAdd ? ` Click the Add ${project.title} to ${machine.label} button (folder +) to add it.` : ""}` : undefined;
+        const iconLabel = [label, projectHint].filter(Boolean).join(". ");
         const host = machine.local ? meta(local?.host, local?.serverVersion) : meta(machine.conversation?.host, machine.conversation?.serverVersion);
         const managed = machine.conversation?.managedOrganization ?? (machine.local ? state.localManagedPolicy?.organization : undefined);
         const status = machine.conversation ? statusTextOf(machine.conversation) : !machine.local && machine.agents && machine.agents.status !== "reachable" ? <span className="env-status env-error">{peerHealthLabel(machine.agents.status)}</span> : null;
         return <div className={`env-row${machine.conversation?.ignored ? " ignored" : ""}`} key={machine.environmentId}>
-        <span className="env-icon" role="img" aria-label={`${machine.local ? "This computer" : "Machine"}: ${label}`} title={label}>{machine.local ? <LaptopMinimalIcon size={14} aria-hidden="true" /> : <ServerIcon size={14} aria-hidden="true" />}<Dot tone={tone} /></span>
+        <span className="env-icon" role="img" aria-label={`${machine.local ? "This computer" : "Machine"}: ${iconLabel}`} title={iconLabel}>{machine.local ? <LaptopMinimalIcon size={14} aria-hidden="true" /> : <ServerIcon size={14} aria-hidden="true" />}{projectHint
+          ? <svg className="env-project-missing" viewBox="0 0 20 20" aria-hidden="true"><title>{projectHint}</title><path d="M10 1.5 19 18H1Z" fill="currentColor" stroke="var(--sidebar, var(--vscode-sideBar-background))" strokeWidth="1.5" strokeLinejoin="round" /><path d="M10 7v5" stroke="#fff" strokeWidth="2" strokeLinecap="round" /><circle cx="10" cy="15" r="1" fill="#fff" /></svg>
+          : <Dot tone={tone} />}</span>
         <div className="env-name" title={[machine.label, host, machine.conversation?.detail].filter(Boolean).join(" · ")}><span>{machine.label}</span>{machine.local && <span className="env-chip">This computer</span>}</div>
         <div className="env-actions"><MachineProject state={state} machine={machine} />{machine.conversation ? actionsOf(machine.conversation) : !machine.local && machine.agents ? <MachineRemoveButton machine={machine} peers={state.peerLinks} removeConversations={() => undefined} /> : null}</div>
         <MachineCapabilities machine={machine} peers={state.peerLinks} pair={() => setAdding(machine)} lead={<>{status}{managed ? <span className="env-managed">Managed by {managed}</span> : null}<MachineCloneStatus state={state} machine={machine} /></>} />

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { FolderGit2Icon, FolderPlusIcon, FolderXIcon, LoaderCircleIcon } from "lucide-react";
+import { FolderPlusIcon, FolderXIcon, LoaderCircleIcon } from "lucide-react";
 import type { HostStateSnapshot, MachineClone } from "../../shared/bridge";
 import type { MachineRow } from "../machines";
 import { useActions } from "../actions";
@@ -8,8 +8,8 @@ import { ClonePopover } from "./MachineChip";
 const cloneOf = (state: HostStateSnapshot, machine: MachineRow): MachineClone | undefined => state.projectMachines?.clones.find((item) => item.environmentId === machine.environmentId);
 
 /**
- * This window's project on a machine, as one icon among the row's actions: a repository icon when it is there,
- * an add button when it is not (cloning it there), a spinner while that clone runs.
+ * Offer to add this window's project when it is missing; hide the project action once it is there.
+ * Keep the clone's existing progress and failure indicators while it runs.
  */
 export function MachineProject({ state, machine }: { readonly state: HostStateSnapshot; readonly machine: MachineRow }) {
   const info = state.projectMachines;
@@ -17,8 +17,7 @@ export function MachineProject({ state, machine }: { readonly state: HostStateSn
   const [adding, setAdding] = useState(false);
   if (!info || !machine.conversations) return null;
   const title = info.title;
-  if (machine.local || info.present.includes(machine.environmentId))
-    return <span className="env-project" role="img" aria-label={`${title} is on ${machine.label}`} title={`${title} is on ${machine.label}`}><FolderGit2Icon size={13} aria-hidden="true" /></span>;
+  if (machine.local || info.present.includes(machine.environmentId)) return null;
   const clone = cloneOf(state, machine);
   if (clone) {
     const failed = clone.phase === "failed" || clone.phase === "cancelled" || clone.copy?.phase === "failed";

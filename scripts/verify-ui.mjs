@@ -223,11 +223,22 @@ try {
   assert.deepEqual(await page.getByRole('menu', { name: 'Remove Agent VPS' }).getByRole('menuitem').evaluateAll(items => items.map(item => item.querySelector('strong')?.textContent)), ['Remove agent access']);
   await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Remove Agent VPS…', 'Escape returns focus to the remove button');
-  // Each machine shows whether this window's project is there, and offers to add it.
+  // Present repositories have no project action; a connected machine missing it gets a green triangle.
   await page.evaluate(() => window.__replace({ projectMachines: { title: 't3-vscode', present: ['both'], targets: [{ environmentId: 'conversations', label: 'Conversation machine', available: true, defaultDestination: '~/code/t3-vscode' }], clones: [], cloneSource: { title: 't3-vscode', sshUrl: 'git@github.com:busFred/t3-vscode.git', httpsUrl: 'https://github.com/busFred/t3-vscode.git', protocol: 'ssh' } } }));
-  await page.locator('.environments .env-project').first().waitFor();
+  await page.locator('.environments .env-project-missing').waitFor();
   assert.deepEqual(await page.locator('.environments .env-row').evaluateAll(rows => rows.map(row => [row.querySelector('.env-name span')?.textContent, (row.querySelector('.env-project') ?? row.querySelector('.env-project-add'))?.getAttribute('aria-label') ?? null])),
-    [['Local workstation', 't3-vscode is on Local workstation'], ['Build machine', 't3-vscode is on Build machine'], ['Conversation machine', 'Add t3-vscode to Conversation machine…'], ['Agent VPS', null]]);
+    [['Local workstation', null], ['Build machine', null], ['Conversation machine', 'Add t3-vscode to Conversation machine…'], ['Agent VPS', null]]);
+  assert.equal(await page.locator('.environments .env-project').count(), 0, 'Present repositories do not show a replacement project icon');
+  const missingProjectRow = page.locator('.environments .env-row').filter({ hasText: 'Conversation machine' });
+  assert.match(await missingProjectRow.locator('.env-project-missing title').textContent(), /t3-vscode is not on Conversation machine.*Add t3-vscode to Conversation machine button/);
+  assert.equal(await missingProjectRow.locator('.env-project-missing').evaluate(icon => getComputedStyle(icon).color), 'rgb(0, 130, 54)');
+  assert.equal(await page.locator('.environments summary .env-project-missing').count(), 0, 'Missing repositories never change the collapsed-title icon');
+  assert.equal(await page.locator('.environments summary .env-dot').evaluate(dot => getComputedStyle(dot).backgroundColor), 'rgb(0, 200, 83)');
+  // Connection problems take priority over repository availability.
+  await page.evaluate(() => window.__replace({ environments: { ...window.__state.environments, rows: window.__state.environments.rows.map(row => row.environmentId === 'conversations' ? { ...row, status: 'reconnecting' } : row) } }));
+  await missingProjectRow.locator('.env-icon > .env-dot.warn').waitFor();
+  assert.equal(await missingProjectRow.locator('.env-project-missing').count(), 0);
+  await page.evaluate(() => window.__replace({ environments: { ...window.__state.environments, rows: window.__state.environments.rows.map(row => row.environmentId === 'conversations' ? { ...row, status: 'connected' } : row) } }));
   await page.getByRole('button', { name: 'Add t3-vscode to Conversation machine…' }).click();
   await page.getByRole('button', { name: 'Clone to Conversation machine' }).click();
   await page.waitForFunction(() => window.__requests.some(request => request.method === 'cloneToMachine' && request.params.environmentId === 'conversations' && request.params.destinationPath === '~/code/t3-vscode'));
