@@ -5,10 +5,10 @@ import type {
   ServerProvider,
 } from "@t3tools/contracts";
 import { formatModelSlugName, resolveSelectableModel } from "@t3tools/shared/model";
-import { fileBasename } from "../markdownLinks.ts";
+import { fileBasename } from "@t3tools/shared/path";
+import { resolveModelShortName } from "../providerClients.ts";
 import { isTerminalSubagentStatus } from "./subagentRuntime.ts";
 
-/** Summarizes one adjacent group, without changing its member identities or order. */
 export function subagentGroupSummary(
   members: ReadonlyArray<{ readonly status: OrchestrationV2TurnItemStatus }>,
 ) {
@@ -22,10 +22,6 @@ export function subagentGroupSummary(
   };
 }
 
-/**
- * Counts a group's states in the order a reader scans them: what is still
- * running first, then outcomes, using the agents panel's words.
- */
 export function summarizeSubagentStatuses(
   statuses: ReadonlyArray<OrchestrationV2TurnItemStatus>,
 ): string {
@@ -43,7 +39,6 @@ export function summarizeSubagentStatuses(
     .join(" · ");
 }
 
-/** Formats Codex task paths for display while leaving provider identity untouched. */
 export function formatSubagentDisplayTitle(title: string): string {
   const displayTitle = title.replace(/^Subagent:\s*/i, "");
   const path = /^\/root\/(?:[^/]+\/)*([^/]+)\/?$/u.exec(displayTitle);
@@ -53,7 +48,6 @@ export function formatSubagentDisplayTitle(title: string): string {
   return name.replace(/(^|\s)\S/gu, (letter) => letter.toUpperCase()) || displayTitle;
 }
 
-/** Match desktop's model resolution and show only changes from the parent's workspace. */
 export function resolveSubagentMetadata(input: {
   readonly model: string | null;
   readonly provider?: Pick<ServerProvider, "driver" | "models"> | null | undefined;
@@ -77,7 +71,7 @@ export function resolveSubagentMetadata(input: {
     : model;
   const catalogModel = input.provider?.models.find((candidate) => candidate.slug === slug);
   const reportedLabel = catalogModel
-    ? catalogModel.shortName || catalogModel.name
+    ? (resolveModelShortName(catalogModel, input.provider?.driver) ?? catalogModel.name)
     : model
       ? formatModelSlugName(model)
       : "Not reported";
@@ -117,16 +111,28 @@ export function resolveSubagentMetadata(input: {
   return { modelLabel, workspace };
 }
 
-/** Live work leads with progress; settled work leads with its result. */
 export function subagentDetailPreview(input: {
   readonly status: OrchestrationV2TurnItemStatus;
   readonly result?: string | null | undefined;
   readonly progress?: string | null | undefined;
 }): string | null {
-  const result = input.result?.trim();
-  const progress = input.progress?.trim();
-  const detail =
-    (isTerminalSubagentStatus(input.status) ? result || progress : progress || result) || "";
-  const compact = detail.replace(/\s+/gu, " ");
-  return compact.length > 280 ? `${compact.slice(0, 280).trimEnd()}…` : compact || null;
+  const terminal = isTerminalSubagentStatus(input.status);
+  const preferred = terminal ? input.result : input.progress;
+  const fallback = terminal ? input.progress : input.result;
+  const detail = preferred?.trimStart() || fallback?.trimStart() || "";
+  if (detail.length <= 280) return detail.trimEnd().replace(/\s+/gu, " ") || null;
+  const whitespace = /\s+/uy;
+  let compact = "";
+  for (let index = 0; index < detail.length; index += 1) {
+    whitespace.lastIndex = index;
+    const gap = whitespace.exec(detail);
+    if (gap) {
+      index += gap[0].length;
+      if (index === detail.length) break;
+      if (compact.length > 0) compact += " ";
+    }
+    compact += detail[index];
+    if (compact.length > 280) return `${compact.slice(0, 280).trimEnd()}…`;
+  }
+  return compact || null;
 }

@@ -1,5 +1,5 @@
 /** Deterministic typed transport for host, bridge and browser regression verification; no real server calls. */
-import { OrchestrationV2Command, ProviderInstanceId, ThreadId, ProjectId, TurnItemId, type OrchestrationV2TurnItem, type OrchestrationV2ShellStreamItem, type OrchestrationV2ThreadStreamItem, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem, type ServerProvider } from "@t3tools/contracts";
+import { OrchestrationV2Command, ProviderInstanceId, ThreadId, ProjectId, TurnItemId, type OrchestrationV2TurnItem, type OrchestrationV2ShellStreamItem, type OrchestrationV2ThreadStreamItem, type OrchestrationV2ArchivedShellSnapshot, type ServerProvider } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as DateTime from "effect/DateTime";
 import { v2Now, v2Project, v2ThreadShell, v2Projection, v2ShellSnapshot } from "../../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
@@ -10,12 +10,21 @@ export const provider: ServerProvider = { instanceId: ProviderInstanceId.make("k
 export const server = { origin: "http://audit.invalid", descriptor: { environmentId: "audit", label: "Audit" } } as DiscoveredServer;
 export const credentials = { get: async () => ({ origin: server.origin, environmentId: server.descriptor.environmentId, accessToken: "fake", expiresAt: Date.now() + 100_000, scopes: [] }), save: async () => {}, clear: async () => {} };
 export class FakeTransport implements HostTransport {
+  guestShareRequests: string[] = [];
+  createGuestShare: HostTransport["createGuestShare"] = async (id) => {
+    this.guestShareRequests.push(id);
+    const { ThreadGuestShare } = await import("@t3tools/contracts");
+    const share = Schema.decodeUnknownSync(ThreadGuestShare)({ id: "guest-share", host: "guest.invalid", createdAt: "2026-11-01T00:00:00Z", expiresAt: "2099-11-02T00:00:00Z", guestName: null, messages: [] });
+    return { url: "https://guest.invalid/guest#credential", share };
+  };
   uploads: Array<Parameters<HostTransport["uploadAttachment"]>[0]> = [];
   deletedAttachments: string[] = [];
   async uploadAttachment(input: Parameters<HostTransport["uploadAttachment"]>[0]) { this.uploads.push(input); return { ...input, type: input.type ?? "image", id: `pending-${this.uploads.length}` } as Awaited<ReturnType<HostTransport["uploadAttachment"]>>; }
   async deleteAttachment(id: string) { this.deletedAttachments.push(id); }
   assetRequests: Array<Parameters<HostTransport["createAssetUrl"]>[0]> = [];
   async createAssetUrl(resource: Parameters<HostTransport["createAssetUrl"]>[0]) { this.assetRequests.push(resource); return { url: "http://127.0.0.1:1/assets/fixture", expiresAt: Date.now() + 60_000 }; }
+  forceStops: unknown[] = [];
+  forceStopThread: HostTransport["forceStopThread"] = async (input) => { this.forceStops.push(input); return { outcome: "killed", sharedWithThreadIds: [] }; };
   connected = false;
   config: NonNullable<HostTransport["config"]> = { providers: [provider] };
   onClose: HostTransport["onClose"] = null;
@@ -23,8 +32,8 @@ export class FakeTransport implements HostTransport {
   connections = 0; shellStarts = 0; threadStarts = 0; threadStops = 0;
   shell = structuredCloneShell();
   archive: OrchestrationV2ArchivedShellSnapshot = { ...v2ShellSnapshot, threads: [] };
-  archiveHandler: ((item: OrchestrationV2ArchivedShellStreamItem) => void) | null = null;
-  archiveStarts = 0;
+  /** Archive snapshot requests; T3 no longer streams archive changes. */
+  archiveFetches = 0;
   shellHandler: ((item: OrchestrationV2ShellStreamItem) => void) | null = null;
   threadHandlers = new Map<string, (item: OrchestrationV2ThreadStreamItem) => void>();
   private readonly snapshots = new Map<string, Extract<OrchestrationV2ThreadStreamItem, { kind: "snapshot" }>>();
@@ -64,6 +73,9 @@ export class FakeTransport implements HostTransport {
     const previous = this.scheduledTasks.find((task) => task.id === id); if (!previous) throw new Error("Task deleted.");
     const task = { ...previous, enabled }; this.scheduledTasks = this.scheduledTasks.map((entry) => entry.id === id ? task : entry); this.scheduledHandler?.(this.scheduledTasks); return { task };
   };
+  rotateWebhookToken: HostTransport["rotateWebhookToken"] = async (id) => { const task = this.scheduledTasks.find((entry) => entry.id === id); if (!task) throw new Error("Task deleted."); return { task }; };
+  listWebhookDeliveries: HostTransport["listWebhookDeliveries"] = async () => ({ deliveries: [] });
+  getWebhookDelivery: HostTransport["getWebhookDelivery"] = async () => { throw new Error("Delivery not found."); };
   runScheduledTask: HostTransport["runScheduledTask"] = async (id) => {
     const previous = this.scheduledTasks.find((task) => task.id === id); if (!previous) throw new Error("Task deleted.");
     this.taskRuns.push(id); const task = { ...previous, lastRunStatus: "running" as const };
@@ -80,11 +92,7 @@ export class FakeTransport implements HostTransport {
   async connect() { this.connected = true; this.connections += 1; }
   async disconnect() { this.connected = false; }
   async snapshotShell() { return this.shell; }
-  async snapshotArchive() { return this.archive; }
-  subscribeArchive: HostTransport["subscribeArchive"] = async (handler) => {
-    this.archiveStarts += 1; this.archiveHandler = handler;
-    return async () => { this.archiveHandler = null; };
-  };
+  async snapshotArchive() { this.archiveFetches += 1; return this.archive; }
   async subscribeShell(handler: (item: OrchestrationV2ShellStreamItem) => void) { this.shellStarts += 1; this.shellHandler = handler; return async () => { this.shellHandler = null; }; }
   async subscribeThread(id: string, handler: (item: OrchestrationV2ThreadStreamItem) => void) {
     this.threadStarts += 1;
@@ -100,6 +108,8 @@ export class FakeTransport implements HostTransport {
       interactionMode: thread?.interactionMode ?? v2Projection.thread.interactionMode } } });
     return async () => { this.threadStops += 1; if (this.threadHandlers.get(id) === receive) this.threadHandlers.delete(id); };
   }
+  linkAnswers: Array<unknown> = [];
+  async answerLinkRequest(input: unknown) { this.linkAnswers.push(input); }
   secretAnswers: Array<unknown> = [];
   secretAnswerError: Error | null = null;
   async answerSecretRequest(input: unknown) { if (this.secretAnswerError) throw this.secretAnswerError; this.secretAnswers.push(input); }
@@ -199,7 +209,7 @@ export class FakeTransport implements HostTransport {
   getTurnItem: HostTransport["getTurnItem"] = async () => ({ item: null });
 }
 function structuredCloneShell() { return { ...v2ShellSnapshot, projects: [...v2ShellSnapshot.projects], threads: [...v2ShellSnapshot.threads], archivedThreads: [] }; }
-export async function harness(options: Pick<HostStateOptions, "taskOrigins" | "saveTaskOrigin" | "workspaceRoot" | "workspaceRoots" | "pickProject" | "draftStore" | "appearance" | "messageNavigation" | "taskDefaultSpeed" | "favoriteModels" | "saveFavoriteModels" | "modelPreferences" | "saveModelPreferences" | "searchPreferences" | "saveSearchPreferences"> = {}, client = new FakeTransport()) {
+export async function harness(options: Pick<HostStateOptions, "taskOrigins" | "saveTaskOrigin" | "workspaceRoot" | "workspaceRoots" | "pickProject" | "draftStore" | "appearance" | "messageNavigation" | "taskDefaultSpeed" | "favoriteModels" | "saveFavoriteModels" | "modelPreferences" | "saveModelPreferences" | "searchPreferences" | "saveSearchPreferences" | "archiveRefreshDelayMs"> = {}, client = new FakeTransport()) {
   const host = new HostState({ home: "/tmp/fake-t3-test", credentials, discover: async () => ({ ok: true, server }), reconnectDelayMs: 0, ...options }, client);
   await host.start(); return { host, client };
 }

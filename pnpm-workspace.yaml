@@ -1,7 +1,7 @@
 packages:
   - vendor/*
 overrides:
-  effect: 4.0.0-rc.115
+  effect: 4.1.2
 allowBuilds:
   esbuild: true
   '@tailwindcss/oxide': true
@@ -9,3 +9,5 @@ allowBuilds:
   '@vscode/vsce-sign': false
 patchedDependencies:
   '@legendapp/list@3.3.5': patches/@legendapp__list@3.3.5.patch
+minimumReleaseAgeExclude:
+  - effect@4.1.2

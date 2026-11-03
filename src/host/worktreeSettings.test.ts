@@ -113,13 +113,11 @@ test('t3.json malformed, oversized and symlink files surface import errors witho
     assert.equal(await readFile(join(f.home, 'external.json'), 'utf8'), '{}');
   } finally { await f.close(); }
 });
-test('old servers expose disabled capabilities and refuse unsupported changes before writes', async () => {
+test('a client reporting no worktree capabilities disables those controls and refuses unsupported changes before writes', async () => {
   const f = await fixture();
   try {
+    // Every supported server reports these capabilities; the store must still honor a client that does not.
     const oldNative = Schema.decodeUnknownSync(ServerSettings)({ defaultProjectScripts: [action], projectSettingsFolded: true });
-    assert.equal(Object.hasOwn(oldNative, 'worktreesDirectory'), false);
-    assert.equal(Object.hasOwn(oldNative.storageCleanup, 'worktreeKeepWhen'), false);
-    assert.equal(Object.hasOwn(oldNative.storageCleanup, 'worktreeSettledAfterDays'), false);
     const oldClient = { getSettings: async () => oldNative, updateSettings: async (patch: unknown) => { f.writes.push(patch); return oldNative; } };
     const loaded = await f.store.load('old', f.project, oldClient);
     assert.deepEqual(loaded.capabilities, { worktreesDirectory: false, cleanupRetention: false, runOnSettle: false });

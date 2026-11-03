@@ -1,3 +1,4 @@
+import { withRemoteSubagents } from "./remoteSubagents.js";
 import type { ThreadSummary, WireTurnItem } from "./bridge.js";
 import { compareSessions, type SessionSort } from "./sessionSort.js";
 
@@ -5,10 +6,13 @@ export interface SessionTreeNode { readonly thread: ThreadSummary; readonly chil
 
 /** Search retains matching sessions and their ancestors; only ordinary conversations/forks can be roots. */
 export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: ReadonlyArray<ThreadSummary> = threads, sort: SessionSort = "date-desc"): SessionTreeNode[] {
+  const matchingIds = new Set(matches.map(thread => thread.id));
+  threads = withRemoteSubagents(threads);
+  matches = threads.filter(thread => matchingIds.has(thread.id) || (!!thread.readOnlyHint && !!thread.parentThreadId && matchingIds.has(thread.parentThreadId)));
   const byId = new Map(threads.map((thread) => [thread.id, thread]));
   const parentOf = (thread: ThreadSummary): ThreadSummary | undefined => {
     const parent = thread.relationshipToParent === "subagent" && thread.parentThreadId ? byId.get(thread.parentThreadId) : undefined;
-    return parent && parent.id !== thread.id && parent.projectId === thread.projectId ? parent : undefined;
+    return parent && parent.id !== thread.id && (thread.remoteDelegation || parent.projectId === thread.projectId) ? parent : undefined;
   };
   const retained = new Set<string>();
   for (const match of matches) {

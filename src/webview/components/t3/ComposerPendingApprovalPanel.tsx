@@ -1,3 +1,4 @@
+import { fullAccessOverrideExplanation } from "@t3tools/client-runtime/state/thread-requests";
 // Ported from T3 Code (MIT); see vendor/LICENSE.t3code.
 import { memo } from "react";
 import type { ThreadPendingApproval as PendingApproval } from "@t3tools/client-runtime/state/thread-requests";
@@ -49,6 +50,8 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
           <span className="ml-auto shrink-0 tabular-nums">1/{pendingCount}</span>
         ) : null}
       </span>
+      {approval.reason ? <span className="whitespace-pre-wrap text-xs">{approval.reason}</span> : null}
+      {approval.fullAccessOverride ? <span className="text-xs text-warning"><strong>Full access override</strong><br />{fullAccessOverrideExplanation(approval.fullAccessOverride)}</span> : null}
       <Detail
         aria-label={detailAriaLabel}
         className={cn(

@@ -1,3 +1,4 @@
+import { GuestShareIndicator, GuestPendingMessages } from "./GuestShareControls";
 import type { SessionSearchOptions } from "../../shared/sessionSearch";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, GlobeIcon, BotIcon, ArrowLeftIcon, SearchIcon, HistoryIcon, PlusIcon, CalendarClockIcon, WandSparklesIcon } from "lucide-react";
@@ -89,6 +90,8 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
           window.getSelection()?.removeAllRanges();
           void run("threadAction", { threadId: thread.id, action: "rename" });
         } : undefined}>{thread?.title || "New conversation"}</strong>{thread?.titleRegenerating ? <span className="thread-retitling" title="Generating a new title…" aria-label="Generating a new title"><WandSparklesIcon size={12} /></span> : null}</div>
+        {thread ? <GuestShareIndicator key={thread.id} thread={thread} /> : null}
+        {thread?.pendingGuestMessageCount ? <span className="guest-message-badge" title="Guest messages waiting" aria-label={`${thread.pendingGuestMessageCount} guest messages waiting`}>{thread.pendingGuestMessageCount}</span> : null}
         <WorktreeHeader state={state} />
         {thread ? <button className="icon-button" aria-label="Scheduled tasks" title={`Scheduled tasks (${state.scheduledTasks?.tasks.filter((task) => task.projectId === thread.projectId && task.originThreadId === thread.id).length ?? 0}) — tasks created by this session`} aria-expanded={scheduledOpen} onClick={() => setScheduledOpen(!scheduledOpen)}><CalendarClockIcon size={15} /></button> : null}
         {thread ? <button className="icon-button" aria-label="Find in session" title="Find in this session (Ctrl/Cmd+F)" onClick={() => { setHistoryOpen(false); if (findOpen) closeFind(); else setFindOpen(true); }}><SearchIcon size={15} /></button> : null}
@@ -106,6 +109,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
       {thread?.relationshipToParent === "subagent" ? <div className="subagent-parent-bar">{parent ? <button className="subagent-parent-link" onClick={() => { void run("selectThread", { threadId: parent.id }); }}><ArrowLeftIcon size={12} /><BotIcon size={12} /><span>Subagent of · {parent.title || "Untitled"}</span></button> : <span>Subagent conversation · parent unavailable in this workspace</span>}</div> : null}
       <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} searchTarget={findOpen ? searchTarget : null} searchOptions={findOpen ? searchOptions : null} onNavigate={() => { setCitationTarget(null); setSearchTarget(null); }} />
       <AssistantSelectionMenu key={`${state.environment?.environmentId}:${state.activeThreadId}`} viewport={viewport} onQuote={openComment} />
+      {thread ? <GuestPendingMessages key={thread.id} thread={thread} /> : null}
       <Composer key={state.activeThreadId ?? "draft"} state={state} onSelectionChange={rememberSelection} onUsage={() => { void run("showUsage"); }} onEditCitation={(citation, index) => setCommentTarget({ citation, index, draftKey: state.activeThreadId ?? "new" })} />
       {commentTarget ? <CitationCommentEditor key={`${commentTarget.citation.messageId}:${commentTarget.citation.start}:${commentTarget.index ?? "new"}`} citation={commentTarget.citation} anchor={commentTarget.anchor} onClose={() => setCommentTarget(null)} onSave={(comment) => {
         const context = { type: "assistant" as const, citation: withAssistantCitationComment(commentTarget.citation, comment) };

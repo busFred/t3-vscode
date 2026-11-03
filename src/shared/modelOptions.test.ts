@@ -17,6 +17,16 @@ test("Effort labels mark only the advertised default", () => {
   const labels = effortDescriptor(model, null)?.options.map(effortOptionLabel);
   assert.deepEqual(labels, ["High", "Max (Default)"]);
 });
+test("A reasoning role identifies effort for provider-specific option ids", () => {
+  const agentModel = { ...model, capabilities: { optionDescriptors: [
+    { id: "thought_level", label: "Thought level", type: "select" as const, role: "reasoning" as const, options: [{ id: "think", label: "Think" }, { id: "deep", label: "Deep", isDefault: true }] },
+    { id: "reasoning", label: "Other reasoning", type: "select" as const, role: "reasoning" as const, options: [{ id: "low", label: "Low" }] },
+  ] } };
+  const effort = effortDescriptor(agentModel, { instanceId: "provider", model: "test", options: [{ id: "thought_level", value: "think" }] });
+  assert.equal(effort?.id, "thought_level");
+  assert.equal(getProviderOptionCurrentValue(effort), "think");
+  assert.deepEqual(effort?.options.map(effortOptionLabel), ["Think", "Deep (Default)"]);
+});
 test("Changing models preserves compatible explicit options and drops incompatible or cross-provider options", () => {
   const previous = { instanceId: "provider", model: "old", options: [{ id: "effort", value: "high" }, { id: "fastMode", value: true }, { id: "other", value: "discard" }] };
   assert.deepEqual(selectionForModel("provider", model, previous).options, previous.options.slice(0, 2));

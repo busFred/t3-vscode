@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { NodeId, ProviderInstanceId, ThreadId, TurnItemId, type OrchestrationV2TurnItem } from "@t3tools/contracts";
+import { EnvironmentId, ProviderDriverKind, NodeId, ProviderInstanceId, ThreadId, TurnItemId, type OrchestrationV2Subagent, type OrchestrationV2TurnItem } from "@t3tools/contracts";
 import { viewsHarness } from "./testing/fakeTransport.js";
 import { v2Now, v2Projection } from "../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 
@@ -68,4 +68,68 @@ test("A parent's own transcript still showing a running subagent turn item is a 
       visibleTurnItems: [{ sourceThreadId: ThreadId.make("first"), sourceItemId: item.id, position: 0, visibility: "local", item }] } });
   const parent = host.snapshot().threads.find((entry) => entry.id === "first")!;
   assert.equal(parent.waitingOnSubagents, true, "a running subagent turn item in the thread's own transcript must read as waiting");
+});
+
+test("Remote parent task rows are discovered on expansion, update status and disappear when removed upstream", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  await host.watchSessions(["first"]);
+  const remoteChild = { environmentId: EnvironmentId.make("studio"), threadId: ThreadId.make("remote-child"), label: "Studio" };
+  const item: Extract<OrchestrationV2TurnItem, { type: "subagent" }> = {
+    id: TurnItemId.make("remote-item"), threadId: ThreadId.make("first"), type: "subagent", title: "Investigate remotely",
+    subagentId: NodeId.make("remote-task"), origin: "app_owned", driver: ProviderDriverKind.make("codex"), providerInstanceId: ProviderInstanceId.make("codex"),
+    childThreadId: null, remoteChild, prompt: "Investigate", result: null, status: "running", ordinal: 0, runId: null, nodeId: null,
+    providerThreadId: null, providerTurnId: null, nativeItemRef: null, parentItemId: null, startedAt: v2Now, completedAt: null, updatedAt: v2Now,
+  };
+  const publish = (items: ReadonlyArray<OrchestrationV2TurnItem>) => client.threadHandlers.get("first")!({ kind: "snapshot", snapshotSequence: 1,
+    projection: { ...v2Projection, thread: { ...v2Projection.thread, id: ThreadId.make("first") }, subagents: items.filter((item): item is Extract<OrchestrationV2TurnItem, { type: "subagent" }> => item.type === "subagent").map(item => ({
+        ...item, id: item.subagentId, parentNodeId: NodeId.make("parent-node"), createdBy: "system", nativeTaskRef: null, model: null,
+      } as OrchestrationV2Subagent)), turnItems: [item],
+      visibleTurnItems: items.map(item => ({ sourceThreadId: ThreadId.make("first"), sourceItemId: item.id, position: 0, visibility: "local" as const, item })) } });
+  const roster = (running: boolean) => {
+    client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1,
+      threads: client.shell.threads.map(thread => thread.id === "first" ? { ...thread,
+        pendingBackgroundTasks: running ? [{ taskId: "remote-task", kind: "subagent" as const, description: "Investigate remotely" }] : [] } : thread) };
+    client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
+  };
+  roster(true);
+  publish([item]);
+  assert.equal(host.snapshot().threads.find(thread => thread.id === "first")!.backgroundWork?.subagents, 1);
+  const rows = () => host.snapshot().threads.find(thread => thread.id === "first")!.remoteSubagents!;
+  assert.equal(rows().length, 1);
+  assert.equal(rows()[0]!.status, "running");
+  assert.equal(rows()[0]!.environmentId, "studio");
+  assert.equal(rows()[0]!.threadId, "remote-child");
+  assert.equal(rows()[0]!.label, "Studio");
+  publish([{ ...item, status: "completed", completedAt: v2Now }]);
+  roster(false);
+  assert.equal(host.snapshot().threads.find(thread => thread.id === "first")!.backgroundWork, undefined, "completed delegated work leaves the pending roster");
+  assert.equal(rows()[0]!.status, "completed", "completed rows remain reachable while the projection retains them");
+  publish([]);
+  assert.equal(rows().length, 0);
+});
+
+test("A paired remote task reflects the owning child's live shell status without duplication", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  Object.assign(client, { threadEnvironment: (id: string) => id === "second" ? { environmentId: "studio", label: "Studio" } : undefined });
+  await host.selectThread("first");
+  const agent: OrchestrationV2Subagent = { id: NodeId.make("remote-task"), threadId: ThreadId.make("first"), runId: null,
+    parentNodeId: NodeId.make("node"), origin: "app_owned", createdBy: "system", driver: ProviderDriverKind.make("codex"), providerInstanceId: ProviderInstanceId.make("codex"),
+    providerThreadId: null, childThreadId: null, nativeTaskRef: null, remoteChild: { environmentId: EnvironmentId.make("studio"), threadId: ThreadId.make("second"), label: "Studio" },
+    prompt: "Investigate", title: "Remote task", model: null, status: "running", result: null, startedAt: v2Now, completedAt: null, updatedAt: v2Now };
+  client.threadHandlers.get("first")!({ kind: "snapshot", snapshotSequence: 1,
+    projection: { ...v2Projection, thread: { ...v2Projection.thread, id: ThreadId.make("first") }, subagents: [agent] } });
+  const { sessionTree } = await import("../shared/sessionTree.js");
+  for (const status of ["running", "failed"] as const) {
+    client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1,
+      threads: client.shell.threads.map(thread => thread.id === "second" ? { ...thread, status, activityRunStatus: status === "running" ? "running" as const : null } : thread) };
+    client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
+    const tree = sessionTree(host.snapshot().threads);
+    const children = tree.find(node => node.thread.id === "first")!.children;
+    assert.equal(children.length, 1);
+    assert.equal(children[0]!.thread.id, "second");
+    assert.equal(children[0]!.thread.activityRunStatus, status === "running" ? "running" : null);
+    assert.equal(children[0]!.thread.status, status);
+    assert.equal(children[0]!.thread.subagentOutcome, status === "failed" ? "failed" : undefined);
+    assert.equal(children[0]!.thread.readOnlyHint, undefined);
+  }
 });

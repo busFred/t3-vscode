@@ -366,8 +366,9 @@ test("Archiving keeps a thread discoverable and restorable outside the active sh
   assert.equal(client.shell.threads.length, 0);
   assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.archived, true);
   await assert.rejects(host.sendMessage("should not send", id), /Restore this thread/);
+  const fetches = client.archiveFetches;
   await host.reconnect();
-  assert.equal(client.archiveStarts, 2);
+  assert.equal(client.archiveFetches, fetches + 1, "Reconnecting refetches the archive");
   assert.equal(host.snapshot().activeThreadId, id);
   await host.threadAction(id, "unarchive");
   assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.archived, false);
@@ -375,18 +376,34 @@ test("Archiving keeps a thread discoverable and restorable outside the active sh
   assert.equal(client.commands.findLast((command) => command.type === "message.dispatch")?.threadId, id);
 });
 
-test("Archive updates from other clients arrive automatically and reject stale deltas", async (t) => {
+test("Archive-located shell deltas update the archive and reject stale deltas", async (t) => {
   const client = new FakeTransport();
   const archived = { ...v2ThreadShell, id: ThreadId.make("archived"), archivedAt: v2Now };
   client.archive = { ...client.archive, threads: [archived] };
   const { host } = await harness({}, client); t.after(() => host.dispose());
   await host.loadArchive();
   assert.equal(host.snapshot().threads.length, 2);
-  client.archiveHandler?.({ kind: "thread.updated", sequence: 5, thread: { ...archived, title: "Renamed in T3" } });
-  client.archiveHandler?.({ kind: "thread.updated", sequence: 4, thread: { ...archived, title: "Stale" } });
+  client.shellHandler?.({ kind: "thread.updated", sequence: 5, location: "archive", thread: { ...archived, title: "Renamed in T3" } });
+  client.shellHandler?.({ kind: "thread.updated", sequence: 4, location: "archive", thread: { ...archived, title: "Stale" } });
   assert.equal(host.snapshot().threads.find((thread) => thread.id === archived.id)?.title, "Renamed in T3");
-  client.archiveHandler?.({ kind: "thread.removed", sequence: 6, threadId: archived.id });
+  client.shellHandler?.({ kind: "thread.removed", sequence: 6, location: "archive", threadId: archived.id });
   assert.equal(host.snapshot().threads.length, 1);
+});
+
+test("A thread archived by another client refetches the archive, and restoring it leaves the archive", async (t) => {
+  const client = new FakeTransport();
+  const { host } = await harness({ archiveRefreshDelayMs: 0 }, client); t.after(() => host.dispose());
+  await host.loadArchive();
+  const id = v2ThreadShell.id; const fetches = client.archiveFetches;
+  client.archive = { ...client.archive, threads: [{ ...v2ThreadShell, archivedAt: v2Now }] };
+  // Current servers only remove the row from the active shell; the archive is re-queried.
+  client.shellHandler?.({ kind: "thread.removed", sequence: 50, location: "active", threadId: id });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(client.archiveFetches, fetches + 1);
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.archived, true);
+  client.shellHandler?.({ kind: "thread.updated", sequence: 51, location: "active", thread: v2ThreadShell });
+  assert.equal(host.snapshot().threads.filter((thread) => thread.id === id).length, 1);
+  assert.equal(host.snapshot().threads.find((thread) => thread.id === id)?.archived, false);
 });
 
 const projected = (item: OrchestrationV2TurnItem, position: number): OrchestrationV2ProjectedTurnItem => ({
@@ -473,5 +490,5 @@ test("A stale archive request cannot overwrite the reconnected snapshot", async 
   release({ ...client.archive, threads: [{ ...v2ThreadShell, id: ThreadId.make("stale-archive"), archivedAt: v2Now }] });
   await stale;
   assert.equal(host.snapshot().threads.some(thread => thread.id === "stale-archive"), false);
-  assert.equal(client.archiveStarts, 1);
+  assert.equal(host.snapshot().archiveLoaded, true);
 });

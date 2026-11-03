@@ -17,6 +17,7 @@ export function ScheduledTaskRows({ state, tasks }: { readonly state: HostStateS
           {task.lastRunStatus === "running" ? <small className="task-run-state"><CircleDashedIcon size={12} />Running</small>
             : task.lastRunError ? <small className="task-run-state failed" title={task.lastRunError}><CircleXIcon size={12} />Last run failed</small> : null}
           <small title={`${taskScheduleLabel(task.schedule)} · ${model?.name ?? task.modelSelection.model} · ${origin}`}>{taskScheduleLabel(task.schedule)} · {model?.name ?? task.modelSelection.model}</small>
+          {task.blockedByPolicy !== undefined ? <small className="task-status" role="alert">{task.blockedByPolicy}</small> : null}
           <CalendarClockIcon size={12} />
         </span>
       </button>

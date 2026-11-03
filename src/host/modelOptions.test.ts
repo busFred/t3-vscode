@@ -8,9 +8,21 @@ const effortModel = { slug: "reasoner", name: "Reasoner", isCustom: true, capabi
   { id: "reasoningEffort", label: "Effort", type: "select" as const, options: [{ id: "low", label: "Low" }, { id: "max", label: "Max", isDefault: true }] },
   { id: "fastMode", label: "Fast", type: "boolean" as const },
 ] } };
+const agentModel = { slug: "agent", name: "Agent", isCustom: true, capabilities: { optionDescriptors: [
+  { id: "thought_level", label: "Thought level", type: "select" as const, role: "reasoning" as const, promptInjectedValues: ["ultrathink"], options: [{ id: "think", label: "Think" }, { id: "deep", label: "Deep" }, { id: "ultrathink", label: "Ultrathink" }] },
+] } };
 function transport() {
-  const client = new FakeTransport(); client.config = { providers: [{ ...provider, requiresNewThreadForModelChange: true, models: [...provider.models, effortModel] }] }; return client;
+  const client = new FakeTransport(); client.config = { providers: [{ ...provider, models: [...provider.models, effortModel, agentModel] }] }; return client;
 }
+test("A reasoning role accepts advertised values for provider-specific effort ids and rejects unsupported values", async (t) => {
+  const client = transport(); const { host } = await harness({}, client); t.after(() => host.dispose());
+  await host.setModel(undefined, { instanceId: provider.instanceId, model: "agent" });
+  await host.setModelOption(undefined, "thought_level", "deep");
+  assert.deepEqual(host.snapshot().draft.modelSelection?.options, [{ id: "thought_level", value: "deep" }]);
+  await assert.rejects(host.setModelOption(undefined, "thought_level", "invented"), /does not support/);
+  await assert.rejects(host.setModelOption(undefined, "thought_level", "ultrathink"), /message text/);
+  assert.equal(client.commands.length, 0);
+});
 test("Draft effort preserves other model options and is carried to the first message, without changing other views", async (t) => {
   const client = transport(); const { host } = await harness({}, client); t.after(() => host.dispose());
   host.registerView("other-tab");
@@ -23,7 +35,7 @@ test("Draft effort preserves other model options and is carried to the first mes
   await host.sendMessage("First message with max effort");
   assert.deepEqual(client.commands.find((command) => command.type === "thread.create")?.modelSelection.options, host.snapshot().draft.modelSelection?.options);
 });
-test("An existing conversation can change effort on a provider that forbids changing the model", async (t) => {
+test("An existing conversation can change effort, and T3 0.1.5+ also lets it change model mid-thread", async (t) => {
   const client = transport();
   client.shell = { ...client.shell, threads: client.shell.threads.map((thread) => ({ ...thread, itemCount: 5, modelSelection: { instanceId: provider.instanceId, model: "reasoner", options: [{ id: "fastMode", value: false }] } })) };
   const { host } = await harness({}, client); t.after(() => host.dispose());
@@ -32,7 +44,8 @@ test("An existing conversation can change effort on a provider that forbids chan
   const change = client.commands.findLast((command) => command.type === "thread.model-selection.set");
   assert.equal(change?.threadId, id); assert.equal(change?.modelSelection.model, "reasoner");
   assert.deepEqual(change?.modelSelection.options, [{ id: "fastMode", value: false }, { id: "reasoningEffort", value: "low" }]);
-  await assert.rejects(host.setModel(id, { instanceId: provider.instanceId, model: provider.models[0]!.slug }), /new thread/);
+  await host.setModel(id, { instanceId: provider.instanceId, model: provider.models[0]!.slug });
+  assert.equal(client.commands.findLast((command) => command.type === "thread.model-selection.set")?.modelSelection.model, provider.models[0]!.slug);
 });
 test("Unsupported efforts, missing options and malformed values cannot reach the server", async (t) => {
   const client = transport(); const { host } = await harness({}, client); t.after(() => host.dispose());

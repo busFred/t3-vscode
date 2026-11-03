@@ -9,7 +9,7 @@ import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import * as RemoteEnvironment from "@t3tools/client-runtime/environment";
 import { resolveRemotePairingTarget } from "@t3tools/shared/remote";
 import * as Effect from "effect/Effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 export interface RemoteEnvironmentRecord {
   readonly environmentId: string;

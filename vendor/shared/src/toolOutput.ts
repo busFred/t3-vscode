@@ -1,4 +1,16 @@
+import {
+  isProviderSendTurnSupportedImageMimeType,
+  PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
+} from "@t3tools/contracts";
 import * as Predicate from "effect/Predicate";
+
+import {
+  HTML_RENDER_TOOL_NAME,
+  readHtmlRenderReference,
+  type HtmlRenderReference,
+} from "./htmlRender.ts";
+import { MCP_APP_OUTPUT_KEY, readMcpAppReference, type McpAppReference } from "./mcpApp.ts";
+import { resolveT3McpToolId } from "./t3McpToolPresentation.ts";
 
 const MAX_PARSED_BYTES = 16_384;
 const MAX_METADATA_BYTES = 8_192;
@@ -27,8 +39,12 @@ interface CompactToolOutput {
   taskId?: string;
   scheduledTaskId?: string;
   status?: "rolled_back";
+  htmlRender?: HtmlRenderReference;
+  [MCP_APP_OUTPUT_KEY]?: McpAppReference;
   thread?: { threadId: string };
   threads?: Array<{ threadId?: string; status?: "rolled_back" }>;
+  linkedCount?: number;
+  unlinkedCount?: number;
 }
 
 function readResult(value: unknown, budget: ResultReadBudget, depth = 0): ResultEnvelope {
@@ -94,7 +110,6 @@ function boundedId(value: unknown): string | undefined {
   return Array.from(value).join("");
 }
 
-/** Keeps only IDs and failure metadata used by T3's grouped tool summaries. */
 export function compactDynamicToolOutput(value: unknown): CompactToolOutput | undefined {
   const budget: ResultReadBudget = {
     remainingBytes: MAX_PARSED_BYTES,
@@ -110,6 +125,14 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
       if (id !== undefined) output[key] = id;
     }
     if (data.status === "rolled_back") output.status = "rolled_back";
+    for (const key of ["linkedCount", "unlinkedCount"] as const) {
+      const count = data[key];
+      if (typeof count === "number" && Number.isSafeInteger(count)) output[key] = count;
+    }
+    const htmlRender = readHtmlRenderReference(data.htmlRender);
+    if (htmlRender !== undefined) output.htmlRender = htmlRender;
+    const mcpApp = readMcpAppReference(data[MCP_APP_OUTPUT_KEY]);
+    if (mcpApp !== undefined) output[MCP_APP_OUTPUT_KEY] = mcpApp;
     const nestedThreadId = Predicate.isObject(data.thread)
       ? boundedId(data.thread.threadId)
       : undefined;
@@ -138,19 +161,43 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
       }
       if (complete) output.threads = threads;
       else {
-        // A partial batch or a top-level ID would turn an unknown creation
-        // count into a confidently wrong one in the existing summary parser.
+        // Partial batches or top-level ids make the summary parser report a false creation count.
         delete output.threadId;
         delete output.status;
       }
     }
   }
-  if (encoder.encode(JSON.stringify(output)).byteLength > MAX_METADATA_BYTES) {
+  const oversized = () => encoder.encode(JSON.stringify(output)).byteLength > MAX_METADATA_BYTES;
+  if (oversized()) {
     delete output.threads;
     delete output.threadId;
     delete output.status;
   }
+  const app = output[MCP_APP_OUTPUT_KEY];
+  if (app?.csp !== undefined && oversized()) {
+    const { csp: _csp, ...rest } = app;
+    output[MCP_APP_OUTPUT_KEY] = rest;
+  }
+  if (oversized()) delete output[MCP_APP_OUTPUT_KEY];
   return Object.keys(output).length === 0 ? undefined : output;
+}
+
+export function htmlRenderFromToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): HtmlRenderReference | undefined {
+  if (resolveT3McpToolId(item.toolName) !== HTML_RENDER_TOOL_NAME) return undefined;
+  const output = compactDynamicToolOutput(item.output);
+  return output?.isError ? undefined : output?.htmlRender;
+}
+
+/** Accept app references only when server and tool match the item, so tools cannot impersonate another app source. */
+export function mcpAppFromToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): McpAppReference | undefined {
+  const app = compactDynamicToolOutput(item.output)?.[MCP_APP_OUTPUT_KEY];
+  return app !== undefined && item.toolName === `${app.server}.${app.tool}` ? app : undefined;
 }
 
 /** Some providers report completion even when command output describes a failure. */
@@ -165,4 +212,61 @@ export function toolOutputIndicatesFailure(text: string): boolean {
     /exit(?:ed)? with exit code\s+[1-9]\d*/i.test(text) ||
     /exit code\s*[:\s]\s*[1-9]\d*\b/i.test(text)
   );
+}
+
+export interface ToolOutputImage {
+  readonly mimeType: string;
+  readonly data?: string;
+}
+
+/** Raster types only, so agent SVG/HTML cannot be served inline. */
+export function readToolOutputImage(block: unknown): ToolOutputImage | null {
+  if (!Predicate.isObject(block) || block.type !== "image") return null;
+  const source = Predicate.isObject(block.source) ? block.source : undefined;
+  if (source !== undefined && source.type !== "base64") return null;
+  const mimeType = source === undefined ? block.mimeType : source.media_type;
+  const data = source === undefined ? block.data : source.data;
+  if (typeof mimeType !== "string" || !isProviderSendTurnSupportedImageMimeType(mimeType)) {
+    return null;
+  }
+  const image = { mimeType: mimeType.toLowerCase() };
+  return typeof data === "string" ? { ...image, data } : image;
+}
+
+function outputBlocks(value: unknown): ReadonlyArray<unknown> {
+  if (Array.isArray(value)) return value;
+  if (Predicate.isObject(value) && Array.isArray(value.content)) return value.content;
+  return [value];
+}
+
+export const MAX_TOOL_OUTPUT_IMAGES = 8;
+
+export const MAX_TOOL_OUTPUT_IMAGE_BASE64_LENGTH =
+  Math.ceil(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / 3) * 4;
+
+export function toolOutputImageBlocks(value: unknown): ReadonlyArray<unknown> {
+  const blocks: unknown[] = [];
+  for (const block of outputBlocks(value)) {
+    if (readToolOutputImage(block) === null) continue;
+    blocks.push(block);
+    if (blocks.length === MAX_TOOL_OUTPUT_IMAGES) break;
+  }
+  return blocks;
+}
+
+/** Order defines the shared tool-output-image asset index. */
+export function toolOutputImages(value: unknown): ReadonlyArray<ToolOutputImage> {
+  return toolOutputImageBlocks(value).flatMap((block) => readToolOutputImage(block) ?? []);
+}
+
+export function omitToolOutputImageData(value: unknown): unknown {
+  const omit = (block: unknown) => {
+    const image = readToolOutputImage(block);
+    return image?.data === undefined ? block : { type: "image", mimeType: image.mimeType };
+  };
+  if (Array.isArray(value)) return value.map(omit);
+  if (Predicate.isObject(value) && Array.isArray(value.content)) {
+    return { ...value, content: value.content.map(omit) };
+  }
+  return omit(value);
 }

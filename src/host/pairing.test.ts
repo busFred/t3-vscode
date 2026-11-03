@@ -6,15 +6,15 @@ import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import * as Effect from "effect/Effect";
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
-import { resolveSpawnCommand, SpawnExecutableResolution } from "@t3tools/shared/shell";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { CommandResolutionCache, resolveSpawnCommand, SpawnExecutableResolution } from "@t3tools/shared/shell";
 import { pairWithServer, PairingError, runPairingCommand, type PairingCommandRuntime } from "./pairing.js";
 
 function commandHarness(platform: NodeJS.Platform, executable?: string) {
   const calls: Array<{ kind: "shell" | "direct"; command: string; args?: string[]; timeout: number; windowsHide: boolean }> = [];
   const runtime: PairingCommandRuntime = {
     resolve: (command, args) => Effect.runSync(resolveSpawnCommand(command, args).pipe(
-      Effect.provideService(HostProcessPlatform, platform),
+      Effect.provideService(HostProcess.Platform, platform),
       Effect.provideService(SpawnExecutableResolution, (name, os) => {
         assert.equal(name, "t3"); assert.equal(os, "win32");
         return executable;
@@ -56,9 +56,11 @@ test("Windows lookup honors Path/PATHEXT and resolves the first installed launch
   syncBuiltinESMExports();
   t.after(() => { mocked.mock.restore(); syncBuiltinESMExports(); });
   const { calls, runtime } = commandHarness("win32");
+  // T3 caches successful lookups for 30 s; each call gets a fresh cache so the removed launcher is re-resolved.
   const resolve: PairingCommandRuntime["resolve"] = (command, args) => Effect.runSync(resolveSpawnCommand(command, args).pipe(
-    Effect.provideService(HostProcessPlatform, "win32"),
-    Effect.provideService(HostProcessEnvironment, {
+    Effect.provideService(CommandResolutionCache, new Map()),
+    Effect.provideService(HostProcess.Platform, "win32"),
+    Effect.provideService(HostProcess.Environment, {
       Path: '"C:\\Users\\Hung Tien\\.t3\\bin";C:\\later', PATHEXT: ".EXE;.CMD",
     }),
   ));

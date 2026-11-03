@@ -494,7 +494,7 @@
     "@t3tools/shared": "workspace:*",
     "clsx": "2.1.1",
     "dompurify": "3.4.16",
-    "effect": "4.0.0-rc.115",
+    "effect": "4.1.2",
     "katex": "0.16.25",
     "lucide-react": "0.564.0",
     "mermaid": "11.17.2",

@@ -1,7 +1,8 @@
 /** Resolve chat file links once in the host; locations stay one-based until VS Code opens them. */
 import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { normalizeMarkdownLinkDestination, safeDecodeURIComponent, splitFilePathPosition, splitMarkdownLinkSearchAndHash } from "@t3tools/client-runtime/markdown-links";
+import { normalizeMarkdownLinkDestination, safeDecodeURIComponent, splitMarkdownLinkSearchAndHash } from "@t3tools/shared/markdownLinks";
+import { splitFilePathPosition } from "@t3tools/shared/fileLinks";
 
 export interface ChatFileLink {
   readonly path: string;

@@ -543,3 +543,33 @@ test("A finished clone that dropped off the machine's list still gets its files,
   assert.equal(clone?.copy?.phase, "failed");
   assert.match(clone?.copy?.error ?? "", /^\.env\.local \(/);
 });
+
+test("A remote delegated child in another repository is listed and can open through its owner", async (t) => {
+  const f = await fixture(); t.after(f.cleanup);
+  // Exercise shell-only delegatedFrom discovery before the parent is expanded.
+  await f.host.selectThread("remote-thread");
+  f.client.shell = { ...f.client.shell, snapshotSequence: f.client.shell.snapshotSequence + 1,
+    threads: f.client.shell.threads.map(thread => thread.id === "other-thread" ? { ...thread,
+      delegatedFrom: { environmentId: "audit", threadId: ThreadId.make("local-thread"), title: "local thread" } as never,
+      activityRunStatus: "running" as const } : thread) };
+  f.client.shell = { ...f.client.shell, threads: [...f.client.shell.threads, {
+    ...f.client.shell.threads.find(thread => thread.id === "other-thread")!, id: ThreadId.make("remote-grandchild"), delegatedFrom: undefined,
+    lineage: { ...v2ThreadShell.lineage, parentThreadId: ThreadId.make("other-thread"), relationshipToParent: "subagent" },
+  } as never] };
+  f.client.threadOwners.set("remote-grandchild", REMOTE_OTHER);
+  f.client.shellHandler!({ kind: "snapshot", snapshot: f.client.shell });
+  const snapshot = f.host.snapshot();
+  const parent = snapshot.threads.find(thread => thread.id === "local-thread")!;
+  assert.equal(parent.remoteSubagents?.[0]?.threadId, "other-thread");
+  assert.equal(parent.remoteSubagents?.[0]?.environmentId, "devbox");
+  const { sessionTree } = await import("../shared/sessionTree.js");
+  const child = sessionTree(snapshot.threads).find(node => node.thread.id === parent.id)!.children[0]!.thread;
+  assert.equal(child.id, "other-thread");
+  const nested = sessionTree(snapshot.threads).find(node => node.thread.id === parent.id)!.children[0]!.children;
+  assert.equal(nested[0]!.thread.id, "remote-grandchild");
+  assert.equal(child.activityRunStatus, "running");
+  assert.equal(child.readOnlyHint, undefined);
+  f.client.statuses.push({ ...REMOTE_OTHER, httpBaseUrl: "https://devbox.example", enabled: true, state: "connected", expiresAt: null });
+  await f.host.selectThread(child.id);
+  assert.equal(f.host.snapshot().remoteSession?.environmentId, "devbox");
+});

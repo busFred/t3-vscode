@@ -1,14 +1,15 @@
+import { linkRequestFailureMessage } from "@t3tools/client-runtime/link-request";
 import { captureTurnBaseline, findTurnBaseline } from "./turnBaseline.js";
 /** Transport adapter over T3's vendored contracts and Effect RPC client. */
 import { randomUUID } from "node:crypto";
 import {
-  CommandId, ProjectId, ThreadId, TurnItemId, OrchestrationV2Command, ScheduledTaskId, ScheduledTaskUpsertInput, type ScheduledTask,
+  GuestShareCreateInput, OrchestrationV2ForceStopThreadInput, CommandId, ProjectId, ThreadId, TurnItemId, OrchestrationV2Command, ScheduledTaskId, ScheduledTaskWebhookDeliveryId, ScheduledTaskUpsertInput, type ScheduledTask,
   OrchestrationV2ThreadLaunchInput, VcsCreateWorktreeInput, VcsListRefsInput, GitPreparePullRequestThreadInput, GitRunStackedActionInput, ServerSettingsPatch, type WorktreeSetupStreamEvent,
   ORCHESTRATION_V2_WS_METHODS as V2, WS_METHODS,
-  SecretRequestAnswerInput, SecretRequestError, EnvironmentAuthorizationError,
+  PeerLinkRequestAnswerInput, SecretRequestAnswerInput, SecretRequestError, EnvironmentAuthorizationError,
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
-  type OrchestrationV2ThreadStreamItem, type OrchestrationV2ArchivedShellStreamItem, type ServerConfig,
+  type OrchestrationV2ThreadStreamItem, type ServerConfig,
   type ReviewDiffFileContentsInput, ProviderInstanceId, type AssetResource, type AttachmentCreateUploadUrlInput, ChatAttachment,
   ProjectCloneStartInput, type ProjectCloneListEvent,
 } from "@t3tools/contracts";
@@ -25,9 +26,10 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
-import * as Socket from "effect/unstable/socket/Socket";
+import { FetchHttpClient, type HttpClient } from "effect/http";
+import * as Socket from "effect/socket/Socket";
 import type { DiscoveredServer } from "./serverDiscovery.js";
+import { serverVersionSupported, unsupportedServerMessage } from "../shared/serverVersion.js";
 import { readCheckpointFiles, readCheckpointDiff } from "./checkpointFiles.js";
 
 export type Subscription = () => Promise<void>;
@@ -70,6 +72,7 @@ export class T3Client {
       }));
       const config = await this.run(session.initialConfig);
       if (config.environment.environmentId !== server.descriptor.environmentId) throw new Error("T3 environment identity changed during connection.");
+      if (!serverVersionSupported(config.environment.serverVersion)) throw new Error(unsupportedServerMessage(config.environment.serverVersion));
       this.session = session;
       this.server = server;
       this.accessToken = accessToken;
@@ -118,9 +121,6 @@ export class T3Client {
   snapshotArchive() {
     return this.run(this.requireSession().client[V2.getArchivedShellSnapshot]({}));
   }
-  subscribeArchive(handler: (item: OrchestrationV2ArchivedShellStreamItem) => void): Promise<Subscription> {
-    return this.subscribe(this.requireSession().client[V2.subscribeArchivedShell]({}), handler);
-  }
   subscribeThread(id: string, handler: (item: OrchestrationV2ThreadStreamItem) => void): Promise<Subscription> {
     return this.subscribe(this.requireSession().client[V2.subscribeThread]({
       threadId: threadId(id), requestCompletionMarker: true, acceptBoundedSnapshot: true,
@@ -131,14 +131,23 @@ export class T3Client {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(input);
     await this.run(this.requireSession().client[V2.dispatchCommand](command));
   }
+  forceStopThread(input: unknown) {
+    return this.run(this.requireSession().client[V2.forceStopThread](Schema.decodeUnknownSync(OrchestrationV2ForceStopThreadInput)(input)));
+  }
+  createGuestShare(id: string) {
+    return this.run(this.requireSession().client[WS_METHODS.guestShareCreate](Schema.decodeUnknownSync(GuestShareCreateInput)({ threadId: id })));
+  }
   launchThread(input: unknown) {
     return this.run(this.requireSession().client[V2.launchThread](Schema.decodeUnknownSync(OrchestrationV2ThreadLaunchInput)(input)));
   }
   listRefs(input: unknown) {
     return this.run(this.requireSession().client[WS_METHODS.vcsListRefs](Schema.decodeUnknownSync(VcsListRefsInput)(input)));
   }
+  /** T3 places worktrees in its managed folder; a checkout at a chosen path is created locally instead. */
   createWorktree(input: unknown) {
-    return this.run(this.requireSession().client[WS_METHODS.vcsCreateWorktree](Schema.decodeUnknownSync(VcsCreateWorktreeInput)(input)));
+    const decoded = Schema.decodeUnknownSync(VcsCreateWorktreeInput)(input);
+    if (decoded.path !== null) return Promise.reject(new Error("T3 creates worktrees only in its managed folder."));
+    return this.run(this.requireSession().client[WS_METHODS.vcsCreateWorktree]({ ...decoded, path: null }));
   }
   removeWorktree(cwd: string, path: string, force = false) {
     return this.run(this.requireSession().client[WS_METHODS.vcsRemoveWorktree]({ cwd, path, force }));
@@ -146,16 +155,20 @@ export class T3Client {
   preparePullRequest(input: unknown) {
     return this.run(this.requireSession().client[WS_METHODS.gitPreparePullRequestThread](Schema.decodeUnknownSync(GitPreparePullRequestThreadInput)(input)));
   }
+  /** Never expose schema or transport errors containing the pairing code. */
+  async answerLinkRequest(input: unknown): Promise<void> {
+    let payload: PeerLinkRequestAnswerInput;
+    try { payload = Schema.decodeUnknownSync(PeerLinkRequestAnswerInput)(input); } catch { throw new Error("Invalid link answer."); }
+    await this.run(this.requireSession().client[WS_METHODS.peerLinksAnswerRequest](payload).pipe(
+      Effect.mapError(error => new Error(linkRequestFailureMessage(error)))));
+  }
+  /** T3 0.1.5 removed `server.getSettings`; settings arrive with the server config stream. */
   async getSettings() {
-    const session = this.requireSession();
-    const settings = await this.run(session.client[WS_METHODS.serverGetSettings]({}));
-    if (this.session !== session) throw new Error("T3 connection changed while loading settings.");
-    // Optional fields retain their absence when decoding older server snapshots.
-    const directory = this.config?.environment.capabilities.worktreesDirectory === true || settings.worktreesDirectory !== undefined;
-    this.settingsSupport = { worktreesDirectory: directory,
-      cleanupRetention: settings.storageCleanup.worktreeKeepWhen !== undefined && settings.storageCleanup.worktreeSettledAfterDays !== undefined,
-      // Settle actions shipped before the directory capability; legacy servers omit both.
-      runOnSettle: directory };
+    this.requireSession();
+    const settings = this.config?.settings;
+    if (!settings) throw new Error("T3 has not sent its settings yet.");
+    // Every supported server (0.1.5+) has the worktree directory, retention and settle-action settings.
+    this.settingsSupport = { worktreesDirectory: true, cleanupRetention: true, runOnSettle: true };
     return settings;
   }
   updateSettings(patch: unknown) {
@@ -233,8 +246,11 @@ export class T3Client {
     await this.run(session.client[WS_METHODS.secretsAnswerRequest](payload).pipe(Effect.mapError((error) =>
       new Error(error instanceof SecretRequestError || error instanceof EnvironmentAuthorizationError ? error.message : "Could not answer the request. Try again."))));
   }
-  listScheduledTasks() {
-    return this.run(this.requireSession().client[WS_METHODS.scheduledTasksList]({}).pipe(Effect.timeout("10 seconds")));
+  /** T3 0.1.5 removed `scheduledTasks.list`; the subscription's first emission is the current list. */
+  async listScheduledTasks() {
+    const first = await this.run(Stream.runHead(this.requireSession().client[WS_METHODS.scheduledTasksSubscribe]({})).pipe(Effect.timeout("10 seconds")));
+    if (Option.isNone(first)) throw new Error("T3 returned no scheduled tasks.");
+    return first.value;
   }
   subscribeScheduledTasks(handler: (tasks: ReadonlyArray<ScheduledTask>) => void, onError: (message: string) => void): Promise<Subscription> {
     const stream = this.requireSession().client[WS_METHODS.scheduledTasksSubscribe]({}).pipe(
@@ -247,6 +263,9 @@ export class T3Client {
   setScheduledTaskEnabled(id: string, enabled: boolean) {
     return this.run(this.requireSession().client[WS_METHODS.scheduledTasksSetEnabled]({ id: ScheduledTaskId.make(id), enabled }));
   }
+  rotateWebhookToken(id: string) { return this.run(this.requireSession().client[WS_METHODS.scheduledTasksRotateWebhookToken]({ id: ScheduledTaskId.make(id) })); }
+  listWebhookDeliveries(id: string) { return this.run(this.requireSession().client[WS_METHODS.scheduledTasksListWebhookDeliveries]({ id: ScheduledTaskId.make(id), acceptAnyOutcome: true })); }
+  getWebhookDelivery(id: string, deliveryId: string) { return this.run(this.requireSession().client[WS_METHODS.scheduledTasksGetWebhookDelivery]({ id: ScheduledTaskId.make(id), deliveryId: ScheduledTaskWebhookDeliveryId.make(deliveryId), acceptAnyOutcome: true })); }
   runScheduledTask(id: string) {
     return this.run(this.requireSession().client[WS_METHODS.scheduledTasksRunNow]({ id: ScheduledTaskId.make(id) }));
   }

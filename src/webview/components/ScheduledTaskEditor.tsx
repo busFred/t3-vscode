@@ -1,3 +1,6 @@
+import { emptyWebhookFilterDraft, parseWebhookFilterDrafts, webhookFilterDrafts, WEBHOOK_FILTER_OPS, type WebhookFilterDraft } from "@t3tools/client-runtime/scheduled-task-webhook";
+import { bridge } from "../bridge-client";
+import type { ScheduledTaskWebhookDelivery, ScheduledTaskWebhookDeliverySummary } from "@t3tools/contracts";
 import { useDateTimeFormat } from "../timeFormat";
 import { useCallback, useRef, useState } from "react";
 import { ArrowLeftIcon, ChevronDownIcon } from "lucide-react";
@@ -12,8 +15,9 @@ export interface TaskDraft {
   readonly id: string; readonly projectId: string; readonly originThreadId: string | null; readonly base: ScheduledTaskView | null;
   readonly title: string; readonly prompt: string; readonly modelSelection: ModelSelection | null; readonly enabled: boolean;
   readonly threadId: string | null; readonly workspaceStrategy: ScheduledTask["workspaceStrategy"];
-  readonly scheduleType: "interval" | "fixed_time" | "unsupported"; readonly minutes: string; readonly timeOfDay: string; readonly weekdays: ReadonlyArray<number> | undefined;
+  readonly scheduleType: "interval" | "fixed_time" | "once" | "webhook" | "unsupported"; readonly runAt: string; readonly filters: ReadonlyArray<WebhookFilterDraft>; readonly minutes: string; readonly timeOfDay: string; readonly weekdays: ReadonlyArray<number> | undefined;
 }
+function localDateTime(value: string): string { const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); }
 export function taskDraft(state: HostStateSnapshot, request: ScheduledTaskEditorRequest): TaskDraft | null {
   const task = request.taskId ? state.scheduledTasks?.tasks.find((task) => task.id === request.taskId && task.projectId === request.projectId) : undefined;
   if (request.taskId && !task) return null;
@@ -22,6 +26,7 @@ export function taskDraft(state: HostStateSnapshot, request: ScheduledTaskEditor
     title: task?.title ?? "", prompt: task?.prompt ?? "", modelSelection: task?.modelSelection ?? newTaskModel(state.providers, state.taskDefaultSpeed ?? "standard"), enabled: task?.enabled ?? true,
     threadId: task ? task.threadId : request.originThreadId ?? null, workspaceStrategy: task?.workspaceStrategy ?? { type: "root" },
     scheduleType: schedule?.type ?? (task ? "unsupported" : "interval"), minutes: String(schedule?.type === "interval" ? schedule.everyMs / 60_000 : 30),
+    runAt: schedule?.type === "once" ? localDateTime(schedule.runAt) : "", filters: webhookFilterDrafts(schedule?.type === "webhook" ? schedule.filters : undefined),
     timeOfDay: schedule?.type === "fixed_time" ? schedule.timeOfDay : "09:00", weekdays: schedule?.type === "fixed_time" ? schedule.weekdays : undefined };
 }
 
@@ -31,6 +36,8 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
 }) {
   const { dateTime } = useDateTimeFormat();
   const run = useActions(); const [saving, setSaving] = useState(false); const [failed, setFailed] = useState(false);
+  const [deliveries, setDeliveries] = useState<ReadonlyArray<ScheduledTaskWebhookDeliverySummary> | null>(null); const [webhookError, setWebhookError] = useState(""); const [rotated, setRotated] = useState<string | null>(null);
+  const [deliveryDetail, setDeliveryDetail] = useState<ScheduledTaskWebhookDelivery | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false); const anchor = useRef<HTMLButtonElement>(null);
   const closePicker = useCallback(() => setPickerOpen(false), []);
   const patch = (change: Partial<TaskDraft>) => { setFailed(false); onChange({ ...draft, ...change }); };
@@ -47,12 +54,16 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
   const speedValue = speed?.explicit ? speed.current?.id ?? "" : "";
   const origin = draft.originThreadId ? state.threads.find((thread) => thread.id === draft.originThreadId)?.title ?? "Origin session unavailable" : draft.base && !draft.base.originKnown ? "Origin unknown" : "Independent task";
   const interval = Number(draft.minutes) * 60_000;
-  const scheduleValid = draft.scheduleType === "interval" ? Number.isSafeInteger(interval) && interval >= 60_000 : draft.scheduleType === "fixed_time" && /^([01]?\d|2[0-3]):[0-5]\d$/.test(draft.timeOfDay);
+  const filters = draft.filters ?? [];
+  const parsedFilters = parseWebhookFilterDrafts(filters);
+  const scheduleValid = draft.scheduleType === "interval" ? Number.isSafeInteger(interval) && interval >= 60_000 : draft.scheduleType === "once" ? !!draft.runAt && !Number.isNaN(Date.parse(draft.runAt)) : draft.scheduleType === "webhook" ? "filters" in parsedFilters : draft.scheduleType === "fixed_time" && /^([01]?\d|2[0-3]):[0-5]\d$/.test(draft.timeOfDay);
   const valid = !!draft.title.trim() && !!draft.prompt.trim() && !unavailable && scheduleValid && !!project && !stale && state.scheduledTasks?.loading !== true;
   const submit = async () => {
     if (!valid || saving) return; setSaving(true); setFailed(false);
     const previousSchedule = draft.base && supportedSchedule(draft.base.schedule) && draft.base.schedule.type === draft.scheduleType ? draft.base.schedule : {};
     const schedule = draft.scheduleType === "interval" ? { ...previousSchedule, type: "interval", everyMs: interval }
+      : draft.scheduleType === "once" ? { ...previousSchedule, type: "once", runAt: draft.base && supportedSchedule(draft.base.schedule) && draft.base.schedule.type === "once" && localDateTime(draft.base.schedule.runAt) === draft.runAt ? draft.base.schedule.runAt : new Date(draft.runAt).toISOString() }
+      : draft.scheduleType === "webhook" ? { ...previousSchedule, type: "webhook", ...( "filters" in parsedFilters ? { filters: parsedFilters.filters } : {}) }
       : { ...previousSchedule, type: "fixed_time", timeOfDay: draft.timeOfDay, ...(draft.weekdays === undefined ? {} : { weekdays: draft.weekdays }) };
     const ok = await run("saveScheduledTask", { id: draft.id, existing: !!draft.base, editVersion: draft.base?.editVersion, projectId: draft.projectId,
       originThreadId: draft.originThreadId, title: draft.title, prompt: draft.prompt, modelSelection: draft.modelSelection,
@@ -84,14 +95,21 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
         {speed.choices.map((choice) => <option key={choice.id} value={choice.id} title={choice.description}>{isPremiumSpeed(choice) ? "⚡ " : ""}{speedChoiceLabel(choice)}</option>)}
       </select></label> : null}
       {speed && isPremiumSpeed(speed.current) ? <small className="task-status">{speed.explicit ? "" : "The server default is "}{speed.current!.label} speed: each run costs more.</small> : null}
-      <label>Schedule<select aria-label="Task schedule" value={draft.scheduleType} disabled={draft.scheduleType === "unsupported"} onChange={(event) => patch({ scheduleType: event.target.value as "interval" | "fixed_time" })}>
-        <option value="interval">Every interval</option><option value="fixed_time">At a time</option>{draft.scheduleType === "unsupported" ? <option value="unsupported">Newer schedule — edit in T3 Web</option> : null}
+      <label>Schedule<select aria-label="Task schedule" value={draft.scheduleType} disabled={draft.scheduleType === "unsupported"} onChange={(event) => patch({ scheduleType: event.target.value as TaskDraft["scheduleType"] })}>
+        <option value="interval">Every interval</option><option value="fixed_time">At a time</option><option value="once">Once</option><option value="webhook">Webhook</option>{draft.scheduleType === "unsupported" ? <option value="unsupported">Newer schedule — edit in T3 Web</option> : null}
       </select></label>
       {draft.scheduleType === "interval" ? <label>Run every (minutes)<input type="number" min="1" step="any" aria-label="Task interval minutes" value={draft.minutes} onChange={(event) => patch({ minutes: event.target.value })} /></label> : draft.scheduleType === "fixed_time" ? <>
         <label>Time on {state.environment?.label ?? "server"}<input type="time" aria-label="Task time" value={draft.timeOfDay} onChange={(event) => patch({ timeOfDay: event.target.value })} /></label>
         <div className="task-weekdays" role="group" aria-label="Days of week">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, index) => <label key={day}><input type="checkbox" checked={draft.weekdays === undefined || draft.weekdays.includes(index)} onChange={(event) => { const days = draft.weekdays ?? [0, 1, 2, 3, 4, 5, 6]; patch({ weekdays: event.target.checked ? [...days, index].sort() : days.filter((day) => day !== index) }); }} />{day}</label>)}</div>
         {draft.weekdays?.length === 0 ? <small>Choose at least one day.</small> : null}
       </> : null}
+      {draft.scheduleType === "once" ? <label>Run on<input type="datetime-local" aria-label="Task run date and time" value={draft.runAt} onChange={(event) => patch({ runAt: event.target.value })} /></label> : null}
+      {draft.scheduleType === "webhook" ? <div>
+        {saved?.webhook ? <><p>Endpoint: {rotated ?? saved.webhook.url ?? saved.webhook.path}</p><button type="button" disabled={!saved.webhook.url} onClick={() => { if (saved.webhook?.url) void navigator.clipboard.writeText(rotated ?? saved.webhook.url); }}>Copy endpoint</button>{!saved.webhook.url ? <small>Link this environment to T3 Connect for a public URL.</small> : null}<p>Secret: {saved.webhook.hasSecret ? "Set" : "Not set"}</p><button type="button" onClick={() => { if (!window.confirm("Rotate this webhook URL? The current URL stops working.")) return; void bridge.request<{ task: ScheduledTask }>("rotateWebhookToken", { taskId: draft.id, projectId: draft.projectId }).then(({ task }) => setRotated(task.webhook?.url ?? task.webhook?.path ?? null), (error) => setWebhookError(String(error))); }}>Rotate token</button><button type="button" onClick={() => void bridge.request<{ deliveries: ReadonlyArray<ScheduledTaskWebhookDeliverySummary> }>("listWebhookDeliveries", { taskId: draft.id, projectId: draft.projectId }).then((result) => setDeliveries(result.deliveries), (error) => setWebhookError(String(error)))}>Recent deliveries</button></> : <p>Save this task to create an endpoint.</p>}
+        {webhookError ? <p role="alert">{webhookError}</p> : null}{deliveries ? <ul>{deliveries.map((delivery) => <li key={delivery.id}><button type="button" onClick={() => void bridge.request<{ delivery: ScheduledTaskWebhookDelivery }>("getWebhookDelivery", { taskId: draft.id, projectId: draft.projectId, deliveryId: delivery.id }).then((result) => setDeliveryDetail(result.delivery), (error) => setWebhookError(String(error)))}>{delivery.outcome} · {dateTime(new Date(delivery.receivedAt))}</button></li>)}</ul> : null}{deliveryDetail ? <div><p>{deliveryDetail.method} · {deliveryDetail.outcome}</p><pre>{deliveryDetail.error ?? deliveryDetail.body}</pre></div> : null}
+        <p>All filters must match.</p>{filters.map((filter) => <div key={filter.id}><input aria-label="Filter path" placeholder="body.action" value={filter.path} onChange={(event) => patch({ filters: filters.map((row) => row.id === filter.id ? { ...row, path: event.target.value } : row) })} /><select aria-label="Filter operator" value={filter.op} onChange={(event) => patch({ filters: filters.map((row) => row.id === filter.id ? { ...row, op: event.target.value as WebhookFilterDraft["op"] } : row) })}>{WEBHOOK_FILTER_OPS.map((op) => <option key={op.op} value={op.op}>{op.label}</option>)}</select>{filter.op !== "exists" ? <input aria-label="Filter value" value={filter.value} onChange={(event) => patch({ filters: filters.map((row) => row.id === filter.id ? { ...row, value: event.target.value } : row) })} /> : null}<button type="button" onClick={() => patch({ filters: filters.filter((row) => row.id !== filter.id) })}>Remove filter</button></div>)}<button type="button" onClick={() => patch({ filters: [...filters, emptyWebhookFilterDraft()] })}>Add filter</button>{"error" in parsedFilters ? <p role="alert">{parsedFilters.error}</p> : null}
+      </div> : null}
+      {draft.base?.blockedByPolicy !== undefined ? <p className="task-status" role="alert">{draft.base.blockedByPolicy}</p> : null}
       <label>Post results to<select aria-label="Task result destination" value={draft.threadId ?? ""} onChange={(event) => patch({ threadId: event.target.value || null })}>
         <option value="">New session each run</option>
         {draft.threadId && !state.threads.some((thread) => thread.id === draft.threadId && thread.projectId === draft.projectId) ? <option value={draft.threadId}>Saved session (unavailable)</option> : null}

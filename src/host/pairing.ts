@@ -11,7 +11,7 @@ import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import { resolveRemotePairingTarget } from "@t3tools/shared/remote";
 import { resolveSpawnCommand, type ResolvedSpawnCommand } from "@t3tools/shared/shell";
 import * as Effect from "effect/Effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);

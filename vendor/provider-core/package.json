@@ -1,0 +1,19 @@
+{
+  "name": "@t3tools/provider-core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": {
+      "types": "./src/client.ts",
+      "import": "./src/client.ts"
+    },
+    "./modelShortName": {
+      "types": "./src/modelShortName.ts",
+      "import": "./src/modelShortName.ts"
+    }
+  },
+  "dependencies": {
+    "@t3tools/contracts": "workspace:*",
+    "effect": "catalog:"
+  }
+}

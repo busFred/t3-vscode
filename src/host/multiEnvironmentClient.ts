@@ -13,7 +13,7 @@ import type { IgnorableEnvironmentStatus, RemoteEnvironmentRecord } from "./envi
 import type { RemoteConnectionState } from "../shared/environmentStatus.js";
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import * as Effect from "effect/Effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 export type { RemoteConnectionState };
 export interface RemoteEnvironmentStatus {
@@ -22,8 +22,8 @@ export interface RemoteEnvironmentStatus {
   readonly expiresAt: number | null; readonly ignoredStatus?: IgnorableEnvironmentStatus;
 }
 export interface ThreadEnvironment { readonly environmentId: string; readonly label: string }
-type RemoteClient = Pick<T3Client, "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
-  | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "createAssetUrl" | "uploadAttachment"
+type RemoteClient = Partial<Pick<T3Client, "forceStopThread">> & Pick<T3Client, "createGuestShare" | "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
+  | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "answerLinkRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "createAssetUrl" | "uploadAttachment"
   | "deleteAttachment" | "getTurnDiff" | "subscribeWorktreeSetup" | "cancelWorktreeSetup" | "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
   | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
 /** What starting and composing a conversation on a paired machine, or cloning this repository there, needs from that machine's own server. */
@@ -328,9 +328,18 @@ export class MultiEnvironmentClient {
     const remote = this.remoteForThread(thread) ?? (thread && this.primaryOwnsThread(thread) ? undefined : this.remoteForProject(command.projectId));
     return (remote ? this.connectedRemote(remote) : this.primary).dispatch(input);
   }
+  forceStopThread(input: unknown) {
+    const client = this.forThread((input as { threadId: string }).threadId);
+    if (!client.forceStopThread) throw new Error("This connection cannot force stop threads.");
+    return client.forceStopThread(input);
+  }
+  async answerLinkRequest(input: unknown): Promise<void> {
+    return this.forThread((input as { threadId?: string } | null)?.threadId).answerLinkRequest(input);
+  }
   async answerSecretRequest(input: unknown): Promise<void> {
     return this.forThread((input as { threadId?: string } | null)?.threadId).answerSecretRequest(input);
   }
+  async createGuestShare(id: string) { return this.forThread(id).createGuestShare(id); }
   async getHistory(id: string, cursor: string) { return this.forThread(id).getHistory(id, cursor); }
   async getTurnItem(id: string, itemId: string) { return this.forThread(id).getTurnItem(id, itemId); }
   async getTurnDiff(id: string, fromTurnCount: number, toTurnCount: number) { return this.forThread(id).getTurnDiff(id, fromTurnCount, toTurnCount); }
@@ -353,7 +362,6 @@ export class MultiEnvironmentClient {
 
   // ---- Local-only operations: project setup, checkouts, settings, schedules ----
   snapshotArchive() { return this.primary.snapshotArchive(); }
-  subscribeArchive(...args: Parameters<T3Client["subscribeArchive"]>) { return this.primary.subscribeArchive(...args); }
   launchThread(input: unknown) { return this.primary.launchThread(input); }
   listRefs(input: unknown) { return this.primary.listRefs(input); }
   createWorktree(input: unknown) { return this.primary.createWorktree(input); }
@@ -368,6 +376,9 @@ export class MultiEnvironmentClient {
   subscribeScheduledTasks(...args: Parameters<T3Client["subscribeScheduledTasks"]>) { return this.primary.subscribeScheduledTasks(...args); }
   upsertScheduledTask(input: unknown) { return this.primary.upsertScheduledTask(input); }
   setScheduledTaskEnabled(id: string, enabled: boolean) { return this.primary.setScheduledTaskEnabled(id, enabled); }
+  rotateWebhookToken(id: string) { return this.primary.rotateWebhookToken(id); }
+  listWebhookDeliveries(id: string) { return this.primary.listWebhookDeliveries(id); }
+  getWebhookDelivery(id: string, deliveryId: string) { return this.primary.getWebhookDelivery(id, deliveryId); }
   runScheduledTask(id: string) { return this.primary.runScheduledTask(id); }
   searchPaths(cwd: string, query: string) { return this.primary.searchPaths(cwd, query); }
   refreshProviders(instanceId?: string, cwd?: string) { return this.primary.refreshProviders(instanceId, cwd); }

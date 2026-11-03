@@ -1,5 +1,5 @@
 import { ComposerContextId, isProviderSendTurnSupportedImageMimeType, PROVIDER_SEND_TURN_MAX_IMAGE_BYTES, PROVIDER_SEND_TURN_MAX_FILE_BYTES, type OrchestrationMessageContext, type ChatAttachment, type AttachmentCreateUploadUrlInput } from "@t3tools/contracts";
-import { mediaMimeType } from "@t3tools/shared/filePreview";
+import { mediaMimeType } from "@t3tools/shared/mediaPreview";
 import { collectComposerContextReferences, formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
 import { collectAssistantCitations } from "./messageCitations.js";
 import * as Schema from "effect/Schema";

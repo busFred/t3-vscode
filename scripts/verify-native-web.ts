@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { chromium, type Page } from "playwright-core";
 import { EnvironmentId } from "@t3tools/contracts";
-import { deriveLogicalProjectKey } from "@t3tools/client-runtime/state/project-grouping";
+import { deriveLogicalProjectKeyFromSettings } from "@t3tools/client-runtime/state/project-grouping";
 import { HostState } from "../src/host/hostState.js";
 import { T3Client } from "../src/host/t3Client.js";
 import type { PairedSession } from "../src/host/pairing.js";
@@ -53,7 +53,7 @@ try {
     branch: null, worktreePath: null, createdBy: "user", creationSource: "web" });
   const envId = host.snapshot().environment!.environmentId;
   const project = (await client.snapshotShell()).projects.find((project) => project.id === projectId)!;
-  const scopeKey = deriveLogicalProjectKey({ ...project, environmentId: EnvironmentId.make(envId) });
+  const scopeKey = deriveLogicalProjectKeyFromSettings({ ...project, environmentId: EnvironmentId.make(envId) }, { sidebarProjectGroupingMode: "repository", sidebarProjectGroupingOverrides: {} });
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? "/usr/bin/chromium", headless: true, args: ["--no-sandbox"] });
   const context = await browser.newContext({ viewport: { width: 1360, height: 950 } });
   await context.addInitScript(({ origin, scopeKey }) => {

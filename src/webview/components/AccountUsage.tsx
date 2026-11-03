@@ -4,7 +4,7 @@ import { ChevronDownIcon, RefreshCwIcon, Settings2Icon } from "lucide-react";
 import { collectExternalUsageLinks, formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
 import type { ServerProviderUsageWindow } from "@t3tools/contracts";
 import type { HostStateSnapshot } from "../../shared/bridge";
-import { accountWindows, groupOf, groupTitle, limitPresentations, perAccountRows, pooledAccount, soonestReset, usageGroups, usageNotices, type AccountRow, type AccountsDisplay, type UsageGroup } from "../../shared/usage";
+import { usageAccountName, accountWindows, groupOf, groupTitle, limitPresentations, perAccountRows, pooledAccount, soonestReset, usageGroups, usageNotices, type AccountRow, type AccountsDisplay, type UsageGroup } from "../../shared/usage";
 import { meterResetLabel } from "../../shared/usageMeter";
 import { ProviderIcon } from "./ProviderIcon";
 import { useActions } from "../actions";
@@ -40,7 +40,7 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
   const limit = (group: UsageGroup, window: ServerProviderUsageWindow | null, label: string) => {
     const reset = window ? meterResetLabel(window.resetsAt, now) : "";
     const first = several && window ? soonestReset(group, window, now) : undefined;
-    const resetTitle = window ? [formatResetsIn(window, now), first ? `soonest: ${first.email || first.label}` : ""].filter(Boolean).join(" · ") : "";
+    const resetTitle = window ? [formatResetsIn(window, now), first ? `soonest: ${usageAccountName(first)}` : ""].filter(Boolean).join(" · ") : "";
     return <div className="account-limit" key={window?.id ?? label}><div><span>{label}</span>{window
       ? <span className="account-limit-value"><span>{remainingPercent(window)}% left</span>{reset ? <small title={resetTitle || undefined}>{reset}</small> : null}</span>
       : <span className="account-limit-missing" title="This account does not report usage">unavailable</span>}</div>
@@ -49,7 +49,7 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
   // Every account gets the same bar length and slot in each window, so a column reads as one account.
   const accountRows = (row: AccountRow) => <div className="account-limit" key={row.window?.id ?? row.label}><div><span>{row.label}</span></div>
     <div className="account-limit-accounts">{row.columns.map(({ account, window }) => {
-      const name = account.email || account.label;
+      const name = usageAccountName(account);
       const reset = window ? meterResetLabel(window.resetsAt, now) : "";
       const title = window ? [`${name} · ${remainingPercent(window)}% left`, formatResetsIn(window, now)].filter(Boolean).join(" · ") : `${name} · not reported`;
       return <div className="account-limit-account" key={account.key} title={title}>

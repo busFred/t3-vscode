@@ -48,8 +48,10 @@ class FakeClient {
     this.shellHandler = handler; return async () => { this.unsubscribes += 1; this.shellHandler = null; };
   }
   async subscribeThread(...args: unknown[]) { this.log("subscribeThread", ...args); return async () => {}; }
+  async createGuestShare(id: string) { this.log("createGuestShare", id); return { url: `https://${this.name}/guest#credential` }; }
   async getThreadProjection(id: string) { this.log("getThreadProjection", id); return { from: this.name }; }
   async dispatch(input: unknown) { this.log("dispatch", input); }
+  async answerLinkRequest(input: unknown) { this.log("answerLinkRequest", input); }
   async answerSecretRequest(input: unknown) { this.log("answerSecretRequest", input); }
   async getHistory(id: string, cursor: string) { this.log("getHistory", id, cursor); return { from: this.name }; }
   async getTurnItem(id: string, itemId: string) { this.log("getTurnItem", id, itemId); return { from: this.name }; }
@@ -185,11 +187,16 @@ test("Thread-scoped calls follow the owning environment", async () => {
 
   assert.deepEqual(await r.multi.getThreadProjection("t-b"), { from: "b" });
   assert.deepEqual(await r.multi.getThreadProjection("local-thread"), { from: "primary" });
+  assert.deepEqual(await r.multi.createGuestShare("t-a"), { url: "https://a/guest#credential" });
+  assert.deepEqual(await r.multi.createGuestShare("local-thread"), { url: "https://primary/guest#credential" });
+  assert.equal(b.callsNamed("createGuestShare").length, 0);
   await r.multi.getHistory("t-a", "cursor"); await r.multi.getTurnItem("t-a", "item"); await r.multi.getTurnDiff("t-a", 1, 2);
   await r.multi.answerSecretRequest({ threadId: "t-b", requestId: "r" });
+  await r.multi.answerLinkRequest({ threadId: "t-b", turnItemId: "link", answer: { type: "decline" } });
   await r.multi.cancelWorktreeSetup("t-a");
   assert.deepEqual([a.callsNamed("getHistory").length, a.callsNamed("getTurnItem").length, a.callsNamed("getTurnDiff").length, a.callsNamed("cancelWorktreeSetup").length], [1, 1, 1, 1]);
   assert.equal(b.callsNamed("answerSecretRequest").length, 1);
+  assert.equal(b.callsNamed("answerLinkRequest").length, 1);
   assert.equal(r.primary.callsNamed("getHistory").length, 0);
 });
 

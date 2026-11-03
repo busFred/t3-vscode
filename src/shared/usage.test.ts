@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ProviderInstanceId, ProviderDriverKind } from "@t3tools/contracts";
 import { harness, provider } from "../host/testing/fakeTransport.js";
-import { accountWindows, groupOf, groupTitle, meterText, perAccountRows, pooledAccount, resolveMeterWindows, selectedUsageAccounts, soonestReset, usageAccounts, usageGroups, usageNotices, usageRefreshTarget } from "./usage.js";
+import { accountPinMatches, updatedAccountPins, usageAccountName, accountWindows, groupOf, groupTitle, meterText, perAccountRows, pooledAccount, resolveMeterWindows, selectedUsageAccounts, soonestReset, usageAccounts, usageGroups, usageNotices, usageRefreshTarget } from "./usage.js";
 
 test("Meters keep subscriptions separate, deduplicate shared accounts and preserve missing quota windows", async (t) => {
   const { host } = await harness(); t.after(() => host.dispose());
@@ -122,7 +122,8 @@ test("Pooled meters ignore the other windows of an account whose 7-day limit is 
   const third = account("c@example.test", { session: [40, 3], week: [60, 100], fable: [30, 7] });
 
   const group = groupOf3([exhausted, second, third]);
-  assert.deepEqual(group.reporting.map((a) => a.email), ["out@example.test", "b@example.test", "c@example.test"]);
+  // T3 orders pool members by effective reset: the locked-out account's session only returns with its week, so it sorts last.
+  assert.deepEqual(group.reporting.map((a) => a.email), ["b@example.test", "c@example.test", "out@example.test"]);
   const pooled = pooledAccount(group, now);
   // Session and Fable average only the two usable accounts (30 and 20 used); the week averages all three (100, 40, 60 used).
   assert.equal(meterText(pooled, all), "S 70% · W 33% · Fable 80%");
@@ -131,7 +132,7 @@ test("Pooled meters ignore the other windows of an account whose 7-day limit is 
   // Fable shows when the locked-out account's own Fable resets (+5h), not the usable accounts' (+6h).
   assert.equal(soonestReset(group, accountWindows(pooled)[2]!.window!, now)?.email, "out@example.test");
   assert.equal(accountWindows(pooled)[2]!.window!.resetsAt, at(5));
-  assert.equal(soonestReset(group, accountWindows(pooled)[0]!.window!, now), group.reporting[1]);
+  assert.equal(soonestReset(group, accountWindows(pooled)[0]!.window!, now), group.reporting[0]);
 
   // Two locked-out accounts whose Fable returns in 24h and one usable account whose Fable resets in 72h with 20% used.
   const day = groupOf3([account("a@example.test", { session: [90, 1], week: [100, 24], fable: [95, 24] }), account("b@example.test", { session: [80, 2], week: [100, 30], fable: [60, 24] }),
@@ -151,12 +152,13 @@ test("Pooled meters ignore the other windows of an account whose 7-day limit is 
   // Per-account mode still shows every account's own bars.
   const rows = perAccountRows(group, now);
   assert.deepEqual(rows.map((row) => row.label), ["Session", "Week", "Fable"]);
-  assert.deepEqual(rows.map((row) => row.columns.map(({ window }) => window?.usedPercent)), [[90, 20, 40], [100, 40, 60], [95, 10, 30]]);
+  assert.deepEqual(rows.map((row) => row.columns.map(({ window }) => window?.usedPercent)), [[20, 40, 90], [40, 60, 100], [10, 30, 95]]);
   assert.equal(group.reporting[0]!.limits.windows.length, 3);
 
-  // Nothing usable left: every account is exhausted, so the other windows are still averaged over all of them.
+  // Nothing usable left: every week is used up, so T3 reports each session as empty until its week resets;
+  // the model week is still averaged over all of them.
   const stuck = groupOf3([exhausted, account("b@example.test", { session: [20, 2], week: [100, 100], fable: [10, 6] })]);
-  assert.equal(meterText(pooledAccount(stuck, now), all), "S 45% · W 0% · Fable 47%");
+  assert.equal(meterText(pooledAccount(stuck, now), all), "S 0% · W 0% · Fable 47%");
 
   // An account with no weekly window is never excluded; an exhausted one only drops out of the windows others report.
   const noWeek = groupOf3([exhausted, account("none@example.test", { session: [20, 2] })]);
@@ -167,4 +169,35 @@ test("Pooled meters ignore the other windows of an account whose 7-day limit is 
   assert.equal(meterText(pooledAccount(groupOf3([exhausted]), now), all), "S 10% · W 0% · Fable 5%");
   // Without an exhausted week every window pools as before.
   assert.equal(meterText(pooledAccount(groupOf3([account("x@example.test", { session: [90, 1], week: [99, 50] }), second]), now), all), "S 45% · W 30% · Fable 90%");
+});
+
+
+test("Workspace accounts stay distinct in pools, rows and legacy pins", async (t) => {
+  const { host } = await harness(); t.after(() => host.dispose());
+  const base = { ...provider, driver: ProviderDriverKind.make("codex"), displayName: "Codex",
+    auth: { status: "authenticated" as const, email: "same@example.test" },
+    usageLimits: { checkedAt: "2026-10-06T00:00:00Z", windows: [{ id: "weekly", kind: "weekly" as const, label: "Weekly", usedPercent: 20 }] } };
+  const first = { ...base, instanceId: ProviderInstanceId.make("first"), auth: { ...base.auth, workspaceId: "one" } };
+  const second = { ...base, instanceId: ProviderInstanceId.make("second"), auth: { ...base.auth, workspaceId: "two" },
+    usageLimits: { ...base.usageLimits, windows: [{ ...base.usageLimits.windows[0]!, usedPercent: 60 }] } };
+  const state = { ...host.snapshot(), providers: [first, second] };
+  const group = usageGroups(state)[0]!;
+  assert.equal(group.reporting.length, 2);
+  assert.deepEqual(group.accounts.map(usageAccountName), ["same@example.test · one", "same@example.test · two"]);
+  assert.deepEqual(group.accounts.map((account) => account.instanceIds), [["first"], ["second"]]);
+  assert.equal(meterText(pooledAccount(group)), "Week 60%");
+  assert.equal(perAccountRows(group)[0]!.columns.length, 2);
+  const legacy = "codex:email:same@example.test";
+  assert.deepEqual(selectedUsageAccounts(group.accounts, { followActive: false, pinnedAccounts: [legacy] }), group.accounts);
+  assert.ok(group.accounts.every((account) => accountPinMatches(account, legacy)));
+  assert.deepEqual(updatedAccountPins([legacy, "unseen:email:x"], group.accounts, group.accounts.map((account) => account.key)), [legacy, "unseen:email:x", ...group.accounts.map((account) => account.key)]);
+  assert.deepEqual(selectedUsageAccounts(group.accounts, { followActive: false, pinnedAccounts: [group.accounts[0]!.key] }), [group.accounts[0]]);
+  assert.deepEqual(updatedAccountPins([legacy], group.accounts, [group.accounts[0]!.key]), [group.accounts[0]!.key]);
+  const merged = usageAccounts({ ...state, providers: [first, { ...base, instanceId: ProviderInstanceId.make("unscoped") }, { ...second, enabled: false }] });
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0]!.instanceIds, ["first", "unscoped"]);
+  const [plain] = usageAccounts({ ...state, providers: [base] });
+  assert.equal(plain!.key, legacy);
+  assert.equal(usageAccountName(plain!), "same@example.test");
+  assert.equal(accountPinMatches(plain!, legacy), true);
 });

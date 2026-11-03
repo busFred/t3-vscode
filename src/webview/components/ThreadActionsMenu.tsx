@@ -1,3 +1,4 @@
+import { GuestShareDialog } from "./GuestShareControls";
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AlarmClockIcon, ArchiveIcon, CheckIcon, ChevronRightIcon, CopyIcon, CopyPlusIcon, MailIcon, PencilIcon, PinIcon, RotateCcwIcon, TimerIcon, Trash2Icon, WandSparklesIcon } from "lucide-react";
@@ -17,6 +18,7 @@ const levelButtons = (menu: HTMLElement | null) => [...(menu?.querySelectorAll<H
 
 /** The same actions are available from a history row and an editor header. */
 export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: { readonly thread: ThreadSummary; readonly workspaceRoot?: string | undefined; readonly position: { x: number; y: number }; readonly onClose: () => void }) {
+  const [sharing, setSharing] = useState(false);
   const menu = useRef<HTMLDivElement>(null), submenu = useRef<HTMLDivElement>(null);
   const [location, setLocation] = useState(position);
   const [open, setOpen] = useState<{ key: string; anchor: HTMLElement; focus: boolean } | null>(null);
@@ -51,7 +53,7 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     if (open?.focus && subLocation) submenu.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }, [open, subLocation]);
   useEffect(() => {
-    const dismiss = (event: PointerEvent) => { if (!menu.current?.contains(event.target as Node) && !submenu.current?.contains(event.target as Node)) onClose(); };
+    const dismiss = (event: PointerEvent) => { if (!(event.target as Element).closest(".guest-share-dialog") && !menu.current?.contains(event.target as Node) && !submenu.current?.contains(event.target as Node)) onClose(); };
     const close = () => onClose();
     document.addEventListener("pointerdown", dismiss); window.addEventListener("resize", close);
     return () => { document.removeEventListener("pointerdown", dismiss); window.removeEventListener("resize", close); };
@@ -83,6 +85,8 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
       { kind: "action" as const, key: "on", label: "Enabled", checked: thread.autoSettle, run: () => choose("auto-settle-on") },
       { kind: "action" as const, key: "off", label: "Disabled", checked: !thread.autoSettle, run: () => choose("auto-settle-off") },
     ] }] : []),
+    { kind: "action", key: "guest-share", label: "Share with guest", disabled: !!thread.guestSharingDisabledReason, title: thread.guestSharingDisabledReason, run: () => setSharing(true) },
+    ...(thread.guestShare ? [{ kind: "action" as const, key: "stop-sharing", label: "Stop sharing", run: () => choose("stop-sharing") }] : []),
     { kind: "separator", key: "copy-separator" },
     { kind: "submenu", key: "copy", label: "Copy", icon: <CopyIcon size={ICON} />, items: copyItems },
     { kind: "separator", key: "archive-separator" },
@@ -123,6 +127,7 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     </div>;
   };
   return createPortal(<>
+    {sharing ? <GuestShareDialog thread={thread} onClose={onClose} /> : null}
     <div ref={menu} className="thread-actions-popup thread-actions-root" role="menu" aria-label={`Actions for ${thread.title}`} style={{ left: location.x, top: location.y }} onKeyDown={(event) => navigate(event, menu.current, false)}>
       {items.map((item) => entry(item, false))}
     </div>

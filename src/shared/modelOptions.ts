@@ -5,6 +5,8 @@ import type { ModelSelection } from "./bridge.js";
 const effortIds = ["reasoningEffort", "effort", "reasoning", "variant"];
 export function effortDescriptor(model: ServerProviderModel | undefined, selection: ModelSelection | null | undefined): SelectProviderOptionDescriptor | undefined {
   const descriptors = getProviderOptionDescriptors({ caps: model?.capabilities ?? {}, selections: selection?.options });
+  const reasoning = descriptors.find((descriptor) => descriptor.type === "select" && descriptor.role === "reasoning");
+  if (reasoning?.type === "select") return reasoning.options.length ? reasoning : undefined;
   for (const id of effortIds) {
     const option = descriptors.find((descriptor) => descriptor.id === id && descriptor.type === "select");
     if (option?.type === "select" && option.options.length) return option;

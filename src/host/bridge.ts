@@ -1,3 +1,5 @@
+import * as Schema from "effect/Schema";
+import { PeerLinkRequestAnswerInput } from "@t3tools/contracts";
 import { parseWorktreeChoice } from "./worktrees.js";
 import { runWorktreeNativeAction, type WorktreeNativePort } from "./worktreeNativeActions.js";
 import type { ScheduledTaskEditorRequest } from "../shared/scheduledTasks.js";
@@ -179,6 +181,9 @@ export class BridgeHandler {
           } else throw new Error("Unsupported session branch action.");
           break;
         }
+        case "rotateWebhookToken": return { id: message.id, result: await this.hostState.rotateWebhookToken(stringParam(params, "taskId"), stringParam(params, "projectId")) };
+        case "listWebhookDeliveries": return { id: message.id, result: await this.hostState.listWebhookDeliveries(stringParam(params, "taskId"), stringParam(params, "projectId")) };
+        case "getWebhookDelivery": return { id: message.id, result: await this.hostState.getWebhookDelivery(stringParam(params, "taskId"), stringParam(params, "projectId"), stringParam(params, "deliveryId")) };
         case "refreshScheduledTasks": await this.hostState.refreshScheduledTasks(); break;
         case "saveScheduledTask": await this.hostState.saveScheduledTask(params); break;
         case "setScheduledTaskEnabled": await this.hostState.setScheduledTaskEnabled(stringParam(params, "taskId"), stringParam(params, "projectId"), params.enabled); break;
@@ -314,13 +319,23 @@ export class BridgeHandler {
         case "moveModel": await this.hostState.moveModel(stringParam(params, "instanceId"), stringParam(params, "model"), params.direction); break;
         case "setModes": await this.hostState.setModes(params.threadId === undefined ? undefined : id(), params, viewId); break;
         case "openSettings": await this.showSettings(); break;
+        case "forceStop": await this.hostState.forceStop(id(), stringParam(params, "runId")); break;
         case "interrupt": await this.hostState.interrupt(id()); break;
         case "respondToRequest": {
           if (params.decision !== undefined && typeof params.decision !== "string") throw new Error("Invalid approval decision.");
+          if (params.feedback !== undefined && typeof params.feedback !== "string") throw new Error("Invalid approval feedback.");
           if (params.answers !== undefined && !isObject(params.answers)) throw new Error("Invalid answers.");
           await this.hostState.respondToRequest({ threadId: id(), requestId: stringParam(params, "requestId"),
             ...(params.decision !== undefined ? { decision: params.decision } : {}),
+            ...(typeof params.feedback === "string" ? { feedback: params.feedback } : {}),
             ...(isObject(params.answers) ? { answers: params.answers } : {}) });
+          break;
+        }
+        case "answerLinkRequest": {
+          let input: PeerLinkRequestAnswerInput;
+          try { input = Schema.decodeUnknownSync(PeerLinkRequestAnswerInput)({ threadId: id(), turnItemId: params.turnItemId, answer: params.answer }); }
+          catch { throw new Error("Invalid link answer."); }
+          await this.hostState.answerLinkRequest(input);
           break;
         }
         case "answerSecretRequest": {
@@ -335,6 +350,7 @@ export class BridgeHandler {
         case "dismissRequest": await this.hostState.dismissRequest(id(), stringParam(params, "requestId")); break;
         case "loadHistory": await this.hostState.loadHistory(id()); break;
         case "loadItemDetail": await this.hostState.loadItemDetail(id(), stringParam(params, "sourceThreadId"), stringParam(params, "itemId")); break;
+        case "createGuestShare": return { id: message.id, result: await this.hostState.createGuestShare(id()) };
         case "threadAction":
           if (params.title !== undefined && typeof params.title !== "string") throw new Error("Invalid thread title.");
           await this.performThreadAction(id(), stringParam(params, "action"), typeof params.value === "string" ? params.value : typeof params.title === "string" ? params.title : undefined, viewId); break;

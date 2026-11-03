@@ -23,8 +23,8 @@ import * as Layer from "effect/Layer";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { FetchHttpClient } from "effect/unstable/http";
-import * as Socket from "effect/unstable/socket/Socket";
+import { FetchHttpClient } from "effect/http";
+import * as Socket from "effect/socket/Socket";
 
 const execFileAsync = promisify(execFile);
 

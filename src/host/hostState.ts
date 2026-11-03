@@ -1,3 +1,4 @@
+import { managedCapabilityDenial, pendingGuestMessageCount, type ThreadGuestShare } from "@t3tools/contracts";
 import { WorktreeCoordinator, parseWorktreeChoice, type WorktreeTransport, type WorktreeHandoff } from "./worktrees.js";
 import { repositoryIdentity, repositoryRemoteKeys, worktreeChanges, applyWorktreeFiles, currentBranch } from "./worktreeGit.js";
 import type { WorktreeChoice, WorktreeSummary } from "../shared/worktrees.js";
@@ -16,10 +17,10 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import {
   ScheduledTaskUpsertInput, type ScheduledTask, OrchestrationV2TurnItemJson, ModelSelection as ModelSelectionSchema, type ChatAttachment, getProviderAttachmentLimitError,
-  ProviderApprovalDecision, ProviderInteractionMode, RuntimeMode,
+  ProviderApprovalDecision, ProviderInteractionMode, RuntimeMode, isProviderWorkspaceSnapshotCurrent, isProviderNativeSubagentThread,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadProjection, type OrchestrationV2ThreadStreamItem,
-  type OrchestrationV2TurnItem, type OrchestrationV2ThreadShell, type OrchestrationV2Checkpoint, type ServerConfig, type AssetResource, type AttachmentCreateUploadUrlInput, type OrchestrationV2ArchivedShellSnapshot, type OrchestrationV2ArchivedShellStreamItem,
+  type OrchestrationV2TurnItem, type OrchestrationV2ThreadShell, type OrchestrationV2Checkpoint, type ServerConfig, type AssetResource, type AttachmentCreateUploadUrlInput, type OrchestrationV2ArchivedShellSnapshot,
 } from "@t3tools/contracts";
 import { restoreAttribution, restoreDryRun, restoreExecute, execGit, nodeIo } from "./checkpointRestore.js";
 import * as ShellState from "@t3tools/client-runtime/state/shell";
@@ -40,7 +41,7 @@ import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import type { AddMachineTarget, MachineChoice, MachineClone, RemoteCheckouts, ThreadSummary, HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, SecretRequestAnswerParams, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch, RewindMarker, RestoreResult, RestorePreview } from "../shared/bridge.js";
 import { slashSuggestions } from "../shared/composerSuggestions.js";
-import { hasCompleteProviderWorkspaceSnapshot } from "@t3tools/client-runtime/providerSkills";
+import { presentRunStop } from "@t3tools/client-runtime/state/thread-execution";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import { withSubagentWorkingState, statusIsWorking } from "../shared/sessionTree.js";
 import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
@@ -61,7 +62,7 @@ import type { MultiEnvironmentClient } from "./multiEnvironmentClient.js";
 import { DEFAULT_APPEARANCE, resolveAppearance, type AppearanceSettings } from "../shared/appearance.js";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { presentThreadShell } from "@t3tools/client-runtime/state/models";
-import { canSnooze, effectiveSnoozed, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
+import { canSnooze, effectiveSnoozed, threadWokeAt, isThreadWokeUnseen } from "@t3tools/client-runtime/state/thread-settled";
 import { unseenRun } from "../shared/threadAttention.js";
 import { ThreadVisits } from "./threadVisits.js";
 import { htmlVisual, type ChatAssetReference, type ChatAssetSource } from "../shared/chatVisuals.js";
@@ -76,7 +77,7 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "subscribeArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment">> | null }
+export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy">> | null }
   // Remote environments: assets and attachments live on the server that owns the conversation.
   & { createAssetUrl(resource: AssetResource, threadId?: string): ReturnType<T3Client["createAssetUrl"]>;
     uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array, environmentId?: string): ReturnType<T3Client["uploadAttachment"]>;
@@ -112,6 +113,8 @@ export interface HostStateOptions {
   readonly discover?: typeof discoverServer;
   readonly pair?: typeof pairWithServer;
   readonly reconnectDelayMs?: number;
+  /** Delay before refetching the archive after a thread leaves the active list. */
+  readonly archiveRefreshDelayMs?: number;
   readonly worktreeRefreshMinutes?: () => number;
 }
 interface ThreadState {
@@ -184,7 +187,7 @@ export class HostState {
   private shell: OrchestrationV2ShellSnapshot | null = null;
   private readonly views = new Map<string, ViewState>([[SIDEBAR_VIEW_ID, blankView()]]);
   private archive: OrchestrationV2ArchivedShellSnapshot | null = null;
-  private archiveSubscription: Subscription | null = null;
+  private archiveRefresh: ReturnType<typeof setTimeout> | null = null;
   private archiveLoad: Promise<void> | null = null;
   private archiveGeneration = 0;
   private archiveError: string | undefined;
@@ -644,7 +647,7 @@ export class HostState {
   private configForThread(id: string | undefined) { return this.client.configForThread ? this.client.configForThread(id) : this.client.config; }
   /** Older servers omit the capability, so the action stays hidden rather than failing. */
   private canRegenerateTitle(id: string): boolean { return this.configForThread(id)?.environment?.capabilities?.threadTitleRegeneration === true; }
-  private supports(id: string, capability: "threadSnooze" | "threadVisitedTracking" | "threadAutoSettleOptOut"): boolean { return this.configForThread(id)?.environment?.capabilities?.[capability] === true; }
+  private supports(id: string, capability: "threadForceStop" | "threadSnooze" | "threadVisitedTracking" | "threadAutoSettleOptOut"): boolean { return this.configForThread(id)?.environment?.capabilities?.[capability] === true; }
   /**
    * Whether the thread's machine auto-settles anything; unknown counts as yes. Mirrors T3's `autoSettlementConfigured`: once
    * any project auto-settles, its sweep also settles threads whose pull request closed, whatever their own project says.
@@ -655,20 +658,48 @@ export class HostState {
     return settings.sidebarAutoSettleOnMerge || settings.sidebarAutoSettleAfterDays !== null
       || Object.values(settings.projectSettingsOverrides).some((entry) => entry.sidebarAutoSettleOnMerge === true || (entry.sidebarAutoSettleAfterDays !== undefined && entry.sidebarAutoSettleAfterDays !== null));
   }
+  private attentionRequestsCache: { shell: OrchestrationV2ShellSnapshot | null; archive: OrchestrationV2ArchivedShellSnapshot | null; requests: Map<string, "approval" | "user_input"> } | null = null;
+  /** threadShell.ts keeps child-attention rollup private; cache it per shell/archive revision. */
+  private attentionShell(thread: OrchestrationV2ThreadShell) {
+    if (this.attentionRequestsCache?.shell !== this.shell || this.attentionRequestsCache?.archive !== this.archive) {
+      const threads = this.allThreads(), byId = new Map(threads.map((entry) => [entry.id, entry]));
+      const requests = new Map<string, "approval" | "user_input">();
+      for (const child of threads) {
+        const kind = child.pendingRuntimeRequest?.kind;
+        if (!kind || kind === "auth_refresh") continue;
+        const request = kind === "user_input" ? "user_input" : "approval";
+        let parentId = child.delegatedFrom?.threadId ?? child.lineage.parentThreadId;
+        if (child.lineage.sideChat === true) {
+          if (parentId !== null && requests.get(parentId) !== "approval") requests.set(parentId, request);
+          continue;
+        }
+        const live = child.activityRunStatus !== undefined ? child.activityRunStatus !== null : ["preparing", "starting", "running", "waiting"].includes(child.status);
+        if ((child.lineage.relationshipToParent !== "subagent" && child.delegatedFrom === undefined) || isProviderNativeSubagentThread(child) || !live || request === "user_input") continue;
+        const seen = new Set([child.id]);
+        while (parentId !== null && !seen.has(parentId)) {
+          requests.set(parentId, "approval"); seen.add(parentId);
+          const parent = byId.get(parentId);
+          parentId = parent?.delegatedFrom?.threadId ?? (parent?.lineage.relationshipToParent === "subagent" || parent?.lineage.sideChat === true ? parent.lineage.parentThreadId : null);
+        }
+      }
+      this.attentionRequestsCache = { shell: this.shell, archive: this.archive, requests };
+    }
+    return presentThreadShell(ATTENTION_ENVIRONMENT, thread, this.attentionRequestsCache?.requests.get(thread.id) ?? null);
+  }
   /** Read state, snooze and auto-settle as T3 Code's sidebar derives them, each only where the thread's server supports it. */
   private attention(thread: OrchestrationV2ThreadShell, now: number): Pick<ThreadSummary, "tracksVisits" | "canMarkUnread" | "unseen" | "woke" | "snoozedUntil" | "canSnooze" | "autoSettle"> {
     const visits = this.supports(thread.id, "threadVisitedTracking"), snooze = this.supports(thread.id, "threadSnooze");
     // A per-thread opt-out means nothing on a machine that never auto-settles, so the choice is hidden there.
     const autoSettle = this.supports(thread.id, "threadAutoSettleOptOut") && this.machineAutoSettles(thread);
     if (!visits && !snooze && !autoSettle) return {};
-    const shell = presentThreadShell(ATTENTION_ENVIRONMENT, thread), at = { now: new Date(now).toISOString() };
+    const shell = this.attentionShell(thread), at = { now: new Date(now).toISOString() };
     const lastVisitedAt = shell.lastVisitedAt ?? null;
     const unseen = visits ? unseenRun(shell.latestRun, lastVisitedAt) : null;
     const wokeAt = visits && snooze && thread.settledOverride !== "settled" && thread.archivedAt === null ? threadWokeAt(shell, at) : null;
     return {
       // T3 rewinds the watermark to just before the latest run's completion, so it needs one.
       ...(visits ? { tracksVisits: true } : {}), ...(visits && thread.latestRunCompletedAt ? { canMarkUnread: true } : {}), ...(unseen ? { unseen } : {}),
-      ...(wokeAt && (!lastVisitedAt || Date.parse(lastVisitedAt) < Date.parse(wokeAt)) ? { woke: true } : {}),
+      ...(isThreadWokeUnseen({ wokeAt, settled: thread.settledOverride === "settled", lastVisitedAt, latestRunCompletedAt: shell.latestRun?.completedAt ?? null }) ? { woke: true } : {}),
       ...(snooze && effectiveSnoozed(shell, at) ? { snoozedUntil: shell.snoozedUntil! } : {}),
       ...(snooze ? { canSnooze: canSnooze(shell, at) } : {}),
       ...(autoSettle ? { autoSettle: thread.autoSettleDisabledAt == null } : {}),
@@ -891,14 +922,13 @@ export class HostState {
     this.scheduledGeneration += 1;
     await this.scheduledSubscription?.(); this.scheduledSubscription = null;
     this.scheduledTasks = []; this.scheduledTasksLoading = true; this.scheduledTaskError = undefined;
-    const shell = this.shellSubscription; const archive = this.archiveSubscription;
+    const shell = this.shellSubscription;
+    if (this.archiveRefresh) { clearTimeout(this.archiveRefresh); this.archiveRefresh = null; }
     const threads = [...this.threads.values()]; this.threads.clear();
     for (const state of threads) this.retainHistory(state);
-    this.archiveSubscription = null;
     this.shellSubscription = null;
     await shell?.();
     for (const state of threads) await state.subscription?.();
-    await archive?.();
   }
   private async connect(forcePair: boolean): Promise<void> {
     await this.stopSubscriptions();
@@ -938,7 +968,7 @@ export class HostState {
       await this.reconcileViews(true);
       this.setPhase("ready");
       void this.worktrees?.refresh().catch(() => {});
-      void this.loadArchive().catch(() => {}); // Archive failures must not block chat startup.
+      void this.fetchArchive().catch(() => {}); // Archive failures must not block chat startup.
       await this.loadScheduledTasks();
     } catch (cause) {
       const kind = cause instanceof PairingError ? cause.kind : this.phase === "pairing" ? "pairing" : "connection";
@@ -961,7 +991,14 @@ export class HostState {
       this.shell = ShellState.mergeShellSnapshotProjects(this.shell, item.snapshot,
         item.resolvedRepositoryIdentityRoots === undefined ? undefined : { resolvedRepositoryIdentityRoots: item.resolvedRepositoryIdentityRoots });
     } else if (this.shell) {
+      // T3 0.1.5 removed the archive subscription; archive moves arrive here, or only as an active removal.
+      const leavesActive = (item.kind === "thread.updated" && item.location === "archive")
+        || (item.kind === "thread.removed" && this.shell.threads.some((thread) => thread.id === item.threadId));
+      const entersActive = item.kind === "thread.updated" && item.location === "active" && this.archive?.threads.some((thread) => thread.id === item.thread.id);
+      if (item.kind !== "project.updated" && item.kind !== "project.removed" && item.location === "archive") this.handleArchive(item);
       this.shell = ShellState.applyShellStreamEvent(this.shell, item);
+      if (entersActive && this.archive) this.archive = { ...this.archive, threads: this.archive.threads.filter((thread) => thread.id !== item.thread.id) };
+      if (leavesActive) this.scheduleArchiveRefresh();
     }
     this.reconcileRemovedThreads();
     this.scheduleEmit();
@@ -975,9 +1012,14 @@ export class HostState {
       [...new Set(this.allThreads().filter(thread => ids.has(thread.projectId) && thread.worktreePath).map(thread => thread.worktreePath!))].sort(),
     ]);
   }
-  loadArchive(): Promise<void> { return this.subscribeArchive(); }
-  private subscribeArchive(): Promise<void> {
-    if (this.archiveSubscription || this.disposed) return Promise.resolve();
+  loadArchive(): Promise<void> { return this.archive ? Promise.resolve() : this.fetchArchive(); }
+  /** Coalesces archive refetches; the server no longer streams archive changes. */
+  private scheduleArchiveRefresh(): void {
+    if (this.archive === null || this.disposed || this.archiveRefresh) return;
+    this.archiveRefresh = setTimeout(() => { this.archiveRefresh = null; void this.fetchArchive().catch(() => {}); }, this.options.archiveRefreshDelayMs ?? 300);
+  }
+  private fetchArchive(): Promise<void> {
+    if (this.disposed) return Promise.resolve();
     if (this.archiveLoad) return this.archiveLoad;
     const generation = this.archiveGeneration;
     this.archiveError = undefined;
@@ -987,9 +1029,7 @@ export class HostState {
         const snapshot = await this.client.snapshotArchive();
         if (!current()) return;
         this.archive = snapshot;
-        const subscription = await this.client.subscribeArchive((item) => { if (current()) this.handleArchive(item); });
-        if (!current()) { await subscription(); return; }
-        this.archiveSubscription = subscription;
+        this.reconcileRemovedThreads();
       } catch (cause) {
         if (current()) this.archiveError = describeError(cause);
         throw cause;
@@ -1000,9 +1040,8 @@ export class HostState {
     this.emit();
     return this.archiveLoad;
   }
-  private handleArchive(item: OrchestrationV2ArchivedShellStreamItem): void {
-    if (item.kind === "snapshot") this.archive = item.snapshot;
-    else if (this.archive && item.sequence > this.archive.snapshotSequence) {
+  private handleArchive(item: Extract<OrchestrationV2ShellStreamItem, { kind: "thread.updated" | "thread.removed" }>): void {
+    if (this.archive && item.sequence > this.archive.snapshotSequence) {
       const id = item.kind === "thread.updated" ? item.thread.id : item.threadId;
       this.archive = { ...this.archive, snapshotSequence: item.sequence,
         threads: [...this.archive.threads.filter((thread) => thread.id !== id), ...(item.kind === "thread.updated" ? [item.thread] : [])] };
@@ -1067,7 +1106,32 @@ export class HostState {
   private visibleLocalProjects() { return this.visibleProjects().filter(project => !this.remoteProject(project.id)); }
   private visibleThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
     const projects = new Set(this.visibleProjects().map((project) => project.id));
-    return this.allThreads().filter((thread) => !thread.deletedAt && projects.has(thread.projectId));
+    const all = this.allThreads().filter(thread => !thread.deletedAt);
+    const byId = new Map(all.map(thread => [thread.id, thread]));
+    const environment = (id: string) => this.remoteThread(id)?.environmentId ?? this.server?.descriptor.environmentId;
+    const children = new Map<string, string[]>();
+    const link = (parent: string, child: string) => { const list = children.get(parent) ?? []; list.push(child); children.set(parent, list); };
+    // A delegated conversation may use a different repository on the paired machine.
+    for (const thread of all) {
+      const lineageParent = thread.lineage.relationshipToParent === "subagent" && thread.lineage.parentThreadId ? byId.get(thread.lineage.parentThreadId) : undefined;
+      if (lineageParent && lineageParent.projectId === thread.projectId && environment(lineageParent.id) === environment(thread.id)) link(lineageParent.id, thread.id);
+      const from = thread.delegatedFrom;
+      if (from && byId.has(from.threadId) && environment(from.threadId) === from.environmentId) link(from.threadId, thread.id);
+      const projection = this.threads.get(thread.id)?.projection;
+      for (const agent of [...projection?.subagents ?? [], ...(projection?.turnItems ?? []).filter(item => item.type === "subagent")]) {
+        const remote = "remoteChild" in agent ? agent.remoteChild : undefined;
+        if (remote && byId.has(remote.threadId) && environment(remote.threadId) === remote.environmentId) link(thread.id, remote.threadId);
+      }
+    }
+    const visible = new Set<string>();
+    const stack = all.filter(thread => projects.has(thread.projectId)).map(thread => thread.id as string);
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (visible.has(id)) continue;
+      visible.add(id);
+      stack.push(...children.get(id) ?? []);
+    }
+    return all.filter(thread => visible.has(thread.id));
   }
   private findThread(id: string | undefined) { return this.visibleThreads().find((thread) => thread.id === id); }
   private latestThreadId(): string | undefined {
@@ -1670,7 +1734,6 @@ export class HostState {
         this.emit(); return;
       }
       const thread = this.requireThread(id);
-      if (provider.requiresNewThreadForModelChange && thread.itemCount > 0 && (selection.model !== thread.modelSelection.model || selection.instanceId !== thread.modelSelection.instanceId)) throw new Error("This provider requires a new thread to change models.");
       await this.client.dispatch({ type: "thread.model-selection.set", commandId: randomUUID(), threadId: id, modelSelection: selection });
   }
   setModelOption(id: string | undefined, optionId: string, value: unknown, viewId = SIDEBAR_VIEW_ID): Promise<void> {
@@ -1775,18 +1838,24 @@ export class HostState {
   }
   interrupt(id: string): Promise<void> {
     return this.enqueue(async () => {
-      const thread = this.requireThread(id);
-      const current = this.threads.get(id)?.projection;
-      let runId = thread.activeRunId ?? (current ? deriveThreadQueueWorkflowState(current).activeRun?.id : null);
-      const accepted = this.acceptedMessages.get(id);
-      if (!runId && accepted) {
-        const projection = await this.client.getThreadProjection(id);
-        const run = projection.runs.find(run => run.userMessageId === accepted.messageId);
-        if (run?.status === "queued") { await this.client.dispatch({ type: "queued-run.cancel", commandId: randomUUID(), threadId: id, runId: run.id }); this.acceptedMessages.delete(id); this.emit(); return; }
-        if (run && !["completed", "failed", "cancelled", "interrupted", "rolled_back"].includes(run.status)) runId = run.id;
-      }
-      if (!runId) return;
-      await this.client.dispatch({ type: "run.interrupt", commandId: randomUUID(), threadId: id, runId, holdQueue: true });
+      this.requireThread(id);
+      // Thread-wide Stop includes work omitted from paginated history and delegated tasks.
+      await this.client.dispatch({ type: "thread.stop", commandId: randomUUID(), threadId: id });
+    });
+  }
+  private forceStopRun(id: string) {
+    const projection = this.threads.get(id)?.projection;
+    const stop = projection ? presentRunStop(projection) : null;
+    const background = this.findThread(id)?.pendingBackgroundTasks ?? [];
+    return stop?.state === "unresponsive" && (!stop.background || background.length > 0)
+      && this.supports(id, "threadForceStop") ? stop : null;
+  }
+  forceStop(id: string, runId: string): Promise<void> {
+    return this.enqueue(async () => {
+      this.requireThread(id);
+      const stop = this.forceStopRun(id);
+      if (!stop || stop.runId !== runId) throw new Error("This agent is no longer waiting for Force stop.");
+      await this.client.forceStopThread({ threadId: id, runId });
     });
   }
   respondToRequest(input: RequestResponse): Promise<void> {
@@ -1799,7 +1868,8 @@ export class HostState {
       const response = input.decision !== undefined
         ? { decision: Schema.decodeUnknownSync(ProviderApprovalDecision)(input.decision) }
         : { answers: input.answers ?? {} };
-      await this.client.dispatch({ type: "runtime-request.respond", commandId: randomUUID(), ...input, ...response });
+      await this.client.dispatch({ type: "runtime-request.respond", commandId: randomUUID(), threadId: input.threadId, requestId: input.requestId, ...response,
+        ...(input.decision === "decline" && request.responseCapability.type === "live" && request.responseCapability.supportsFeedback && input.feedback?.trim() ? { feedback: input.feedback.trim() } : {}) });
     });
   }
   /** The secret is passed straight to T3 and is never stored, logged or echoed in errors. */
@@ -1809,11 +1879,38 @@ export class HostState {
       await this.client.answerSecretRequest(input);
     });
   }
+  /** Pairing codes go straight to the peer RPC; inherited/resolved requests cannot be answered here. */
+  answerLinkRequest(input: import("@t3tools/contracts").PeerLinkRequestAnswerInput): Promise<void> {
+    return this.enqueue(async () => {
+      this.requireThread(input.threadId);
+      const row = this.threads.get(input.threadId)?.projection?.visibleTurnItems.find(row => row.item.id === input.turnItemId);
+      if (!row || row.visibility !== "local" || row.item.type !== "link_request" || row.item.linkStatus !== "pending") throw new Error("This link request is no longer pending here.");
+      await this.client.answerLinkRequest(input);
+    });
+  }
   dismissRequest(id: string, requestId: string): Promise<void> {
     return this.enqueue(async () => {
       this.requireThread(id);
       await this.client.dispatch({ type: "thread.user-input.dismiss", commandId: randomUUID(), threadId: id, requestId });
     });
+  }
+  /** Full projections carry the share; preserve it too when a shell supplies the field. */
+  private threadGuestShare(thread: OrchestrationV2ThreadShell): ThreadGuestShare | null {
+    const projection = this.threads.get(thread.id)?.projection;
+    return (projection ? projection.thread.guestShare : (thread as OrchestrationV2ThreadShell & { guestShare?: ThreadGuestShare | null }).guestShare) ?? null;
+  }
+  createGuestShare(id: string) {
+    return this.enqueue(async () => {
+      this.requireThread(id);
+      const reason = this.guestSharingDisabledReason(id);
+      if (reason) throw new Error(reason);
+      return this.client.createGuestShare(id);
+    });
+  }
+  private guestSharingDisabledReason(id: string): string | undefined {
+    const config = this.configForThread(id);
+    return managedCapabilityDenial(config?.managedPolicy, "connect")
+      ?? (config?.settings?.guestSharingEnabled === true ? undefined : "Guest links are off. Turn them on in Settings > Labs.");
   }
   /** `value` is the new title for rename and the ISO wake time for snooze. Duplicate resolves to the new thread's id. */
   threadAction(id: string, action: string, value?: string): Promise<string | undefined> {
@@ -1822,7 +1919,16 @@ export class HostState {
       this.requireThread(id);
       let created: string | undefined;
       if (action !== "delete") this.emptyThreads.delete(id);
-      if (action === "rename") {
+      if (action === "stop-sharing") {
+        await this.client.dispatch({ type: "thread.guest-share.close", commandId: randomUUID(), threadId: id });
+      } else if (action === "send-guest-message" || action === "dismiss-guest-message") {
+        const share = this.threadGuestShare(this.requireThread(id)) ?? (await this.client.getThreadProjection(id)).thread.guestShare;
+        if (!share?.messages.some((message) => message.id === value && message.status === "pending")) throw new Error("This guest message is no longer waiting.");
+        const commandId = randomUUID();
+        await this.client.dispatch(action === "dismiss-guest-message"
+          ? { type: "thread.guest-message.dismiss", commandId, threadId: id, guestMessageId: value }
+          : { type: "message.dispatch", commandId, threadId: id, messageId: commandId, guestMessageId: value, text: "", attachments: [], dispatchMode: { type: "queue_after_active" }, createdBy: "user", creationSource: "web" });
+      } else if (action === "rename") {
         if (!title?.trim()) throw new Error("Enter a thread title.");
         await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, title });
       } else if (action === "regenerate-title" || action === "stop-title-regeneration") {
@@ -1840,7 +1946,7 @@ export class HostState {
           const until = Date.parse(value ?? "");
           if (!(until > Date.now())) throw new Error("Choose a time in the future to snooze until.");
           const thread = this.requireThread(id);
-          if (!canSnooze(presentThreadShell(ATTENTION_ENVIRONMENT, thread), { now: new Date().toISOString() })) throw new Error("This thread is waiting for you, so it cannot be snoozed.");
+          if (!canSnooze(this.attentionShell(thread), { now: new Date().toISOString() })) throw new Error("This thread is waiting for you, so it cannot be snoozed.");
           await this.client.dispatch({ type: "thread.snooze", commandId: randomUUID(), threadId: id, snoozedUntil: new Date(until).toISOString() });
         }
       } else if (action === "auto-settle-on" || action === "auto-settle-off") {
@@ -1863,7 +1969,6 @@ export class HostState {
       this.shell = await this.client.snapshotShell();
       if (action === "archive" || action === "unarchive" || action === "delete") {
         this.archive = await this.client.snapshotArchive();
-        await this.subscribeArchive();
       }
       await this.reconcileViews();
       return created;
@@ -2107,7 +2212,7 @@ export class HostState {
     const job = new SessionSearchJob(id, options, () => { if (this.sessionSearches.get(viewId) === job && this.views.has(viewId)) this.scheduleEmit(); });
     this.sessionSearches.set(viewId, job); this.emit();
     void job.scan(state.projection.visibleTurnItems, state.history.historyCursor, {
-      present: (row) => ({ key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId, ...this.presentItem(row.item) }),
+      present: (row) => ({ key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId, visibility: row.visibility, ...this.presentItem(row.item) }),
       history: (cursor) => this.client.getHistory(id, cursor),
       detail: async (row) => { const result = await this.client.getTurnItem(row.sourceThreadId, row.sourceItemId); if (!result.item) throw new Error("Some activity details could not be loaded; the match count is incomplete."); return { ...row, item: result.item }; },
     }, state.history.hasMoreHistory);
@@ -2169,7 +2274,8 @@ export class HostState {
     if (kind !== "slash-command" && kind !== "skill") throw new Error("Unknown composer trigger.");
     const config = () => machine ? this.client.configForEnvironment?.(machine) ?? null : this.client.config;
     let provider = config()?.providers.find((provider) => provider.instanceId === instanceId);
-    if (instanceId && cwd && (!machine || remote) && !hasCompleteProviderWorkspaceSnapshot(provider, cwd)) {
+    const workspaceSnapshot = provider?.workspaceSnapshots?.find((snapshot) => snapshot.cwd === cwd);
+    if (instanceId && cwd && (!machine || remote) && (!workspaceSnapshot || workspaceSnapshot.slashCommandsPending || !isProviderWorkspaceSnapshotCurrent(workspaceSnapshot, Date.now()))) {
       const key = `${machine ?? ""}:${instanceId}:${cwd}`;
       const pending = this.workspaceRefreshes.get(key) ?? (remote ? remote.refreshProviders(instanceId, cwd) : this.client.refreshProviders(instanceId, cwd)).finally(() => this.workspaceRefreshes.delete(key));
       this.workspaceRefreshes.set(key, pending);
@@ -2208,7 +2314,7 @@ export class HostState {
         if (!text?.trim()) throw new Error("Enter a queued message.");
         await this.client.dispatch({ ...command, type: "queued-run.edit", runId: entry.run.id, text, ...(entry.context ? { context: entry.context } : {}) });
       } else if (action === "reorder") {
-        if (!workflow.canReorder) throw new Error("This provider cannot reorder queued messages.");
+        if (workflow.queuedRuns.length < 2) throw new Error("This provider cannot reorder queued messages.");
         if (beforeRunId !== null && !workflow.queuedRuns.some((entry) => entry.run.id === beforeRunId)) throw new Error("The destination message is no longer queued.");
         await this.client.dispatch({ ...command, type: "queued-run.reorder", runId: entry.run.id, beforeRunId });
       } else throw new Error("Unknown queue action.");
@@ -2269,6 +2375,15 @@ export class HostState {
   async chatAsset(id: string, source: ChatAssetSource, reference: ChatAssetReference, viewId = SIDEBAR_VIEW_ID) {
     this.requireView(viewId); this.requireThread(id);
     const row = this.threads.get(id)?.projection?.visibleTurnItems.find((row) => row.sourceThreadId === source.sourceThreadId && row.sourceItemId === source.itemId);
+    if (!row && reference.kind === "attachment" && source.sourceThreadId === id) {
+      const guestShare = this.threads.get(id)?.projection?.thread.guestShare;
+      const message = guestShare?.messages.find((message) => message.id === source.itemId && message.status === "pending");
+      const attachment = message?.attachments?.find((attachment) => attachment.id === reference.attachmentId);
+      if (!attachment) throw new Error("This attachment does not belong to the selected guest message.");
+      const result = await this.client.createAssetUrl({ _tag: "attachment", attachmentId: attachment.id, fileName: attachment.name, mimeType: attachment.mimeType, disposition: "inline" }, id);
+      this.requireView(viewId); this.requireThread(id);
+      return result;
+    }
     if (!row) throw new Error("The visual's message is no longer available. Load its history and try again.");
     const item = row.item;
     let resource: Parameters<HostTransport["createAssetUrl"]>[0];
@@ -2358,13 +2473,41 @@ export class HostState {
         const hasRunningSubagentItem = !!projection?.visibleTurnItems.some((row) => row.item.type === "subagent" && statusIsWorking(row.item.status));
         const pendingBackgroundTasks = thread.pendingBackgroundTasks ?? [];
         const remote = this.remoteThread(thread.id);
+        const forceStop = this.forceStopRun(thread.id);
         // Provider subagents have no runs of their own; their parent records whether they are still working.
         // App-owned subagents run their own threads, whose status already wins over a lagging parent record.
         const subagent = thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider" ? subagentActivity.get(thread.id) : undefined;
         const subagentWorking = !!subagent && statusIsWorking(subagent.status) && !statusIsWorking(thread.activityRunStatus ?? "") && !statusIsWorking(thread.status);
         const subagentOutcome = subagent && !subagentWorking ? subagent.status === "failed" ? "failed" as const : subagent.status === "cancelled" || subagent.status === "interrupted" ? "stopped" as const : undefined : undefined;
         return {
+          ...((remote?.environmentId ?? descriptor?.environmentId) ? { environmentId: (remote?.environmentId ?? descriptor?.environmentId)! } : {}),
+          remoteSubagents: (() => {
+            const rows = new Map<string, NonNullable<ThreadSummary["remoteSubagents"]>[number]>();
+            for (const agent of projection?.subagents ?? []) {
+              if (!agent.remoteChild) continue;
+              const remote = agent.remoteChild;
+              rows.set(`${remote.environmentId}:${remote.threadId}`, { id: agent.id,
+                environmentId: remote.environmentId, threadId: remote.threadId, label: remote.label,
+                title: agent.title || agent.prompt || "Subagent", status: agent.status,
+                startedAt: agent.startedAt ? DateTime.formatIso(agent.startedAt) : null });
+            }
+            // Before expansion loads the parent's tasks, paired children can identify their parent themselves.
+            if (!projection) for (const child of threads) {
+              const from = child.delegatedFrom;
+              if (from?.threadId !== thread.id || from.environmentId !== (remote?.environmentId ?? descriptor?.environmentId)) continue;
+              const owner = this.remoteThread(child.id);
+              const environmentId = owner?.environmentId ?? descriptor?.environmentId;
+              if (!environmentId) continue;
+              rows.set(`${environmentId}:${child.id}`, { id: child.id, environmentId, threadId: child.id,
+                label: owner?.label ?? descriptor?.label ?? environmentId, title: child.title,
+                status: child.activityRunStatus ?? child.status, startedAt: null });
+            }
+            return [...rows.values()];
+          })(),
           ...(remote ? { environmentLabel: remote.label } : {}),
+          guestShare: this.threadGuestShare(thread),
+          pendingGuestMessageCount: projection ? pendingGuestMessageCount(projection.thread.guestShare) : thread.pendingGuestMessageCount ?? pendingGuestMessageCount(this.threadGuestShare(thread)),
+          ...(this.guestSharingDisabledReason(thread.id) ? { guestSharingDisabledReason: this.guestSharingDisabledReason(thread.id)! } : {}),
           id: thread.id, projectId: thread.projectId, title: thread.title, status: thread.status,
           modelSelection: thread.modelSelection, runtimeMode: thread.runtimeMode, interactionMode: thread.interactionMode,
           updatedAt: DateTime.formatIso(thread.updatedAt), archived: thread.archivedAt !== null, pinned: thread.pinnedAt != null,
@@ -2372,6 +2515,8 @@ export class HostState {
           // A provider-run subagent's conversation is the provider's, like sending to it.
           ...(!(thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") && this.canRegenerateTitle(thread.id) ? { canRegenerateTitle: true } : {}),
           ...(thread.titleRegeneration ? { titleRegenerating: true } : {}),
+          tags: thread.tags ?? [], linkedPullRequest: thread.linkedPullRequest ?? null, pullRequests: thread.pullRequests ?? [],
+          ...(forceStop ? { forceStopRunId: forceStop.runId } : {}),
           activeRunId: thread.activeRunId,
           workingStartedAt: thread.activityRunStartedAt !== undefined
             ? (thread.activityRunStartedAt ? DateTime.formatIso(thread.activityRunStartedAt) : null)
@@ -2417,7 +2562,7 @@ export class HostState {
       transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => {
         const source = this.threads.get(row.sourceThreadId)?.projection ?? projection;
         const status = row.item.type === "checkpoint" && row.item.runId ? indexBy(source.runs, "id", (run) => run.id as string).get(row.item.runId)?.status : undefined;
-        return this.stableRow({ key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId,
+        return this.stableRow({ key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId, visibility: row.visibility,
           ...this.presentItem(row.item), canFork: visibleThreadIds.has(row.sourceThreadId) && this.canForkRow(projection, row, threadById),
           ...(status ? { checkpointRunStatus: status } : {}),
           ...this.transcriptRevertFields(projection, row, activeThreadId, threadById),
@@ -2503,6 +2648,12 @@ export class HostState {
       this.scheduledTasks = [...this.scheduledTasks.filter((task) => task.id !== result.task.id), result.task]; this.emit();
     });
   }
+  async rotateWebhookToken(id: string, projectId: string) {
+    await this.freshTask(id, projectId); const result = await this.client.rotateWebhookToken(id);
+    this.scheduledTasks = this.scheduledTasks.map((task) => task.id === id ? result.task : task); this.emit(); return result;
+  }
+  async listWebhookDeliveries(id: string, projectId: string) { await this.freshTask(id, projectId); return this.client.listWebhookDeliveries(id); }
+  async getWebhookDelivery(id: string, projectId: string, deliveryId: string) { await this.freshTask(id, projectId); return this.client.getWebhookDelivery(id, deliveryId); }
   setScheduledTaskEnabled(id: string, projectId: string, enabled: unknown): Promise<void> {
     return this.enqueue(async () => {
       if (typeof enabled !== "boolean") throw new Error("Invalid enabled setting.");

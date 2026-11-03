@@ -119,3 +119,57 @@ test("Custom snooze asks for a time and cancelling sends nothing", async (t) => 
   await bridge.performThreadAction("first", "snooze");
   assert.equal(client.commands.at(-1)?.type, "thread.snooze");
 });
+
+test("Completed runs stay snoozed; runtime requests, guest attention and fresh failures wake them", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose()); capable(client);
+  const snoozedAt = DateTime.makeUnsafe(Date.now() - 60_000), finished = DateTime.makeUnsafe(Date.now() - 1000), until = DateTime.makeUnsafe(Date.now() + 3_600_000);
+  updateThread(client, "first", { snoozedAt, snoozedUntil: until, latestRunId: RunId.make("run"), latestRunCompletedAt: finished, lastVisitedAt: DateTime.makeUnsafe(Date.now() - 120_000), status: "completed" });
+  assert.equal(summary(host, "first").snoozedUntil, DateTime.formatIso(until));
+  assert.equal(summary(host, "first").woke, undefined, "a completed run never wakes the snooze");
+  for (const fields of [
+    { pendingRuntimeRequest: { id: "auth", kind: "auth_refresh", createdAt: finished } },
+    { pendingGuestMessageCount: 1 },
+  ]) {
+    updateThread(client, "first", { pendingRuntimeRequest: null, pendingGuestMessageCount: 0, ...fields });
+    assert.equal(summary(host, "first").snoozedUntil, undefined);
+    assert.equal(summary(host, "first").canSnooze, false);
+    await assert.rejects(host.threadAction("first", "snooze", DateTime.formatIso(until)), /waiting for you/);
+  }
+  updateThread(client, "first", { pendingRuntimeRequest: null, pendingGuestMessageCount: 0, status: "failed", updatedAt: finished });
+  assert.equal(summary(host, "first").snoozedUntil, undefined);
+  updateThread(client, "first", { latestRunCompletedAt: DateTime.makeUnsafe(Date.now() - 120_000), updatedAt: snoozedAt });
+  assert.equal(summary(host, "first").snoozedUntil, DateTime.formatIso(until), "an old failure does not wake a new snooze");
+});
+
+test("Watching a run finish after a timed wake clears Woke through the upstream unseen helper", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose()); capable(client);
+  updateThread(client, "first", { snoozedUntil: DateTime.makeUnsafe(Date.now() - 2000), snoozedAt: DateTime.makeUnsafe(Date.now() - 60_000), latestRunId: RunId.make("run"), latestRunCompletedAt: DateTime.makeUnsafe(Date.now() - 1000), lastVisitedAt: DateTime.makeUnsafe(Date.now() - 30_000) });
+  assert.equal(summary(host, "first").woke, undefined);
+});
+
+test("Running subagents can stay snoozed; live app-owned child approvals block snooze and wake the parent", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose()); capable(client);
+  const until = new Date(Date.now() + 3_600_000).toISOString();
+  updateThread(client, "second", { lineage: { rootThreadId: ThreadId.make("first"), parentThreadId: ThreadId.make("first"), relationshipToParent: "subagent" }, creationSource: "mcp", status: "running", activityRunStatus: "running" });
+  await host.threadAction("first", "snooze", until);
+  assert.equal(summary(host, "first").snoozedUntil, until);
+  updateThread(client, "second", { pendingRuntimeRequest: { id: "approval", kind: "command_execution_approval", createdAt: DateTime.makeUnsafe(Date.now()) } });
+  assert.equal(summary(host, "first").canSnooze, false);
+  assert.equal(summary(host, "first").snoozedUntil, undefined);
+  await assert.rejects(host.threadAction("first", "snooze", until), /waiting for you/);
+  updateThread(client, "second", { activityRunStatus: null });
+  assert.equal(summary(host, "first").canSnooze, true, "ended child requests do not hold the parent");
+  updateThread(client, "second", { activityRunStatus: "running", pendingRuntimeRequest: { id: "question", kind: "user_input", createdAt: DateTime.makeUnsafe(Date.now()) } });
+  assert.equal(summary(host, "first").canSnooze, true, "the coordinator answers subagent questions");
+});
+
+
+test("Child attention rolls up through delegated tasks and side chats, and clears on the next shell revision", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose()); capable(client);
+  updateThread(client, "second", { lineage: { rootThreadId: ThreadId.make("second"), parentThreadId: null, relationshipToParent: null }, delegatedFrom: { environmentId: "other", threadId: ThreadId.make("first") }, creationSource: "mcp", activityRunStatus: "waiting", pendingRuntimeRequest: { id: "approval", kind: "command_execution_approval", createdAt: DateTime.makeUnsafe(Date.now()) } });
+  assert.equal(summary(host, "first").canSnooze, false);
+  updateThread(client, "second", { delegatedFrom: undefined, lineage: { rootThreadId: ThreadId.make("first"), parentThreadId: ThreadId.make("first"), relationshipToParent: null, sideChat: true }, pendingRuntimeRequest: { id: "question", kind: "user_input", createdAt: DateTime.makeUnsafe(Date.now()) } });
+  assert.equal(summary(host, "first").canSnooze, false);
+  updateThread(client, "second", { pendingRuntimeRequest: null });
+  assert.equal(summary(host, "first").canSnooze, true);
+});

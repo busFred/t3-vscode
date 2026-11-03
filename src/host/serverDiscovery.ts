@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 import type { ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
 import * as RemoteEnvironment from "@t3tools/client-runtime/environment";
 import * as Effect from "effect/Effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 import type { ConnectionProblem, ConnectionSetup } from "../shared/connectionSetup.js";
 
 /** T3 home precedence: explicit setting → T3CODE_HOME env → ~/.t3. */

@@ -1,7 +1,9 @@
 import type { DateFormat, TimeFormat } from "./timeFormat.js";
 /** UI intents only. T3 credentials, RPCs, projections and subscriptions stay in the host. */
 import type {
+  ThreadGuestShare,
   OrchestrationV2TurnItemJson,
+  OrchestrationV2ThreadShell,
   ProviderInteractionMode,
   RuntimeMode,
   ServerProvider,
@@ -21,16 +23,16 @@ import type { ScheduledTasksState } from "./scheduledTasks.js";
 
 export const Methods = {
   refreshWorktrees: "refreshWorktrees", configureWorktree: "configureWorktree", newWorktreeChat: "newWorktreeChat", worktreeAction: "worktreeAction", sessionBranch: "sessionBranch", saveWorktreeSettings: "saveWorktreeSettings", worktreeReview: "worktreeReview",
-  refreshScheduledTasks: "refreshScheduledTasks", saveScheduledTask: "saveScheduledTask", setScheduledTaskEnabled: "setScheduledTaskEnabled", runScheduledTask: "runScheduledTask", editScheduledTask: "editScheduledTask",
+  rotateWebhookToken: "rotateWebhookToken", listWebhookDeliveries: "listWebhookDeliveries", getWebhookDelivery: "getWebhookDelivery", refreshScheduledTasks: "refreshScheduledTasks", saveScheduledTask: "saveScheduledTask", setScheduledTaskEnabled: "setScheduledTaskEnabled", runScheduledTask: "runScheduledTask", editScheduledTask: "editScheduledTask",
   searchSession: "searchSession", cancelSessionSearch: "cancelSessionSearch", revealSessionMatch: "revealSessionMatch",
   sessionSearchPreviews: "sessionSearchPreviews", setSearchPreferences: "setSearchPreferences",
   restoreComposerDraft: "restoreComposerDraft", saveComposerDraft: "saveComposerDraft", chatAsset: "chatAsset", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
   getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
   newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", chooseMachine: "chooseMachine", startClone: "startClone", cloneAction: "cloneAction", listCopyableFiles: "listCopyableFiles", startPairing: "startPairing", reconnect: "reconnect",
-  setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModelVisibility: "setModelVisibility", moveModel: "moveModel", reorderModel: "reorderModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt",
-  respondToRequest: "respondToRequest", answerSecretRequest: "answerSecretRequest", dismissRequest: "dismissRequest",
+  setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModelVisibility: "setModelVisibility", moveModel: "moveModel", reorderModel: "reorderModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt", forceStop: "forceStop",
+  respondToRequest: "respondToRequest", answerSecretRequest: "answerSecretRequest", answerLinkRequest: "answerLinkRequest", dismissRequest: "dismissRequest",
   loadHistory: "loadHistory", loadItemDetail: "loadItemDetail",
-  threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab", openSessionTab: "openSessionTab", keepTab: "keepTab", openTaskManager: "openTaskManager", closeTaskTab: "closeTaskTab",
+  createGuestShare: "createGuestShare", threadAction: "threadAction", forkFromResponse: "forkFromResponse", openLink: "openLink", copyText: "copyText", openInTab: "openInTab", openSessionTab: "openSessionTab", keepTab: "keepTab", openTaskManager: "openTaskManager", closeTaskTab: "closeTaskTab",
   searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", turnDiffSummary: "turnDiffSummary", openMergeDiff: "openMergeDiff", refreshUsage: "refreshUsage",
   queueAction: "queueAction",
   revertConversation: "revertConversation", dismissRewindMarker: "dismissRewindMarker", restorePreview: "restorePreview", restoreFiles: "restoreFiles", openRestoreDiff: "openRestoreDiff", compareRestoredFile: "compareRestoredFile",
@@ -110,6 +112,22 @@ export interface ConversationDraft {
   readonly interactionMode: ProviderInteractionMode;
 }
 export interface ThreadSummary {
+  readonly environmentId?: string;
+  readonly readOnlyHint?: string;
+  /** This parent link crosses environments and may cross projects. */
+  readonly remoteDelegation?: boolean;
+  readonly remoteSubagents?: ReadonlyArray<{
+    readonly id: string; readonly environmentId: string; readonly threadId: string; readonly label: string;
+    readonly title: string; readonly status: string; readonly startedAt: string | null;
+  }>;
+  readonly tags?: OrchestrationV2ThreadShell["tags"];
+  readonly linkedPullRequest?: OrchestrationV2ThreadShell["linkedPullRequest"];
+  readonly pullRequests?: OrchestrationV2ThreadShell["pullRequests"];
+  /** Unresponsive Stop, scoped to the run the user saw. */
+  readonly forceStopRunId?: string;
+  readonly guestShare?: ThreadGuestShare | null;
+  readonly pendingGuestMessageCount?: number;
+  readonly guestSharingDisabledReason?: string;
   /** Machine label for a session on a paired remote environment; absent for local sessions. */
   readonly environmentLabel?: string;
   /** How a finished subagent ended, when it did not complete normally. */
@@ -181,6 +199,7 @@ export interface ConversationTasks {
 }
 export type WireTurnItem = typeof OrchestrationV2TurnItemJson.Encoded;
 export interface TranscriptItem {
+  readonly visibility?: "local" | "inherited" | "synthetic";
   readonly key: string;
   readonly sourceThreadId: string;
   readonly sourceItemId?: string;
@@ -283,12 +302,13 @@ export interface HostStateSnapshot {
   readonly sending: boolean;
 }
 /** A `request_secret` the agent is waiting on. Never carries the secret value. */
-export interface PendingSecretRequest { turnItemId: string; label: string; reason: string; placeholder?: string; createdAt: string | null }
+export interface PendingSecretRequest { turnItemId: string; label: string; reason: string; placeholder?: string; delivery?: "file"; createdAt: string | null }
 export type SecretRequestAnswer = { readonly type: "save"; readonly secret: string } | { readonly type: "decline" };
 export interface SecretRequestAnswerParams { readonly threadId: string; readonly turnItemId: string; readonly answer: SecretRequestAnswer }
 export interface RequestResponse {
   readonly threadId: string; readonly requestId: string;
   readonly decision?: string;
+  readonly feedback?: string;
   readonly answers?: Readonly<Record<string, unknown>>;
 }
 export const isObject = (value: unknown): value is Record<string, unknown> =>

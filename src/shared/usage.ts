@@ -9,6 +9,8 @@ export function providerBrand(driver: string, name = ""): ProviderBrand {
 }
 export interface UsageAccount extends LimitAccount {
   readonly instanceIds: ReadonlyArray<string>;
+  readonly legacyKey?: string | undefined;
+  readonly workspaceId?: string | undefined;
   readonly label: string;
   readonly brand: ProviderBrand;
 }
@@ -20,29 +22,57 @@ export function limitPresentations(state: HostStateSnapshot): LimitPresentations
 }
 const identity = (driver: string, email: string | undefined, fingerprint: string | undefined, fallback: string) =>
   email?.trim() ? `${driver}:email:${email.trim().toLowerCase()}` : fingerprint ? `${driver}:credential:${fingerprint}` : fallback;
-const providerKey = (provider: ServerProvider, environmentId: string) => identity(provider.driver, provider.auth?.email, provider.usageLimits?.credentialFingerprint, `${environmentId}:${provider.instanceId}`);
+const providerKey = (provider: ServerProvider, environmentId: string) => {
+  const base = identity(provider.driver, provider.auth?.email, provider.usageLimits?.credentialFingerprint, `${environmentId}:${provider.instanceId}`);
+  return provider.auth?.workspaceId ? `${base}:${provider.auth.workspaceId}` : base;
+};
+export const usageAccountName = (account: UsageAccount) => account.workspaceId && account.email ? `${account.email} · ${account.workspaceId}` : account.email || account.label;
+/** A legacy pin intentionally matches every workspace for the same account. */
+export const accountPinMatches = (account: UsageAccount, pin: string) => account.key === pin || account.legacyKey === pin;
+/** Keep unseen pins; replace visible legacy pins with the selected workspace keys. */
+export function updatedAccountPins(pins: ReadonlyArray<string>, accounts: ReadonlyArray<UsageAccount>, selected: ReadonlyArray<string>): string[] {
+  return [...new Set([...pins.filter((pin) => {
+    const matches = accounts.filter((account) => accountPinMatches(account, pin));
+    return !matches.length || (matches.some((account) => account.legacyKey === pin) && matches.every((account) => selected.includes(account.key)));
+  }), ...selected])];
+}
 
 /** Keep accounts separate, deduplicate shared credentials, and retain unavailable providers as “—”. */
 export function usageAccounts(state: HostStateSnapshot): ReadonlyArray<UsageAccount> {
   if (!state.environment) return [];
   const environmentId = state.environment.environmentId;
   const accounts = new Map<string, UsageAccount>();
+  const reports = [...state.providers.filter((provider) => provider.enabled).map((provider) => ({ driver: provider.driver, email: provider.auth.email, workspaceId: provider.auth.workspaceId, fingerprint: provider.usageLimits?.credentialFingerprint })),
+    ...(state.usageLimitSources ?? []).flatMap((source) => source.accounts.map((account) => ({ driver: account.driver, email: account.email, workspaceId: account.workspaceId, fingerprint: account.usageLimits.credentialFingerprint })))];
+  const resolvedProviderKey = (provider: ServerProvider) => {
+    const key = providerKey(provider, environmentId);
+    if (provider.auth.workspaceId) return key;
+    const known = new Set(reports.filter((report) => identity(report.driver, report.email, report.fingerprint, "") === key && report.workspaceId).map((report) => report.workspaceId!));
+    return known.size === 1 ? `${key}:${[...known][0]}` : key;
+  };
   for (const account of collectLimitAccounts(limitPresentations(state))) {
-    const key = identity(account.driver, account.email, account.limits.credentialFingerprint, account.key);
-    const providers = state.providers.filter((provider) => providerKey(provider, environmentId) === key);
-    accounts.set(key, { ...account, key, instanceIds: providers.map((provider) => provider.instanceId),
-      label: account.displayName || account.email || account.sourceLabel || account.driver,
+    const base = identity(account.driver, account.email, account.limits.credentialFingerprint, account.key);
+    const native = state.providers.find((provider) => `${environmentId}:${provider.instanceId}` === account.key);
+    const source = (state.usageLimitSources ?? []).flatMap((source) => source.accounts.map((entry) => ({ key: `${source.id}:${entry.id}${entry.workspaceId ? `:${entry.workspaceId}` : ""}`, entry }))).find((entry) => entry.key === account.key)?.entry;
+    const reportWorkspace = native?.auth.workspaceId ?? source?.workspaceId;
+    const known = new Set(reports.filter((report) => identity(report.driver, report.email, report.fingerprint, "") === base && report.workspaceId).map((report) => report.workspaceId!));
+    const workspaceId = reportWorkspace ?? (known.size === 1 ? [...known][0] : undefined);
+    const key = workspaceId ? `${base}:${workspaceId}` : base;
+    const providers = state.providers.filter((provider) => resolvedProviderKey(provider) === key);
+    accounts.set(key, { ...account, key, workspaceId, legacyKey: workspaceId ? base : undefined, instanceIds: providers.map((provider) => provider.instanceId),
+      label: `${account.displayName || account.email || account.sourceLabel || account.driver}${workspaceId ? ` · ${workspaceId}` : ""}`,
       brand: providerBrand(account.driver, account.displayName ?? "") });
   }
   for (const provider of state.providers.filter((provider) => provider.enabled && provider.installed)) {
-    const key = providerKey(provider, environmentId);
+    const key = resolvedProviderKey(provider);
     if (accounts.has(key)) continue;
-    accounts.set(key, { key, driver: provider.driver, displayName: provider.displayName || null, email: provider.auth?.email,
+    const workspaceId = provider.auth?.workspaceId;
+    accounts.set(key, { key, workspaceId, legacyKey: workspaceId ? identity(provider.driver, provider.auth?.email, provider.usageLimits?.credentialFingerprint, key) : undefined, driver: provider.driver, displayName: provider.displayName || null, email: provider.auth?.email,
       plan: provider.auth?.label, accentColor: provider.accentColor, sourceLabel: null, redeem: null,
       environments: [{ environmentId: environmentId as EnvironmentId, label: state.environment.label }],
       limits: provider.usageLimits ?? { checkedAt: provider.checkedAt, windows: [] },
-      instanceIds: state.providers.filter((candidate) => providerKey(candidate, environmentId) === key).map((candidate) => candidate.instanceId),
-      label: provider.displayName || provider.instanceId, brand: providerBrand(provider.driver, provider.displayName) });
+      instanceIds: state.providers.filter((candidate) => resolvedProviderKey(candidate) === key).map((candidate) => candidate.instanceId),
+      label: `${provider.displayName || provider.instanceId}${workspaceId ? ` · ${workspaceId}` : ""}`, brand: providerBrand(provider.driver, provider.displayName) });
   }
   return [...accounts.values()];
 }
@@ -90,8 +120,7 @@ export function meterText(account: UsageAccount, windows: ReadonlyArray<MeterWin
 export interface MeterPreferences { readonly followActive: boolean; readonly pinnedAccounts: ReadonlyArray<string> }
 export function selectedUsageAccounts(accounts: ReadonlyArray<UsageAccount>, preferences: MeterPreferences, instanceId?: string): ReadonlyArray<UsageAccount> {
   const active = preferences.followActive ? accounts.find((account) => account.instanceIds.includes(instanceId ?? "")) : undefined;
-  const keys = new Set([...(active ? [active.key] : []), ...preferences.pinnedAccounts]);
-  return [...keys].flatMap((key) => { const account = accounts.find((account) => account.key === key); return account ? [account] : []; });
+  return [...new Set([...(active ? [active] : []), ...preferences.pinnedAccounts.flatMap((pin) => accounts.filter((account) => accountPinMatches(account, pin)))])];
 }
 
 /**

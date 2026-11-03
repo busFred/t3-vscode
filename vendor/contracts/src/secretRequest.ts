@@ -2,20 +2,18 @@ import * as Schema from "effect/Schema";
 
 import { ThreadId, TrimmedNonEmptyString, TurnItemId } from "./baseSchemas.ts";
 
+/** Server stores the value under a one-use SecretRef; the thread learns only status. */
 export const SecretRequestAnswerInput = Schema.Struct({
   threadId: ThreadId,
   turnItemId: TurnItemId,
   answer: Schema.Union([
-    Schema.Struct({
-      type: Schema.Literal("save"),
-      secret: TrimmedNonEmptyString,
-    }),
+    Schema.Struct({ type: Schema.Literal("save"), secret: TrimmedNonEmptyString }),
     Schema.Struct({ type: Schema.Literal("decline") }),
   ]),
 });
 export type SecretRequestAnswerInput = typeof SecretRequestAnswerInput.Type;
 
-export const SECRET_REQUEST_FAILURE_MESSAGES = {
+const SECRET_REQUEST_FAILURE_MESSAGES = {
   load_failed: "Could not load the secret request.",
   not_found: "This secret request no longer exists.",
   already_answered: "This secret request was already answered.",
@@ -28,13 +26,14 @@ export const SECRET_REQUEST_FAILURE_MESSAGES = {
     "That secretRef was already used or does not exist. Ask the user again with request_secret.",
   ref_expired: "That secretRef expired. Ask the user again with request_secret.",
   consume_failed: "Could not use that secretRef. Try again.",
+  not_a_file_request:
+    'The user did not save this secret for shell use. Ask again with request_secret and delivery: "file".',
 } as const;
 
 export const SecretRequestFailureReason = Schema.Literals(
-  Object.keys(SECRET_REQUEST_FAILURE_MESSAGES) as [
-    keyof typeof SECRET_REQUEST_FAILURE_MESSAGES,
-    ...(keyof typeof SECRET_REQUEST_FAILURE_MESSAGES)[],
-  ],
+  Object.keys(SECRET_REQUEST_FAILURE_MESSAGES) as Array<
+    keyof typeof SECRET_REQUEST_FAILURE_MESSAGES
+  >,
 );
 export type SecretRequestFailureReason = typeof SecretRequestFailureReason.Type;
 
@@ -42,7 +41,7 @@ export class SecretRequestError extends Schema.TaggedError<SecretRequestError>()
   "SecretRequestError",
   {
     reason: SecretRequestFailureReason,
-    cause: Schema.optional(Schema.Defect()),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {
   override get message(): string {

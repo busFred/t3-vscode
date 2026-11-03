@@ -3,7 +3,7 @@ import { formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
 import type { HostStateSnapshot } from "../shared/bridge.js";
 import { explicitLegacyUsageSeconds, resolveRefreshSettings, type RefreshSettings } from "../shared/refreshSettings.js";
 import { UsageRefreshScheduler } from "../shared/usageRefresh.js";
-import { accountWindows, groupTitle, usageNotices, meterText, pooledAccount, resolveAccountsDisplay, resolveMeterWindows, selectedUsageAccounts, soonestReset, usageGroups, usageRefreshTarget, type MeterWindow, type UsageAccount, type UsageGroup } from "../shared/usage.js";
+import { accountPinMatches, updatedAccountPins, usageAccountName, accountWindows, groupTitle, usageNotices, meterText, pooledAccount, resolveAccountsDisplay, resolveMeterWindows, selectedUsageAccounts, soonestReset, usageGroups, usageRefreshTarget, type MeterWindow, type UsageAccount, type UsageGroup } from "../shared/usage.js";
 
 /** Read explicit legacy values separately so its schema default cannot mask the shared default. */
 export function readRefreshSettings(): RefreshSettings {
@@ -75,7 +75,7 @@ export class UsageStatusBar implements vscode.Disposable {
     const pinnedProviders = config.get<ReadonlyArray<string>>("usage.pinnedProviders", []);
     const active = followActive ? groups.find((group) => group.accounts.some((account) => account.instanceIds.includes(instanceId ?? ""))) : undefined;
     // Accounts pinned before pooling still pin their provider.
-    const pinned = groups.filter((group) => pinnedProviders.includes(group.driver) || group.accounts.some((account) => pinnedAccounts.includes(account.key)));
+    const pinned = groups.filter((group) => pinnedProviders.includes(group.driver) || group.accounts.some((account) => pinnedAccounts.some((pin) => accountPinMatches(account, pin))));
     return [...new Set([...(active ? [active] : []), ...pinned])].map((group) => ({ account: pooledAccount(group), group, members: group.accounts }));
   }
   private tooltip(account: UsageAccount, group: UsageGroup | undefined, windows: ReadonlyArray<MeterWindow>, notices: ReadonlyArray<string>): vscode.MarkdownString {
@@ -86,9 +86,9 @@ export class UsageStatusBar implements vscode.Disposable {
     accountWindows(account).forEach(({ window, label }) => {
       const first = pooled && window ? soonestReset(group, window) : undefined;
       const reset = window ? formatResetsIn(window, Date.now()) ?? "Not reported" : "Not reported";
-      tooltip.appendMarkdown(`| ${label} | ${window ? `${remainingPercent(window)}%` : "—"} | ${reset}${first ? ` (${first.email || first.label})` : ""} |\n`);
+      tooltip.appendMarkdown(`| ${label} | ${window ? `${remainingPercent(window)}%` : "—"} | ${reset}${first ? ` (${usageAccountName(first)})` : ""} |\n`);
     });
-    if (pooled) for (const member of group.reporting) tooltip.appendText(`\n${member.email || member.label}: ${meterText(member, windows)}`);
+    if (pooled) for (const member of group.reporting) tooltip.appendText(`\n${usageAccountName(member)}: ${meterText(member, windows)}`);
     // Real failures keep their reason; API-key harnesses are already left out.
     for (const notice of notices) tooltip.appendText(`\n${notice}`);
     tooltip.appendText("\n\nPercentages show remaining allowance. Click for account limits. To customize meters, open the Command Palette and run T3 VSCode: Configure Status Meters.");
@@ -110,9 +110,9 @@ export class UsageStatusBar implements vscode.Disposable {
     const separator = (label: string): Choice => ({ label, kind: vscode.QuickPickItemKind.Separator });
     const targets: Choice[] = mode.value === "pooled"
       ? groups.map((group) => ({ label: `$(t3-vscode-${group.brand}) ${group.label}`, description: groupTitle(group), detail: `Remaining: ${meterText(pooledAccount(group), windows)}`,
-        picked: pinnedProviders.has(group.driver) || group.accounts.some((account) => pinnedAccounts.has(account.key)), key: group.driver, group: "show" }))
-      : groups.flatMap((group) => group.accounts.map((account) => ({ label: `$(t3-vscode-${account.brand}) ${account.email || account.label}`, description: account.plan || account.sourceLabel || account.driver,
-        detail: `Remaining: ${meterText(account, windows)}`, picked: pinnedAccounts.has(account.key), key: account.key, group: "show" as const })));
+        picked: pinnedProviders.has(group.driver) || group.accounts.some((account) => [...pinnedAccounts].some((pin) => accountPinMatches(account, pin))), key: group.driver, group: "show" }))
+      : groups.flatMap((group) => group.accounts.map((account) => ({ label: `$(t3-vscode-${account.brand}) ${usageAccountName(account)}`, description: account.plan || account.sourceLabel || account.driver,
+        detail: `Remaining: ${meterText(account, windows)}`, picked: [...pinnedAccounts].some((pin) => accountPinMatches(account, pin)), key: account.key, group: "show" as const })));
     const windowChoices: Choice[] = ([["session", "Session"], ["week", "Week"], ["modelWeeks", "Model weeks (Fable, Opus…)"], ["month", "Month"]] as const)
       .map(([key, label]) => ({ label, picked: windows.includes(key), key, group: "window" }));
     const selected = await vscode.window.showQuickPick<Choice>([
@@ -127,8 +127,8 @@ export class UsageStatusBar implements vscode.Disposable {
     if (mode.value === "pooled") {
       await config.update("usage.pinnedProviders", shown, vscode.ConfigurationTarget.Global);
       // Unpinning a provider must also release the accounts that pinned it before pooling.
-      await config.update("usage.pinnedAccounts", [...pinnedAccounts].filter((key) => !groups.some((group) => !shown.includes(group.driver) && group.accounts.some((account) => account.key === key))), vscode.ConfigurationTarget.Global);
-    } else await config.update("usage.pinnedAccounts", shown, vscode.ConfigurationTarget.Global);
+      await config.update("usage.pinnedAccounts", [...pinnedAccounts].filter((key) => !groups.some((group) => !shown.includes(group.driver) && group.accounts.some((account) => accountPinMatches(account, key)))), vscode.ConfigurationTarget.Global);
+    } else await config.update("usage.pinnedAccounts", updatedAccountPins([...pinnedAccounts], groups.flatMap((group) => group.accounts), shown), vscode.ConfigurationTarget.Global);
     await config.update("usage.statusBarWindows", selected.filter((item) => item.group === "window").map((item) => item.key!), vscode.ConfigurationTarget.Global);
     this.update();
   }

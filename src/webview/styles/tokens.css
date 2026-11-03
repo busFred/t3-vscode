@@ -922,3 +922,16 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .thread-machine > svg { flex: none; opacity: .7; }
 .thread-machine > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thread.active .thread-machine { color: inherit; opacity: .8; }
+
+/* Guest proposals stay separate from the owner's composer until approved. */
+.guest-share-dialog { width: min(480px, calc(100vw - 32px)); padding: 20px; color: var(--vscode-foreground); background: var(--vscode-editor-background); border: 1px solid var(--vscode-widget-border); border-radius: 8px; }
+.guest-share-dialog::backdrop { background: #0008; }
+.guest-share-dialog p { margin-block: 12px; }
+.guest-link, .guest-share-buttons, .guest-share-indicator { display: flex; align-items: center; gap: 8px; }
+.guest-link input { flex: 1; min-width: 0; }
+.guest-share-buttons { justify-content: flex-end; margin-top: 8px; }
+.guest-share-indicator { font-size: 12px; flex-wrap: wrap; }
+.guest-pending-messages { list-style: none; margin: 0; padding: 12px; overflow-y: auto; max-height: 35vh; flex-shrink: 0; }
+.guest-pending-messages li { margin: 8px 0 8px auto; padding: 12px; max-width: 80%; border: 1px solid var(--vscode-widget-border); border-radius: 12px; }
+.guest-pending-messages p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.guest-message-badge { border-radius: 8px; padding: 0 5px; color: var(--vscode-badge-foreground); background: var(--vscode-badge-background); }

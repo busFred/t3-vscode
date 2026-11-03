@@ -26,7 +26,7 @@ test("Settled and archived are independent durable states and settling does not 
 test("Composer commands and files come from the chosen provider and host-owned conversation directory", async (t) => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose());
   const provider = client.config.providers[0]!;
-  client.config = { providers: [{ ...provider, slashCommands: [{ name: "wrong-global" }], skills: [], workspaceSnapshots: [{ cwd: "/tmp/t3-vscode", checkedAt: "2026-10-06T00:00:00Z", slashCommands: [{ name: "compact", description: "Summarize this conversation" }], skills: [
+  client.config = { providers: [{ ...provider, slashCommands: [{ name: "wrong-global" }], skills: [], workspaceSnapshots: [{ cwd: "/tmp/t3-vscode", checkedAt: new Date().toISOString(), slashCommands: [{ name: "compact", description: "Summarize this conversation" }], skills: [
     { name: "Review", path: "/tmp/t3-vscode/.agents/skills/review", enabled: true, description: "Review code changes" },
     { name: "Hidden", path: "/tmp/hidden", enabled: true, userInvocable: false },
   ] }] }] };

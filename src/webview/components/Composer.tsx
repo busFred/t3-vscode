@@ -289,6 +289,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     return () => observer.disconnect();
   }, [modelLabel, effortLabel, Boolean(effort), speedLabel, Boolean(speed), runtimeMode, worktreeLabel, Boolean(state.worktrees), state.draft.projectId, thread?.projectId, state.appearance.fontSizeInterface]);
   const running = Boolean(thread?.activeRunId || state.queue?.activeRunId || state.acknowledgedWorking);
+  const canStop = running || Boolean(thread?.waitingOnSubagents || thread?.backgroundWork);
   const shortcutHint = `${running ? `Enter to queue${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Enter to send"} · Shift+Enter for a new line`;
   const send = async (steer = false) => {
     const value = formatComposerMessage(text, contexts);
@@ -464,7 +465,8 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         <div className="composer-send-controls">
           {sendBlock ? <span className="composer-shortcuts" role="status"><span>{sendBlock === "Send when it reconnects" ? "Your draft is kept" : sendBlock}</span><span>{sendBlock === "Send when it reconnects" ? sendBlock : "Your draft is kept"}</span></span>
             : <span className="composer-shortcuts" aria-hidden="true"><span>{running ? "Enter to queue" : "Enter to send"}</span><span>{running && state.queue?.canSteer ? `${steerShortcut} to steer` : "Shift+Enter for a new line"}</span></span>}
-          {running && thread ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
+          {thread?.forceStopRunId ? <button className="stop-button" title="Agent not responding to Stop" onClick={() => { void run("forceStop", { threadId: thread.id, runId: thread.forceStopRunId }); }}>Force stop</button> : null}
+          {canStop && thread ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
           <button className="send-button" aria-label="Send message" title={shortcutHint} disabled={disabled || setupBlocked || picking || placingPicked || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
         </div>
       </div>

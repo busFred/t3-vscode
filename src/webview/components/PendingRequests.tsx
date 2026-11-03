@@ -1,3 +1,6 @@
+import { secretRequestPrivacyNote } from "@t3tools/client-runtime/secret-request";
+import { seedUserInputDraftAnswers } from "@t3tools/client-runtime/state/thread-requests";
+import { resolvePendingUserInputAnswer, setPendingUserInputCustomAnswer, togglePendingUserInputOptionSelection, isPendingUserInputOptionSelected, type PendingUserInputDraftAnswer } from "@t3tools/client-runtime/state/pending-user-input";
 /** T3's docked approval/question flow, with responses sent through the host. */
 import { type ComponentProps, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ThreadPendingApproval, ThreadPendingUserInput } from "@t3tools/client-runtime/state/thread-requests";
@@ -57,16 +60,14 @@ function UserInput({ prompt, threadId, open, onToggle }: { prompt: ThreadPending
   const run = useActions();
   const card = useRef<HTMLFormElement>(null);
   const wasOpen = useRef(open);
-  const [answers, setAnswers] = useState<Record<string, string[]>>({});
-  const [custom, setCustom] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, PendingUserInputDraftAnswer>>(() => seedUserInputDraftAnswers(prompt.questions, {}));
   const [busy, setBusy] = useState(false);
   const disabled = busy || prompt.responseCapability === "not_resumable";
-  const values = (id: string) => [...(answers[id] ?? []), ...(custom[id]?.trim() ? [custom[id]!.trim()] : [])];
-  const valid = prompt.questions.every((question) => question.required === false || values(question.id).length > 0);
+  const valid = prompt.questions.every(question => question.required === false || resolvePendingUserInputAnswer(question, drafts[question.id]) !== null);
   const submit = () => {
     if (!valid || disabled) return;
     setBusy(true);
-    void run("respondToRequest", { threadId, requestId: prompt.requestId, answers: Object.fromEntries(prompt.questions.map((question) => [question.id, question.multiSelect ? values(question.id) : values(question.id)[0] ?? ""])) }).finally(() => setBusy(false));
+    void run("respondToRequest", { threadId, requestId: prompt.requestId, answers: Object.fromEntries(prompt.questions.map(question => [question.id, resolvePendingUserInputAnswer(question, drafts[question.id]) ?? ""])) }).finally(() => setBusy(false));
   };
   useLayoutEffect(() => {
     // Only re-expanding moves focus into the card; the first render keeps focus where it was.
@@ -78,17 +79,15 @@ function UserInput({ prompt, threadId, open, onToggle }: { prompt: ThreadPending
     {open ? <>{prompt.questions.map((question) => <fieldset key={question.id} disabled={disabled}><legend>{question.question}</legend>
       <div className="question-options">{question.options.map((option) => {
         const value = option.value ?? option.label;
-        const selected = answers[question.id]?.includes(value) ?? false;
+        const selected = isPendingUserInputOptionSelected(question, drafts[question.id], value);
         return <label className={selected ? "question-option selected" : "question-option"} key={value}>
           <input type={question.multiSelect ? "checkbox" : "radio"} name={question.id} checked={selected} onChange={() => {
-            setAnswers((previous) => ({ ...previous, [question.id]: question.multiSelect ? selected ? (previous[question.id] ?? []).filter((item) => item !== value) : [...(previous[question.id] ?? []), value] : [value] }));
-            if (!question.multiSelect) setCustom((previous) => ({ ...previous, [question.id]: "" }));
-          }} /><span><strong>{option.label}</strong><small>{option.description}</small></span>
+            setDrafts(previous => ({ ...previous, [question.id]: togglePendingUserInputOptionSelection(question, previous[question.id], value) }));
+          }} /><span><strong>{option.label}</strong><small>{option.description}</small>{option.preview ? <pre className="whitespace-pre-wrap">{option.preview}</pre> : null}</span>
         </label>;
       })}</div>
-      {question.allowCustomAnswer !== false || !question.options.length ? <CustomAnswer aria-label={`Answer: ${question.header}`} placeholder={question.options.length ? "Or write your own answer…" : "Your answer…"} value={custom[question.id] ?? ""} onChange={(event) => {
-        setCustom((previous) => ({ ...previous, [question.id]: event.target.value }));
-        if (!question.multiSelect) setAnswers((previous) => ({ ...previous, [question.id]: [] }));
+      {question.allowCustomAnswer !== false || !question.options.length ? <CustomAnswer aria-label={`Answer: ${question.header}`} placeholder={question.options.length ? "Or write your own answer…" : "Your answer…"} value={drafts[question.id]?.customAnswer ?? ""} onChange={(event) => {
+        setDrafts(previous => ({ ...previous, [question.id]: setPendingUserInputCustomAnswer(question, previous[question.id], event.target.value) }));
       }} /> : null}
     </fieldset>)}
     {prompt.responseCapability === "not_resumable" ? <p className="subtle">The provider process has ended. Restart the turn to respond.</p> : null}
@@ -98,16 +97,17 @@ function UserInput({ prompt, threadId, open, onToggle }: { prompt: ThreadPending
 }
 
 function ApprovalCard({ approval, pendingCount, threadId, open, onToggle }: { approval: ThreadPendingApproval; pendingCount: number; threadId: string; open: boolean; onToggle: () => void }) {
-  const run = useActions(); const [responding, setResponding] = useState(false);
+  const run = useActions(); const [responding, setResponding] = useState(false); const [feedback, setFeedback] = useState("");
   return <div className={open ? "approval-card" : "approval-card collapsed"} onKeyDown={(event) => collapseOnEscape(event, open, onToggle)}>
     <RequestHeading open={open} summary={approvalSummary(approval)} onToggle={onToggle} />
     {open ? <>
       <ComposerPendingApprovalPanel approval={approval} pendingCount={pendingCount} />
+      {approval.supportsFeedback ? <CustomAnswer aria-label="Optional decline feedback" placeholder="Optional feedback when declining…" value={feedback} disabled={responding} onChange={event => setFeedback(event.target.value)} /> : null}
       <div className="request-actions">{(approval.options ?? [
         { decision: "decline", label: "Decline" }, { decision: "acceptForSession", label: "Allow this session" }, { decision: "accept", label: "Approve" },
       ]).map((option) => <button className={option.decision === "accept" ? "btn primary" : "btn"} key={option.decision} title={"warning" in option ? option.warning : undefined} disabled={responding || approval.responseCapability !== "live"} onClick={() => {
         setResponding(true);
-        void run("respondToRequest", { threadId, requestId: approval.requestId, decision: option.decision }).finally(() => setResponding(false));
+        void run("respondToRequest", { threadId, requestId: approval.requestId, decision: option.decision, ...(option.decision === "decline" && approval.supportsFeedback ? { feedback } : {}) }).finally(() => setResponding(false));
       }}>{option.label}</button>)}</div>
     </> : null}
   </div>;
@@ -148,6 +148,7 @@ function SecretRequestCard({ request, threadId, open, onToggle }: { request: Pen
       <fieldset disabled={busy}>
         <legend>{request.label}</legend>
         {request.reason.trim() ? <p className="subtle secret-reason">{request.reason}</p> : null}
+        {request.delivery === "file" ? <p className="subtle">{secretRequestPrivacyNote(request)}</p> : null}
         <input ref={field} className="question-custom secret-input" type="text" value={secret} placeholder={request.placeholder ?? "Paste the secret"} aria-label={request.label} aria-invalid={failed || undefined} aria-describedby={failed ? errorId : undefined}
           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-1p-ignore data-lpignore="true" data-bwignore onChange={(event) => { setSecret(event.target.value); setFailed(false); }} />
         {failed ? <p id={errorId} className="secret-error" role="alert">Could not answer the request. Try again.</p> : null}

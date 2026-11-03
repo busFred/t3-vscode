@@ -4,7 +4,7 @@ import { ScheduledTaskUpsertInput } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { FakeTransport, harness, provider, server } from "./testing/fakeTransport.js";
 import { scheduledTaskFixture } from "./testing/scheduledTaskFixture.js";
-import { newTaskModel, resolveTaskDefaultSpeed, taskEditVersion, type TaskOrigin } from "../shared/scheduledTasks.js";
+import { newTaskModel, resolveTaskDefaultSpeed, supportedSchedule, taskEditVersion, type TaskOrigin } from "../shared/scheduledTasks.js";
 
 function fixture() {
   const client = new FakeTransport();
@@ -55,12 +55,12 @@ test("Deleted, foreign, stale and invalid model tasks reject; scheduler progress
 });
 test("Unsupported schedules stay visible and use partial enable updates; unknown fields survive the wire schema", async (t) => {
   const { client, options, edit } = fixture();
-  const webhook = scheduledTaskFixture({ schedule: { type: "webhook" }, futureSetting: { test: true } });
+  const webhook = scheduledTaskFixture({ schedule: { type: "future_schedule" }, futureSetting: { test: true } });
   client.scheduledTasks = [webhook]; const { host } = await harness(options, client); t.after(() => host.dispose());
   assert.equal(host.snapshot().scheduledTasks?.tasks.length, 1);
   await assert.rejects(host.saveScheduledTask({ ...edit(), editVersion: taskEditVersion(webhook) }), /newer schedule/);
   await host.setScheduledTaskEnabled(webhook.id, webhook.projectId, false);
-  assert.deepEqual(client.scheduledTasks[0]!.schedule, { type: "webhook" }); assert.equal(client.taskSaves.length, 0);
+  assert.deepEqual(client.scheduledTasks[0]!.schedule, { type: "future_schedule" }); assert.equal(client.taskSaves.length, 0);
   const input = Schema.decodeUnknownSync(ScheduledTaskUpsertInput)({ ...edit(), schedule: { type: "fixed_time", timeOfDay: "09:00", weekdays: [1, 3], futureZone: "keep" } });
   assert.deepEqual(Schema.encodeSync(ScheduledTaskUpsertInput)(input).schedule, { type: "fixed_time", timeOfDay: "09:00", weekdays: [1, 3], futureZone: "keep" });
   assert.deepEqual(input.futureSetting, { preserve: true });
@@ -109,4 +109,31 @@ test("A saved task keeps an explicit speed and rejects one the model does not ad
   await host.saveScheduledTask({ ...edit(), modelSelection: modelSelection("default") });
   assert.deepEqual(client.scheduledTasks[0]!.modelSelection.options, [{ id: "serviceTier", value: "default" }]);
   await assert.rejects(host.saveScheduledTask({ ...edit(), editVersion: taskEditVersion(client.scheduledTasks[0]!), modelSelection: modelSelection("warp") }), /advertised/);
+});
+
+test("Once and webhook tasks save and preserve unknown task fields", async (t) => {
+  const { client, task: base, options, edit } = fixture(); const { host } = await harness(options, client); t.after(() => host.dispose());
+  for (const schedule of [{ type: "once", runAt: "2026-11-05T12:30:00.000Z" }, { type: "webhook", signature: null, filters: [{ path: "body.action", op: "equals", value: "open" }] }]) {
+    const task = scheduledTaskFixture({ ...base, schedule, futureSetting: { keep: true } }); client.scheduledTasks = [task];
+    await host.saveScheduledTask({ ...edit(), schedule, editVersion: taskEditVersion(task) });
+    assert.deepEqual(client.scheduledTasks[0]!.schedule, schedule); assert.deepEqual(client.scheduledTasks[0]!.futureSetting, { keep: true });
+  }
+});
+
+test("Webhook operations and policy notice use the task's project", async (t) => {
+  const { client, options } = fixture();
+  const task = scheduledTaskFixture({ schedule: { type: "webhook", signature: null }, blockedByPolicy: "Webhooks are blocked.", webhook: { path: "/hooks/old", url: null, hasSecret: true } });
+  client.scheduledTasks = [task];
+  client.rotateWebhookToken = async () => ({ task: { ...task, webhook: { path: "/hooks/new", url: null, hasSecret: true } } });
+  client.listWebhookDeliveries = async () => ({ deliveries: [] });
+  const { host } = await harness(options, client); t.after(() => host.dispose());
+  assert.equal(host.snapshot().scheduledTasks?.tasks[0]?.blockedByPolicy, "Webhooks are blocked.");
+  assert.equal((await host.rotateWebhookToken(task.id, task.projectId)).task.webhook?.path, "/hooks/new");
+  assert.deepEqual(await host.listWebhookDeliveries(task.id, task.projectId), { deliveries: [] });
+  await assert.rejects(host.listWebhookDeliveries(task.id, "foreign"), /Project|project/);
+});
+
+test("Unknown once and webhook schedule fields remain read-only", () => {
+  assert.equal(supportedSchedule({ type: "once", runAt: "2026-11-05T12:30:00.000Z", future: 42 }), false);
+  assert.equal(supportedSchedule({ type: "webhook", signature: null, future: 42 }), false);
 });
