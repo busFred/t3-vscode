@@ -46,6 +46,8 @@ export function ThreadList({ state, onAppearance, onSelect, compact = false }: {
   const tagAnchor = useRef<HTMLButtonElement>(null);
   const closeTags = useCallback(() => setTagOpen(false), []);
   const tags = [...new Set(state.threads.flatMap(thread => thread.tags ?? []))].sort();
+  // A tag removed from every thread leaves the filter, so it cannot hide the whole list with no row to uncheck.
+  useEffect(() => { if ([...tagFilter].some(tag => !tags.includes(tag))) setTagFilter(new Set([...tagFilter].filter(tag => tags.includes(tag)))); }, [tags.join("\n"), tagFilter]);
   const hiddenEnvironments = [...new Map(state.threads.filter(thread => thread.hiddenThreadTags?.length).map(thread => [thread.environmentId ?? "local", thread])).values()];
   const tagLabel = tagFilter.size ? `Filter by tag: ${[...tagFilter].sort().join(", ")}` : "Filter by tag";
   const [draggingPin, setDraggingPin] = useState<string | null>(null);

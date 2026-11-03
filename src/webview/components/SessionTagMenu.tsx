@@ -10,7 +10,7 @@ export function SessionTagMenu({ anchor, tags, selected, onChange, environments,
   useLayoutEffect(() => {
     const node = popup.current!; const box = anchor.getBoundingClientRect();
     setPosition(clampMenuPosition({ x: box.right - node.offsetWidth, y: box.bottom + 4 }, { width: node.offsetWidth, height: node.offsetHeight }, { width: innerWidth, height: innerHeight }));
-    node.querySelector<HTMLButtonElement>('[aria-checked="true"], button')?.focus();
+    (node.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? node.querySelector<HTMLButtonElement>('button'))?.focus();
   }, [anchor]);
   useEffect(() => {
     const outside = (event: PointerEvent) => { if (!popup.current?.contains(event.target as Node) && !anchor.contains(event.target as Node)) onClose(); };
