@@ -23,7 +23,7 @@ export interface RemoteEnvironmentStatus {
 }
 export interface ThreadEnvironment { readonly environmentId: string; readonly label: string }
 type RemoteClient = Partial<Pick<T3Client, "forceStopThread">> & Pick<T3Client, "createGuestShare" | "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
-  | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "answerLinkRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "searchThreadStream" | "createAssetUrl" | "uploadAttachment"
+  | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "answerLinkRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "searchThreadStream" | "createAssetUrl" | "uploadAttachment"
   | "deleteAttachment" | "getTurnDiff" | "subscribeWorktreeSetup" | "cancelWorktreeSetup" | "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
   | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
 /** What starting and composing a conversation on a paired machine, or cloning this repository there, needs from that machine's own server. */
@@ -346,6 +346,10 @@ export class MultiEnvironmentClient {
   async subscribeWorktreeSetup(...args: Parameters<T3Client["subscribeWorktreeSetup"]>) { return this.forThread(args[0]).subscribeWorktreeSetup(...args); }
   async cancelWorktreeSetup(id: string) { return this.forThread(id).cancelWorktreeSetup(id); }
   /** Attachment resources name no thread, so callers pass the conversation that displays them. */
+  mcpAppCallTool(input: { threadId: string }) { return this.forThread(input.threadId).mcpAppCallTool(input); }
+  mcpAppToolInfo(input: { threadId: string }) { return this.forThread(input.threadId).mcpAppToolInfo(input); }
+  mcpAppReadResource(input: { threadId: string }) { return this.forThread(input.threadId).mcpAppReadResource(input); }
+  mcpAppUpdateModelContext(input: { threadId: string }) { return this.forThread(input.threadId).mcpAppUpdateModelContext(input); }
   async createAssetUrl(resource: AssetResource, threadId?: string) {
     return this.forThread(threadId ?? ("threadId" in resource ? resource.threadId : undefined)).createAssetUrl(resource);
   }

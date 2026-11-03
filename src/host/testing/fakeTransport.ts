@@ -21,6 +21,11 @@ export class FakeTransport implements HostTransport {
   deletedAttachments: string[] = [];
   async uploadAttachment(input: Parameters<HostTransport["uploadAttachment"]>[0]) { this.uploads.push(input); return { ...input, type: input.type ?? "image", id: `pending-${this.uploads.length}` } as Awaited<ReturnType<HostTransport["uploadAttachment"]>>; }
   async deleteAttachment(id: string) { this.deletedAttachments.push(id); }
+  mcpAppRequests: Array<{ method: string; input: unknown }> = [];
+  mcpAppToolInfo: HostTransport["mcpAppToolInfo"] = async (input) => { this.mcpAppRequests.push({ method: "mcpApps.toolInfo", input }); return { callable: true, readOnly: true, tool: { name: "fixture" } }; };
+  mcpAppCallTool: HostTransport["mcpAppCallTool"] = async (input) => { this.mcpAppRequests.push({ method: "mcpApps.callTool", input }); return { content: [{ type: "text", text: "fixture" }] }; };
+  mcpAppReadResource: HostTransport["mcpAppReadResource"] = async (input) => { this.mcpAppRequests.push({ method: "mcpApps.readResource", input }); return { contents: [{ text: "fixture" }] }; };
+  mcpAppUpdateModelContext: HostTransport["mcpAppUpdateModelContext"] = async (input) => { this.mcpAppRequests.push({ method: "mcpApps.updateModelContext", input }); };
   assetRequests: Array<Parameters<HostTransport["createAssetUrl"]>[0]> = [];
   async createAssetUrl(resource: Parameters<HostTransport["createAssetUrl"]>[0]) { this.assetRequests.push(resource); return { url: "http://127.0.0.1:1/assets/fixture", expiresAt: Date.now() + 60_000 }; }
   forceStops: unknown[] = [];

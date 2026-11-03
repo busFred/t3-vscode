@@ -19,3 +19,16 @@ test("Tool visuals and requests stay visible and different runs cannot share an 
   for (const item of [row("image", "dynamic_tool", { viewedImagePath: "plot.png" }), row("html", "dynamic_tool", { toolName: "mcp.html_render" }), row("approval", "approval_request"), row("input", "user_input_request"), row("plan", "proposed_plan"), row("progress", "assistant_message")]) assert.equal(isWorkItem(item), false);
   assert.equal(transcriptRows([row("a", "reasoning"), row("b", "reasoning", { runId: "next" })]).length, 2);
 });
+
+test("MCP app results occupy their own timeline row using upstream source validation", () => {
+  const app = { attachmentId: "app-html", server: "charts", tool: "plot", resourceUri: "ui://chart" };
+  const before = row("before", "reasoning"), after = row("after", "command_execution");
+  for (const output of [{ t3McpApp: app }, JSON.stringify({ t3McpApp: app }), { structuredContent: { t3McpApp: app } }, [{ type: "text", text: JSON.stringify({ t3McpApp: app }) }]]) {
+    const visual = row("app", "dynamic_tool", { toolName: "charts.plot", output });
+    assert.equal(isWorkItem(visual), false);
+    assert.deepEqual(transcriptRows([before, visual, after]).map((group) => group.rows.map((item) => item.key)), [["before"], ["app"], ["after"]]);
+  }
+  for (const [toolName, output] of [["other.plot", { t3McpApp: app }], ["charts.plot", { t3McpApp: { ...app, resourceUri: "https://bad" } }], ["charts.plot", { t3McpApp: { ...app, attachmentId: "" } }], ["charts.plot", {}]] as const) {
+    assert.equal(isWorkItem(row("plain", "dynamic_tool", { toolName, output })), true);
+  }
+});

@@ -1,4 +1,6 @@
 import { LinkRequestCard } from "./LinkRequestCard";
+import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
+import { McpAppFrame } from "./McpAppFrame";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList, type LegendListRef, type OnViewableItemsChangedInfo } from "@legendapp/list/react";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
@@ -115,7 +117,9 @@ function DynamicTool({ row, threadId }: { row: TranscriptItem; threadId: string 
   if (visual) return <HtmlVisual visual={visual} threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} />;
   if (knownVisual && row.needsDetail) return <div className="visual-loading" role="status">{busy ? "Loading visualization…" : "Visualization is unavailable."}{!busy ? <button className="text-button" onClick={load}>{failed ? "Retry" : "Load visualization"}</button> : null}</div>;
   if (row.item.viewedImagePath) return <ChatMedia src={row.item.viewedImagePath} alt="Viewed image" threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} />;
-  return <Disclosure label={row.toolLabel ?? row.item.title ?? row.item.toolName ?? "Tool"} icon={<WrenchIcon size={14} />} row={row} threadId={threadId}><pre className="command-input">{typeof row.item.input === "string" ? row.item.input : JSON.stringify(row.item.input, null, 2)}</pre>{row.output ? <pre className="tool-output">{row.output}</pre> : <span className="subtle">{row.needsDetail ? "Expand again to retry loading output." : "No output."}</span>}</Disclosure>;
+  const fallback = <Disclosure label={row.toolLabel ?? row.item.title ?? row.item.toolName ?? "Tool"} icon={<WrenchIcon size={14} />} row={row} threadId={threadId}><pre className="command-input">{typeof row.item.input === "string" ? row.item.input : JSON.stringify(row.item.input, null, 2)}</pre>{row.output ? <pre className="tool-output">{row.output}</pre> : <span className="subtle">{row.needsDetail ? "Expand again to retry loading output." : "No output."}</span>}</Disclosure>;
+  const app = mcpAppFromToolItem(row.item);
+  return app ? <McpAppFrame key={app.attachmentId} app={app} threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} revision={row.item.updatedAt} fallback={fallback} /> : fallback;
 }
 function WorkGroup({ rows, threadId, environmentId }: { rows: ReadonlyArray<TranscriptItem>; threadId: string; environmentId: string }) {
   const [open, setOpen] = useState(false), [now, setNow] = useState(Date.now);

@@ -1,4 +1,7 @@
 import { managedCapabilityDenial, pendingGuestMessageCount, type ThreadGuestShare } from "@t3tools/contracts";
+import { relayMcpAppRequest, type McpAppNativePort } from "./mcpApps.js";
+import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
+import { mcpAppFileName } from "@t3tools/shared/mcpApp";
 import { WorktreeCoordinator, parseWorktreeChoice, type WorktreeTransport, type WorktreeHandoff } from "./worktrees.js";
 import { repositoryIdentity, repositoryRemoteKeys, worktreeChanges, applyWorktreeFiles, currentBranch } from "./worktreeGit.js";
 import type { WorktreeChoice, WorktreeSummary } from "../shared/worktrees.js";
@@ -77,7 +80,7 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy">> | null }
+export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream" | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy">> | null }
   // Remote environments: assets and attachments live on the server that owns the conversation.
   & { createAssetUrl(resource: AssetResource, threadId?: string): ReturnType<T3Client["createAssetUrl"]>;
     uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array, environmentId?: string): ReturnType<T3Client["uploadAttachment"]>;
@@ -2376,6 +2379,29 @@ export class HostState {
     this.requireView(viewId); this.requireThread(diff.threadId);
     return result;
   }
+  async mcpAppRequest(id: string, source: ChatAssetSource, method: string, params: unknown, native: McpAppNativePort, viewId = SIDEBAR_VIEW_ID) {
+    const scope = () => {
+      this.requireView(viewId); this.requireThread(id);
+      const row = this.threads.get(id)?.projection?.visibleTurnItems.find((row) => row.sourceThreadId === source.sourceThreadId && row.sourceItemId === source.itemId);
+      const app = row?.item.type === "dynamic_tool" ? mcpAppFromToolItem(row.item) : undefined;
+      if (!row || !app) throw new Error("This tool call has no MCP app in this conversation.");
+      return { row, app };
+    };
+    const { row, app } = scope();
+    if (method === "tool-call") {
+      const detail = await this.client.getTurnItem(source.sourceThreadId, source.itemId);
+      scope();
+      const item = detail.item ?? row.item;
+      if (item.type !== "dynamic_tool") throw new Error("This tool call has no MCP app.");
+      return { arguments: item.input, result: (item.output as { result?: unknown } | undefined)?.result };
+    }
+    return relayMcpAppRequest(this.client, { threadId: source.sourceThreadId, itemId: source.itemId, conversationThreadId: id }, app, method, params, {
+      ...native,
+      // Revalidate after native dialogs before any side effect.
+      confirm: async (message) => { const approved = await native.confirm(message); scope(); return approved; },
+      sendMessage: async (text) => { scope(); await this.sendMessage(text, id, viewId); },
+    });
+  }
   async chatAsset(id: string, source: ChatAssetSource, reference: ChatAssetReference, viewId = SIDEBAR_VIEW_ID) {
     this.requireView(viewId); this.requireThread(id);
     const row = this.threads.get(id)?.projection?.visibleTurnItems.find((row) => row.sourceThreadId === source.sourceThreadId && row.sourceItemId === source.itemId);
@@ -2395,6 +2421,10 @@ export class HostState {
       const visual = htmlVisual(Schema.encodeSync(OrchestrationV2TurnItemJson)(item));
       if (!visual) throw new Error("This item has no rendered HTML page.");
       resource = { _tag: "attachment", attachmentId: visual.attachmentId, fileName: "visualization.html", mimeType: "text/html", disposition: "inline" };
+    } else if (reference.kind === "mcp-app") {
+      const app = item.type === "dynamic_tool" ? mcpAppFromToolItem(item) : undefined;
+      if (!app) throw new Error("This item has no MCP app.");
+      resource = { _tag: "attachment", attachmentId: app.attachmentId, fileName: mcpAppFileName(app), mimeType: "text/html", disposition: "inline", renderIntent: "mcp-app" };
     } else if (reference.kind === "attachment") {
       const attachment = item.type === "user_message" ? item.attachments.find((entry) => entry.id === reference.attachmentId) : null;
       if (!attachment) throw new Error("This attachment does not belong to the selected message.");

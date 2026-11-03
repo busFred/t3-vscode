@@ -58,6 +58,10 @@ class FakeClient {
   async getTurnDiff(...args: unknown[]) { this.log("getTurnDiff", ...args); return { from: this.name }; }
   async subscribeWorktreeSetup(...args: unknown[]) { this.log("subscribeWorktreeSetup", ...args); return async () => {}; }
   async cancelWorktreeSetup(id: string) { this.log("cancelWorktreeSetup", id); }
+  async mcpAppToolInfo(input: unknown) { this.log("mcpApps.toolInfo", input); return { callable: true, readOnly: true }; }
+  async mcpAppCallTool(input: unknown) { this.log("mcpApps.callTool", input); return { content: [] }; }
+  async mcpAppReadResource(input: unknown) { this.log("mcpApps.readResource", input); return { contents: [] }; }
+  async mcpAppUpdateModelContext(input: unknown) { this.log("mcpApps.updateModelContext", input); }
   async createAssetUrl(resource: unknown) { this.log("createAssetUrl", resource); return { url: `http://${this.name}/asset`, expiresAt: 1 }; }
   async uploadAttachment(input: unknown, bytes: Uint8Array) { this.log("uploadAttachment", input, bytes); return { id: `${this.name}-attachment` }; }
   async deleteAttachment(id: string) { this.log("deleteAttachment", id); }
@@ -492,4 +496,23 @@ test("Conversation find streams route to the owning environment and cancel there
   assert.equal(r.primary.callsNamed("searchThreadStream").length, 0);
   await stop(); assert.equal(remote.callsNamed("stopThreadSearch").length, 1);
   await r.multi.disconnect();
+});
+
+test("Every MCP app RPC follows the producing thread to its environment, including a disconnected denial", async (t) => {
+  const r = await rig(); t.after(() => r.multi.disconnect());
+  const remote = await pair(r, "apps-remote", shell([project("remote-project")], [thread("remote-source", "remote-project")]));
+  for (const threadId of ["local-thread", "remote-source"]) {
+    const input = { threadId, itemId: "app-item", name: "plot", arguments: {}, uri: "ui://chart", conversationThreadId: threadId, content: [] };
+    await r.multi.mcpAppToolInfo(input); await r.multi.mcpAppCallTool(input);
+    await r.multi.mcpAppReadResource(input); await r.multi.mcpAppUpdateModelContext(input);
+  }
+  const methods = ["mcpApps.toolInfo", "mcpApps.callTool", "mcpApps.readResource", "mcpApps.updateModelContext"];
+  for (const method of methods) {
+    assert.equal((r.primary.callsNamed(method)[0]?.[1] as { threadId: string }).threadId, "local-thread");
+    assert.equal((remote.callsNamed(method)[0]?.[1] as { threadId: string }).threadId, "remote-source");
+    assert.equal(r.primary.callsNamed(method).length, 1); assert.equal(remote.callsNamed(method).length, 1);
+  }
+  remote.connected = false;
+  assert.throws(() => r.multi.mcpAppReadResource({ threadId: "remote-source" }), /disconnected/);
+  assert.equal(r.primary.callsNamed("mcpApps.readResource").length, 1, "a disconnected remote must never fall through to the primary");
 });

@@ -6,6 +6,7 @@ import {
   GuestShareCreateInput, OrchestrationV2ForceStopThreadInput, CommandId, ProjectId, ThreadId, TurnItemId, OrchestrationV2Command, ScheduledTaskId, ScheduledTaskWebhookDeliveryId, ScheduledTaskUpsertInput, type ScheduledTask,
   OrchestrationV2ThreadLaunchInput, VcsCreateWorktreeInput, VcsListRefsInput, GitPreparePullRequestThreadInput, GitRunStackedActionInput, ServerSettingsPatch, type WorktreeSetupStreamEvent,
   ORCHESTRATION_V2_WS_METHODS as V2, WS_METHODS,
+  McpAppCallToolInput, McpAppToolInfoInput, McpAppReadResourceInput, McpAppUpdateModelContextInput,
   PeerLinkRequestAnswerInput, SecretRequestAnswerInput, SecretRequestError, EnvironmentAuthorizationError,
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
@@ -298,6 +299,18 @@ export class T3Client {
   findTurnBaseline = findTurnBaseline;
   getSavedTurnDiff(input: Parameters<typeof readCheckpointDiff>[0]) {
     return readCheckpointDiff(input);
+  }
+  mcpAppCallTool(input: unknown) {
+    return this.run(this.requireSession().client[WS_METHODS.mcpAppsCallTool](Schema.decodeUnknownSync(McpAppCallToolInput)(input)));
+  }
+  mcpAppToolInfo(input: unknown) {
+    return this.run(this.requireSession().client[WS_METHODS.mcpAppsToolInfo](Schema.decodeUnknownSync(McpAppToolInfoInput)(input)));
+  }
+  mcpAppReadResource(input: unknown) {
+    return this.run(this.requireSession().client[WS_METHODS.mcpAppsReadResource](Schema.decodeUnknownSync(McpAppReadResourceInput)(input)));
+  }
+  mcpAppUpdateModelContext(input: unknown) {
+    return this.run(this.requireSession().client[WS_METHODS.mcpAppsUpdateModelContext](Schema.decodeUnknownSync(McpAppUpdateModelContextInput)(input)));
   }
   async createAssetUrl(resource: AssetResource) {
     const server = this.server;

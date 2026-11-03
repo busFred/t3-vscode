@@ -249,10 +249,22 @@ export class BridgeHandler {
           return { id: message.id, result: { attachments, errors } };
         }
         case "releaseAttachment": await this.hostState.releaseAttachment(stringParam(params, "attachmentId"), viewId); break;
+        case "mcpAppRequest": return { id: message.id, result: await this.hostState.mcpAppRequest(id(),
+          { sourceThreadId: stringParam(params, "sourceThreadId"), itemId: stringParam(params, "itemId") },
+          stringParam(params, "appMethod"), params.input, {
+            confirm: async (text) => (await (await import("vscode")).window.showWarningMessage(text, { modal: true }, "Allow")) === "Allow",
+            openLink: async (url) => { await this.openLink(url, id()); },
+            saveFile: async (name, bytes) => {
+              const vscode = await import("vscode");
+              const destination = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(name), title: "Save MCP app file" });
+              if (!destination) throw new Error("Declined by the user.");
+              await vscode.workspace.fs.writeFile(destination, bytes);
+            },
+          }, viewId) };
         case "chatAsset": {
           const reference = paramsObject(params.reference);
           const kind = stringParam(reference, "kind");
-          const assetReference = kind === "html" ? { kind } as const : kind === "attachment" ? { kind, attachmentId: stringParam(reference, "attachmentId") } as const : kind === "media" ? { kind, path: stringParam(reference, "path") } as const : null;
+          const assetReference = (kind === "html" || kind === "mcp-app") ? { kind } as const : kind === "attachment" ? { kind, attachmentId: stringParam(reference, "attachmentId") } as const : kind === "media" ? { kind, path: stringParam(reference, "path") } as const : null;
           if (!assetReference) throw new Error("Unsupported chat asset.");
           return { id: message.id, result: await this.hostState.chatAsset(id(), { sourceThreadId: stringParam(params, "sourceThreadId"), itemId: stringParam(params, "itemId") }, assetReference, viewId) };
         }

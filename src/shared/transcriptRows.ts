@@ -1,3 +1,4 @@
+import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
 import type { TranscriptItem } from "./bridge.js";
 import { htmlVisual } from "./chatVisuals.js";
 
@@ -13,7 +14,7 @@ export interface DisplayRow { readonly key: string; readonly rows: ReadonlyArray
 export function isWorkItem(row: TranscriptItem): boolean {
   switch (row.item.type) {
     case "reasoning": case "command_execution": case "file_change": case "file_search": case "web_search": return true;
-    case "dynamic_tool": return !row.item.viewedImagePath && !htmlVisual(row.item) && !/(?:^|[._])html_render$/.test(row.item.toolName ?? "");
+    case "dynamic_tool": return !mcpAppFromToolItem(row.item) && !row.item.viewedImagePath && !htmlVisual(row.item) && !/(?:^|[._])html_render$/.test(row.item.toolName ?? "");
     default: return false;
   }
 }
