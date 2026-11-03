@@ -284,13 +284,9 @@ try {
   await page.screenshot({ path: `${evidence}/usage-folded.png` });
   await sessionGroup.locator('summary').click();
   assert.equal(await sessionGroup.evaluate(element => element.open), true);
-  // Pooled windows fold too (the title keeps the value); a provider with a single kind of limit never folds.
+  // Pooled windows are one line each and never fold; a provider with a single kind of limit never folds either.
   await page.getByLabel('Multiple accounts').selectOption('pooled');
-  const pooledWeek = page.locator('.account-limit-group').filter({ hasText: 'Week' });
-  await pooledWeek.locator('summary').click();
-  assert.equal(await pooledWeek.locator('.account-limit-bar').isVisible(), false);
-  await pooledWeek.locator('summary', { hasText: /\d+% left/ }).waitFor();
-  await pooledWeek.locator('summary').click();
+  await page.waitForFunction(() => document.querySelectorAll('.account-limit-group').length === 0 && document.querySelectorAll('.account-limit-bar').length === 3, null, { timeout: 5000 });
   await page.evaluate(() => window.__replace({ usageLimitSources: [{ id: "hub", kind: "cliproxy", label: "CLI Proxy", checkedAt: new Date().toISOString(), accounts: [{ id: "solo.json", driver: "claudeAgent", email: "solo@example.test", plan: "Claude Subscription", usageLimits: { checkedAt: new Date().toISOString(), windows: [{ id: "seven_day", kind: "weekly", label: "Weekly", usedPercent: 40, resetsAt: new Date(Date.now() + 3_600_000).toISOString() }] } }] }] }));
   await page.waitForFunction(() => document.querySelectorAll('.account-limit-group').length === 0 && document.querySelectorAll('.account-limit-bar').length === 1, null, { timeout: 5000 });
   await page.locator('.account-usage > summary').click();

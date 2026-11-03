@@ -1201,6 +1201,10 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Usage rows and machine rows use less vertical space. Per-account bars keep a 3 px gap; machine rows, chips and actions are tighter.
 - Validation: browser fixture checks bar spacing, folding and the "lowest" title in Per account, folding in Pooled, and that a single-window provider has no fold. Screenshots: `sidebar-compact.png`, `usage-folded.png`.
 
+#### v0.3.9 — per-account folding only
+
+- Only the **Per account** view folds usage windows; **Pooled** windows are one line each and no longer fold.
+
 ### Status bar meters
 
 #### v0.3.7

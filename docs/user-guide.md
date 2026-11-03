@@ -125,7 +125,7 @@ An already-missing environment only updates its record; it never causes checkout
 
 ## Account and usage meters
 
-**Account & Usage** starts collapsed. Expand it to refresh limits and see the selected provider's reported update time. When a provider reports more than one kind of limit, click a window's title (Session, Week, Fable, Month…) to fold it; a folded window keeps its value, or in **Per account** the lowest remaining share, on its title line. Folded windows are remembered.
+**Account & Usage** starts collapsed. Expand it to refresh limits and see the selected provider's reported update time. In **Per account**, when a provider reports more than one kind of limit, click a window's title (Session, Week, Fable, Month…) to fold it; a folded window keeps the lowest remaining share on its title line. Folded windows are remembered. **Pooled** windows are one line each and do not fold.
 
 The dropdown lists providers (Claude, Codex…). Each combines its own harness account with every account a usage hub configured in T3 (**Settings → Usage providers**, such as CLI Proxy) reports for it; T3 VSCode needs no setup of its own. With several accounts, a small dropdown beside Refresh switches between **Pooled** (each window's average remaining, with the soonest account's reset; hover the reset to see which account) and **Per account** (one equal-length bar per account in every window; hover a bar for its email). A harness signed in with an API key reports no limits, so its windows read “unavailable” without an error; a hub that cannot be read still shows its error.
 

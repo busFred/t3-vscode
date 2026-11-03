@@ -3,6 +3,7 @@
 ## 0.3.9 — Local build
 
 - Machines: one remove menu per machine that asks whether to remove the conversations from VS Code or the agent access, describing each; an ⓘ replaces the standing description; chips read "Agents (Auto)"; roomier rows.
+- Account & Usage: only Per account folds usage windows; Pooled no longer folds.
 
 ## 0.3.8 — Local build
 

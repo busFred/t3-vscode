@@ -34,8 +34,9 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
   const checkedAt = account?.limits.checkedAt;
   const several = (group?.reporting.length ?? 0) > 1;
   const perAccount = several && display === "perAccount";
-  // Windows fold only when the provider reports more than one kind of limit (Claude's session/week/Fable, Kimi's week/month), never a lone window.
-  const foldable = !!account && accountWindows(account).filter((row) => row.window).length > 1;
+  // Per account, each window folds when the provider reports more than one kind of limit (Claude's session/week/Fable,
+  // Kimi's week/month); pooled windows are one line each, and a lone window never folds.
+  const foldable = perAccount && !!account && accountWindows(account).filter((row) => row.window).length > 1;
   const notices = usageNotices(state, group?.driver);
   const links = collectExternalUsageLinks(limitPresentations(state));
   const run = useActions();
@@ -49,8 +50,7 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
       ? <span className="account-limit-value"><span>{remainingPercent(window)}% left</span>{reset ? <small title={resetTitle || undefined}>{reset}</small> : null}</span>
       : <span className="account-limit-missing" title="This account does not report usage">unavailable</span>}</>;
     const bar = window ? <div className="account-limit-bar" role="meter" aria-label={`${account?.label} ${label} remaining`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={remainingPercent(window)}><i style={{ width: `${remainingPercent(window)}%` }} /></div> : null;
-    // The heading already carries the value, so folding a pooled window only hides its bar.
-    return foldable && bar ? fold(group, label, window?.id ?? label, () => heading, bar) : <div className="account-limit" key={window?.id ?? label}><div>{heading}</div>{bar}</div>;
+    return <div className="account-limit" key={window?.id ?? label}><div>{heading}</div>{bar}</div>;
   };
   /** One usage window that folds to its title line; only offered when the provider reports more than one window. */
   const fold = (group: UsageGroup, label: string, key: string, heading: (open: boolean) => ReactNode, body: ReactNode) => {
