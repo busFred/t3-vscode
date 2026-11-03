@@ -1043,6 +1043,8 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .machine-remove-confirm .danger { color: var(--destructive); }
 /* A machine's actions stay rendered while its remove menu is open, so the menu keeps its anchor and focus returns to it. */
 .env-row:has(.env-hover-actions [aria-expanded="true"]) .env-hover-actions { display: inline-flex; opacity: 1; pointer-events: auto; }
+/* Project pickers match the other sidebar inputs instead of a squat native select. */
+.task-project-select select { height: 28px; padding: 0 6px; border-radius: 4px; font-size: .75rem; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); }
 /* This window's project on each machine. */
 .env-project { display: inline-flex; align-items: center; gap: 3px; }
 .env-project-add { display: inline-flex; align-items: center; gap: 3px; }

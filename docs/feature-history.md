@@ -231,6 +231,10 @@ Task entries open independent editor tabs with the same preview/keep behavior. E
 
 - Use the same icon-only Scheduled tasks button as adjacent chat-header actions; preserve its accessible name, drawer toggle and session task count in the tooltip.
 
+#### Unreleased (after v0.3.9)
+
+- Project pickers (Tasks, New worktree chat) name the machine when a project's name is not unique or the project is on a paired machine, e.g. "t3-vscode · GPU box", and are as tall as the other sidebar inputs.
+
 ### Workspace scope
 
 #### v0.2.0

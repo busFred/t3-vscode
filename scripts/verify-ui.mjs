@@ -226,6 +226,15 @@ try {
     await page.waitForFunction((action) => window.__requests.some(request => request.method === 'machineCloneAction' && request.params.action === action), action);
   }
   await page.evaluate(() => window.__replace({ projectMachines: undefined }));
+  // Projects with the same name on several machines name their machine in project pickers.
+  const savedProjects = await page.evaluate(() => window.__state.projects);
+  await page.evaluate(() => window.__replace({ projects: [{ id: 'project-one', title: 't3-vscode', workspaceRoot: '/tmp/t3-vscode' }, { id: 'remote-one', title: 't3-vscode', workspaceRoot: '/home/me/t3-vscode', environmentLabel: 'GPU box' }, { id: 'project-two', title: 'myt3code', workspaceRoot: '/tmp/myt3code' }] }));
+  await page.getByRole('tab', { name: 'Tasks' }).click();
+  assert.deepEqual(await page.getByLabel('Task project').locator('option').allTextContents(), ['t3-vscode · Local workstation', 't3-vscode · GPU box', 'myt3code']);
+  assert.ok((await page.getByLabel('Task project').boundingBox()).height >= 26, 'the project picker is as tall as the other sidebar inputs');
+  await page.screenshot({ path: `${evidence}/tasks-project-picker.png` });
+  await page.getByRole('tab', { name: 'Sessions' }).click();
+  await page.evaluate((projects) => window.__replace({ projects }), savedProjects);
   const localMachine = page.locator('.environments .env-row').filter({ hasText: 'Local workstation' });
   assert.equal(await localMachine.getByText('Let agents use this…').count(), 0);
   await page.screenshot({ path: `${evidence}/machines-merged.png` });
