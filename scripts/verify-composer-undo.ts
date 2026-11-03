@@ -67,6 +67,26 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
   await page.getByRole("button", { name: "Remove picked.png", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector(".composer-attachment"));
 
+  // VS Code forwards native paste with execCommand('paste'). Model its nesting by
+  // dispatching the clipboard event while another native edit is still on the stack.
+  await reset(""); await message.focus();
+  await message.pressSequentially("Before nested paste.");
+  await message.evaluate((element: HTMLTextAreaElement, bytes: string) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([Uint8Array.from(atob(bytes), c => c.charCodeAt(0))], "nested-paste.png", { type: "image/png" }));
+    window.addEventListener("input", () => element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true })), { once: true });
+    document.execCommand("insertText", false, " ");
+  }, png);
+  await page.getByRole("button", { name: "Preview nested-paste.png", exact: true }).waitFor();
+  await page.waitForFunction(() => !document.querySelector(".attachment-state")?.textContent?.includes("Uploading"));
+  const nestedPaste = await message.inputValue();
+  assert.match(nestedPaste, /^Before nested paste\. !\[nested-paste\.png\]/);
+  await message.press("Control+z"); await expected("Before nested paste. ");
+  await message.press("Control+y"); await expected(nestedPaste);
+  await message.press("Control+z"); await expected("Before nested paste. ");
+  await page.getByRole("button", { name: "Remove nested-paste.png", exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector(".composer-attachment"));
+
   // A quoted citation stays a single undo step, same as the picked-file reference above.
   await reset(""); await message.focus();
   await message.pressSequentially("Before quote after.");
@@ -85,6 +105,31 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
   assert.ok(afterQuoteUndo.length < "Before quote after.".length && "Before quote after.".startsWith(afterQuoteUndo), `undo must continue into the typing before a quote, not ${JSON.stringify(afterQuoteUndo)}`);
   await message.press("Control+y"); await expected("Before quote after.");
   await message.press("Control+y"); await expected(quoted);
+  // The same passage keeps the same citation number. Its final label must be part
+  // of the insertion, rather than a second native edit during React's layout effects.
+  await message.evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(element.value.length, element.value.length));
+  await selectAssistantText(page, "reply in first conversation");
+  await page.keyboard.press("Shift+F10");
+  await page.getByRole("menuitem", { name: "Quote", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const repeatedQuote = await message.inputValue();
+  await focused();
+  await message.press("Control+z"); await expected(quoted);
+  await message.press("Control+y"); await expected(repeatedQuote);
+  await message.press("Control+z"); await expected(quoted);
+  // A distinct quote inserted before the first one renumbers that older token in
+  // the same edit, and undo restores both the old text and its old number.
+  await message.evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(7, 7));
+  await selectAssistantText(page, "reply in first");
+  await page.keyboard.press("Shift+F10");
+  await page.getByRole("menuitem", { name: "Quote", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const prependedQuote = await message.inputValue();
+  assert.ok(prependedQuote.includes("❝2"), prependedQuote);
+  await focused();
+  await message.press("Control+z"); await expected(quoted);
+  await message.press("Control+y"); await expected(prependedQuote);
+  await message.press("Control+z"); await expected(quoted);
   await page.getByRole("button", { name: "Remove reference 1", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector(".composer-chip"));
 
@@ -108,5 +153,5 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
   // "Live reply in" is already on screen, so wait for the streamed chunks to go: a late snapshot would otherwise re-render later checks mid-step.
   await page.waitForFunction(() => document.body.textContent?.includes("Live reply in") && !document.body.textContent.includes("streamed chunk"));
   await reset(original);
-  console.log("PASS: native undo for plain typing, a picked-file reference, a quote and an unrelated mid-typing host-state snapshot.");
+  console.log("PASS: native undo for typing, picked files, nested native paste, first/repeated quotes and a mid-typing host snapshot.");
 }

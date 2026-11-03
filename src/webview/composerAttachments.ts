@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { getProviderAttachmentLimitError, type AttachmentCreateUploadUrlInput } from "@t3tools/contracts";
 import { attachmentUploadInput, insertAttachmentReferences, type TextSelection, type DraftAttachment, type AttachmentInsertionOptions } from "../shared/composerAttachments";
 import { planComposerPaste, type ComposerClipboardPayload } from "../shared/composerClipboard";
@@ -6,11 +7,18 @@ import { bridge } from "./bridge-client";
 import { readDraft, updateDraft } from "./composerDrafts";
 
 const pending = new Map<string, Set<Promise<unknown>>>();
+const workListeners = new Set<() => void>();
 export function trackAttachmentWork<T>(draftKey: string, work: Promise<T>): Promise<T> {
-  const jobs = pending.get(draftKey) ?? new Set(); jobs.add(work); pending.set(draftKey, jobs);
-  void work.finally(() => { jobs.delete(work); if (!jobs.size) pending.delete(draftKey); }).catch(() => undefined);
+  const jobs = pending.get(draftKey) ?? new Set(); jobs.add(work); pending.set(draftKey, jobs); workListeners.forEach((listener) => listener());
+  void work.finally(() => { jobs.delete(work); if (!jobs.size) pending.delete(draftKey); workListeners.forEach((listener) => listener()); }).catch(() => undefined);
   return work;
 }
+/** Re-renders while a draft's paste or drop work starts and finishes, so Send re-enables when it is done. */
+export function usePendingAttachmentWork(draftKey: string): boolean {
+  return useSyncExternalStore((listener) => { workListeners.add(listener); return () => { workListeners.delete(listener); }; }, () => hasPendingAttachmentWork(draftKey));
+}
+/** A paste or drop still placing its reference (or uploading); sending now would drop it from the message. */
+export function hasPendingAttachmentWork(draftKey: string): boolean { return (pending.get(draftKey)?.size ?? 0) > 0; }
 export async function settleDraftAttachments(draftKey: string): Promise<void> { await Promise.allSettled([...(pending.get(draftKey) ?? [])]); }
 export function addDraftAttachments(draftKey: string, attachments: ReadonlyArray<DraftAttachment>, selection?: TextSelection, options?: AttachmentInsertionOptions): number | undefined {
   const added = attachments.map((file) => ({ ...file, contextId: file.contextId ?? `${file.mimeType.startsWith("image/") ? "image" : "file"}_${crypto.randomUUID()}` }));
@@ -51,6 +59,9 @@ async function uploadSlots(draftKey: string, slots: ReadonlyArray<UploadSlot>, t
 }
 export function pasteAttachments(draftKey: string, files: ReadonlyArray<File>, threadId?: string, selection?: TextSelection, onInsert?: (cursor: number) => void, options?: AttachmentInsertionOptions): Promise<void> {
   return trackAttachmentWork(draftKey, (async () => {
+    // VS Code invokes paste through execCommand. A nested insertText is rejected;
+    // wait for that native command to finish before replaying the captured selection.
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
     const inputs = files.map((file) => attachmentUploadInput(file.name || "image.png", file.type, file.size));
     const error = getProviderAttachmentLimitError([...existingTypes(draftKey), ...inputs.map((input) => ({ ...input, type: input.type ?? "image" }))]);
     if (error) throw new Error(error);
@@ -64,6 +75,8 @@ export function pasteAttachments(draftKey: string, files: ReadonlyArray<File>, t
 /** Pastes what a copy in another composer (or this one) carried. Over the attachment limit the text still lands, with the images as their names. */
 export function pasteComposerClipboard(draftKey: string, payload: ComposerClipboardPayload, threadId: string | undefined, selection: TextSelection, onInsert?: (cursor: number) => void): Promise<void> {
   return trackAttachmentWork(draftKey, (async () => {
+    // Rich clipboard references (quotes/files as well as images) use the same native paste transaction.
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
     const draft = readDraft(draftKey);
     let plan = planComposerPaste(payload, draft, selection, () => crypto.randomUUID());
     const error = plan.uploads.length ? getProviderAttachmentLimitError([...existingTypes(draftKey), ...plan.uploads.map(({ input }) => ({ ...input, type: input.type ?? "image" }))]) : undefined;

@@ -147,11 +147,11 @@ See [the architecture](t3-vscode-architecture.md) for the host/webview boundary 
 
 `verify-views.ts` also runs `verify-composer-editing.ts` for tab-local History, independent drafts, raw Markdown formatting, native undo/redo, list continuation, automatic numbering with undo, selection wrapping, indentation, IME handling, focus traversal and dense spacing at desktop and narrow widths.
 
-It then runs `verify-composer-undo.ts` for native undo across plain typing, a picked-file reference, a quote, and a host-state snapshot mid-typing.
+It then runs `verify-composer-undo.ts` for native undo across plain typing, a picked-file reference, a paste nested inside a native command, first/repeated/reordered quotes, and a host-state snapshot mid-typing.
 
 For native editor groups and Command Palette routing, run `node scripts/verify-edh.mjs --base-dir <fresh-isolated-home> --editor-controls-only` against an explicitly isolated server with an available provider. This uses disposable VS Code user data, extensions and shared data; it checks new tabs in two editor groups, local History selection, title changes empty-chat cleanup, and close/reopen recovery of typed text and a pasted image without sending provider messages.
 
-`--undo-only` drives the composer with real workbench clicks and keystrokes, in a new chat panel and in a session opened from Sessions (a custom-editor preview tab). It checks that Ctrl+Z undoes exactly one step and that Ctrl+Shift+Z and Ctrl+Y redo. It needs the rich fixture (`prepare-rich-fixture.ts`, then `--seed`) in the same isolated home and does not call a provider.
+`--undo-only` drives the composer with real workbench clicks and keystrokes, in a new chat panel and in a session opened from Sessions (a custom-editor preview tab). It checks typing, dispatched image paste, actual OS image paste with completed uploads, assistant quotes through the selection menu (including the same passage twice), and native editor references. Each insertion must undo in one step and redo with both Ctrl+Shift+Z and Ctrl+Y, immediately and after hiding/revealing the tab and switching focus through Sessions; earlier typing must remain undoable. The OS-paste check uses a disposable Chromium window and saves/restores the clipboard. It needs the rich fixture (`prepare-rich-fixture.ts`, then `--seed`) in the same isolated home and does not call a provider.
 
 ## Session-search verification
 

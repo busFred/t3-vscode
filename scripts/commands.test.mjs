@@ -18,3 +18,14 @@ test("Contributed commands are registered, including the usage refresh", () => {
   assert.ok(declared.includes("t3-vscode.refreshUsage"));
   assert.ok(declared.includes("t3-vscode.configureUsage"));
 });
+
+test("Each command is registered once; a duplicate fails extension activation", () => {
+  const registered = [...source.matchAll(/registerCommand\("([^"]+)"/g)].map((match) => match[1]);
+  const duplicates = registered.filter((command, index) => registered.indexOf(command) !== index);
+  assert.deepEqual(duplicates, []);
+});
+
+test("Each command is declared once in the manifest", () => {
+  const declared = manifest.contributes.commands.map((command) => command.command);
+  assert.deepEqual(declared.filter((command, index) => declared.indexOf(command) !== index), []);
+});

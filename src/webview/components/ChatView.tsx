@@ -63,9 +63,13 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
     let cursor: number | undefined;
     updateDraft(draftKey, (draft) => {
       const context = { type: "assistant" as const, citation, contextId: quoteContextId(draft.contexts) };
-      const inserted = insertAssistantQuote(draft.text, context, selection ?? { start: draft.text.length, end: draft.text.length });
-      cursor = inserted.cursor;
-      return { ...draft, text: inserted.text, contexts: [...draft.contexts, context] };
+      const contexts = [...draft.contexts, context];
+      const inserted = insertAssistantQuote(draft.text, context, selection ?? { start: draft.text.length, end: draft.text.length }, draft.contexts);
+      // Repeated citations share a number; inserting before another quote also renumbers it.
+      // Replay the final labels together, rather than nesting a layout-effect edit inside insertText.
+      const synced = syncAssistantQuoteLabels(inserted.text, contexts);
+      cursor = synced?.map(inserted.cursor) ?? inserted.cursor;
+      return { ...draft, text: synced?.text ?? inserted.text, contexts };
     }, "take-focus");
     return cursor;
   }, []);

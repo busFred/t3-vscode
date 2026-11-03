@@ -128,7 +128,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand("t3-vscode.fontSettings", showSettings),
     vscode.commands.registerCommand("t3-vscode.settings", showSettings),
-    vscode.commands.registerCommand("t3-vscode.reconnect", () => hostState?.reconnect()),
     vscode.commands.registerCommand("t3-vscode.insertReference", async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) { await vscode.window.showInformationMessage("Select text in a file to reference it in T3 VSCode."); return; }

@@ -172,7 +172,7 @@ async function chooseLiveTestModel(view, favorite = false) {
 }
 async function runCommand(label) {
   await workbench.bringToFront();
-  await workbench.keyboard.press('Control+Shift+P');
+  await workbench.keyboard.press('F1');
   await workbench.locator('.quick-input-widget input').filter({ visible: true }).fill(`>${label}`);
   await workbench.locator('.quick-input-list .monaco-list-row').filter({ hasText: label }).first().waitFor();
   await workbench.keyboard.press('Enter');
