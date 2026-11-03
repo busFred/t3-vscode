@@ -100,3 +100,108 @@ test("Streaming updates received during a slow detail fetch are indexed without 
   release!();
   await until(() => job.state.total === 3);
 });
+
+test("Plain message filters stream incremental history matches and cancel on change or close", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  publishText(client, "first", "Latest rate", 1);
+  const projection = await client.getThreadProjection("first"), latest = projection.visibleTurnItems[0]!;
+  if (latest.item.type !== "assistant_message") throw new Error("Expected message");
+  const older = { ...latest, position: 0, sourceItemId: TurnItemId.make("old-stream"), item: { ...latest.item, id: TurnItemId.make("old-stream"), messageId: "old-message" as never, text: "Old rate" } };
+  client.threadHandlers.get("first")!({ kind: "snapshot", snapshotSequence: 2, projection, historyCursor: "before", hasMoreHistory: true });
+  let historyCalls = 0;
+  client.getHistory = async () => { historyCalls++; return { snapshotSequence: 2, items: [older], nextCursor: null, hasMoreHistory: false }; };
+  const plain: SessionSearchOptions = { ...options, scope: "text", sources: ["user", "assistant"] };
+  host.searchSession("first", plain);
+  await until(() => client.threadSearches.length === 1);
+  assert.equal(historyCalls, 0);
+  const receive = client.threadSearches[0]![2];
+  receive({ snapshotSequence: 2, totalMatches: 1, activeIndex: 0, complete: false, match: { entryId: latest.item.messageId, runId: latest.item.runId, occurrence: 0 } });
+  await until(() => host.snapshot().sessionSearch?.matches.length === 1);
+  assert.equal(host.snapshot().sessionSearch!.scanning, true);
+  receive({ snapshotSequence: 2, totalMatches: 2, activeIndex: 0, match: null, navigation: [
+    { entryId: older.item.messageId, runId: older.item.runId, startIndex: 0, count: 1 },
+    { entryId: latest.item.messageId, runId: latest.item.runId, startIndex: 1, count: 1 },
+  ] });
+  await until(() => host.snapshot().sessionSearch?.scanning === false);
+  assert.equal(host.snapshot().sessionSearch!.total, 2);
+  assert.equal(host.snapshot().transcript.length, 1);
+  assert.equal(historyCalls, 1);
+  const match = host.snapshot().sessionSearch!.matches[0]!;
+  host.revealSessionMatch(match.id);
+  assert.ok(host.snapshot().transcript.some(row => row.key === match.rowKey));
+  host.searchSession("first", { ...plain, query: "new" });
+  await until(() => client.threadSearchStops === 1);
+  receive({ snapshotSequence: 2, totalMatches: 100, activeIndex: 0, match: null });
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(host.snapshot().sessionSearch!.query, "new");
+  assert.equal(host.snapshot().sessionSearch!.total, 0);
+  host.cancelSessionSearch(); await until(() => client.threadSearchStops === 2);
+});
+
+test("Advanced filters keep the existing local search", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  publishText(client, "first", "rate", 1);
+  const plain: SessionSearchOptions = { ...options, scope: "text", sources: ["user", "assistant"] };
+  for (const patch of [{ caseSensitive: true }, { wholeWord: true }, { content: ["code"] as const }, { sources: ["tools"] as const }, { sources: ["user", "assistant", "tools"] as const }, { query: "r".repeat(201) }]) {
+    host.searchSession("first", { ...plain, ...patch });
+    await until(() => host.snapshot().sessionSearch?.scanning === false);
+  }
+  assert.equal(client.threadSearches.length, 0);
+});
+
+test("A refreshed stream ignores delayed history failures and stops late subscription handles", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  publishText(client, "first", "rate", 1);
+  const row = (await client.getThreadProjection("first")).visibleTurnItems[0]!;
+  const job = new SessionSearchJob("first", { ...options, scope: "text", sources: ["user", "assistant"] }, () => {});
+  t.after(() => job.cancel());
+  const handlers: Array<(result: import("@t3tools/contracts").OrchestrationV2SearchThreadResult) => void> = [];
+  let rejectHistory!: (cause: Error) => void, releaseFirst!: (stop: () => Promise<void>) => void;
+  let firstStops = 0, secondStops = 0;
+  const starting = job.stream([row], "older", {
+    present: entry => ({ key: `${entry.sourceThreadId}:${entry.sourceItemId}`, sourceThreadId: entry.sourceThreadId,
+      item: Schema.encodeSync(OrchestrationV2TurnItemJson)(entry.item), toolLabel: null, output: null, needsDetail: false }),
+    history: () => new Promise((_, reject) => { rejectHistory = reject; }), detail: async entry => entry,
+  }, async handler => {
+    handlers.push(handler);
+    if (handlers.length === 1) return new Promise(resolve => { releaseFirst = resolve; });
+    return async () => { secondStops++; };
+  });
+  await until(() => handlers.length === 1);
+  handlers[0]!({ snapshotSequence: 1, totalMatches: 1, activeIndex: 0, complete: false, match: { entryId: "missing", runId: null, occurrence: 0 } });
+  await until(() => !!rejectHistory);
+  job.refresh([{ ...row }]); await until(() => handlers.length === 2);
+  rejectHistory(new Error("stale failure"));
+  releaseFirst(async () => { firstStops++; }); await starting;
+  assert.equal(firstStops, 1, "A late obsolete subscription is stopped immediately");
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(job.state.error, undefined);
+  job.cancel(); await until(() => secondStops === 1);
+});
+
+test("Stream navigation beyond 17 entries retains every rendered-text match", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  publishText(client, "first", "hello **world**", 1);
+  const original = (await client.getThreadProjection("first")).visibleTurnItems[0]!;
+  if (original.item.type !== "assistant_message") throw new Error("Expected message");
+  const item = original.item;
+  const rows = Array.from({ length: 18 }, (_, n) => ({ ...original, position: n, sourceItemId: TurnItemId.make(`item-${n}`), item: { ...item, id: TurnItemId.make(`item-${n}`), messageId: `message-${n}` as never } }));
+  const job = new SessionSearchJob("first", { ...options, query: "hello world", scope: "text", sources: ["user", "assistant"] }, () => {});
+  t.after(() => job.cancel());
+  const indices: Array<number | undefined> = [];
+  await job.stream(rows, null, {
+    present: row => ({ key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId,
+      item: Schema.encodeSync(OrchestrationV2TurnItemJson)(row.item), toolLabel: null, output: null, needsDetail: false }),
+    history: async () => { throw new Error("No history fetch expected"); }, detail: async row => row,
+  }, async (handler, _, index) => {
+    indices.push(index);
+    handler({ snapshotSequence: 1, totalMatches: 18, activeIndex: index ?? 0, match: null,
+      navigation: rows.slice(index ?? 0, index === undefined ? 17 : 18).map((row, n) => ({ entryId: row.item.messageId, runId: row.item.runId, startIndex: (index ?? 0) + n, count: 1 })) });
+    return async () => {};
+  });
+  await until(() => job.state.matches.length === 18 && !job.state.scanning);
+  assert.deepEqual(indices, [undefined, 17]);
+  assert.equal(job.state.total, 18);
+  const match = job.state.matches[0]!;
+  assert.equal(job.previews([match.id])[0]!.text, "hello world");
+});

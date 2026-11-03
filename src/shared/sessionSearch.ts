@@ -6,7 +6,7 @@ export const SEARCH_SOURCES = ["user", "assistant", "tools", "thought", "files",
 export const SEARCH_CONTENT = ["figures", "code", "equations", "files"] as const;
 export type SearchSource = typeof SEARCH_SOURCES[number];
 export type SearchContent = typeof SEARCH_CONTENT[number];
-export interface SessionSearchOptions { readonly sources?: readonly SearchSource[]; readonly content?: readonly SearchContent[]; readonly query: string; readonly caseSensitive: boolean; readonly wholeWord: boolean; readonly scope: "all" | "messages" }
+export interface SessionSearchOptions { readonly sources?: readonly SearchSource[]; readonly content?: readonly SearchContent[]; readonly query: string; readonly caseSensitive: boolean; readonly wholeWord: boolean; readonly scope: "all" | "messages" | "text" }
 export interface SessionMatch { readonly id: string; readonly rowKey: string; readonly field: string; readonly start: number; readonly end: number; readonly occurrence: number; readonly snippet: string; readonly kind: string; readonly timestamp?: string | null }
 export interface SessionSearchState extends SessionSearchOptions { readonly threadId: string; readonly matches: ReadonlyArray<SessionMatch>; readonly total: number; readonly scanning: boolean; readonly error?: string; readonly scannedItems: number; readonly revision?: number }
 export function searchPattern(options: SessionSearchOptions): RegExp {
@@ -16,8 +16,9 @@ export function searchPattern(options: SessionSearchOptions): RegExp {
 export function searchableFields(row: TranscriptItem, scope: SessionSearchOptions["scope"]): ReadonlyArray<{ field: string; text: string }> {
   const item = row.item;
   if (item.type === "assistant_message") return [{ field: "text", text: item.text }];
-  if (item.type === "user_message") return [{ field: "text", text: renderedMessageText(item.text) }, ...item.attachments.map((attachment, index) => ({ field: `attachment:${index}`, text: attachment.name }))];
-  if (scope === "messages") return [];
+  if (item.type === "user_message") return [{ field: "text", text: renderedMessageText(item.text) }, ...(scope === "text" ? [] : item.attachments.map((attachment, index) => ({ field: `attachment:${index}`, text: attachment.name })))];
+  if (scope === "text" && item.type === "proposed_plan") return [{ field: "text", text: item.markdown }];
+  if (scope !== "all") return [];
   switch (item.type) {
     case "reasoning": return [{ field: "text", text: item.text }];
     case "proposed_plan": return [{ field: "text", text: item.markdown }];

@@ -72,12 +72,12 @@ import { resolveAccountsDisplay, type AccountsDisplay } from "../shared/usage.js
 import { classifyMarkdownImageSource } from "@t3tools/client-runtime/markdown-images";
 import { attachmentMessageContext, attachmentUploadInput, type AttachmentReference, type DraftAttachment } from "../shared/composerAttachments.js";
 
-import { SessionSearchJob } from "./sessionSearch.js";
+import { SessionSearchJob, supportsThreadFindStream, type SearchRow } from "./sessionSearch.js";
 import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy">> | null }
+export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy">> | null }
   // Remote environments: assets and attachments live on the server that owns the conversation.
   & { createAssetUrl(resource: AssetResource, threadId?: string): ReturnType<T3Client["createAssetUrl"]>;
     uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array, environmentId?: string): ReturnType<T3Client["uploadAttachment"]>;
@@ -2211,11 +2211,15 @@ export class HostState {
     this.cancelSessionSearch(viewId);
     const job = new SessionSearchJob(id, options, () => { if (this.sessionSearches.get(viewId) === job && this.views.has(viewId)) this.scheduleEmit(); });
     this.sessionSearches.set(viewId, job); this.emit();
-    void job.scan(state.projection.visibleTurnItems, state.history.historyCursor, {
-      present: (row) => ({ key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId, visibility: row.visibility, ...this.presentItem(row.item) }),
-      history: (cursor) => this.client.getHistory(id, cursor),
-      detail: async (row) => { const result = await this.client.getTurnItem(row.sourceThreadId, row.sourceItemId); if (!result.item) throw new Error("Some activity details could not be loaded; the match count is incomplete."); return { ...row, item: result.item }; },
-    }, state.history.hasMoreHistory);
+    const sources = {
+      cwd: this.referenceRoot(viewId) ?? undefined,
+      present: (row: SearchRow) => ({ key: `${row.sourceThreadId}:${row.sourceItemId}`, sourceThreadId: row.sourceThreadId, sourceItemId: row.sourceItemId, visibility: row.visibility, ...this.presentItem(row.item) }),
+      history: (cursor: string) => this.client.getHistory(id, cursor),
+      detail: async (row: SearchRow) => { const result = await this.client.getTurnItem(row.sourceThreadId, row.sourceItemId); if (!result.item) throw new Error("Some activity details could not be loaded; the match count is incomplete."); return { ...row, item: result.item }; },
+    };
+    if (supportsThreadFindStream(options)) void job.stream(state.projection.visibleTurnItems, state.history.historyCursor, sources,
+      (handler, onError, index) => this.client.searchThreadStream(id, options.query, handler, onError, index));
+    else void job.scan(state.projection.visibleTurnItems, state.history.historyCursor, sources, state.history.hasMoreHistory);
   }
   revealSessionMatch(matchId: string, viewId = SIDEBAR_VIEW_ID): void {
     const job = this.sessionSearches.get(viewId);
@@ -2226,7 +2230,7 @@ export class HostState {
     this.requireThread(job.threadId);
     const existing = state.projection.visibleTurnItems.find((item) => item.sourceThreadId === row.sourceThreadId && item.sourceItemId === row.sourceItemId);
     if (existing) state.projection = { ...state.projection, visibleTurnItems: state.projection.visibleTurnItems.map((entry) => entry === existing && DateTime.toEpochMillis(entry.item.updatedAt) <= DateTime.toEpochMillis(row.item.updatedAt) ? row : entry) };
-    else state.projection = mergeOlderHistoryIntoProjection(state.projection, [row]);
+    else state.projection = mergeOlderHistoryIntoProjection(state.projection, job.historyPages.get(match!.rowKey) ?? [row]);
     this.emit();
   }
   async composerSuggestions(kind: string, query: string, atPromptStart: boolean, viewId = SIDEBAR_VIEW_ID): Promise<ReadonlyArray<ComposerSuggestion>> {

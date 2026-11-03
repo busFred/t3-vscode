@@ -11,6 +11,7 @@ import { bridge } from "../bridge-client";
 export interface SearchTarget extends SessionMatch, SessionSearchOptions { threadId: string; nonce: number }
 export const SearchTargetContext = createContext<SearchTarget | null>(null);
 const PAGE_SIZE = 25;
+const MESSAGE_SOURCES: readonly SearchSource[] = ["user", "assistant"];
 const sourceLabels: Record<SearchSource, string> = { user: "Your messages", assistant: "Assistant", tools: "Commands / tools", thought: "Thought process", files: "Files / diffs", other: "Other activity" };
 const contentLabels: Record<SearchContent, string> = { figures: "Figures", code: "Code", equations: "Equations", files: "Files" };
 const kindLabel = (match: SessionMatch) => ({ "user message": "You", "assistant message": "Assistant", "command execution": "Command", "dynamic tool": "Tool", reasoning: "Thought process", "proposed plan": "Plan" })[match.kind] ?? match.kind.replace(/^./, (c) => c.toUpperCase());
@@ -46,7 +47,8 @@ export function SessionFind({ state, preferences, onPreferences, onClose, onSele
   const [query, setQuery] = useState(""), [caseSensitive, setCase] = useState(false), [wholeWord, setWord] = useState(false), [refresh, setRefresh] = useState(0);
   const [selected, setSelected] = useState<string | null>(null), [results, setResults] = useState(true);
   const [page, setPage] = useState(0);
-  const [sources, setSources] = useState<readonly SearchSource[]>(SEARCH_SOURCES), [content, setContent] = useState<readonly SearchContent[]>([]);
+  const [textOnly, setTextOnly] = useState(false);
+  const [chosenSources, setSources] = useState<readonly SearchSource[]>(SEARCH_SOURCES), [content, setContent] = useState<readonly SearchContent[]>([]);
   const [previews, setPreviews] = useState<SessionSearchPreview[]>([]), [previewError, setPreviewError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ left: number; top: number } | null>(null);
   const [height, setHeight] = useState(preferences.resultsHeight), [maxHeight, setMaxHeight] = useState(700);
@@ -54,7 +56,8 @@ export function SessionFind({ state, preferences, onPreferences, onClose, onSele
   const section = useRef<HTMLElement>(null), controls = useRef<HTMLDivElement>(null), feedback = useRef<HTMLDivElement>(null), contextButton = useRef<HTMLButtonElement>(null), popup = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y: number; height: number } | null>(null), dragHeight = useRef(height);
   const run = useActions(), id = state.activeThreadId;
-  const scope = "all" as const;
+  const scope = textOnly ? "text" as const : "all" as const;
+  const sources = textOnly ? MESSAGE_SOURCES : chosenSources;
   const options = { query, caseSensitive, wholeWord, scope, sources, content };
   const search = state.sessionSearch && state.sessionSearch.threadId === id && state.sessionSearch.query === query && state.sessionSearch.caseSensitive === caseSensitive && state.sessionSearch.wholeWord === wholeWord && state.sessionSearch.scope === scope && sameSearchFilters(state.sessionSearch, options) ? state.sessionSearch : undefined;
   const matches = useMemo(() => preferences.order === "newest" ? [...(search?.matches ?? [])].reverse() : search?.matches ?? [], [search?.matches, preferences.order]);
@@ -75,13 +78,13 @@ export function SessionFind({ state, preferences, onPreferences, onClose, onSele
     return () => cancelAnimationFrame(frame);
   }, [selected, previews, preferences.contextLines, results]);
   useEffect(() => { input.current?.focus(); }, []);
-  useEffect(() => { onSearch(query ? options : null); }, [query, caseSensitive, wholeWord, sources, content, id, onSearch]);
+  useEffect(() => { onSearch(query ? options : null); }, [query, caseSensitive, wholeWord, sources, content, scope, id, onSearch]);
   useEffect(() => {
     generation.current += 1; selecting.current += 1;
     setSelected(null); onSelect(null); setPage(0); setPreviews([]);
     const timer = setTimeout(() => { if (query && id) void run("searchSession", { threadId: id, ...options }); }, 220);
     return () => { generation.current += 1; clearTimeout(timer); void run("cancelSessionSearch"); };
-  }, [query, caseSensitive, wholeWord, sources, content, id, refresh, run]);
+  }, [query, caseSensitive, wholeWord, sources, content, scope, id, refresh, run]);
   useEffect(() => {
     let cancelled = false;
     setPreviewError(null);
@@ -145,12 +148,13 @@ export function SessionFind({ state, preferences, onPreferences, onClose, onSele
       {totalPages > 1 ? <div className="find-pagination"><button className="text-button" aria-label="Previous results" disabled={!currentPage} onClick={() => setPage(currentPage - 1)}>Previous</button><span>{currentPage * PAGE_SIZE + 1}–{Math.min(matches.length, (currentPage + 1) * PAGE_SIZE)} of {matches.length}</span><button className="text-button" aria-label="Next results" disabled={currentPage === totalPages - 1} onClick={() => setPage(currentPage + 1)}>Next</button></div> : null}
     </div><div className="find-resize" role="separator" tabIndex={0} aria-label="Resize search results" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={maxHeight} aria-valuenow={Math.min(height, maxHeight)} title="Drag or use arrow keys to resize; double-click to reset" onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); drag.current = { y: event.clientY, height: Math.min(height, maxHeight) }; dragHeight.current = Math.min(height, maxHeight); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { if (drag.current) resize(drag.current.height + event.clientY - drag.current.y); }} onPointerUp={(event) => { finishResize(); if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }} onPointerCancel={finishResize} onLostPointerCapture={finishResize} onDoubleClick={() => { setHeight(280); onPreferences({ resultsHeight: 280 }); }} onKeyDown={(event) => { if (["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) { event.preventDefault(); onPreferences({ resultsHeight: resize(event.key === "Home" ? 120 : event.key === "End" ? maxHeight : Math.min(height, maxHeight) + (event.key === "ArrowDown" ? 20 : -20)) }); } }}><span className="find-grip" />Drag to resize results</div></> : null}
     {contextMenu && createPortal(<div ref={popup} className="find-context-popover" role="dialog" aria-label="Search filters and options" style={contextMenu}>
-      <fieldset><legend>Search in</legend><div className="find-filter-grid">{SEARCH_SOURCES.map(source => <label key={source}><input type="checkbox" checked={sources.includes(source)} onChange={() => setSources(sources.includes(source) ? sources.filter(item => item !== source) : SEARCH_SOURCES.filter(item => item === source || sources.includes(item)))} />{sourceLabels[source]}</label>)}</div></fieldset>
+      <label><input type="checkbox" checked={textOnly} onChange={() => setTextOnly(!textOnly)} />Message text only (progressive)</label>
+      <fieldset disabled={textOnly}><legend>Search in</legend><div className="find-filter-grid">{SEARCH_SOURCES.map(source => <label key={source}><input type="checkbox" checked={sources.includes(source)} onChange={() => setSources(sources.includes(source) ? sources.filter(item => item !== source) : SEARCH_SOURCES.filter(item => item === source || sources.includes(item)))} />{sourceLabels[source]}</label>)}</div></fieldset>
       <fieldset><legend>Containing any of</legend><div className="find-filter-grid">{SEARCH_CONTENT.map(feature => <label key={feature}><input type="checkbox" checked={content.includes(feature)} onChange={() => setContent(content.includes(feature) ? content.filter(item => item !== feature) : SEARCH_CONTENT.filter(item => item === feature || content.includes(item)))} />{contentLabels[feature]}</label>)}</div><p>Text and filenames are searched, not image pixels.</p></fieldset>
       <div className="find-filter-grid"><label><input type="checkbox" checked={caseSensitive} onChange={() => setCase(!caseSensitive)} />Match case</label><label><input type="checkbox" checked={wholeWord} onChange={() => setWord(!wholeWord)} />Whole word</label></div>
       <label className="find-filter-option">Context lines<select aria-label="Context lines" value={preferences.contextLines} onChange={event => onPreferences({ contextLines: Number(event.target.value) })}>{Array.from({ length: 11 }, (_, n) => <option key={n} value={n}>{n ? `${n} before + ${n} after` : "Matching line only"}</option>)}</select></label>
       <label className="find-filter-option">Order<select aria-label="Chronological order" value={preferences.order} onChange={event => { onPreferences({ order: event.target.value as SearchPreferences["order"] }); setPage(0); }}><option value="oldest">Oldest first</option><option value="newest">Newest first</option></select></label>
-      <div className="find-filter-actions"><button className="text-button" onClick={() => { setSources(SEARCH_SOURCES); setContent([]); setCase(false); setWord(false); }}>Reset filters</button><button className="icon-button" title="Refresh search" aria-label="Refresh search" disabled={!query} onClick={() => setRefresh(n => n + 1)}><RefreshCwIcon size={14} /></button><button className="text-button" onClick={() => { setContextMenu(null); contextButton.current?.focus(); }}>Done</button></div>
+      <div className="find-filter-actions"><button className="text-button" onClick={() => { setTextOnly(false); setSources(SEARCH_SOURCES); setContent([]); setCase(false); setWord(false); }}>Reset filters</button><button className="icon-button" title="Refresh search" aria-label="Refresh search" disabled={!query} onClick={() => setRefresh(n => n + 1)}><RefreshCwIcon size={14} /></button><button className="text-button" onClick={() => { setContextMenu(null); contextButton.current?.focus(); }}>Done</button></div>
     </div>, document.body)}
   </section>;
 }

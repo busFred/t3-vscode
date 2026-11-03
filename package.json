@@ -509,6 +509,7 @@
     "tailwind-merge": "3.4.0"
   },
   "devDependencies": {
+    "@types/mdast": "4.0.4",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.0",

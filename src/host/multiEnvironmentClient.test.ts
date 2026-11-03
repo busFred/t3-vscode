@@ -61,6 +61,7 @@ class FakeClient {
   async createAssetUrl(resource: unknown) { this.log("createAssetUrl", resource); return { url: `http://${this.name}/asset`, expiresAt: 1 }; }
   async uploadAttachment(input: unknown, bytes: Uint8Array) { this.log("uploadAttachment", input, bytes); return { id: `${this.name}-attachment` }; }
   async deleteAttachment(id: string) { this.log("deleteAttachment", id); }
+  async searchThreadStream(...args: unknown[]) { this.log("searchThreadStream", ...args); return async () => { this.log("stopThreadSearch"); }; }
   async searchThreads(query: string) { this.log("searchThreads", query); if (this.searchError) throw this.searchError; return this.searchResult; }
   emit(item: OrchestrationV2ShellStreamItem) { this.shellHandler!(item); }
   close() { this.connected = false; this.onClose?.(); }
@@ -479,4 +480,16 @@ test("dispose stops remotes and cancels pending retries", async () => {
   await new Promise((resolve) => setTimeout(resolve, 40));
   assert.equal(retry.connects, 0);
   assert.deepEqual(r.multi.remoteStatuses(), []);
+});
+
+test("Conversation find streams route to the owning environment and cancel there", async () => {
+  const r = await rig();
+  const remote = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 1));
+  await r.multi.snapshotShell();
+  const handler = () => {}, onError = () => {};
+  const stop = await r.multi.searchThreadStream("t-a", "needle", handler, onError);
+  assert.deepEqual(remote.callsNamed("searchThreadStream"), [["searchThreadStream", "t-a", "needle", handler, onError]]);
+  assert.equal(r.primary.callsNamed("searchThreadStream").length, 0);
+  await stop(); assert.equal(remote.callsNamed("stopThreadSearch").length, 1);
+  await r.multi.disconnect();
 });

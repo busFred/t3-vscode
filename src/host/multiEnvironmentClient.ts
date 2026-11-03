@@ -23,7 +23,7 @@ export interface RemoteEnvironmentStatus {
 }
 export interface ThreadEnvironment { readonly environmentId: string; readonly label: string }
 type RemoteClient = Partial<Pick<T3Client, "forceStopThread">> & Pick<T3Client, "createGuestShare" | "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
-  | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "answerLinkRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "createAssetUrl" | "uploadAttachment"
+  | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "answerLinkRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "searchThreadStream" | "createAssetUrl" | "uploadAttachment"
   | "deleteAttachment" | "getTurnDiff" | "subscribeWorktreeSetup" | "cancelWorktreeSetup" | "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
   | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
 /** What starting and composing a conversation on a paired machine, or cloning this repository there, needs from that machine's own server. */
@@ -352,6 +352,7 @@ export class MultiEnvironmentClient {
   /** Attachments live on the server of the conversation that will receive them. */
   async uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array, environmentId?: string) { return this.forEnvironment(environmentId).uploadAttachment(input, bytes); }
   async deleteAttachment(attachmentId: string, environmentId?: string) { return this.forEnvironment(environmentId).deleteAttachment(attachmentId); }
+  searchThreadStream(...args: Parameters<T3Client["searchThreadStream"]>) { return this.forThread(args[0]).searchThreadStream(...args); }
   async searchThreads(query: string): ReturnType<T3Client["searchThreads"]> {
     const local = await this.primary.searchThreads(query);
     const remotes = await Promise.allSettled([...this.remotes.values()].filter(remote => remote.state === "connected" && remote.client)

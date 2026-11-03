@@ -81,6 +81,12 @@ export class FakeTransport implements HostTransport {
     this.taskRuns.push(id); const task = { ...previous, lastRunStatus: "running" as const };
     this.scheduledTasks = this.scheduledTasks.map((entry) => entry.id === id ? task : entry); this.scheduledHandler?.(this.scheduledTasks); return { task };
   };
+  threadSearches: Array<Parameters<HostTransport["searchThreadStream"]>> = [];
+  threadSearchStops = 0;
+  searchThreadStream: HostTransport["searchThreadStream"] = async (...args) => {
+    this.threadSearches.push(args);
+    return async () => { this.threadSearchStops += 1; };
+  };
   async searchThreads(query: string) { this.searches.push(query); return this.searchMatches; }
   async searchPaths(cwd: string, query: string) { this.pathSearches.push({ cwd, query }); return this.pathEntries; }
   async refreshProviders(instanceId?: string, cwd?: string) { this.providerRefreshes.push({ instanceId, cwd }); return { providers: this.config.providers }; }

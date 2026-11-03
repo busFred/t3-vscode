@@ -129,8 +129,8 @@ export class BridgeHandler {
       const id = () => stringParam(params, "threadId");
       switch (message.method) {
         case "searchSession": {
-          if (typeof params.query !== "string" || typeof params.caseSensitive !== "boolean" || typeof params.wholeWord !== "boolean" || !["all", "messages"].includes(String(params.scope))) throw new Error("Invalid session search options.");
-          this.hostState.searchSession(id(), { query: params.query, caseSensitive: params.caseSensitive, wholeWord: params.wholeWord, scope: params.scope as "all" | "messages", ...parseSearchFilters(params) }, viewId); break;
+          if (typeof params.query !== "string" || typeof params.caseSensitive !== "boolean" || typeof params.wholeWord !== "boolean" || !["all", "messages", "text"].includes(String(params.scope))) throw new Error("Invalid session search options.");
+          this.hostState.searchSession(id(), { query: params.query, caseSensitive: params.caseSensitive, wholeWord: params.wholeWord, scope: params.scope as "all" | "messages" | "text", ...parseSearchFilters(params) }, viewId); break;
         }
         case "cancelSessionSearch": this.hostState.cancelSessionSearch(viewId); break;
         case "setSearchPreferences": await this.hostState.setSearchPreferences(searchPreferencePatch(params)); break;

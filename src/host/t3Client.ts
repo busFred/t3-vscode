@@ -9,7 +9,7 @@ import {
   PeerLinkRequestAnswerInput, SecretRequestAnswerInput, SecretRequestError, EnvironmentAuthorizationError,
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
-  type OrchestrationV2ThreadStreamItem, type ServerConfig,
+  type OrchestrationV2ThreadStreamItem, type ServerConfig, type OrchestrationV2SearchThreadResult,
   type ReviewDiffFileContentsInput, ProviderInstanceId, type AssetResource, type AttachmentCreateUploadUrlInput, ChatAttachment,
   ProjectCloneStartInput, type ProjectCloneListEvent,
 } from "@t3tools/contracts";
@@ -268,6 +268,11 @@ export class T3Client {
   getWebhookDelivery(id: string, deliveryId: string) { return this.run(this.requireSession().client[WS_METHODS.scheduledTasksGetWebhookDelivery]({ id: ScheduledTaskId.make(id), deliveryId: ScheduledTaskWebhookDeliveryId.make(deliveryId), acceptAnyOutcome: true })); }
   runScheduledTask(id: string) {
     return this.run(this.requireSession().client[WS_METHODS.scheduledTasksRunNow]({ id: ScheduledTaskId.make(id) }));
+  }
+  searchThreadStream(id: string, query: string, handler: (result: OrchestrationV2SearchThreadResult) => void, onError: (message: string) => void, index?: number): Promise<Subscription> {
+    const stream = this.requireSession().client[V2.searchThreadStream]({ threadId: threadId(id), query, ...(index === undefined ? {} : { index }) }).pipe(
+      Stream.catch((cause) => { onError(String(cause)); return Stream.empty; }));
+    return this.subscribe(stream, handler);
   }
   searchThreads(query: string) {
     return this.run(this.requireSession().client[V2.searchThreads]({ query, limit: 50 }));
