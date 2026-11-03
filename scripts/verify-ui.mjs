@@ -190,6 +190,12 @@ try {
   // The explanation lives in the title's info icon once machines are listed.
   assert.match(await page.locator('.environments .env-info').getAttribute('title'), /Conversations: .*Agents: /);
   assert.equal(await page.locator('.environments-body > .env-hint').filter({ hasText: /^Conversations:/ }).count(), 0);
+  // Health is a solid light on each machine's icon; a healthy machine shows no "Connected" text.
+  assert.equal(await page.locator('.environments .env-state').filter({ hasText: /Connected|Reachable/ }).count(), 0);
+  assert.equal(await page.locator('.environments .env-row .env-icon > .env-dot').count(), await page.locator('.environments .env-row').count());
+  assert.equal(await page.locator('.environments .env-row').first().locator('.env-icon > .env-dot').evaluate(dot => getComputedStyle(dot).backgroundColor), 'rgb(0, 200, 83)');
+  assert.equal(await page.locator('.environments .env-row').first().locator('.env-icon').getAttribute('aria-label'), 'This computer: Connected');
+  await page.locator('.environments').screenshot({ path: `${evidence}/machines-status-light.png` });
   // One remove per machine asks which capability to remove and describes each.
   const both = page.locator('.environments .env-row').filter({ hasText: 'Build machine' });
   await both.hover(); await both.getByRole('button', { name: 'Remove Build machine…' }).click();

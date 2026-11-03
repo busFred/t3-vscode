@@ -1059,3 +1059,12 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .env-project-clone > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .env-project-clone.failed { color: var(--destructive); }
 .env-project-unavailable { font-size: .6875rem; color: var(--muted-foreground); }
+/* Machine status: one solid light on the machine icon's bottom-right corner instead of a "Connected" label. */
+:root { --status-ok: rgb(0, 200, 83); --status-warn: rgb(255, 179, 0); --status-error: rgb(229, 57, 53); }
+.env-dot { background: var(--status-ok); }
+.env-dot.warn { background: var(--status-warn); }
+.env-dot.error { background: var(--status-error); }
+.connection-dot { background: var(--status-ok); }
+.env-icon { position: relative; grid-row: span 2; display: inline-flex; color: var(--muted-foreground); }
+.env-icon > .env-dot { position: absolute; right: -3px; bottom: -2px; width: 7px; height: 7px; box-shadow: 0 0 0 1.5px var(--sidebar, var(--vscode-sideBar-background)); }
+.env-icon > .env-dot.off { width: 5px; height: 5px; background: var(--sidebar, var(--vscode-sideBar-background)); }

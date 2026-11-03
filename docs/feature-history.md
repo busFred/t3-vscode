@@ -1639,6 +1639,7 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 #### v0.3.10
 
 - Each machine with Conversations shows whether this window's project is on it, or offers **Add *project*…** to clone it there from the sidebar, using the composer's clone form and pipeline without starting a chat. Clone progress, Cancel, Retry and Remove show on the machine's row.
+- Machine status is a solid light (green, amber, red; hollow when disabled) on the bottom-right of each machine's icon, replacing the "Connected" / "Reachable" text; other states keep their text.
 
 ### Managed policy
 

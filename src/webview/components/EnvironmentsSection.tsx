@@ -18,6 +18,15 @@ function Dot({ tone, label }: { readonly tone: "ok" | "warn" | "error" | "off"; 
   return <i className={`env-dot ${tone}`} {...(label ? { role: "img", "aria-label": label, title: label } : { "aria-hidden": true })} />;
 }
 
+/** The light on a machine's icon: its conversation connection, or for agent-only machines the link's health. */
+function machineStatus(machine: MachineRow): { tone: "ok" | "warn" | "error" | "off"; label: string } {
+  if (machine.local) return { tone: "ok", label: "Connected" };
+  const status = machine.conversation?.status;
+  if (status) return { connected: { tone: "ok", label: "Connected" }, connecting: { tone: "warn", label: "Connecting…" }, reconnecting: { tone: "warn", label: "Reconnecting…" },
+    expiring: { tone: "warn", label: machine.conversation?.detail ?? "Expiring soon" }, expired: { tone: "error", label: "Pairing expired" }, disabled: { tone: "off", label: "Disabled" } }[status] as { tone: "ok" | "warn" | "error" | "off"; label: string };
+  const health = machine.agents?.status;
+  return health === "reachable" ? { tone: "ok", label: "Reachable" } : health === "expired" ? { tone: "warn", label: "Agent access expired" } : { tone: "error", label: peerHealthLabel(health ?? "unreachable") };
+}
 export function EnvironmentsSection({ state }: { readonly state: HostStateSnapshot }) {
   const run = useActions();
   const [open, setOpen] = useState(false);
@@ -60,16 +69,14 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
     const buttons = text.map((action) => <Fragment key={action}>{iconButton(inlineOf[action].label, action, row, inlineOf[action].icon)}</Fragment>);
     const hover = icons.length ? <span className="env-hover-actions">{icons.map((action) => <Fragment key={action}>{iconOf[action](row)}</Fragment>)}</span> : null;
     switch (row.status) {
-      case "connected": return <>
-        <span className="env-resting"><Dot tone="ok" />Connected</span>
-        {hover}
-      </>;
+      // Healthy needs no words: the green light on the machine icon says it.
+      case "connected": return <>{hover}</>;
       case "connecting": return <span>Connecting…</span>;
-      case "reconnecting": return <><span className="env-warn"><Dot tone="warn" />Reconnecting…</span>{hover}{buttons}</>;
-      case "expiring": return <><span className="env-warn"><Dot tone="warn" />{row.detail ?? "Expiring soon"}</span>{hover}{buttons}</>;
-      case "expired": return <><span className="env-error"><Dot tone="error" />Expired</span>{hover}{buttons}</>;
+      case "reconnecting": return <><span className="env-warn">Reconnecting…</span>{hover}{buttons}</>;
+      case "expiring": return <><span className="env-warn">{row.detail ?? "Expiring soon"}</span>{hover}{buttons}</>;
+      case "expired": return <><span className="env-error">Expired</span>{hover}{buttons}</>;
       case "disabled": return <>
-        <span><Dot tone="off" />Disabled</span>{buttons}
+        <span>Disabled</span>{buttons}
         {hover}
       </>;
     }
@@ -82,9 +89,9 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
       {state.peerLinks?.denial && <p className="env-hint">{state.peerLinks.denial}</p>}
       {state.peerLinks?.error && <p role="alert">{state.peerLinks.error}</p>}
       {machines.map(machine => <div className={`env-row${machine.conversation?.ignored ? " ignored" : ""}`} key={machine.environmentId}>
-        {machine.local ? <LaptopMinimalIcon size={14} /> : <ServerIcon size={14} />}
+        {(() => { const { tone, label } = machineStatus(machine); return <span className="env-icon" role="img" aria-label={`${machine.local ? "This computer" : "Machine"}: ${label}`} title={label}>{machine.local ? <LaptopMinimalIcon size={14} aria-hidden="true" /> : <ServerIcon size={14} aria-hidden="true" />}<Dot tone={tone} /></span>; })()}
         <div className="env-name"><span title={machine.label}>{machine.label}</span>{machine.local && <span className="env-chip">This computer</span>}</div>
-        <div className={`env-state ${machine.conversation?.status ?? ""}`}>{machine.conversation ? stateOf(machine.conversation) : machine.local ? <span className="env-resting"><Dot tone="ok" />Connected</span> : machine.agents ? <><span className="env-resting">{peerHealthLabel(machine.agents.status)}</span><span className="env-hover-actions"><MachineRemoveButton machine={machine} peers={state.peerLinks} removeConversations={() => undefined} /></span></> : null}</div>
+        <div className={`env-state ${machine.conversation?.status ?? ""}`}>{machine.conversation ? stateOf(machine.conversation) : machine.local ? null : machine.agents ? <>{machine.agents.status === "reachable" ? null : <span className="env-resting">{peerHealthLabel(machine.agents.status)}</span>}<span className="env-hover-actions"><MachineRemoveButton machine={machine} peers={state.peerLinks} removeConversations={() => undefined} /></span></> : null}</div>
         <div className="env-meta" title={machine.conversation?.detail}>{machine.local ? meta(local?.host, local?.serverVersion) : meta(machine.conversation?.host, machine.conversation?.serverVersion)}{(machine.conversation?.managedOrganization ?? (machine.local ? state.localManagedPolicy?.organization : undefined)) && <span className="env-managed">Managed by {machine.conversation?.managedOrganization ?? state.localManagedPolicy?.organization}</span>}</div>
         <MachineCapabilities machine={machine} peers={state.peerLinks} pair={() => setAdding(machine)} project={<MachineProject state={state} machine={machine} />} />
       </div>)}
