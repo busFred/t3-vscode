@@ -279,6 +279,14 @@ The owner reviewed these and chose to ship as they are. None is a regression aga
 - Built `target-installer/t3-vscode-0.3.6.vsix` (45 files, 3.23 MB) from the clean commit with `preview: false`; the packaged manifest has version `0.3.6`, publisher `hungtienhuang` and no `PreRelease` property. SHA-256: `13f6d6c1aea83a70601bfc19174ccdd45225c6fe18fb5d144bf31526708bf476`.
 - At 20:58 UTC, `pnpm exec vsce publish --packagePath target-installer/t3-vscode-0.3.6.vsix` reported `DONE Published hungtienhuang.t3-vscode v0.3.6.` The first `vsce show` readback still listed 0.3.5 as latest, so listing refresh is pending. No Marketplace installation was attempted.
 
+## 0.3.10 release-channel publication
+
+- On November 3, 2026 the owner requested “release it” for the reviewed 0.3.10 candidate and explicitly confirmed merging back to `main`. Scope: stable release (`preview: false`), push `main`, annotated tag `v0.3.10`, Marketplace publication and a GitHub release with the VSIX/checksum. The manifest version stays 0.3.10.
+- Merged `feat/machine-status-dot` into `main` by fast-forward through `1bfc6b4`. Release metadata is the only subsequent change; product code remains the reviewed candidate.
+- Validation: the pre-cosmetic candidate passed 740 unit tests, typecheck/build, headless UI and 11 real VS Code undo checks. The final cosmetic badge/button update passed typecheck/build, three focused peer/environment test files and fixture syntax checks; its fresh-context regression review approved. The existing broader view-suite timeout at “Steer with queued message” remains documented.
+- Final fresh-context release review against `1bfc6b4`: approved with no blockers. Only release documentation changed; manifest/source/assets/undo guards are unchanged. Reviewer checks: diff whitespace, package/gate/UI script syntax, and stable manifest assertions passed.
+- Native undo was not rerun after the cosmetic update at the owner’s request. Release packaging retains the recorded waiver: “Owner requested skipping interactive tests for cosmetic machine badge/button visibility changes; composer, bridge and undo behavior are unchanged.” No interactive suites or normal-profile installation are part of this release step.
+
 ## 0.3.9 release-channel publication
 
 - On November 3, 2026 the owner asked for a release, which they define as: merge to `main`, push, tag, GitHub release and Marketplace publication. Version 0.3.9 was bumped at the owner's request. Channel: stable release (`preview: false`). Comparison revision: `ef9289a` (stable 0.3.7). Source commit: `8c44963`.
