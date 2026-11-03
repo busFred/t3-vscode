@@ -13,7 +13,8 @@ Read the version directly from `package.json`; use the same value in release not
 1. Complete the requested implementation and update the changelog and linked feature history without changing the manifest version.
 2. Run relevant unit, type, browser and isolated native checks; use GPT-6 Luna with low effort only when a live provider check is needed.
 3. Start a regression reviewer with fresh context, resolve blockers, obtain final signoff and record the outcome in the feature history.
-4. Run `pnpm package` and verify the VSIX version, publisher, channel metadata and bundled assets. Store the installer and checksum under `target-installer/`.
+4. Run `node scripts/verify-edh.mjs --base-dir <isolated-home> --undo-only` against an isolated T3 server. It records a stamp of the exact source, and `pnpm package` refuses to build without a matching one (see AGENTS.md, "Protected behavior: native undo").
+5. Run `pnpm package` and verify the VSIX version, publisher, channel metadata and bundled assets. Store the installer and checksum under `target-installer/`.
 
 The packaging script reads the existing manifest and derives the prerelease flag from `preview: true`. Keep packaging separate from publication, do not bump without the owner's specific request, and publish only the specifically authorized version/channel. Packaging does not authorize installation into the normal VS Code profile. T3 Code and providers remain separately installed applications.
 
