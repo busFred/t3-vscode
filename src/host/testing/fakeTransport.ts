@@ -10,6 +10,7 @@ export const provider: ServerProvider = { instanceId: ProviderInstanceId.make("k
 export const server = { origin: "http://audit.invalid", descriptor: { environmentId: "audit", label: "Audit" } } as DiscoveredServer;
 export const credentials = { get: async () => ({ origin: server.origin, environmentId: server.descriptor.environmentId, accessToken: "fake", expiresAt: Date.now() + 100_000, scopes: [] }), save: async () => {}, clear: async () => {} };
 export class FakeTransport implements HostTransport {
+  pullRequestRequest: HostTransport["pullRequestRequest"] = async () => { throw new Error("No pull request fixture."); };
   guestShareRequests: string[] = [];
   createGuestShare: HostTransport["createGuestShare"] = async (id) => {
     this.guestShareRequests.push(id);

@@ -1,8 +1,10 @@
+import { signInRequired, type PullRequestOperation, type PullRequestResponse } from "../shared/pullRequests.js";
 import { linkRequestFailureMessage } from "@t3tools/client-runtime/link-request";
 import { captureTurnBaseline, findTurnBaseline } from "./turnBaseline.js";
 /** Transport adapter over T3's vendored contracts and Effect RPC client. */
 import { randomUUID } from "node:crypto";
 import {
+  PullRequestRef, SourceControlSignInInput, SourceControlAppAccessInput,
   GuestShareCreateInput, OrchestrationV2ForceStopThreadInput, CommandId, ProjectId, ThreadId, TurnItemId, OrchestrationV2Command, ScheduledTaskId, ScheduledTaskWebhookDeliveryId, ScheduledTaskUpsertInput, type ScheduledTask,
   OrchestrationV2ThreadLaunchInput, VcsCreateWorktreeInput, VcsListRefsInput, GitPreparePullRequestThreadInput, GitRunStackedActionInput, ServerSettingsPatch, type WorktreeSetupStreamEvent,
   ORCHESTRATION_V2_WS_METHODS as V2, WS_METHODS,
@@ -152,6 +154,26 @@ export class T3Client {
   }
   removeWorktree(cwd: string, path: string, force = false) {
     return this.run(this.requireSession().client[WS_METHODS.vcsRemoveWorktree]({ cwd, path, force }));
+  }
+  pullRequestRequest<K extends PullRequestOperation>(id: string, operation: K, input: unknown): Promise<PullRequestResponse<K>>;
+  async pullRequestRequest(id: string, operation: PullRequestOperation, input: unknown): Promise<PullRequestResponse<PullRequestOperation>> {
+    const client = this.requireSession().client;
+    const request = <A, E>(effect: Effect.Effect<A, E, Services>) => this.run(effect.pipe(Effect.match({
+      onSuccess: (data): { data: A } => ({ data }),
+      onFailure: (cause) => ({ error: cause instanceof Error ? cause.message : String(cause), signInRequired: signInRequired(cause) }),
+    })));
+    switch (operation) {
+      case "summary": return request(client[WS_METHODS.pullRequestsSummary](Schema.decodeUnknownSync(PullRequestRef)(input)));
+      case "detail": return request(client[WS_METHODS.pullRequestsDetail](Schema.decodeUnknownSync(PullRequestRef)(input)));
+      case "checks": return request(client[WS_METHODS.pullRequestsChecks](Schema.decodeUnknownSync(PullRequestRef)(input)));
+      case "changeBreakdown": return request(client[WS_METHODS.pullRequestsChangeBreakdown](Schema.decodeUnknownSync(PullRequestRef)(input)));
+      case "reviewGuide": return request(client[WS_METHODS.pullRequestsReviewGuide](Schema.decodeUnknownSync(PullRequestRef)(input)));
+      case "generateReviewGuide": return request(client[WS_METHODS.pullRequestsGenerateReviewGuide](Schema.decodeUnknownSync(PullRequestRef)(input)));
+      case "signInStart": return request(client[WS_METHODS.sourceControlSignInStart](Schema.decodeUnknownSync(SourceControlSignInInput)(input)));
+      case "signInWait": return request(client[WS_METHODS.sourceControlSignInWait](Schema.decodeUnknownSync(SourceControlSignInInput)(input)));
+      case "signInCancel": return request(client[WS_METHODS.sourceControlSignInCancel](Schema.decodeUnknownSync(SourceControlSignInInput)(input)));
+      case "appAccess": return request(client[WS_METHODS.sourceControlAppAccess](Schema.decodeUnknownSync(SourceControlAppAccessInput)(input)));
+    }
   }
   preparePullRequest(input: unknown) {
     return this.run(this.requireSession().client[WS_METHODS.gitPreparePullRequestThread](Schema.decodeUnknownSync(GitPreparePullRequestThreadInput)(input)));

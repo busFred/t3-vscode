@@ -1,3 +1,4 @@
+import { conversationPullRequests, pullRequestHost, pullRequestOperations, type PullRequestOperation } from "../shared/pullRequests.js";
 import { managedCapabilityDenial, pendingGuestMessageCount, type ThreadGuestShare } from "@t3tools/contracts";
 import { relayMcpAppRequest, type McpAppNativePort } from "./mcpApps.js";
 import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
@@ -80,7 +81,7 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream" | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy">> | null }
+export type HostTransport = Pick<T3Client, "pullRequestRequest" | "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream" | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext"> & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy">> | null }
   // Remote environments: assets and attachments live on the server that owns the conversation.
   & { createAssetUrl(resource: AssetResource, threadId?: string): ReturnType<T3Client["createAssetUrl"]>;
     uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array, environmentId?: string): ReturnType<T3Client["uploadAttachment"]>;
@@ -1168,6 +1169,18 @@ export class HostState {
       await this.reconcileViews(true);
       this.scheduleWorktreeRefresh();
     });
+  }
+  async conversationPullRequest(id: string, operation: string, number: number, url: string) {
+    if (!pullRequestOperations.includes(operation as PullRequestOperation)) throw new Error("Unsupported pull request operation.");
+    const thread = this.requireThread(id);
+    const link = conversationPullRequests(thread).find(link => link.number === number && link.url === url);
+    if (!link) throw new Error("This pull request is not linked to the conversation.");
+    const definition = pullRequestHost(link.url);
+    const op = operation as PullRequestOperation;
+    const input = op.startsWith("signIn") || op === "appAccess"
+      ? { provider: definition.kind, host: link.host, ...(op === "appAccess" ? { repository: link.repository } : {}) }
+      : { projectId: thread.projectId, host: link.host, repository: link.repository, number: link.number };
+    return this.client.pullRequestRequest(id, op, input);
   }
   private requireThread(id: string): OrchestrationV2ThreadShell {
     if (!this.client.connected) throw new Error("T3 is disconnected.");

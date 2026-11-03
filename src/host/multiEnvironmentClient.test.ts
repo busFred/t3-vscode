@@ -48,6 +48,7 @@ class FakeClient {
     this.shellHandler = handler; return async () => { this.unsubscribes += 1; this.shellHandler = null; };
   }
   async subscribeThread(...args: unknown[]) { this.log("subscribeThread", ...args); return async () => {}; }
+  async pullRequestRequest(...args: unknown[]) { this.log("pullRequestRequest", ...args); return { data: { from: this.name } }; }
   async createGuestShare(id: string) { this.log("createGuestShare", id); return { url: `https://${this.name}/guest#credential` }; }
   async getThreadProjection(id: string) { this.log("getThreadProjection", id); return { from: this.name }; }
   async dispatch(input: unknown) { this.log("dispatch", input); }
@@ -515,4 +516,21 @@ test("Every MCP app RPC follows the producing thread to its environment, includi
   remote.connected = false;
   assert.throws(() => r.multi.mcpAppReadResource({ threadId: "remote-source" }), /disconnected/);
   assert.equal(r.primary.callsNamed("mcpApps.readResource").length, 1, "a disconnected remote must never fall through to the primary");
+});
+
+
+test("Conversation PR reads, generation and source-control sign-in follow the thread environment", async () => {
+  const r = await rig({ primaryShell: shell([project("local")], [thread("local-thread", "local")]) });
+  const remote = await pair(r, "pr-remote", shell([project("remote-project")], [thread("remote-thread", "remote-project")]));
+  try {
+    for (const operation of ["summary", "detail", "checks", "changeBreakdown", "reviewGuide", "generateReviewGuide", "signInStart", "signInWait", "signInCancel", "appAccess"] as const) {
+      const input = { projectId: "remote-project", host: "github.com", repository: "owner/repo", number: 12 };
+      assert.deepEqual(await r.multi.pullRequestRequest("remote-thread", operation, input), { data: { from: "pr-remote" } });
+      assert.deepEqual(remote.calls.at(-1), ["pullRequestRequest", "remote-thread", operation, input]);
+      assert.deepEqual(await r.multi.pullRequestRequest("local-thread", operation, input), { data: { from: "primary" } });
+      assert.deepEqual(r.primary.calls.at(-1), ["pullRequestRequest", "local-thread", operation, input]);
+    }
+    remote.connected = false;
+    await assert.rejects(async () => r.multi.pullRequestRequest("remote-thread", "summary", {}), /connect/i);
+  } finally { await r.multi.dispose(); }
 });

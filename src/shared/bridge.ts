@@ -22,6 +22,7 @@ import type { ProviderModelPreferences } from "./modelPreferences.js";
 import type { ScheduledTasksState } from "./scheduledTasks.js";
 
 export const Methods = {
+  conversationPullRequest: "conversationPullRequest",
   refreshWorktrees: "refreshWorktrees", configureWorktree: "configureWorktree", newWorktreeChat: "newWorktreeChat", worktreeAction: "worktreeAction", sessionBranch: "sessionBranch", saveWorktreeSettings: "saveWorktreeSettings", worktreeReview: "worktreeReview",
   rotateWebhookToken: "rotateWebhookToken", listWebhookDeliveries: "listWebhookDeliveries", getWebhookDelivery: "getWebhookDelivery", refreshScheduledTasks: "refreshScheduledTasks", saveScheduledTask: "saveScheduledTask", setScheduledTaskEnabled: "setScheduledTaskEnabled", runScheduledTask: "runScheduledTask", editScheduledTask: "editScheduledTask",
   searchSession: "searchSession", cancelSessionSearch: "cancelSessionSearch", revealSessionMatch: "revealSessionMatch",

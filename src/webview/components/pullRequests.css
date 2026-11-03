@@ -1,0 +1,12 @@
+.conversation-pr-list { padding: 10px; overflow-wrap: anywhere; }
+.conversation-pr + .conversation-pr { border-top: 1px solid var(--vscode-panel-border); margin-top: 12px; padding-top: 12px; }
+.conversation-pr header { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.conversation-pr h3, .conversation-pr h4 { margin: 10px 0 6px; }
+.conversation-pr p { margin: 6px 0; }
+.conversation-pr [role=alert] { color: var(--vscode-errorForeground); }
+.pr-breakdown { margin: 8px 0; }
+.pr-breakdown > div { display: flex; justify-content: space-between; gap: 12px; }
+.pr-breakdown dt { text-transform: capitalize; }
+.thread-pr { font-size: 10px; color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.conversation-pr-control { max-width: 260px; min-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -22,7 +22,7 @@ export interface RemoteEnvironmentStatus {
   readonly expiresAt: number | null; readonly ignoredStatus?: IgnorableEnvironmentStatus;
 }
 export interface ThreadEnvironment { readonly environmentId: string; readonly label: string }
-type RemoteClient = Partial<Pick<T3Client, "forceStopThread">> & Pick<T3Client, "createGuestShare" | "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
+type RemoteClient = Partial<Pick<T3Client, "forceStopThread">> & Pick<T3Client, "pullRequestRequest" | "createGuestShare" | "connect" | "disconnect" | "connected" | "onClose" | "onConfig" | "config" | "snapshotShell" | "subscribeShell" | "subscribeThread"
   | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "answerLinkRequest" | "getHistory" | "getTurnItem" | "searchThreads" | "searchThreadStream" | "createAssetUrl" | "uploadAttachment"
   | "deleteAttachment" | "getTurnDiff" | "subscribeWorktreeSetup" | "cancelWorktreeSetup" | "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
   | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
@@ -371,6 +371,7 @@ export class MultiEnvironmentClient {
   listRefs(input: unknown) { return this.primary.listRefs(input); }
   createWorktree(input: unknown) { return this.primary.createWorktree(input); }
   removeWorktree(cwd: string, path: string, force = false) { return this.primary.removeWorktree(cwd, path, force); }
+  pullRequestRequest<K extends import("../shared/pullRequests.js").PullRequestOperation>(id: string, operation: K, input: unknown) { return this.forThread(id).pullRequestRequest(id, operation, input); }
   preparePullRequest(input: unknown) { return this.primary.preparePullRequest(input); }
   getSettings() { return this.primary.getSettings(); }
   updateSettings(patch: unknown) { return this.primary.updateSettings(patch); }

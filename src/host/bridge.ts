@@ -268,6 +268,7 @@ export class BridgeHandler {
           if (!assetReference) throw new Error("Unsupported chat asset.");
           return { id: message.id, result: await this.hostState.chatAsset(id(), { sourceThreadId: stringParam(params, "sourceThreadId"), itemId: stringParam(params, "itemId") }, assetReference, viewId) };
         }
+        case "conversationPullRequest": return { id: message.id, result: await this.hostState.conversationPullRequest(id(), stringParam(params, "operation"), Number(params.number), stringParam(params, "url")) };
         case "refreshUsage": await this.hostState.refreshUsage(); break;
         case "turnDiffSummary": {
           const sourceThreadId = stringParam(params, "sourceThreadId"), itemId = stringParam(params, "itemId");

@@ -1,3 +1,4 @@
+import { ConversationPullRequest } from "./ConversationPullRequest";
 import { GuestShareIndicator, GuestPendingMessages } from "./GuestShareControls";
 import type { SessionSearchOptions } from "../../shared/sessionSearch";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -93,6 +94,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
         {thread ? <GuestShareIndicator key={thread.id} thread={thread} /> : null}
         {thread?.pendingGuestMessageCount ? <span className="guest-message-badge" title="Guest messages waiting" aria-label={`${thread.pendingGuestMessageCount} guest messages waiting`}>{thread.pendingGuestMessageCount}</span> : null}
         <WorktreeHeader state={state} />
+        {thread ? <ConversationPullRequest key={thread.id} thread={thread} /> : null}
         {thread ? <button className="icon-button" aria-label="Scheduled tasks" title={`Scheduled tasks (${state.scheduledTasks?.tasks.filter((task) => task.projectId === thread.projectId && task.originThreadId === thread.id).length ?? 0}) — tasks created by this session`} aria-expanded={scheduledOpen} onClick={() => setScheduledOpen(!scheduledOpen)}><CalendarClockIcon size={15} /></button> : null}
         {thread ? <button className="icon-button" aria-label="Find in session" title="Find in this session (Ctrl/Cmd+F)" onClick={() => { setHistoryOpen(false); if (findOpen) closeFind(); else setFindOpen(true); }}><SearchIcon size={15} /></button> : null}
         <button ref={historyAnchor} className="icon-button" aria-label="History" title="History — switch conversation in this tab" aria-expanded={historyOpen} aria-controls={historyOpen ? "session-history" : undefined} onClick={() => { setHistoryOpen(!historyOpen); setThreadMenu(null); }}><HistoryIcon size={15} /></button>
