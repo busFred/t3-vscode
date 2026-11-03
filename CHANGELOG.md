@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (after v0.3.7)
+
+- Faster sidebar and transcript updates with many sessions and while replies stream; hidden views no longer receive updates until shown.
+
 ## 0.3.7 — Release
 
 - Tag conversations, filter by several tags at once from the tag button beside Sort, hide tagged threads, and reorder pinned conversations.

@@ -217,6 +217,8 @@ export class HostState {
   private revision = 0;
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
   private emitting: Map<string, HostStateSnapshot> | null = null;
+  /** Thread and project derivations memoized while one snapshot is built; null outside a build so state changes are always seen. */
+  private derived: Map<string, unknown> | null = null;
   private readonly clipboardNonce = randomUUID();
   private readonly retainedHistory = new Map<string, { projection: OrchestrationV2ThreadProjection; history: ThreadHistoryMeta }>();
   private readonly listeners = new Map<(state: HostStateSnapshot) => void, string>();
@@ -728,6 +730,13 @@ export class HostState {
     await this.client.dispatch({ type: "thread.visit", commandId: randomUUID(), threadId, visitedAt });
   });
   private snoozeWake: { at: number; timer: ReturnType<typeof setTimeout> } | null = null;
+  /** What a tab title needs, without building the view's whole snapshot. */
+  viewTitle(viewId: string, taskId?: string): { activeThreadId: string | undefined; threadTitle: string | undefined; taskTitle: string | undefined } {
+    const thread = this.findThread(this.views.get(viewId)?.activeThreadId);
+    const task = taskId === undefined ? undefined : this.scheduledTasks.find((item) => item.id === taskId);
+    const taskVisible = !!task && this.visibleProjects().some((project) => project.id === task.projectId);
+    return { activeThreadId: thread?.id, threadTitle: thread?.title, taskTitle: taskVisible ? task!.title : undefined };
+  }
   setViewVisible(viewId: string, visible: boolean): void {
     if (visible === this.visibleViews.has(viewId)) return;
     if (visible) this.visibleViews.add(viewId); else this.visibleViews.delete(viewId);
@@ -1073,7 +1082,13 @@ export class HostState {
     this.reconcileRemovedThreads();
     this.scheduleEmit();
   }
-  private allThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
+  private memo<T>(key: string, compute: () => T): T {
+    if (!this.derived) return compute();
+    if (this.derived.has(key)) return this.derived.get(key) as T;
+    const value = compute(); this.derived.set(key, value); return value;
+  }
+  private allThreads(): ReadonlyArray<OrchestrationV2ThreadShell> { return this.memo("allThreads", () => this.computeAllThreads()); }
+  private computeAllThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
     const active = this.shell?.threads ?? [];
     const activeIds = new Set(active.map((thread) => thread.id));
     return [...active, ...(this.archive?.threads ?? this.shell?.archivedThreads ?? []).filter((thread) => !activeIds.has(thread.id))];
@@ -1107,8 +1122,18 @@ export class HostState {
     }
     if (this.pathInWorkspace(project.workspaceRoot)) return true;
     const common = this.repositoryIdentities.get(this.pathIdentity(project.workspaceRoot));
+    const worktrees = this.projectWorktreeIdentities().get(project.id);
     return this.workspaceRoots().some(root => common && this.repositoryIdentities.get(this.pathIdentity(root)) === common
-      || this.allThreads().some(t => t.projectId === project.id && t.worktreePath && this.pathIdentity(t.worktreePath) === this.pathIdentity(root)));
+      || !!worktrees?.has(this.pathIdentity(root)));
+  }
+  private projectWorktreeIdentities(): ReadonlyMap<string, ReadonlySet<string>> {
+    return this.memo("projectWorktrees", () => {
+      const result = new Map<string, Set<string>>();
+      for (const thread of this.allThreads()) if (thread.worktreePath) {
+        const set = result.get(thread.projectId) ?? new Set<string>(); set.add(this.pathIdentity(thread.worktreePath)); result.set(thread.projectId, set);
+      }
+      return result;
+    });
   }
   /** The window folder whose Git remote matches a remote project's repository. */
   private repositoryRoot(project: { repositoryIdentity?: { readonly canonicalKey: string } | null | undefined }): string | undefined {
@@ -1124,11 +1149,12 @@ export class HostState {
     const inside = relative(remoteRoot, path);
     return inside === "" ? localRoot : !inside.startsWith("..") && !isAbsolute(inside) ? join(localRoot, inside) : path;
   }
-  private visibleProjects() { return this.shell?.projects.filter(project => this.projectContainsWorkspace(project)) ?? []; }
+  private visibleProjects() { return this.memo("visibleProjects", () => this.shell?.projects.filter(project => this.projectContainsWorkspace(project)) ?? []); }
   private localProjects() { return this.shell?.projects.filter(project => !this.remoteProject(project.id)) ?? []; }
   /** Projects new conversations, checkouts and file references can use: remote environments are browse-and-reply only. */
   private visibleLocalProjects() { return this.visibleProjects().filter(project => !this.remoteProject(project.id)); }
-  private visibleThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
+  private visibleThreads(): ReadonlyArray<OrchestrationV2ThreadShell> { return this.memo("visibleThreads", () => this.computeVisibleThreads()); }
+  private computeVisibleThreads(): ReadonlyArray<OrchestrationV2ThreadShell> {
     const projects = new Set(this.visibleProjects().map((project) => project.id));
     const all = this.allThreads().filter(thread => !thread.deletedAt);
     const byId = new Map(all.map(thread => [thread.id, thread]));
@@ -1157,7 +1183,10 @@ export class HostState {
     }
     return all.filter(thread => visible.has(thread.id));
   }
-  private findThread(id: string | undefined) { return this.visibleThreads().find((thread) => thread.id === id); }
+  private findThread(id: string | undefined): OrchestrationV2ThreadShell | undefined {
+    if (!this.derived) return this.visibleThreads().find((thread) => thread.id === id);
+    return id === undefined ? undefined : this.memo("visibleThreadById", () => new Map(this.visibleThreads().map((thread) => [thread.id as string, thread]))).get(id);
+  }
   private latestThreadId(): string | undefined {
     return [...this.visibleThreads()].filter((thread) => !thread.archivedAt)
       .sort((a, b) => DateTime.toEpochMillis(b.updatedAt) - DateTime.toEpochMillis(a.updatedAt))[0]?.id;
@@ -2626,7 +2655,9 @@ export class HostState {
     // Listeners of one emit (bridge push, tab titles, status bar) share each view's snapshot.
     const cached = this.emitting?.get(viewId);
     if (cached) return cached;
-    const state = this.buildSnapshot(viewId);
+    const outer = this.derived; this.derived = new Map();
+    let state: HostStateSnapshot;
+    try { state = this.buildSnapshot(viewId); } finally { this.derived = outer; }
     this.emitting?.set(viewId, state); return state;
   }
   private buildSnapshot(viewId: string): HostStateSnapshot {
@@ -2675,11 +2706,11 @@ export class HostState {
       ...((activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))?.managedPolicy ? { managedPolicy: (activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))!.managedPolicy } : {}),
       ...(this.client.config?.managedPolicy ? { localManagedPolicy: this.client.config.managedPolicy } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
-      scheduledTasks: { loading: this.scheduledTasksLoading, ...(this.scheduledTaskError ? { error: this.scheduledTaskError } : {}), tasks: this.scheduledTasks.filter((task) => this.visibleProjects().some((project) => project.id === task.projectId)).map((task) => {
-        const association = this.options.taskOrigins?.().find((origin) => origin.environmentId === descriptor?.environmentId && origin.projectId === task.projectId && origin.taskId === task.id);
+      scheduledTasks: { loading: this.scheduledTasksLoading, ...(this.scheduledTaskError ? { error: this.scheduledTaskError } : {}), tasks: (() => { const origins = this.options.taskOrigins?.(); return this.scheduledTasks.filter((task) => this.visibleProjects().some((project) => project.id === task.projectId)).map((task) => {
+        const association = origins?.find((origin) => origin.environmentId === descriptor?.environmentId && origin.projectId === task.projectId && origin.taskId === task.id);
         const serverOrigin = typeof task.originThreadId === "string" && this.findThread(task.originThreadId)?.projectId === task.projectId ? task.originThreadId : null;
         return { ...task, editVersion: taskEditVersion(task), originThreadId: association ? association.threadId : serverOrigin, originKnown: !!association || serverOrigin !== null };
-      }) },
+      }); })() },
       projects: this.visibleProjects().map((project) => { const remote = this.remoteProject(project.id);
         return { id: project.id, title: project.title, workspaceRoot: project.workspaceRoot, ...(remote ? { environmentLabel: remote.label } : {}) }; }),
       ...(activeThreadId && this.remoteThread(activeThreadId) ? { remoteSession: this.remoteThread(activeThreadId)! } : {}),

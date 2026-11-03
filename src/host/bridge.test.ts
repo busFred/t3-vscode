@@ -104,6 +104,29 @@ test("Bridge replies and state pushes are scoped to each originating webview", a
   await assert.rejects(first.request("newThread"), /tab has been closed/);
 });
 
+test("Hidden views receive no state pushes and catch up with the latest state when shown", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry);
+  const shown = new FakeWebview(), hidden = new FakeWebview();
+  host.registerView("tab-one"); host.registerView("tab-two");
+  for (const [id, view] of [["tab-one", shown], ["tab-two", hidden]] as const) { registry.add(id, view.webview); bridge.attach(view.webview, id); }
+  await host.selectThread("second", "tab-one"); await host.selectThread("third", "tab-two");
+  const states = (view: FakeWebview) => view.messages.filter((raw) => (raw as { event?: string }).event === Events.stateChanged) as Array<{ data: HostStateSnapshot }>;
+  bridge.pushState();
+  assert.equal(states(hidden).length, 1);
+  registry.setVisible("tab-two", false);
+  publishText(client, "third", "written while hidden");
+  bridge.pushState(); bridge.pushState();
+  assert.equal(states(shown).length, 3);
+  assert.equal(states(hidden).length, 1);
+  registry.setVisible("tab-two", true);
+  assert.equal(states(hidden).length, 2);
+  assert.deepEqual(states(hidden).at(-1)!.data.transcript, host.snapshot("tab-two").transcript);
+  assert.equal(hidden.incomplete, 0);
+  registry.setVisible("tab-two", true);
+  assert.equal(states(hidden).length, 2);
+});
+
 test("A view re-resolved under the same id starts whole; replies encoded for its old webview cannot advance the new one", async (t) => {
   const { host } = await viewsHarness(); t.after(() => host.dispose());
   const registry = new WebviewRegistry(), old = new FakeWebview(), current = new FakeWebview();

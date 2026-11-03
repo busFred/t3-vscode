@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useState, type CSSProperties, type ReactNode } from "react";
 import { CheckIcon, CopyIcon, WrapTextIcon } from "lucide-react";
 import { useActions } from "../actions";
 import { codeBlockLanguageName, codeBlockLayout } from "../../shared/codeBlock";
@@ -9,7 +9,7 @@ import { setCodeBlockWrapped, useCodeBlockWrapped } from "../codeBlockWrap";
  * number, with nothing measured. The numbers are generated content, so they can be neither selected nor searched,
  * while each line keeps its closing newline so the displayed text, and a copied selection, are the source.
  */
-export function CodeBlock({ code, language, startLine }: {
+export const CodeBlock = memo(function CodeBlock({ code, language, startLine }: {
   readonly code: string;
   readonly language?: string;
   /** First line's number; defaults to 1. Lets a file-range snippet show its real line numbers. */
@@ -27,4 +27,4 @@ export function CodeBlock({ code, language, startLine }: {
     </div>
     <pre className="code-block-body" tabIndex={wrap ? undefined : 0}><code className={language ? `language-${language}` : undefined}>{lines.map((line, index) => <span className="code-block-line" key={index}><span className="code-block-number" data-line={first + index} aria-hidden="true" /><span className="code-block-text">{line + "\n"}</span></span>)}</code></pre>
   </div>;
-}
+});

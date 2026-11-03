@@ -27,12 +27,18 @@ function PullRequestPanel({ thread, link }: { thread: ThreadSummary; link: NonNu
   useEffect(() => {
     const request = <K extends PullRequestOperation>(operation: K) => bridge.request<PullRequestResponse<K>>("conversationPullRequest", { threadId: thread.id, operation, number: link.number, url: link.url }, operation === "signInWait" ? 20 * 60_000 : undefined);
     const model = new PullRequestStateController(request, setState); controller.current = model;
-    void model.refresh();
-    const timer = setInterval(() => {
-      if (model.state.data.reviewGuide?.run?._tag === "Running" && !model.state.loading.reviewGuide) void model.load("reviewGuide");
-    }, 2000);
-    const checksTimer = setInterval(() => { void model.load("summary"); void model.load("checks"); }, 45_000);
-    return () => { clearInterval(timer); clearInterval(checksTimer); model.dispose(); controller.current = null; };
+    let timer: ReturnType<typeof setInterval> | undefined, checksTimer: ReturnType<typeof setInterval> | undefined;
+    const visibility = () => {
+      clearInterval(timer); clearInterval(checksTimer);
+      if (document.hidden) return;
+      void model.refresh();
+      timer = setInterval(() => {
+        if (model.state.data.reviewGuide?.run?._tag === "Running" && !model.state.loading.reviewGuide) void model.load("reviewGuide");
+      }, 2000);
+      checksTimer = setInterval(() => { void model.load("summary"); void model.load("checks"); }, 45_000);
+    };
+    visibility(); document.addEventListener("visibilitychange", visibility);
+    return () => { clearInterval(timer); clearInterval(checksTimer); document.removeEventListener("visibilitychange", visibility); model.dispose(); controller.current = null; };
   }, [thread.id, link.url, link.number]);
   const detail = resolvePullRequestDetailChecks(state.data.detail ?? null, state.data.checks ?? null, true);
   const summary = state.data.summary;

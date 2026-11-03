@@ -1,3 +1,4 @@
+import { retryDelay } from "./renderScheduling";
 /** Renderer-local drafts are independent in each webview, including contexts for inactive conversations. */
 import { useEffect, useSyncExternalStore } from "react";
 import { bridge } from "./bridge-client";
@@ -104,7 +105,9 @@ function restore(key: string): Promise<void> {
 }
 export function useDraftRecovery(key: string): DraftRecovery {
   const status = useSyncExternalStore(listener => subscribe(key, listener), () => recovery.get(key) ?? RESTORING);
-  useEffect(() => { if (status.ready) return; void restore(key); const timer = setInterval(() => { void restore(key); }, 1500); return () => clearInterval(timer); }, [key, status.ready]);
+  useEffect(() => { if (status.ready) return; let cancelled = false, failures = 0; let timer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = async () => { await restore(key); if (cancelled) return; if (recovery.get(key)?.ready) { failures = 0; return; } timer = setTimeout(() => { void attempt(); }, retryDelay(failures++)); };
+    void attempt(); return () => { cancelled = true; clearTimeout(timer); }; }, [key, status.ready]);
   const pending = readDraft(key).attachments?.some(file => file.pending);
   useEffect(() => { if (!status.ready || !pending) return; const timer = setInterval(() => { void restore(key); }, 750); return () => clearInterval(timer); }, [key, status.ready, pending]);
   return status;
