@@ -35,15 +35,20 @@ function MachineRemoveMenu({ anchor, machine, canRemoveAgents, removeConversatio
     const node = popup.current!; const box = anchor.getBoundingClientRect();
     setPosition(clampMenuPosition({ x: box.right - node.offsetWidth, y: box.bottom + 4 }, { width: node.offsetWidth, height: node.offsetHeight }, { width: innerWidth, height: innerHeight }));
     node.querySelector<HTMLButtonElement>("button")?.focus();
-  }, [anchor, confirming]);
+  }, [anchor]);
+  // The confirm step replaces the options in place; only move focus into it.
+  useLayoutEffect(() => { if (confirming) popup.current?.querySelector<HTMLButtonElement>("button")?.focus(); }, [confirming]);
+  const busyRef = useRef(false); busyRef.current = busy;
   useEffect(() => {
-    const outside = (event: PointerEvent) => { if (!popup.current?.contains(event.target as Node) && !anchor.contains(event.target as Node)) onClose(); };
-    document.addEventListener("pointerdown", outside); window.addEventListener("resize", onClose); window.addEventListener("blur", onClose);
-    return () => { document.removeEventListener("pointerdown", outside); window.removeEventListener("resize", onClose); window.removeEventListener("blur", onClose); };
+    // An unlink in flight keeps the menu, so its failure can still be shown.
+    const dismiss = () => { if (!busyRef.current) onClose(); };
+    const outside = (event: PointerEvent) => { if (!popup.current?.contains(event.target as Node) && !anchor.contains(event.target as Node)) dismiss(); };
+    document.addEventListener("pointerdown", outside); window.addEventListener("resize", dismiss); window.addEventListener("blur", dismiss);
+    return () => { document.removeEventListener("pointerdown", outside); window.removeEventListener("resize", dismiss); window.removeEventListener("blur", dismiss); };
   }, [anchor, onClose]);
   const close = () => { onClose(); anchor.focus(); };
   return createPortal(<div ref={popup} className="selection-context-menu machine-remove-menu" role="menu" aria-label={`Remove ${machine.label}`} style={{ left: position.x, top: position.y }} onKeyDown={event => {
-    if (event.key === "Escape" || event.key === "Tab") { if (event.key === "Escape") event.preventDefault(); event.stopPropagation(); close(); return; }
+    if (event.key === "Escape" || event.key === "Tab") { if (event.key === "Escape") event.preventDefault(); event.stopPropagation(); if (!busyRef.current) close(); return; }
     const buttons = [...popup.current!.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")]; const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     const next = event.key === "ArrowDown" ? (index + 1) % buttons.length : event.key === "ArrowUp" ? (index - 1 + buttons.length) % buttons.length : -1;
     if (next >= 0) { event.preventDefault(); buttons[next]?.focus(); }

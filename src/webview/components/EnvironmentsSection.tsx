@@ -75,7 +75,7 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
   };
   const local = environments.local;
   return <><details ref={section} className="environments" data-sized={listHeight !== null || undefined} style={listHeight !== null ? { "--env-list-height": `${listHeight}px` } as CSSProperties : undefined} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary><ChevronDownIcon size={12} /><strong>MACHINES</strong><span className="env-info" role="img" aria-label={MACHINES_HELP} title={MACHINES_HELP}><InfoIcon size={11} /></span><span className="env-summary-dot"><Dot tone={environments.indicator} label={summary} /></span></summary>
+    <summary aria-description={MACHINES_HELP}><ChevronDownIcon size={12} /><strong>MACHINES</strong><span className="env-info" aria-hidden="true" title={MACHINES_HELP}><InfoIcon size={11} /></span><span className="env-summary-dot"><Dot tone={environments.indicator} label={summary} /></span></summary>
     <div className="environments-body">
       {machines.every((machine) => machine.local) ? <p className="env-hint">{MACHINES_HELP}</p> : null}
       {state.peerLinks?.denial && <p className="env-hint">{state.peerLinks.denial}</p>}

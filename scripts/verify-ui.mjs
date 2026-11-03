@@ -205,6 +205,7 @@ try {
   await vps.hover(); await vps.getByRole('button', { name: 'Remove Agent VPS…' }).click();
   assert.deepEqual(await page.getByRole('menu', { name: 'Remove Agent VPS' }).getByRole('menuitem').evaluateAll(items => items.map(item => item.querySelector('strong')?.textContent)), ['Remove agent access']);
   await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Remove Agent VPS…', 'Escape returns focus to the remove button');
   const localMachine = page.locator('.environments .env-row').filter({ hasText: 'Local workstation' });
   assert.equal(await localMachine.getByText('Let agents use this…').count(), 0);
   await page.screenshot({ path: `${evidence}/machines-merged.png` });
