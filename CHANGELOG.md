@@ -4,6 +4,7 @@
 
 - Machines: one remove menu per machine that asks whether to remove the conversations from VS Code or the agent access, describing each; an ⓘ replaces the standing description; chips read "Agents (Auto)"; roomier rows.
 - Account & Usage: only Per account folds usage windows; Pooled no longer folds.
+- Validation: typecheck clean; 728/728 unit tests; `pnpm run build`; `scripts/verify-ui.mjs` passes, with new remove-menu, chip, info-icon, focus-return and Pooled no-fold checks. Fresh-context Opus regression review: APPROVE WITH NITS, and all five nits are fixed (menu anchoring and focus on reconnecting rows, in-flight unlink, wording, info-icon name). Not exercised in a live VS Code window. Local installer `target-installer/t3-vscode-0.3.9.vsix` (SHA-256 `38f8afb21d3f37e4fb7f9d5a57b4a324ad409b2b1fd63f960c0145bef68eef52`), not installed or published.
 
 ## 0.3.8 — Local build
 
