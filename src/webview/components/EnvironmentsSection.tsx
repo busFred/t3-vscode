@@ -1,14 +1,16 @@
 import { mergeMachines, type MachineRow } from "../machines";
 import { AddMachineForm, MachineCapabilities, peerHealthLabel } from "./PeerLinksSection";
+import { MachineRemoveButton } from "./MachineRemoveMenu";
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useEnvironmentsHeight } from "../environmentsHeight";
 import { clampSectionHeight } from "../sectionHeight";
-import { BellIcon, BellOffIcon, ChevronDownIcon, LaptopMinimalIcon, LinkIcon, PlayIcon, PlusIcon, PowerIcon, RefreshCwIcon, ServerIcon, Trash2Icon } from "lucide-react";
+import { BellIcon, BellOffIcon, ChevronDownIcon, InfoIcon, LaptopMinimalIcon, LinkIcon, PlayIcon, PlusIcon, PowerIcon, RefreshCwIcon, ServerIcon, Trash2Icon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import type { EnvironmentRow } from "../../shared/environmentStatus";
 import { environmentRowActions, type EnvironmentActionName, type EnvironmentIconAction } from "../../shared/environmentActions";
 import { useActions } from "../actions";
 
+const MACHINES_HELP = "Conversations: the machine's conversations appear in VS Code and new chats can run there. Agents: agents on this computer can launch and drive threads there.";
 const meta = (...parts: ReadonlyArray<string | undefined>) => parts.filter(Boolean).join(" · ");
 
 function Dot({ tone, label }: { readonly tone: "ok" | "warn" | "error" | "off"; readonly label?: string }) {
@@ -42,13 +44,16 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
   const iconOf: Record<EnvironmentIconAction, (row: EnvironmentRow) => ReactNode> = {
     reconnect: (row) => iconButton("Reconnect", "reconnect", row, <RefreshCwIcon size={13} />),
     disable: (row) => iconButton("Disable", "disable", row, <PowerIcon size={13} />),
-    remove: (row) => iconButton("Remove", "remove", row, <Trash2Icon size={13} />, true),
+    // One remove per machine: it asks whether to remove the VS Code conversations, the agent access, or (in turn) both.
+    remove: (row) => { const machine = machines.find((item) => item.environmentId === row.environmentId);
+      return machine ? <MachineRemoveButton machine={machine} peers={state.peerLinks} removeConversations={() => act("remove", row.environmentId)} /> : iconButton("Remove", "remove", row, <Trash2Icon size={13} />, true); },
   };
   // Beside the status, each is an icon button like the hover icons; the title and the machine-named label keep it readable.
   const inlineOf = {
     pairAgain: { label: "Pair again", icon: <LinkIcon size={13} /> }, enable: { label: "Enable", icon: <PlayIcon size={13} /> },
     ignore: { label: "Ignore", icon: <BellOffIcon size={13} /> }, unignore: { label: "Unignore", icon: <BellIcon size={13} /> },
   } as const;
+  const machines = mergeMachines(environments, state.peerLinks);
   const stateOf = (row: EnvironmentRow): ReactNode => {
     const { text, icons } = environmentRowActions(row);
     const buttons = text.map((action) => <Fragment key={action}>{iconButton(inlineOf[action].label, action, row, inlineOf[action].icon)}</Fragment>);
@@ -70,15 +75,15 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
   };
   const local = environments.local;
   return <><details ref={section} className="environments" data-sized={listHeight !== null || undefined} style={listHeight !== null ? { "--env-list-height": `${listHeight}px` } as CSSProperties : undefined} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary><ChevronDownIcon size={12} /><strong>MACHINES</strong><span className="env-summary-dot"><Dot tone={environments.indicator} label={summary} /></span></summary>
+    <summary aria-description={MACHINES_HELP}><ChevronDownIcon size={12} /><strong>MACHINES</strong><span className="env-info" aria-hidden="true" title={MACHINES_HELP}><InfoIcon size={11} /></span><span className="env-summary-dot"><Dot tone={environments.indicator} label={summary} /></span></summary>
     <div className="environments-body">
-      <p className="env-hint">Conversations appear in VS Code. Agents can use machines to launch and drive threads.</p>
+      {machines.every((machine) => machine.local) ? <p className="env-hint">{MACHINES_HELP}</p> : null}
       {state.peerLinks?.denial && <p className="env-hint">{state.peerLinks.denial}</p>}
       {state.peerLinks?.error && <p role="alert">{state.peerLinks.error}</p>}
-      {mergeMachines(environments, state.peerLinks).map(machine => <div className={`env-row${machine.conversation?.ignored ? " ignored" : ""}`} key={machine.environmentId}>
+      {machines.map(machine => <div className={`env-row${machine.conversation?.ignored ? " ignored" : ""}`} key={machine.environmentId}>
         {machine.local ? <LaptopMinimalIcon size={14} /> : <ServerIcon size={14} />}
         <div className="env-name"><span title={machine.label}>{machine.label}</span>{machine.local && <span className="env-chip">This computer</span>}</div>
-        <div className={`env-state ${machine.conversation?.status ?? ""}`}>{machine.conversation ? stateOf(machine.conversation) : machine.local ? <span className="env-resting"><Dot tone="ok" />Connected</span> : machine.agents ? peerHealthLabel(machine.agents.status) : null}</div>
+        <div className={`env-state ${machine.conversation?.status ?? ""}`}>{machine.conversation ? stateOf(machine.conversation) : machine.local ? <span className="env-resting"><Dot tone="ok" />Connected</span> : machine.agents ? <><span className="env-resting">{peerHealthLabel(machine.agents.status)}</span><span className="env-hover-actions"><MachineRemoveButton machine={machine} peers={state.peerLinks} removeConversations={() => undefined} /></span></> : null}</div>
         <div className="env-meta" title={machine.conversation?.detail}>{machine.local ? meta(local?.host, local?.serverVersion) : meta(machine.conversation?.host, machine.conversation?.serverVersion)}{(machine.conversation?.managedOrganization ?? (machine.local ? state.localManagedPolicy?.organization : undefined)) && <span className="env-managed">Managed by {machine.conversation?.managedOrganization ?? state.localManagedPolicy?.organization}</span>}</div>
         <MachineCapabilities machine={machine} peers={state.peerLinks} pair={() => setAdding(machine)} />
       </div>)}

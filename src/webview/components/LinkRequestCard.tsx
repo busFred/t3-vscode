@@ -51,7 +51,7 @@ function PendingLinkRequest({ item }: { item: LinkItem }) {
     {review ? <fieldset disabled={busy || !!peers?.denial}>
       {picksMachine ? <label>Machine<select value={selected} onChange={event => { setChoice(event.target.value); setCode(""); }}>
         <option value="">Another address…</option>
-        {machines.map(machine => <option key={machine.environmentId} value={machine.environmentId}>{machine.label}{machine.linked ? " · Agents can use" : " · Conversations in VS Code"}</option>)}
+        {machines.map(machine => <option key={machine.environmentId} value={machine.environmentId}>{machine.label}{machine.linked ? " · Agents" : " · Conversations"}</option>)}
       </select></label> : null}
       {peers?.error ? <p role="alert">{peers.error}</p> : null}
       {machine?.linked ? <p className="subtle">Agents here can already use {machine?.label}. Change their access in Settings → Connections.</p> : <>

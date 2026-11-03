@@ -41,7 +41,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
 | [Effort and permission controls](#effort-and-permission-controls) | Advertised model options, a Speed (service tier / fast mode) control and runtime modes inside the composer. | v0.0.1 | v0.3.7 |
-| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.8 |
+| [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.9 |
 | [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.7 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
@@ -53,7 +53,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.7 |
-| [Remote environments](#remote-environments) | One Machines list shows Conversations and agent access independently; add either or both, start remote chats with Run on, and clone missing repositories. | v0.3.0 | v0.3.8 |
+| [Remote environments](#remote-environments) | One Machines list shows Conversations and agent access independently; add either or both, start remote chats with Run on, and clone missing repositories. | v0.3.0 | v0.3.9 |
 | [Managed policy](#managed-policy) | Shows the managing organization and applies server policy restrictions. | v0.3.7 | v0.3.7 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
@@ -1201,6 +1201,10 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Usage rows and machine rows use less vertical space. Per-account bars keep a 3 px gap; machine rows, chips and actions are tighter.
 - Validation: browser fixture checks bar spacing, folding and the "lowest" title in Per account, folding in Pooled, and that a single-window provider has no fold. Screenshots: `sidebar-compact.png`, `usage-folded.png`.
 
+#### v0.3.9 — per-account folding only
+
+- Only the **Per account** view folds usage windows; **Pooled** windows are one line each and no longer fold.
+
 ### Status bar meters
 
 #### v0.3.7
@@ -1596,6 +1600,12 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - The row's text buttons became icon buttons at the owner's request (icon table reviewed in chat): Pair again = Link, Enable = Play, Ignore = BellOff, Unignore = Bell, each with a title and a machine-named label, at the same 22 px size as the hover icons. Review of this change: APPROVE WITH NITS (layout and hover swap measured unchanged; the icons are muted grey where Pair again used to be a coloured link; an ignored machine has no text cue beyond its dimmed status and the Bell icon; the Disabled row's Enable is now a Play icon). A Disabled row's Remove (trash) icon is always visible instead of appearing only on hover (owner request; checked in a 280 px render, not re-reviewed).
 - Reconnect timing (owner question): the extension's own backoff is 2 s doubling to a 60 s cap (T3's app uses jittered 2 s to 5 min); no periodic check runs while connected, a drop is noticed when the socket closes.
 - Validation: pure action-set tests for each status, an unignore persistence test in the catalog tests. A first approach that reserved icon width at rest squeezed the machine name out in narrow panels (review blocker) and was replaced by the hover swap. `verify-views.ts` already fails on unmodified `a203643` at "Snooze opens beside the parent".
+
+#### v0.3.9
+
+- The Machines description moved to an ⓘ beside the title (shown in the list only while no other machine is added).
+- One remove (trash) button per machine opens a menu: **Remove from VS Code** (the existing VS Code confirmation) and **Remove agent access** (confirmed in the menu). Each option describes its effect on hover and in the menu; the separate inline "Remove agent access" link is gone. Machines with agent access only get the same button.
+- Agent chips read **Agents (Auto)**, **Agents (Read only)**, … or **Agents (expired)**. Machine rows have more line spacing.
 
 ### Managed policy
 
