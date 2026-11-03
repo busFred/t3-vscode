@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.11 — Unreleased
+## 0.3.11 — Release
 
 - Fix finished tasks delegated to another machine appearing as top-level sessions once their (long) parent conversation was opened; they stay under the parent's Subagents.
 
