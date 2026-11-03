@@ -1640,6 +1640,7 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 
 - Each machine with Conversations shows whether this window's project is on it, or offers **Add *project*…** to clone it there from the sidebar, using the composer's clone form and pipeline without starting a chat. Clone progress, Cancel, Retry and Remove show on the machine's row.
 - Machine status is a solid light (green, amber, red; hollow when disabled) on the bottom-right of each machine's icon, replacing the "Connected" / "Reachable" text; other states keep their text.
+- Machine rows: actions (project icon or add-project button, problem fixes, Reconnect, Disable, Remove) are always visible in solid colors on the name line; the address moves into the name's tooltip. A capability the machine lacks is a solid red **Conversations** or **Agents** tag that enables it when clicked, replacing "Pair to see conversations" and "Let agents use this…". The project's presence is a repository icon instead of a "✓ project" chip.
 
 ### Managed policy
 

@@ -12,6 +12,7 @@
 - Reconnect and Settings moved to the sidebar title bar beside Open Web UI; the sidebar has no footer.
 - More solid colors for status icons, labels, chips and badges.
 - Machines show their status as a solid light on the machine icon instead of "Connected" text.
+- Machine rows keep their actions always visible on the name line, show missing capabilities as red tags to click, use a repository icon for the project, and hide the address.
 - Validation: typecheck clean; 738/738 unit tests; `pnpm run build`; `scripts/verify-ui.mjs` with new machine-group, remote-checkout, task-shelf, project, title-bar and paste-undo checks; real VS Code `verify-edh.mjs --undo-only` 11/11 on this exact source (both new-chat paste and repeated-quote scenarios fail without the fix). Fresh-context Opus reviews approved every part after fixes. `verify-views.ts` still stops at "Steer with queued message", which also fails at v0.3.7. Paired machines' tasks are not yet available. Not exercised on macOS/Windows. Local installer only, not published.
 
 ## 0.3.9 — Release

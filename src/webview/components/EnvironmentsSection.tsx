@@ -1,7 +1,7 @@
 import { mergeMachines, type MachineRow } from "../machines";
 import { AddMachineForm, MachineCapabilities, peerHealthLabel } from "./PeerLinksSection";
 import { MachineRemoveButton } from "./MachineRemoveMenu";
-import { MachineProject } from "./MachineProject";
+import { MachineCloneStatus, MachineProject } from "./MachineProject";
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useEnvironmentsHeight } from "../environmentsHeight";
 import { clampSectionHeight } from "../sectionHeight";
@@ -64,23 +64,17 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
     ignore: { label: "Ignore", icon: <BellOffIcon size={13} /> }, unignore: { label: "Unignore", icon: <BellIcon size={13} /> },
   } as const;
   const machines = mergeMachines(environments, state.peerLinks);
-  const stateOf = (row: EnvironmentRow): ReactNode => {
+  /** Actions sit on the name line, always visible: problem fixes first, then reconnect, disable and remove. */
+  const actionsOf = (row: EnvironmentRow): ReactNode => {
     const { text, icons } = environmentRowActions(row);
-    const buttons = text.map((action) => <Fragment key={action}>{iconButton(inlineOf[action].label, action, row, inlineOf[action].icon)}</Fragment>);
-    const hover = icons.length ? <span className="env-hover-actions">{icons.map((action) => <Fragment key={action}>{iconOf[action](row)}</Fragment>)}</span> : null;
-    switch (row.status) {
-      // Healthy needs no words: the green light on the machine icon says it.
-      case "connected": return <>{hover}</>;
-      case "connecting": return <span>Connecting…</span>;
-      case "reconnecting": return <><span className="env-warn">Reconnecting…</span>{hover}{buttons}</>;
-      case "expiring": return <><span className="env-warn">{row.detail ?? "Expiring soon"}</span>{hover}{buttons}</>;
-      case "expired": return <><span className="env-error">Expired</span>{hover}{buttons}</>;
-      case "disabled": return <>
-        <span>Disabled</span>{buttons}
-        {hover}
-      </>;
-    }
+    return <>{text.map((action) => <Fragment key={action}>{iconButton(inlineOf[action].label, action, row, inlineOf[action].icon)}</Fragment>)}
+      {icons.map((action) => <Fragment key={action}>{iconOf[action](row)}</Fragment>)}</>;
   };
+  /** Only an unhealthy state is written out; a healthy machine is just its green light. */
+  const statusTextOf = (row: EnvironmentRow): ReactNode => ({
+    connected: null, connecting: <span className="env-status">Connecting…</span>, reconnecting: <span className="env-status env-warn">Reconnecting…</span>,
+    expiring: <span className="env-status env-warn">{row.detail ?? "Expiring soon"}</span>, expired: <span className="env-status env-error">Expired</span>, disabled: <span className="env-status">Disabled</span>,
+  })[row.status];
   const local = environments.local;
   return <><details ref={section} className="environments" data-sized={listHeight !== null || undefined} style={listHeight !== null ? { "--env-list-height": `${listHeight}px` } as CSSProperties : undefined} onToggle={event => setOpen(event.currentTarget.open)}>
     <summary aria-description={MACHINES_HELP}><ChevronDownIcon size={12} /><strong>MACHINES</strong><span className="env-info" aria-hidden="true" title={MACHINES_HELP}><InfoIcon size={11} /></span><span className="env-summary-dot"><Dot tone={environments.indicator} label={summary} /></span></summary>
@@ -88,13 +82,16 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
       {machines.every((machine) => machine.local) ? <p className="env-hint">{MACHINES_HELP}</p> : null}
       {state.peerLinks?.denial && <p className="env-hint">{state.peerLinks.denial}</p>}
       {state.peerLinks?.error && <p role="alert">{state.peerLinks.error}</p>}
-      {machines.map(machine => <div className={`env-row${machine.conversation?.ignored ? " ignored" : ""}`} key={machine.environmentId}>
-        {(() => { const { tone, label } = machineStatus(machine); return <span className="env-icon" role="img" aria-label={`${machine.local ? "This computer" : "Machine"}: ${label}`} title={label}>{machine.local ? <LaptopMinimalIcon size={14} aria-hidden="true" /> : <ServerIcon size={14} aria-hidden="true" />}<Dot tone={tone} /></span>; })()}
-        <div className="env-name"><span title={machine.label}>{machine.label}</span>{machine.local && <span className="env-chip">This computer</span>}</div>
-        <div className={`env-state ${machine.conversation?.status ?? ""}`}>{machine.conversation ? stateOf(machine.conversation) : machine.local ? null : machine.agents ? <>{machine.agents.status === "reachable" ? null : <span className="env-resting">{peerHealthLabel(machine.agents.status)}</span>}<span className="env-hover-actions"><MachineRemoveButton machine={machine} peers={state.peerLinks} removeConversations={() => undefined} /></span></> : null}</div>
-        <div className="env-meta" title={machine.conversation?.detail}>{machine.local ? meta(local?.host, local?.serverVersion) : meta(machine.conversation?.host, machine.conversation?.serverVersion)}{(machine.conversation?.managedOrganization ?? (machine.local ? state.localManagedPolicy?.organization : undefined)) && <span className="env-managed">Managed by {machine.conversation?.managedOrganization ?? state.localManagedPolicy?.organization}</span>}</div>
-        <MachineCapabilities machine={machine} peers={state.peerLinks} pair={() => setAdding(machine)} project={<MachineProject state={state} machine={machine} />} />
-      </div>)}
+      {machines.map(machine => { const { tone, label } = machineStatus(machine);
+        const host = machine.local ? meta(local?.host, local?.serverVersion) : meta(machine.conversation?.host, machine.conversation?.serverVersion);
+        const managed = machine.conversation?.managedOrganization ?? (machine.local ? state.localManagedPolicy?.organization : undefined);
+        const status = machine.conversation ? statusTextOf(machine.conversation) : !machine.local && machine.agents && machine.agents.status !== "reachable" ? <span className="env-status env-error">{peerHealthLabel(machine.agents.status)}</span> : null;
+        return <div className={`env-row${machine.conversation?.ignored ? " ignored" : ""}`} key={machine.environmentId}>
+        <span className="env-icon" role="img" aria-label={`${machine.local ? "This computer" : "Machine"}: ${label}`} title={label}>{machine.local ? <LaptopMinimalIcon size={14} aria-hidden="true" /> : <ServerIcon size={14} aria-hidden="true" />}<Dot tone={tone} /></span>
+        <div className="env-name" title={[host, machine.conversation?.detail].filter(Boolean).join(" · ") || undefined}><span>{machine.label}</span>{machine.local && <span className="env-chip">This computer</span>}</div>
+        <div className="env-actions"><MachineProject state={state} machine={machine} />{machine.conversation ? actionsOf(machine.conversation) : !machine.local && machine.agents ? <MachineRemoveButton machine={machine} peers={state.peerLinks} removeConversations={() => undefined} /> : null}</div>
+        <MachineCapabilities machine={machine} peers={state.peerLinks} pair={() => setAdding(machine)} lead={<>{status}{managed ? <span className="env-managed">Managed by {managed}</span> : null}<MachineCloneStatus state={state} machine={machine} /></>} />
+      </div>; })}
       {adding ? <AddMachineForm key={adding === true ? "new" : adding.environmentId} peers={state.peerLinks} machine={adding === true ? undefined : adding} close={() => setAdding(null)} /> : <button className="text-button env-add" onClick={() => setAdding(true)}><PlusIcon size={13} />Add machine…</button>}
     </div>
   </details>

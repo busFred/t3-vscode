@@ -62,6 +62,12 @@ const port = portServer.address().port;
 await new Promise((resolve) => portServer.close(resolve));
 const log = createWriteStream(join(profile, "code.log"));
 const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("T3") && !["ELECTRON_RUN_AS_NODE", "VITE_HTTP_URL", "VITE_WS_URL"].includes(key)));
+// Never drive the owner's desktop: windows would pop up, their focus breaks the test, and OS-clipboard checks would
+// overwrite their clipboard. Use T3_VSCODE_TEST_DISPLAY, else start a private X display (Xvfb, invisible; else Xephyr).
+const { startIsolatedDisplay } = await import("./isolatedDisplay.mjs");
+const isolated = await startIsolatedDisplay(process.env.T3_VSCODE_TEST_DISPLAY);
+environment.DISPLAY = isolated.display; delete environment.WAYLAND_DISPLAY;
+process.on("exit", () => isolated.stop());
 const child = spawn(process.env.VSCODE_BIN ?? "/usr/share/code/code", [
   "--no-sandbox", "--disable-gpu", "--new-window", "--profile=Default", "--skip-welcome", "--skip-release-notes", "--disable-workspace-trust",
   `--user-data-dir=${profile}`, `--extensions-dir=${profile}/extensions`, `--shared-data-dir=${profile}/shared-data`, `--remote-debugging-port=${port}`,
@@ -107,7 +113,7 @@ class WebviewSession {
     return this.evaluate(`new Promise((resolve, reject) => {
       let timer, poll; const observer = new MutationObserver(check);
       function check() { if (${expression}) { clearTimeout(timer); clearInterval(poll); observer.disconnect(); resolve(true); } }
-      timer = setTimeout(() => { clearInterval(poll); observer.disconnect(); reject(new Error('Webview condition timed out')); }, ${timeout});
+      timer = setTimeout(() => { clearInterval(poll); observer.disconnect(); reject(new Error('Webview condition timed out: ' + ${JSON.stringify(expression.slice(0, 200))})); }, ${timeout});
       // Form values and computed theme styles can change without a DOM mutation.
       poll = setInterval(check, 100);
       observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, characterData: true }); check();

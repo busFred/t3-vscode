@@ -185,22 +185,28 @@ try {
   }));
   await page.locator('.environments summary').click();
   assert.equal(await page.locator('.environments .env-row').count(), 4);
-  assert.equal(await page.locator('.environments .env-chip').filter({ hasText: /^Conversations$/ }).count(), 3);
-  assert.deepEqual(await page.locator('.environments .env-chip').filter({ hasText: /^Agents/ }).allTextContents(), ['Agents (Read only)', 'Agents (Supervised)']);
+  assert.equal(await page.locator('.environments .env-chip:not(.env-chip-missing)').filter({ hasText: /^Conversations$/ }).count(), 3);
+  assert.deepEqual(await page.locator('.environments .env-chip:not(.env-chip-missing)').filter({ hasText: /^Agents/ }).allTextContents(), ['Agents (Read only)', 'Agents (Supervised)']);
+  // A missing capability is a solid red tag that enables it; the local machine never offers agents.
+  assert.deepEqual(await page.locator('.environments .env-row').evaluateAll(rows => rows.map(row => [row.querySelector('.env-name span')?.textContent, [...row.querySelectorAll('.env-chip-missing')].map(tag => tag.textContent)])),
+    [['Local workstation', []], ['Build machine', []], ['Conversation machine', ['Agents']], ['Agent VPS', ['Conversations']]]);
+  assert.equal(await page.locator('.environments .env-chip-missing').first().evaluate(tag => getComputedStyle(tag).backgroundColor), 'rgb(229, 57, 53)');
+  assert.equal(await page.locator('.environments .env-meta:not(.machine-capabilities)').count(), 0, 'machine addresses are not shown');
   // The explanation lives in the title's info icon once machines are listed.
   assert.match(await page.locator('.environments .env-info').getAttribute('title'), /Conversations: .*Agents: /);
   assert.equal(await page.locator('.environments-body > .env-hint').filter({ hasText: /^Conversations:/ }).count(), 0);
   // Health is a solid light on each machine's icon; a healthy machine shows no "Connected" text.
-  assert.equal(await page.locator('.environments .env-state').filter({ hasText: /Connected|Reachable/ }).count(), 0);
+  assert.equal(await page.locator('.environments .env-row').filter({ hasText: /Connected|Reachable/ }).count(), 0);
   assert.equal(await page.locator('.environments .env-row .env-icon > .env-dot').count(), await page.locator('.environments .env-row').count());
   assert.equal(await page.locator('.environments .env-row').first().locator('.env-icon > .env-dot').evaluate(dot => getComputedStyle(dot).backgroundColor), 'rgb(0, 200, 83)');
   assert.equal(await page.locator('.environments .env-row').first().locator('.env-icon').getAttribute('aria-label'), 'This computer: Connected');
   await page.locator('.environments').screenshot({ path: `${evidence}/machines-status-light.png` });
-  // Hover actions sit in the state column and never cover the machine's name.
-  const hovered = page.locator('.environments .env-row').filter({ hasText: 'Build machine' });
-  await hovered.hover();
-  const [nameBox, actionsBox] = [await hovered.locator('.env-name').boundingBox(), await hovered.locator('.env-hover-actions').boundingBox()];
-  assert.ok(actionsBox.x >= nameBox.x + nameBox.width - 1, `hover actions overlap the name: ${JSON.stringify([nameBox, actionsBox])}`);
+  // Actions are always visible on the machine's name line, in solid color, and never cover the name.
+  const buildRow = page.locator('.environments .env-row').filter({ hasText: 'Build machine' });
+  await page.mouse.move(0, 0);
+  assert.equal(await buildRow.getByRole('button', { name: 'Reconnect Build machine' }).isVisible(), true);
+  const [nameBox, actionsBox] = [await buildRow.locator('.env-name span').first().boundingBox(), await buildRow.locator('.env-actions').boundingBox()];
+  assert.ok(actionsBox.x >= nameBox.x + nameBox.width - 1 && Math.abs(actionsBox.y + actionsBox.height / 2 - (nameBox.y + nameBox.height / 2)) < 8, `actions sit beside the name: ${JSON.stringify([nameBox, actionsBox])}`);
   // One remove per machine asks which capability to remove and describes each.
   const both = page.locator('.environments .env-row').filter({ hasText: 'Build machine' });
   await both.hover(); await both.getByRole('button', { name: 'Remove Build machine…' }).click();
@@ -220,9 +226,9 @@ try {
   // Each machine shows whether this window's project is there, and offers to add it.
   await page.evaluate(() => window.__replace({ projectMachines: { title: 't3-vscode', present: ['both'], targets: [{ environmentId: 'conversations', label: 'Conversation machine', available: true, defaultDestination: '~/code/t3-vscode' }], clones: [], cloneSource: { title: 't3-vscode', sshUrl: 'git@github.com:busFred/t3-vscode.git', httpsUrl: 'https://github.com/busFred/t3-vscode.git', protocol: 'ssh' } } }));
   await page.locator('.environments .env-project').first().waitFor();
-  assert.deepEqual(await page.locator('.environments .env-row').evaluateAll(rows => rows.map(row => [row.querySelector('.env-name span')?.textContent, row.querySelector('.env-project')?.textContent ?? row.querySelector('.env-project-add')?.textContent ?? null])),
-    [['Local workstation', 't3-vscode'], ['Build machine', 't3-vscode'], ['Conversation machine', 'Add t3-vscode…'], ['Agent VPS', null]]);
-  await page.getByRole('button', { name: 'Add t3-vscode…' }).click();
+  assert.deepEqual(await page.locator('.environments .env-row').evaluateAll(rows => rows.map(row => [row.querySelector('.env-name span')?.textContent, (row.querySelector('.env-project') ?? row.querySelector('.env-project-add'))?.getAttribute('aria-label') ?? null])),
+    [['Local workstation', 't3-vscode is on Local workstation'], ['Build machine', 't3-vscode is on Build machine'], ['Conversation machine', 'Add t3-vscode to Conversation machine…'], ['Agent VPS', null]]);
+  await page.getByRole('button', { name: 'Add t3-vscode to Conversation machine…' }).click();
   await page.getByRole('button', { name: 'Clone to Conversation machine' }).click();
   await page.waitForFunction(() => window.__requests.some(request => request.method === 'cloneToMachine' && request.params.environmentId === 'conversations' && request.params.destinationPath === '~/code/t3-vscode'));
   await page.screenshot({ path: `${evidence}/machines-project.png` });
@@ -290,9 +296,9 @@ try {
   await page.getByRole('tab', { name: 'Sessions' }).click();
   await page.evaluate(({ projects, threads }) => window.__replace({ projects, threads, worktrees: undefined, machineCheckouts: undefined }), { projects: savedProjects, threads: savedThreads });
   const localMachine = page.locator('.environments .env-row').filter({ hasText: 'Local workstation' });
-  assert.equal(await localMachine.getByText('Let agents use this…').count(), 0);
+  assert.equal(await localMachine.getByRole('button', { name: /agent access/ }).count(), 0);
   await page.screenshot({ path: `${evidence}/machines-merged.png` });
-  await page.getByRole('button', { name: 'Let agents use this…', exact: true }).click();
+  await page.getByRole('button', { name: 'Enable agent access to Conversation machine', exact: true }).click();
   assert.equal(await page.getByLabel('Pairing code', { exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Let agents use this', exact: true }).click();
   await page.waitForFunction(() => window.__requests.some(request => request.method === 'linkPeer' && request.params.environmentId === 'conversations' && !request.params.pairingCode));

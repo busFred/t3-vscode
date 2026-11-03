@@ -4,7 +4,7 @@ import { peerAccessLabels, type PeerLinksState } from "../../shared/peerLinks";
 import type { MachineRow } from "../machines";
 import { useActions } from "../actions";
 
-export function MachineCapabilities({ machine, peers, pair, project }: { readonly machine: MachineRow; readonly peers?: PeerLinksState | undefined; readonly pair: () => void; readonly project?: import("react").ReactNode }) {
+export function MachineCapabilities({ machine, peers, pair, lead }: { readonly machine: MachineRow; readonly peers?: PeerLinksState | undefined; readonly pair: () => void; readonly lead?: import("react").ReactNode }) {
   const run = useActions();
   const [editing, setEditing] = useState(false), [manual, setManual] = useState(false), [code, setCode] = useState("");
   const [address, setAddress] = useState(machine.address ?? ""), [access, setAccess] = useState<AuthMcpClientAccess>("approval-required");
@@ -20,12 +20,15 @@ export function MachineCapabilities({ machine, peers, pair, project }: { readonl
     finally { setCode(""); setBusy(false); inFlight.current = false; }
   };
   return <div className="env-meta machine-capabilities">
-    {machine.conversations ? <span className="env-chip">Conversations</span> : <button className="text-button" onClick={pair}>Pair to see conversations</button>}
-    {project}
-    {!machine.local && (machine.agents ? <>
-      <span className="env-chip" title={peerHealthLabel(machine.agents.status)}>{agentChipLabel(machine.agents)}</span>
-      {machine.agents.status === "expired" && <button className="text-button" disabled={!peers || !!peers.denial || !peers.loaded} title={peers?.denial} onClick={() => setEditing(true)}>Let agents use this…</button>}
-    </> : <button className="text-button" disabled={!peers || !!peers.denial || !peers.loaded} title={peers?.denial} onClick={() => setEditing(true)}>Let agents use this…</button>)}
+    {lead}
+    {/* A capability the machine lacks is a red tag; clicking it enables that capability. */}
+    {machine.conversations ? <span className="env-chip">Conversations</span>
+      : <button type="button" className="env-chip env-chip-missing" title={`Pair ${machine.label} to see its conversations in VS Code`} aria-label={`Enable conversations from ${machine.label}`} onClick={pair}>Conversations</button>}
+    {!machine.local && (machine.agents && machine.agents.status !== "expired"
+      ? <span className="env-chip" title={peerHealthLabel(machine.agents.status)}>{agentChipLabel(machine.agents)}</span>
+      : <button type="button" className="env-chip env-chip-missing" disabled={!peers || !!peers.denial || !peers.loaded}
+          title={peers?.denial ?? (machine.agents ? `Agent access to ${machine.label} expired; renew it` : `Let agents on this computer use ${machine.label}`)}
+          aria-label={`${machine.agents ? "Renew" : "Enable"} agent access to ${machine.label}`} onClick={() => setEditing(true)}>{machine.agents ? agentChipLabel(machine.agents) : "Agents"}</button>)}
     {editing && <form autoComplete="off" onSubmit={event => { event.preventDefault(); void submit(); }}><fieldset disabled={busy}>
       <AccessChoice access={access} setAccess={setAccess} />
       {(!machine.conversations || manual) && <><label>Machine address<input className="question-custom" value={address} onChange={event => setAddress(event.target.value)} /></label><CodeInput code={code} setCode={setCode} /></>}

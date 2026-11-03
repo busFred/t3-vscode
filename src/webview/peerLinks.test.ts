@@ -17,8 +17,10 @@ test("Machines merge local, conversations only, agents only and both by identity
     assert.equal(html.includes("Conversations</span>"), row.conversations);
     assert.equal(html.includes("Agents ("), !!row.agents);
     assert.equal(html.includes("Remove agent access"), false, "removal lives in the machine's remove menu");
-    assert.equal(html.includes("Let agents use this"), !row.local && !row.agents);
-    assert.equal(html.includes("Pair to see conversations"), !row.conversations);
+    // A missing capability is a red tag button that enables it.
+    assert.equal(html.includes("Enable agent access to"), !row.local && !row.agents);
+    assert.equal(html.includes("Enable conversations from"), !row.conversations);
+    assert.equal(html.includes("Let agents use this…") || html.includes("Pair to see conversations"), false);
   }
 });
 test("Local machine never receives self agent access", () => {
