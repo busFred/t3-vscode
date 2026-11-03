@@ -23,7 +23,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation, centred in the whole conversation; earlier pages load at the top. | v0.0.8 | v0.3.4 |
 | [Subagent conversations](#subagent-conversations) | Nested local and remote child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.7 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
-| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.2.4 |
+| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | Unreleased |
 | [Context window meter](#context-window-meter) | Ring + percent in the composer toolbar showing live provider usage against the model's context window. | v0.2.2 | v0.2.2 |
 | [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.3.7 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
@@ -576,6 +576,14 @@ Session resources retain the current History selection for restoration. Opening 
 ## Composer and attachments
 
 ### Compact composer
+
+#### Unreleased (v0.3.9 base)
+
+- Keep real VS Code image paste and rich clipboard references in native undo history. VS Code forwards Ctrl+V through `execCommand('paste')`; replaying `insertText` inside that command is rejected, and the old `setRangeText` fallback loses history. Custom paste now waits one task before replaying the captured insertion. Synthetic clipboard events alone did not expose this nesting.
+- Insert quotes with their final citation numbers in one native edit, including repeated passages and a new quote placed before an existing one. Previously a layout-effect label correction added another edit (or attempted a nested native command), so one Ctrl+Z did not remove just the quote.
+- Historical comparison: real OS paste fails on `c5e8f9b` (v0.3.9 plus a documentation-only commit), tag `v0.3.7` (`33399a4`), and `9238e95` (the undo-routing fix shipped in v0.2.4; that source commit still declares v0.2.3). The replay/fallback and quote-label mechanism originated in `0517532` (v0.1.21, Hung-Tien Huang, co-authored by Claude Opus 5). No passing historical boundary was established; these failures must not be attributed to the recent hidden-view or memoization changes.
+- Extend `verify-edh.mjs --undo-only` to check real OS and dispatched image paste with completed uploads, first/repeated assistant quotes through the selection menu, and native editor references in both a new plain panel and a Sessions custom-editor tab. Check immediate undo, both redo shortcuts, earlier typing, sidebar focus, and hide/reveal. Browser guards model a paste nested inside a native command and cover repeated/reordered quotes; both fail before the fix.
+- Validation: `tsc --noEmit`, 728/728 unit tests, production build, `verify-ui.mjs`, and the extended native undo suite pass. Native verification used a disposable VS Code profile, isolated T3 home and nested X display/clipboard, without provider calls. The browser undo guards pass; the full `verify-views.ts` suite still times out at “Steer with queued message” (line 876), also reproduced at v0.3.7. Native clicks wait for webview painting after reveal, and reference checks wait for the tab's focus handoff. No VSIX was packaged; independent regression review and macOS/Windows verification remain outstanding.
 
 #### v0.2.4
 

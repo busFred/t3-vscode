@@ -51,6 +51,9 @@ async function uploadSlots(draftKey: string, slots: ReadonlyArray<UploadSlot>, t
 }
 export function pasteAttachments(draftKey: string, files: ReadonlyArray<File>, threadId?: string, selection?: TextSelection, onInsert?: (cursor: number) => void, options?: AttachmentInsertionOptions): Promise<void> {
   return trackAttachmentWork(draftKey, (async () => {
+    // VS Code invokes paste through execCommand. A nested insertText is rejected;
+    // wait for that native command to finish before replaying the captured selection.
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
     const inputs = files.map((file) => attachmentUploadInput(file.name || "image.png", file.type, file.size));
     const error = getProviderAttachmentLimitError([...existingTypes(draftKey), ...inputs.map((input) => ({ ...input, type: input.type ?? "image" }))]);
     if (error) throw new Error(error);
@@ -64,6 +67,8 @@ export function pasteAttachments(draftKey: string, files: ReadonlyArray<File>, t
 /** Pastes what a copy in another composer (or this one) carried. Over the attachment limit the text still lands, with the images as their names. */
 export function pasteComposerClipboard(draftKey: string, payload: ComposerClipboardPayload, threadId: string | undefined, selection: TextSelection, onInsert?: (cursor: number) => void): Promise<void> {
   return trackAttachmentWork(draftKey, (async () => {
+    // Rich clipboard references (quotes/files as well as images) use the same native paste transaction.
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
     const draft = readDraft(draftKey);
     let plan = planComposerPaste(payload, draft, selection, () => crypto.randomUUID());
     const error = plan.uploads.length ? getProviderAttachmentLimitError([...existingTypes(draftKey), ...plan.uploads.map(({ input }) => ({ ...input, type: input.type ?? "image" }))]) : undefined;
