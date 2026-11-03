@@ -34,12 +34,12 @@ export async function verifyScheduledTasks(sidebar: Page, chat: Page, other: Pag
   await sidebar.getByRole("tab", { name: /^Tasks/ }).click();
   assert.equal(await sidebar.locator("#tasks-manager > .task-scope-note").count(), 0, "A single-project manager starts directly with Tasks, without a duplicate project label");
   assert.equal(await sidebar.getByRole("combobox", { name: "Task project", exact: true }).count(), 0, "A single-project workspace needs no project selector");
-  const list = sidebar.getByRole("region", { name: "Project scheduled tasks" });
+  const list = sidebar.getByRole("region", { name: "Scheduled tasks by machine" });
   assert.equal(await list.locator(".scheduled-task-row").count(), 3, "Only this project's tasks");
   await sidebar.getByRole("textbox", { name: "Search tasks", exact: true }).fill("Other session");
   await sidebar.getByRole("button", { name: "Edit task Other session task" }).click();
   await sidebar.getByRole("textbox", { name: "Task name", exact: true }).fill("Unsaved task draft");
-  await sidebar.getByRole("button", { name: "Project tasks", exact: true }).click();
+  await sidebar.getByRole("button", { name: "Tasks", exact: true }).click();
   assert.equal(await sidebar.getByRole("textbox", { name: "Search tasks", exact: true }).inputValue(), "Other session");
   await sidebar.getByRole("button", { name: "Edit task Other session task" }).click();
   assert.equal(await sidebar.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Unsaved task draft");
@@ -90,7 +90,7 @@ export async function verifyScheduledTasks(sidebar: Page, chat: Page, other: Pag
   assert.deepEqual(host.snapshot("tab-two").threads.find((thread) => thread.id === "second")!.modelSelection, modelBefore);
   assert.equal(host.snapshot("tab-two").activeThreadId, "second"); assert.equal(host.snapshot("tab-three").activeThreadId, "third");
   assert.equal(await chat.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Keep my chat draft");
-  await sidebar.getByRole("button", { name: "New task", exact: true }).click();
+  await sidebar.getByRole("button", { name: /^New task on / }).click();
   await sidebar.getByRole("textbox", { name: "Task name", exact: true }).fill("Independent check");
   await sidebar.getByRole("textbox", { name: "Task prompt", exact: true }).fill("Read the log; report progress.");
   assert.equal(await sidebar.getByRole("combobox", { name: "Task result destination" }).inputValue(), "");

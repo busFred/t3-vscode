@@ -157,7 +157,7 @@ export class BridgeHandler {
         case "refreshWorktrees":
           // Another machine's checkouts are read from its own server.
           if (typeof params.projectId === "string" && this.hostState.isRemoteProject(params.projectId)) await this.hostState.refreshRemoteCheckouts(params.projectId);
-          else await this.hostState.refreshWorktrees(params.cleanupEnvironments === true);
+          else await Promise.all([this.hostState.refreshWorktrees(params.cleanupEnvironments === true), ...(viewId === SIDEBAR_VIEW_ID ? [this.hostState.refreshSidebarRemoteCheckouts()] : [])]);
           break;
         case "configureWorktree": await this.hostState.configureWorktree(params.choice, params.projectId === undefined ? undefined : stringParam(params, "projectId"), viewId); break;
         case "newWorktreeChat": {

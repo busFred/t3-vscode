@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased (after v0.3.10)
+
+- Worktrees groups by machine name and loads paired machines’ checkouts from their own servers. Multi-root machines retain repository headings; **Machines** controls visibility.
+- Tasks replaces the project selector with machine shelves, saved fold state and machine-targeted new-task actions. Remote task groups explicitly report that tasks are unavailable and expose no local actions.
+- Repeated project names in project pickers use machine names.
+- Validation: typecheck; 737/737 unit tests; build; deterministic UI verification pass. `verify-views.ts` passes everything before the known “Steer with queued message” timeout. Implementation only; no installer or live paired-machine verification.
+
 ## 0.3.10 — Local build
 
 - Fix Ctrl+Z after pasting an image (real clipboard paste in VS Code) or quoting a conversation: the insertion is one undo step again, and redo restores it. Sending waits while a paste is still placing its reference.

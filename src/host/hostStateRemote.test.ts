@@ -596,3 +596,26 @@ test("The Machines list shows where this project is and adds it to a machine wit
   assert.deepEqual(f.client.cloneActions, [`retry:${input.projectId}`, `delete:${input.projectId}`]);
   assert.deepEqual(f.host.snapshot().projectMachines!.clones, []);
 });
+
+
+test("sidebar checkout refresh reads each remote server and preserves cached rows on disconnect", async (t) => {
+  const f = await fixture(); t.after(f.cleanup);
+  await f.host.refreshSidebarRemoteCheckouts();
+  const snapshot = f.host.snapshot();
+  assert.equal(snapshot.projects.find((project) => project.id === "remote-match")?.environmentId, "studio");
+  assert.equal(snapshot.machineCheckouts?.studio?.items[0]?.repositoryId, "github.com/acme/widget");
+  assert.ok(snapshot.machineCheckouts?.studio?.items.some((item) => item.path === "/home/dev/widget-x"));
+  f.host.registerView("checkout-editor");
+  assert.equal(f.host.snapshot("checkout-editor").machineCheckouts, undefined, "checkout snapshots stay out of editor views");
+  f.client.statuses = f.client.statuses.map((entry) => entry.environmentId === "studio" ? { ...entry, state: "error" } : entry);
+  await f.host.refreshSidebarRemoteCheckouts();
+  assert.match(f.host.snapshot().machineCheckouts!.studio!.error!, /disconnected/);
+  assert.ok(f.host.snapshot().machineCheckouts!.studio!.items.some((item) => item.path === "/home/dev/widget-x"));
+});
+
+test("Refreshing the sidebar drops checkout listings of machines that are no longer paired", async (t) => {
+  const f = await cloneFixture(t);
+  (f.host as unknown as { remoteCheckouts: Map<string, unknown> }).remoteCheckouts.set("gone-machine\0p", { loading: false, items: [], branches: [] });
+  await f.host.refreshSidebarRemoteCheckouts();
+  assert.equal((f.host as unknown as { remoteCheckouts: Map<string, unknown> }).remoteCheckouts.has("gone-machine\0p"), false);
+});

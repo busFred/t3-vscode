@@ -228,13 +228,56 @@ try {
   await page.evaluate(() => window.__replace({ projectMachines: undefined }));
   // Projects with the same name on several machines name their machine in project pickers.
   const savedProjects = await page.evaluate(() => window.__state.projects);
-  await page.evaluate(() => window.__replace({ projects: [{ id: 'project-one', title: 't3-vscode', workspaceRoot: '/tmp/t3-vscode' }, { id: 'remote-one', title: 't3-vscode', workspaceRoot: '/home/me/t3-vscode', environmentLabel: 'GPU box' }, { id: 'project-two', title: 'myt3code', workspaceRoot: '/tmp/myt3code' }] }));
+  const savedThreads = await page.evaluate(() => window.__state.threads);
+  await page.evaluate(() => window.__replace({ projects: [{ id: 'project-one', title: 't3-vscode', workspaceRoot: '/tmp/t3-vscode' }, { id: 'remote-one', title: 't3-vscode', workspaceRoot: '/home/me/t3-vscode', environmentId: 'gpu', environmentLabel: 'GPU box' }],
+    worktrees: { loading: false, settings: [], preparations: [], branches: [], items: [{ id: 'local-main', projectId: 'project-one', path: '/tmp/t3-vscode', branch: 'main', root: true, missing: false, active: false, threadIds: [] }] },
+    threads: [...window.__state.threads, { ...window.__state.threads[0], id: 'remote-checkout-session', title: 'GPU checkout session', projectId: 'remote-one', worktreePath: '/home/me/feature' }],
+    machineCheckouts: { gpu: { loading: false, branches: [], items: [{ id: 'remote-main', projectId: 'remote-one', path: '/home/me/t3-vscode', branch: 'main', root: true, missing: false, active: false, threadIds: [] }, { id: 'remote-feature', projectId: 'remote-one', path: '/home/me/feature', branch: 'feature/gpu', root: false, missing: false, active: false, threadIds: [] }] } } }));
   await page.getByRole('tab', { name: 'Tasks' }).click();
-  assert.deepEqual(await page.getByLabel('Task project').locator('option').allTextContents(), ['t3-vscode · Local workstation', 't3-vscode · GPU box', 'myt3code']);
-  assert.ok((await page.getByLabel('Task project').boundingBox()).height >= 26, 'the project picker is as tall as the other sidebar inputs');
-  await page.screenshot({ path: `${evidence}/tasks-project-picker.png` });
+  const taskMachines = page.locator('#tasks-manager details.worktree-repository');
+  await taskMachines.nth(1).locator('summary strong').waitFor();
+  assert.deepEqual(await taskMachines.locator('summary strong').allTextContents(), ['Local workstation', 'GPU box']);
+  await page.getByText('Scheduled tasks are not available for this machine in VS Code.', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Task project', { exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'New task on Local workstation', exact: true }).waitFor();
+  assert.equal(await taskMachines.nth(1).getByRole('button').count(), 0, 'remote tasks have no local controls');
+  await taskMachines.nth(0).locator('summary').click();
+  assert.equal(await taskMachines.nth(0).getAttribute('open'), null);
   await page.getByRole('tab', { name: 'Sessions' }).click();
-  await page.evaluate((projects) => window.__replace({ projects }), savedProjects);
+  await page.getByRole('tab', { name: 'Tasks' }).click();
+  assert.equal(await taskMachines.nth(0).getAttribute('open'), null, 'task machine fold survives navigation');
+  await taskMachines.nth(0).locator('summary').click();
+  await page.screenshot({ path: `${evidence}/tasks-machines.png` });
+  await page.getByRole('tab', { name: 'Worktrees' }).click();
+  const worktreeMachines = page.locator('#worktrees-manager [data-machine-id]');
+  await worktreeMachines.nth(1).locator(':scope > details > summary strong').waitFor();
+  assert.deepEqual(await worktreeMachines.locator(':scope > details > summary strong').allTextContents(), ['Local workstation', 'GPU box']);
+  assert.equal(await worktreeMachines.nth(1).locator('.worktree-checkout').count(), 2);
+  await worktreeMachines.nth(1).locator('.worktree-checkout').nth(1).locator('summary').click();
+  await worktreeMachines.nth(1).getByRole('button', { name: 'GPU checkout session', exact: true }).waitFor();
+  assert.equal(await worktreeMachines.nth(1).locator('.worktree-checkout').nth(1).locator(':scope > summary .shelf-count').textContent(), '1');
+  assert.equal(await worktreeMachines.nth(1).getByRole('button', { name: /^Manage/ }).count(), 0);
+  assert.equal(await worktreeMachines.nth(1).getByRole('button', { name: /^Worktree settings/ }).count(), 0);
+  await page.screenshot({ path: `${evidence}/worktrees-machines.png` });
+  // A paired machine's checkouts offer no Chat or Manage: both would act on this computer's draft.
+  const gpuGroup = worktreeMachines.locator(':scope > details').filter({ has: page.locator('summary strong', { hasText: 'GPU box' }) });
+  assert.equal(await gpuGroup.getByRole('button', { name: 'Chat', exact: true }).count(), 0);
+  assert.equal(await gpuGroup.getByRole('button', { name: /^Manage / }).count(), 0);
+  await page.getByRole('button', { name: 'Visible machines', exact: true }).click();
+  const machineDialog = page.getByRole('dialog', { name: 'Visible machines' });
+  await machineDialog.getByLabel('GPU box').uncheck();
+  assert.equal(await worktreeMachines.count(), 1);
+  await machineDialog.getByLabel('GPU box').check();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'New worktree chat', exact: true }).click();
+  assert.deepEqual(await page.getByLabel('New worktree project').locator('option').allTextContents(), ['Local workstation', 'GPU box']);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.__replace({ projects: [...window.__state.projects, { id: 'project-two', title: 'notes', workspaceRoot: '/tmp/notes' }] }));
+  await worktreeMachines.nth(0).locator(':scope > details > details > summary strong').nth(1).waitFor();
+  assert.deepEqual(await worktreeMachines.nth(0).locator(':scope > details > details > summary strong').allTextContents(), ['t3-vscode', 'notes']);
+  await page.screenshot({ path: `${evidence}/worktrees-machines-multiroot.png` });
+  await page.getByRole('tab', { name: 'Sessions' }).click();
+  await page.evaluate(({ projects, threads }) => window.__replace({ projects, threads, worktrees: undefined, machineCheckouts: undefined }), { projects: savedProjects, threads: savedThreads });
   const localMachine = page.locator('.environments .env-row').filter({ hasText: 'Local workstation' });
   assert.equal(await localMachine.getByText('Let agents use this…').count(), 0);
   await page.screenshot({ path: `${evidence}/machines-merged.png` });

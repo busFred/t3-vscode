@@ -1,4 +1,3 @@
-import { projectOptionLabel } from "../projectLabels";
 import { bridge, Events } from "../bridge-client";
 import { useEffect, useRef, useState } from "react";
 import type { HostStateSnapshot } from "../../shared/bridge";
@@ -8,19 +7,16 @@ import { WorktreeList } from "./WorktreeList";
 import { AccountUsage } from "./AccountUsage";
 import { EnvironmentsSection } from "./EnvironmentsSection";
 import { ProviderSetupNotice } from "./ServerSetup";
-import { ScheduledTaskList } from "./ScheduledTaskList";
+import { MachineTaskList } from "./ScheduledTaskList";
 import { ScheduledTaskEditor, taskDraft, type TaskDraft } from "./ScheduledTaskEditor";
 
 export function SidebarView({ state, usageRequest, taskRequest, navigationRequest }: { readonly state: HostStateSnapshot; readonly usageRequest: { accountKey?: string } | null; readonly taskRequest: ScheduledTaskEditorRequest | null; readonly navigationRequest: number }) {
   const [tab, setTab] = useState<"sessions" | "worktrees" | "tasks">("sessions");
   useEffect(() => bridge.on(Events.showTaskManager, () => { setEditing(null); setTab("tasks"); }), []);
-  const [selectedProject, setProject] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, TaskDraft>>({});
   const latest = useRef(state); latest.current = state;
   const returnFocus = useRef<HTMLElement | null>(null); const tabs = useRef<HTMLDivElement>(null);
-  const projectId = state.projects.some((project) => project.id === selectedProject) ? selectedProject
-    : state.threads.find((thread) => thread.id === state.activeThreadId)?.projectId ?? state.draft.projectId ?? state.projects[0]?.id;
   const editKey = (request: ScheduledTaskEditorRequest) => JSON.stringify([state.environment?.environmentId, request.projectId, request.taskId ?? `new:${request.originThreadId ?? "project"}`]);
   useEffect(() => {
     if (!taskRequest) return;
@@ -51,16 +47,15 @@ export function SidebarView({ state, usageRequest, taskRequest, navigationReques
       }}>
         <button role="tab" id="sessions-tab" data-tab="sessions" aria-controls="sessions-manager" aria-selected={tab === "sessions"} tabIndex={tab === "sessions" ? 0 : -1} title="Sessions in this workspace's projects" onClick={() => setTab("sessions")}>Sessions</button>
         <button role="tab" id="worktrees-tab" data-tab="worktrees" aria-controls="worktrees-manager" aria-selected={tab === "worktrees"} tabIndex={tab === "worktrees" ? 0 : -1} onClick={() => setTab("worktrees")}>Worktrees</button>
-        <button role="tab" id="tasks-tab" data-tab="tasks" aria-controls="tasks-manager" aria-selected={tab === "tasks"} tabIndex={tab === "tasks" ? 0 : -1} onClick={() => setTab("tasks")}>Tasks <small>{state.scheduledTasks?.tasks.filter((task) => task.projectId === projectId).length ?? 0}</small></button>
+        <button role="tab" id="tasks-tab" data-tab="tasks" aria-controls="tasks-manager" aria-selected={tab === "tasks"} tabIndex={tab === "tasks" ? 0 : -1} onClick={() => setTab("tasks")}>Tasks <small>{state.scheduledTasks?.tasks.length ?? 0}</small></button>
       </div>
       <div id="sessions-manager" className="sidebar-manager" role="tabpanel" aria-labelledby="sessions-tab" style={{ display: tab === "sessions" ? "flex" : "none" }}><ThreadList state={state} /></div>
       <div id="worktrees-manager" className="sidebar-manager" role="tabpanel" aria-labelledby="worktrees-tab" style={{ display: tab === "worktrees" ? "flex" : "none" }}><WorktreeList state={state} active={tab === "worktrees"} /></div>
       <div id="tasks-manager" className="sidebar-manager" role="tabpanel" aria-labelledby="tasks-tab" style={{ display: tab === "tasks" ? "flex" : "none" }}>
-        {state.projects.length > 1 ? <label className="task-project-select">Project<select aria-label="Task project" value={projectId} onChange={(event) => setProject(event.target.value)}>{state.projects.map((project) => <option key={project.id} value={project.id}>{projectOptionLabel(state, project)}</option>)}</select></label> : null}
-        {projectId ? <ScheduledTaskList key={projectId} state={state} projectId={projectId} /> : <p className="empty-list">Open a project to manage its scheduled tasks.</p>}
+        <MachineTaskList state={state} />
       </div>
     </div>
-    {draft && editing ? <ScheduledTaskEditor key={editing} state={state} draft={draft} returnLabel={tab === "sessions" ? "Sessions" : "Project tasks"} onChange={(value) => setDrafts((previous) => ({ ...previous, [editing]: value }))} onReturn={back}
+    {draft && editing ? <ScheduledTaskEditor key={editing} state={state} draft={draft} returnLabel={tab === "sessions" ? "Sessions" : "Tasks"} onChange={(value) => setDrafts((previous) => ({ ...previous, [editing]: value }))} onReturn={back}
       onReload={() => { const value = taskDraft(state, { taskId: draft.id, projectId: draft.projectId }); if (value) setDrafts((previous) => ({ ...previous, [editing]: value })); }} /> : null}
   </div>;
 }
