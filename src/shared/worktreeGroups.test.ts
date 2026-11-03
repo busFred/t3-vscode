@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { HostStateSnapshot, ThreadSummary } from "./bridge.js";
 import type { WorktreeSummary } from "./worktrees.js";
-import { checkoutForWorkingDirectory, checkoutPath, existingCheckoutChoice, worktreeRepositoryGroups, worktreeVisibilityScope } from "./worktreeGroups.js";
+import { checkoutForWorkingDirectory, checkoutPath, existingCheckoutChoice, worktreeRepositoryGroups, worktreeVisibilityScope, projectMachineGroups, worktreeMachineGroups } from "./worktreeGroups.js";
 import { sessionShelves } from "./sessionTree.js";
 
 const project = (id: string, workspaceRoot: string) => ({ id, workspaceRoot, title: id });
@@ -115,4 +115,27 @@ test("visibility scope separates environments, isolated homes and workspaces, in
   assert.notEqual(key, worktreeVisibilityScope({ ...base, home: "/different" }));
   assert.notEqual(key, worktreeVisibilityScope({ ...base, environment: { ...base.environment, environmentId: "different" } }));
   assert.notEqual(key, worktreeVisibilityScope({ ...base, workspaceRoots: ["/other"] }));
+});
+
+
+test("machine groups use identity rather than repeated repository titles or machine labels", () => {
+  const state = { projects: [project("local", "/repo"), { ...project("remote", "/repo"), environmentId: "gpu", environmentLabel: "Laptop" }, { ...project("other", "/repo"), environmentId: "other", environmentLabel: "Laptop" }],
+    environments: { local: { label: "Laptop" } }, environment: { label: "Fallback" } } as unknown as HostStateSnapshot;
+  assert.deepEqual(projectMachineGroups(state).map(({ id, title, remote }) => [id, title, remote]), [["local", "Laptop", false], ["remote:gpu", "Laptop", true], ["remote:other", "Laptop", true]]);
+  assert.equal(projectMachineGroups({ projects: [project("local", "/repo")], environment: { environmentId: "here", label: "Fallback" } })[0]!.title, "Fallback");
+});
+
+test("worktree machines isolate identical paths and repository IDs, retain remote errors and multi-root repositories", () => {
+  const remote = { ...project("remote", "/repo"), environmentId: "gpu", environmentLabel: "GPU" };
+  const state = { projects: [project("main", "/repo"), project("extra", "/extra"), remote], threads: [thread("local-session", "main"), thread("remote-session", "remote")],
+    worktrees: { items: [item("main", "/repo", true), { ...item("extra", "/extra", true), repositoryId: "/extra/.git" }] },
+    machineCheckouts: { gpu: { loading: false, error: "Disconnected", branches: [], items: [item("remote", "/repo", true), item("remote", "/topic")] } } } as unknown as HostStateSnapshot;
+  const [local, gpu] = worktreeMachineGroups(state);
+  assert.equal(local!.repositories.length, 2);
+  assert.equal(gpu!.repositories.length, 1);
+  assert.equal(gpu!.error, "Disconnected");
+  assert.deepEqual(gpu!.repositories[0]!.checkouts.map(({ item }) => item.path), ["/repo", "/topic"]);
+  assert.deepEqual(gpu!.repositories[0]!.checkouts[0]!.sessions.map(({ id }) => id), ["remote-session"]);
+  assert.deepEqual(local!.repositories[0]!.checkouts[0]!.sessions.map(({ id }) => id), ["local-session"]);
+  assert.equal(worktreeMachineGroups({ ...state, machineCheckouts: {} })[1]!.repositories[0]!.checkouts.length, 0, "missing remote data cannot borrow local checkouts");
 });

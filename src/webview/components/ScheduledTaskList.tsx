@@ -2,6 +2,8 @@ import { useState } from "react";
 import { CalendarClockIcon, CircleDashedIcon, CircleXIcon, PlayIcon, PlusIcon, RefreshCwIcon, SearchIcon, XIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { taskScheduleLabel, type ScheduledTaskView } from "../../shared/scheduledTasks";
+import { projectMachineGroups, worktreeVisibilityScope } from "../../shared/worktreeGroups";
+import { useCollapsedTaskMachines } from "../taskMachines";
 import { useActions } from "../actions";
 
 export function ScheduledTaskRows({ state, tasks }: { readonly state: HostStateSnapshot; readonly tasks: ReadonlyArray<ScheduledTaskView> }) {
@@ -40,6 +42,32 @@ export function ScheduledTaskList({ state, projectId, originThreadId, onClose }:
     {state.scheduledTasks?.loading ? <p className="empty-list" role="status">Loading tasks…</p> : null}
     {state.scheduledTasks?.error ? <p className="task-status" role="alert">{state.scheduledTasks.error}</p> : null}
     <div className="scheduled-task-scroll"><ScheduledTaskRows state={state} tasks={tasks.filter((task) => `${task.title} ${task.prompt}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))} /></div>
+    <button className="task-refresh text-button" onClick={() => void run("refreshScheduledTasks")}><RefreshCwIcon size={12} />Refresh tasks</button>
+  </section>;
+}
+
+/** Tasks are currently served by the local task store; remote controls must never target it. */
+export function MachineTaskList({ state }: { readonly state: HostStateSnapshot }) {
+  const run = useActions(); const [query, setQuery] = useState("");
+  const [collapsed, setCollapsed] = useCollapsedTaskMachines();
+  const scope = worktreeVisibilityScope(state);
+  const machines = projectMachineGroups(state);
+  return <section className="scheduled-task-list" aria-label="Scheduled tasks by machine">
+    <div className="sidebar-search-row"><label className="thread-search"><SearchIcon size={14} /><input aria-label="Search tasks" placeholder="Search tasks…" value={query} onChange={(event) => setQuery(event.target.value)} /></label></div>
+    <div className="scheduled-task-scroll">{machines.map((machine) => {
+      const key = `${scope}:${machine.id}`;
+      const projects = machine.projects;
+      const tasks = machine.remote ? [] : state.scheduledTasks?.tasks.filter((task) => projects.some((project) => project.id === task.projectId)) ?? [];
+      const add = (projectId: string, label: string) => <button type="button" className="icon-button" aria-label={`New task on ${label}`} title={`New task on ${label}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void run("editScheduledTask", { projectId }); }}><PlusIcon size={15} /></button>;
+      return <details key={machine.id} className="worktree-repository history-shelf" data-machine-id={machine.id} open={!collapsed.has(key)} onToggle={(event) => setCollapsed(key, !event.currentTarget.open)}>
+        <summary className="history-heading"><strong>{machine.title}</strong>{!machine.remote ? <><small className="shelf-count">{tasks.length}</small>{projects.length === 1 ? add(projects[0]!.id, machine.title) : null}</> : null}</summary>
+        {machine.remote ? <p className="empty-list">Scheduled tasks are not available for this machine in VS Code.</p> : <>
+          {state.scheduledTasks?.loading ? <p className="empty-list" role="status">Loading tasks…</p> : null}
+          {state.scheduledTasks?.error ? <p className="task-status" role="alert">{state.scheduledTasks.error}</p> : null}
+          {projects.map((project) => <div key={project.id}>{projects.length > 1 ? <div className="history-heading"><strong>{project.title}</strong>{add(project.id, `${machine.title} · ${project.title}`)}</div> : null}<ScheduledTaskRows state={state} tasks={tasks.filter((task) => task.projectId === project.id && `${task.title} ${task.prompt}`.toLowerCase().includes(query.toLowerCase()))} /></div>)}
+        </>}
+      </details>;
+    })}{!machines.length ? <p className="empty-list">Open a project to manage its scheduled tasks.</p> : null}</div>
     <button className="task-refresh text-button" onClick={() => void run("refreshScheduledTasks")}><RefreshCwIcon size={12} />Refresh tasks</button>
   </section>;
 }

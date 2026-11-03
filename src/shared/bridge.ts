@@ -53,7 +53,7 @@ export interface ModelSelection {
 }
 export interface FavoriteModel { readonly instanceId: string; readonly model: string }
 export type HostPhase = "discovering" | "no-server" | "pairing" | "connecting" | "ready" | "error";
-export interface ProjectSummary { readonly id: string; readonly title: string; readonly workspaceRoot: string; /** Machine label for a project on a paired remote environment. */ readonly environmentLabel?: string }
+export interface ProjectSummary { readonly id: string; readonly title: string; readonly workspaceRoot: string; /** Machine label for a project on a paired remote environment. */ readonly environmentLabel?: string; readonly environmentId?: string }
 export type ProjectSelection = { readonly projectId: string } | { readonly workspaceRoot: string } | { readonly noProject: true };
 /** A machine a new conversation can run on: this computer or a paired one with the same repository. */
 export interface MachineChoice {
@@ -268,6 +268,8 @@ export interface RestorePreview {
 }
 export interface HostStateSnapshot {
   readonly worktrees?: import("./worktrees.js").WorktreesState;
+  /** Sidebar-only checkout listings, fetched from each paired machine. */
+  readonly machineCheckouts?: Readonly<Record<string, RemoteCheckouts>>;
   readonly scheduledTasks?: ScheduledTasksState;
   readonly acknowledgedWorking?: { readonly messageId: string; readonly startedAt: string };
   readonly sessionSearch?: SessionSearchState;

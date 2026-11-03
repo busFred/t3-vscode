@@ -106,3 +106,35 @@ export function worktreeRepositoryGroups(state: Pick<HostStateSnapshot, "project
 export function worktreeVisibilityScope(state: Pick<HostStateSnapshot, "home" | "environment" | "workspaceRoots">): string {
   return JSON.stringify([state.environment?.environmentId ?? "", state.home, [...state.workspaceRoots].map(checkoutPath).sort()]);
 }
+
+export interface MachineGroup {
+  readonly id: string;
+  readonly title: string;
+  readonly remote: boolean;
+  readonly projects: ReadonlyArray<ProjectSummary>;
+}
+
+/** Stable machine identity keeps equal labels and identical paths on different servers separate. */
+export function projectMachineGroups(state: Pick<HostStateSnapshot, "projects" | "environment" | "environments">): ReadonlyArray<MachineGroup> {
+  const groups = new Map<string, MachineGroup>();
+  for (const project of state.projects) {
+    const remote = project.environmentId !== undefined || project.environmentLabel !== undefined;
+    const id = remote ? `remote:${project.environmentId ?? project.environmentLabel}` : "local";
+    const title = remote ? project.environmentLabel ?? "Remote computer" : state.environments?.local?.label ?? state.environment?.label ?? "This computer";
+    const previous = groups.get(id);
+    groups.set(id, { id, title, remote, projects: [...previous?.projects ?? [], project] });
+  }
+  return [...groups.values()];
+}
+
+export function worktreeMachineGroups(state: Pick<HostStateSnapshot, "projects" | "threads" | "worktrees" | "environment" | "environments" | "machineCheckouts">) {
+  return projectMachineGroups(state).map((machine) => {
+    const environmentId = machine.projects[0]?.environmentId;
+    const listing = environmentId ? state.machineCheckouts?.[environmentId] : undefined;
+    const ids = new Set(machine.projects.map((project) => project.id));
+    const items = machine.remote ? listing?.items ?? [] : state.worktrees?.items ?? [];
+    const repositories = worktreeRepositoryGroups({ projects: machine.projects, threads: state.threads.filter((thread) => ids.has(thread.projectId)),
+      worktrees: { loading: false, settings: [], preparations: [], branches: [], ...state.worktrees, items: items.filter((item) => ids.has(item.projectId)) } });
+    return { ...machine, repositories, loading: listing?.loading ?? false, error: listing?.error };
+  });
+}

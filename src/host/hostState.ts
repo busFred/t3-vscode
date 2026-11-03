@@ -412,12 +412,34 @@ export class HostState {
     const environmentId = this.remoteProject(projectId)?.environmentId, root = this.visibleProjects().find((project) => project.id === projectId)?.workspaceRoot;
     return environmentId && root ? this.loadRemoteCheckouts(environmentId, projectId, root) : Promise.resolve();
   }
+  /** Sidebar refresh is explicitly routed per project; unavailable remotes never use the local server. */
+  async refreshSidebarRemoteCheckouts(): Promise<void> {
+    // Machines no longer paired or enabled drop their cached listings, so a re-paired machine starts fresh.
+    const live = new Set((this.client.remoteStatuses?.() ?? []).filter((entry) => entry.enabled).map((entry) => entry.environmentId));
+    for (const key of [...this.remoteCheckouts.keys()]) if (!live.has(key.split("\0")[0]!)) { this.remoteCheckouts.delete(key); this.remoteCheckoutLoads.delete(key); }
+    await Promise.all(this.visibleProjects().filter((project) => this.remoteProject(project.id)).map((project) => this.refreshRemoteCheckouts(project.id)));
+  }
+  private sidebarMachineCheckouts(): Readonly<Record<string, RemoteCheckouts>> {
+    const machines: Record<string, RemoteCheckouts> = {};
+    for (const project of this.visibleProjects()) {
+      const remote = this.remoteProject(project.id);
+      if (!remote) continue;
+      const listing = this.remoteCheckouts.get(`${remote.environmentId}\0${project.id}`);
+      if (!listing) continue;
+      const previous = machines[remote.environmentId];
+      machines[remote.environmentId] = { loading: !!previous?.loading || listing.loading,
+        ...((previous?.error ?? listing.error) ? { error: previous?.error ?? listing.error } : {}),
+        items: [...previous?.items ?? [], ...listing.items], branches: [...previous?.branches ?? [], ...listing.branches] };
+    }
+    return machines;
+  }
   private readonly remoteCheckoutLoads = new Map<string, number>();
   /** Threads this extension created up front for a new chat; only these may be removed when a chat moves to another machine. */
   private readonly placeholders = new Set<string>();
   private async loadRemoteCheckouts(environmentId: string, projectId: string, root: string): Promise<void> {
     const key = `${environmentId}\0${projectId}`, previous = this.remoteCheckouts.get(key), load = (this.remoteCheckoutLoads.get(key) ?? 0) + 1;
     this.remoteCheckoutLoads.set(key, load);
+    this.remoteCheckouts.set(key, { loading: true, items: previous?.items ?? [], branches: previous?.branches ?? [] }); this.scheduleEmit();
     let next: RemoteCheckouts;
     try {
       const calls = this.client.environmentCalls?.(environmentId);
@@ -431,9 +453,11 @@ export class HostState {
       const sessions = (path: string) => this.allThreads().filter((thread) => thread.projectId === projectId && thread.worktreePath === path).map((thread) => thread.id);
       const local = refs.filter((ref) => !ref.isRemote);
       const rootRef = local.find((ref) => ref.worktreePath === root) ?? local.find((ref) => ref.current);
+      const repositoryId = this.visibleProjects().find((project) => project.id === projectId)?.repositoryIdentity?.canonicalKey;
+      const repository = repositoryId ? { repositoryId } : {};
       const items: WorktreeSummary[] = [
-        { id: `${environmentId}:${root}`, projectId, path: root, branch: rootRef?.name ?? "", root: true, missing: false, threadIds: sessions(root), active: false },
-        ...local.filter((ref) => ref.worktreePath && ref.worktreePath !== root).map((ref) => ({ id: `${environmentId}:${ref.worktreePath}`, projectId, path: ref.worktreePath!, branch: ref.name, root: false, missing: false, threadIds: sessions(ref.worktreePath!), active: false })),
+        { ...repository, id: `${environmentId}:${root}`, projectId, path: root, branch: rootRef?.name ?? "", root: true, missing: false, threadIds: sessions(root), active: false },
+        ...local.filter((ref) => ref.worktreePath && ref.worktreePath !== root).map((ref) => ({ ...repository, id: `${environmentId}:${ref.worktreePath}`, projectId, path: ref.worktreePath!, branch: ref.name, root: false, missing: false, threadIds: sessions(ref.worktreePath!), active: false })),
       ];
       next = { loading: false, items, branches: refs.map((ref) => ({ projectId, name: ref.name, path: ref.worktreePath, remote: !!ref.isRemote })) };
     } catch (cause) {
@@ -2766,6 +2790,7 @@ export class HostState {
       peerLinks: this.peerLinksSnapshot(), linkRequestPeers: this.peerLinksSnapshot(activeThreadId),
       ...(acknowledgedWorking ? { acknowledgedWorking } : {}),
       ...(this.worktrees ? { worktrees: this.worktrees.snapshot() } : {}),
+      ...(viewId === SIDEBAR_VIEW_ID ? { machineCheckouts: this.sidebarMachineCheckouts() } : {}),
       revision: this.revision, clipboardNonce: this.clipboardNonce, phase: this.phase, home: this.options.home,
       connectionSetup: { ...this.setup, ...(this.connectionProblem ? { problem: this.connectionProblem } : {}) },
       searchPreferences: this.searchPreferences,
@@ -2782,7 +2807,7 @@ export class HostState {
         return { ...task, editVersion: taskEditVersion(task), originThreadId: association ? association.threadId : serverOrigin, originKnown: !!association || serverOrigin !== null };
       }); })() },
       projects: this.visibleProjects().map((project) => { const remote = this.remoteProject(project.id);
-        return { id: project.id, title: project.title, workspaceRoot: project.workspaceRoot, ...(remote ? { environmentLabel: remote.label } : {}) }; }),
+        return { id: project.id, title: project.title, workspaceRoot: project.workspaceRoot, ...(remote ? { environmentLabel: remote.label, environmentId: remote.environmentId } : {}) }; }),
       ...(activeThreadId && this.remoteThread(activeThreadId) ? { remoteSession: this.remoteThread(activeThreadId)! } : {}),
       ...this.environmentsSection(),
       ...(() => { const projectMachines = viewId === SIDEBAR_VIEW_ID ? this.projectMachines() : undefined; return projectMachines ? { projectMachines } : {}; })(),

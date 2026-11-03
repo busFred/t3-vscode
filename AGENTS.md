@@ -1,6 +1,10 @@
 # T3 VSCode development
 
 - Keep [docs/feature-history.md](docs/feature-history.md) current whenever a feature is introduced, changed or removed. Maintain its linked overview table and add concise versioned entries under the affected feature; verify historical release versions from Git rather than guessing.
+- **Protected behavior: native undo in the composer.** Ctrl+Z/Ctrl+Y after typing, pasting an image (real OS clipboard), quoting a conversation (first and repeated) and adding an editor reference must each undo/redo exactly one step, in a new chat tab and in a session tab opened from Sessions. It has regressed repeatedly (v0.1.21, v0.2.4, and again until v0.3.10) because browser harnesses cannot reproduce VS Code's `execCommand('paste')` and key routing. Rules:
+  - `pnpm package` refuses to build unless `node scripts/verify-edh.mjs --base-dir <isolated-home> --undo-only` passed in real VS Code on the exact current source (`scripts/nativeUndoGate.mjs`). Never bypass it; only the owner may waive it (`T3_VSCODE_NATIVE_UNDO_WAIVER="<reason>"`), and a waiver goes in the release notes.
+  - Any change to composer text, insertion, paste, drop, clipboard, quotes, references, draft sync, key handling or the webview bridge must keep `scripts/verify-native-undo.mjs`, `scripts/verify-composer-undo.ts` and the paste-undo check in `scripts/verify-ui.mjs` passing. Never weaken or delete those checks; extend them when a new insertion path is added.
+  - Every regression review must explicitly check native undo for the changed code.
 - Before creating any VSIX, launch a separate regression-review agent with fresh context (`fork_turns: "none"`). Give it the repository, comparison revision, scope and existing feature requirements; ask it to check for accidental regressions independently.
 - Resolve blocking review findings, run relevant verification, and obtain the agent's review of the final changes before packaging. Record the review and validation outcome in the release notes or feature history.
 - Build installers under `target-installer/`; packaging does not authorize installation into the user's normal VS Code profile.

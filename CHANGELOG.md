@@ -2,12 +2,16 @@
 
 ## 0.3.10 — Local build
 
+- Worktrees groups by machine name and loads paired machines’ checkouts from their own servers. Multi-root machines retain repository headings; **Machines** controls visibility.
+- Tasks replaces the project selector with machine shelves, saved fold state and machine-targeted new-task actions. Remote task groups explicitly report that tasks are unavailable and expose no local actions.
+- Repeated project names in project pickers use machine names.
+- Packaging now requires a passing real VS Code native-undo run on the exact source (see AGENTS.md).
 - Fix Ctrl+Z after pasting an image (real clipboard paste in VS Code) or quoting a conversation: the insertion is one undo step again, and redo restores it. Sending waits while a paste is still placing its reference.
 - Machines show whether this window's project is on each machine and can add it (clone) from the sidebar.
 - Project pickers name the machine for same-named projects and match the other inputs' height.
 - Reconnect and Settings moved to the sidebar title bar beside Open Web UI; the sidebar has no footer.
 - More solid colors for status icons, labels, chips and badges.
-- Validation: typecheck clean; 732/732 unit tests; `pnpm run build`; `scripts/verify-ui.mjs`; real VS Code `verify-edh.mjs --undo-only` 11/11 (both new-chat paste and repeated-quote scenarios fail without the fix). Fresh-context Opus reviews: sidebar round APPROVE after fixes (one BLOCK on clone action names, fixed); undo fix APPROVE after fixes. `verify-views.ts` still stops at "Steer with queued message", which also fails at v0.3.7. Not exercised on macOS/Windows. Local installer only, not published.
+- Validation: typecheck clean; 738/738 unit tests; `pnpm run build`; `scripts/verify-ui.mjs` with new machine-group, remote-checkout, task-shelf, project, title-bar and paste-undo checks; real VS Code `verify-edh.mjs --undo-only` 11/11 on this exact source (both new-chat paste and repeated-quote scenarios fail without the fix). Fresh-context Opus reviews approved every part after fixes. `verify-views.ts` still stops at "Steer with queued message", which also fails at v0.3.7. Paired machines' tasks are not yet available. Not exercised on macOS/Windows. Local installer only, not published.
 
 ## 0.3.9 — Release
 

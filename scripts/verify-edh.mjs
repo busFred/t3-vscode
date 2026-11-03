@@ -261,6 +261,9 @@ try {
     const { verifyNativeUndo } = await import('./verify-native-undo.mjs');
     await verifyNativeUndo({ home, workbench, sidebar, findWebview, runCommand });
     console.log('PASS: Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo one step in a new chat panel and in a session custom-editor tab');
+    // Unlocks `pnpm package` for exactly this source (scripts/nativeUndoGate.mjs).
+    const { recordNativeUndoPass } = await import('./nativeUndoGate.mjs');
+    await recordNativeUndoPass(fileURLToPath(new URL('..', import.meta.url)), { vscode: process.env.VSCODE_BIN ?? '/usr/share/code/code' });
   } else if (editorControlsOnly) {
     const { verifyNativeEditorControls } = await import('./verify-native-editor-controls.mjs');
     await verifyNativeEditorControls({ evidence, workbench, sidebar, findWebview, chooseLiveTestModel, runCommand });

@@ -305,7 +305,8 @@ try {
   await sidebar.getByRole('tab', { name: /^Tasks/ }).click();
   const taskSearch = await searchGeometry();
   assert.deepEqual(taskSearch.row, emptySearch.row, 'Sessions and Tasks search rows share their position and size');
-  assert.deepEqual(taskSearch.add, emptySearch.add, 'Both New buttons align');
+  assert.equal(await sidebar.locator('#tasks-manager .sidebar-search-add').count(), 0, 'Tasks create actions belong to their machine shelf');
+  await sidebar.getByRole('button', { name: /^New task on / }).waitFor();
   assert.equal(taskSearch.field.x, emptySearch.field.x);
   assert.equal(taskSearch.field.y, emptySearch.field.y);
   assert.equal(taskSearch.field.height, emptySearch.field.height);
