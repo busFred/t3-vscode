@@ -1,11 +1,12 @@
 # Changelog
 
-## Unreleased (after v0.3.10)
+## 0.3.11 — Local build
 
 - Worktrees groups by machine name and loads paired machines’ checkouts from their own servers. Multi-root machines retain repository headings; **Machines** controls visibility.
 - Tasks replaces the project selector with machine shelves, saved fold state and machine-targeted new-task actions. Remote task groups explicitly report that tasks are unavailable and expose no local actions.
 - Repeated project names in project pickers use machine names.
-- Validation: typecheck; 737/737 unit tests; build; deterministic UI verification pass. `verify-views.ts` passes everything before the known “Steer with queued message” timeout. Implementation only; no installer or live paired-machine verification.
+- Packaging now requires a passing real VS Code native-undo run on the exact source (see AGENTS.md).
+- Validation: typecheck clean; 738/738 unit tests; `pnpm run build`; `scripts/verify-ui.mjs` (new machine-group, remote-checkout and task-shelf checks); real VS Code `verify-edh.mjs --undo-only` passed and stamped this source; `verify-views.ts` passes up to the known "Steer with queued message" step (also failing at v0.3.7). Fresh-context Opus review: APPROVE WITH NITS, all five fixed. Paired machines' tasks are not yet available. Local installer only, not published.
 
 ## 0.3.10 — Local build
 
