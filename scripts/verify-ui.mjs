@@ -196,6 +196,11 @@ try {
   assert.equal(await page.locator('.environments .env-row').first().locator('.env-icon > .env-dot').evaluate(dot => getComputedStyle(dot).backgroundColor), 'rgb(0, 200, 83)');
   assert.equal(await page.locator('.environments .env-row').first().locator('.env-icon').getAttribute('aria-label'), 'This computer: Connected');
   await page.locator('.environments').screenshot({ path: `${evidence}/machines-status-light.png` });
+  // Hover actions sit in the state column and never cover the machine's name.
+  const hovered = page.locator('.environments .env-row').filter({ hasText: 'Build machine' });
+  await hovered.hover();
+  const [nameBox, actionsBox] = [await hovered.locator('.env-name').boundingBox(), await hovered.locator('.env-hover-actions').boundingBox()];
+  assert.ok(actionsBox.x >= nameBox.x + nameBox.width - 1, `hover actions overlap the name: ${JSON.stringify([nameBox, actionsBox])}`);
   // One remove per machine asks which capability to remove and describes each.
   const both = page.locator('.environments .env-row').filter({ hasText: 'Build machine' });
   await both.hover(); await both.getByRole('button', { name: 'Remove Build machine…' }).click();

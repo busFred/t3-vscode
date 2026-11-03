@@ -456,7 +456,6 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .env-dot.off { width: 5px; height: 5px; background: transparent; border: 1.5px solid var(--muted-foreground); }
 .env-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 1px 8px; align-items: center; padding: 5px 6px; border-radius: 4px; }
 .env-row:hover, .env-row:focus-within { background: var(--sidebar-row-hover); }
-.env-row > svg { grid-row: span 2; color: var(--muted-foreground); }
 .env-name { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: .75rem; }
 .env-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .env-chip { flex: none; padding: 0 5px; border-radius: 8px; font-size: .625rem; color: var(--muted-foreground); background: color-mix(in srgb, var(--foreground) 12%, transparent); white-space: nowrap; }
@@ -1068,3 +1067,5 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .env-icon { position: relative; grid-row: span 2; display: inline-flex; color: var(--muted-foreground); }
 .env-icon > .env-dot { position: absolute; right: -3px; bottom: -2px; width: 7px; height: 7px; box-shadow: 0 0 0 1.5px var(--sidebar, var(--vscode-sideBar-background)); }
 .env-icon > .env-dot.off { width: 5px; height: 5px; background: var(--sidebar, var(--vscode-sideBar-background)); }
+/* With no status text, the state column still reserves room for the hover actions so they never cover the name. */
+.env-state { min-width: 78px; }

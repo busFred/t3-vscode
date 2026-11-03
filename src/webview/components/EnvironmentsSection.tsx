@@ -25,7 +25,7 @@ function machineStatus(machine: MachineRow): { tone: "ok" | "warn" | "error" | "
   if (status) return { connected: { tone: "ok", label: "Connected" }, connecting: { tone: "warn", label: "Connecting…" }, reconnecting: { tone: "warn", label: "Reconnecting…" },
     expiring: { tone: "warn", label: machine.conversation?.detail ?? "Expiring soon" }, expired: { tone: "error", label: "Pairing expired" }, disabled: { tone: "off", label: "Disabled" } }[status] as { tone: "ok" | "warn" | "error" | "off"; label: string };
   const health = machine.agents?.status;
-  return health === "reachable" ? { tone: "ok", label: "Reachable" } : health === "expired" ? { tone: "warn", label: "Agent access expired" } : { tone: "error", label: peerHealthLabel(health ?? "unreachable") };
+  return health === "reachable" ? { tone: "ok", label: "Reachable" } : health === "expired" ? { tone: "error", label: "Agent access expired" } : { tone: "error", label: peerHealthLabel(health ?? "unreachable") };
 }
 export function EnvironmentsSection({ state }: { readonly state: HostStateSnapshot }) {
   const run = useActions();
