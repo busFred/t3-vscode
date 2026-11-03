@@ -6,6 +6,7 @@
 - Add either or both capabilities in one address-first flow; enable agent access for an existing conversation machine using a host-only minted code, with manual code fallback.
 - Preserve connection actions, policy explanations and confirmed removal of agent access.
 - Keep the Account & Usage, Machines and Sessions titles in view however long their lists are; drag or use the keyboard to adjust the Machines list height.
+- Fold usage windows (Session, Week, Fable, Month…) when a provider reports more than one; tighter usage and machine rows.
 - Faster sidebar and transcript updates with many sessions and while replies stream; hidden views no longer receive updates until shown.
 
 ## 0.3.7 — Release

@@ -1,6 +1,7 @@
 import { useDateTimeFormat, useTimeFormat } from "../timeFormat";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDownIcon, RefreshCwIcon, Settings2Icon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ChevronDownIcon, ChevronRightIcon, RefreshCwIcon, Settings2Icon } from "lucide-react";
+import { useCollapsedUsageSections } from "../usageSections";
 import { collectExternalUsageLinks, formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
 import type { ServerProviderUsageWindow } from "@t3tools/contracts";
 import type { HostStateSnapshot } from "../../shared/bridge";
@@ -18,6 +19,7 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
   const [display, setDisplay] = useState<AccountsDisplay>(state.usagePanelAccounts ?? "pooled");
   useEffect(() => setDisplay(state.usagePanelAccounts ?? "pooled"), [state.usagePanelAccounts]);
   const [refreshing, setRefreshing] = useState(false);
+  const [collapsed, setCollapsed] = useCollapsedUsageSections();
   useEffect(() => {
     if (!request || !details.current) return;
     // A status meter names an account or a provider; either opens its provider.
@@ -32,6 +34,8 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
   const checkedAt = account?.limits.checkedAt;
   const several = (group?.reporting.length ?? 0) > 1;
   const perAccount = several && display === "perAccount";
+  // Windows fold only when the provider reports more than one kind of limit (Claude's session/week/Fable, Kimi's week/month), never a lone window.
+  const foldable = !!account && accountWindows(account).filter((row) => row.window).length > 1;
   const notices = usageNotices(state, group?.driver);
   const links = collectExternalUsageLinks(limitPresentations(state));
   const run = useActions();
@@ -41,14 +45,24 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
     const reset = window ? meterResetLabel(window.resetsAt, now) : "";
     const first = several && window ? soonestReset(group, window, now) : undefined;
     const resetTitle = window ? [formatResetsIn(window, now), first ? `soonest: ${usageAccountName(first)}` : ""].filter(Boolean).join(" · ") : "";
-    return <div className="account-limit" key={window?.id ?? label}><div><span>{label}</span>{window
+    const heading = <><span>{label}</span>{window
       ? <span className="account-limit-value"><span>{remainingPercent(window)}% left</span>{reset ? <small title={resetTitle || undefined}>{reset}</small> : null}</span>
-      : <span className="account-limit-missing" title="This account does not report usage">unavailable</span>}</div>
-      {window ? <div className="account-limit-bar" role="meter" aria-label={`${account?.label} ${label} remaining`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={remainingPercent(window)}><i style={{ width: `${remainingPercent(window)}%` }} /></div> : null}</div>;
+      : <span className="account-limit-missing" title="This account does not report usage">unavailable</span>}</>;
+    const bar = window ? <div className="account-limit-bar" role="meter" aria-label={`${account?.label} ${label} remaining`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={remainingPercent(window)}><i style={{ width: `${remainingPercent(window)}%` }} /></div> : null;
+    // The heading already carries the value, so folding a pooled window only hides its bar.
+    return foldable && bar ? fold(group, label, window?.id ?? label, () => heading, bar) : <div className="account-limit" key={window?.id ?? label}><div>{heading}</div>{bar}</div>;
+  };
+  /** One usage window that folds to its title line; only offered when the provider reports more than one window. */
+  const fold = (group: UsageGroup, label: string, key: string, heading: (open: boolean) => ReactNode, body: ReactNode) => {
+    const id = `${group.key}:${label}`, open = !collapsed.has(id);
+    return <details className="account-limit account-limit-group" key={key} open={open} onToggle={(event) => setCollapsed(id, !event.currentTarget.open)}>
+      <summary>{open ? <ChevronDownIcon size={11} /> : <ChevronRightIcon size={11} />}{heading(open)}</summary>{body}</details>;
   };
   // Every account gets the same bar length and slot in each window, so a column reads as one account.
-  const accountRows = (row: AccountRow) => <div className="account-limit" key={row.window?.id ?? row.label}><div><span>{row.label}</span></div>
-    <div className="account-limit-accounts">{row.columns.map(({ account, window }) => {
+  // Folded, a window's title keeps the lowest remaining share across accounts in view.
+  const accountRows = (row: AccountRow, group: UsageGroup) => {
+    const remaining = row.columns.flatMap(({ window }) => window ? [remainingPercent(window)] : []);
+    const body = <div className="account-limit-accounts">{row.columns.map(({ account, window }) => {
       const name = usageAccountName(account);
       const reset = window ? meterResetLabel(window.resetsAt, now) : "";
       const title = window ? [`${name} · ${remainingPercent(window)}% left`, formatResetsIn(window, now)].filter(Boolean).join(" · ") : `${name} · not reported`;
@@ -56,7 +70,10 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
         <div className="account-limit-bar" role="meter" aria-label={`${name} ${row.label} remaining`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={window ? remainingPercent(window) : undefined}>{window ? <i style={{ width: `${remainingPercent(window)}%` }} /> : null}</div>
         <span className="account-limit-value">{window ? <>{remainingPercent(window)}%{reset ? <small>{reset}</small> : null}</> : <span className="account-limit-missing">—</span>}</span>
       </div>;
-    })}</div></div>;
+    })}</div>;
+    const heading = (open: boolean) => <><span>{row.label}</span>{!open && remaining.length ? <span className="account-limit-value" title="Lowest remaining across accounts">lowest {Math.min(...remaining)}%</span> : null}</>;
+    return foldable ? fold(group, row.label, row.window?.id ?? row.label, heading, body) : <div className="account-limit" key={row.window?.id ?? row.label}><div>{heading(true)}</div>{body}</div>;
+  };
   // Rows: provider and display choice; source machine beside the actions; plan beside the update time.
   // Without a plan the update time joins the actions row instead of sitting alone on its own.
   const status = <small role="status">{refreshing ? "Refreshing limits…" : checkedAt ? <>Updated <time dateTime={checkedAt} title={dateTime(new Date(checkedAt))}>{new Date(checkedAt).toLocaleTimeString(undefined, timeOptions)}</time></> : "No update reported"}</small>;
@@ -69,7 +86,7 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
         <button className="icon-button" aria-label="Refresh usage" title="Refresh usage" disabled={refreshing} onClick={() => { setRefreshing(true); void run("refreshUsage").finally(() => setRefreshing(false)); }}><RefreshCwIcon size={13} /></button><button className="icon-button" aria-label="Status meters" title="Status meters" onClick={() => { void run("configureUsage"); }}><Settings2Icon size={13} /></button></div>
       {group?.plan ? <div className="account-plan subtle"><p>{group.plan}</p>{status}</div> : null}
       {group && account ? <>
-        {perAccount ? perAccountRows(group, now).map(accountRows) : accountWindows(account).map((row) => limit(group, row.window, row.label))}
+        {perAccount ? perAccountRows(group, now).map((row) => accountRows(row, group)) : accountWindows(account).map((row) => limit(group, row.window, row.label))}
       </> : <p className="subtle">No provider accounts reported yet.</p>}
       {notices.map((notice) => <p className="usage-notice" key={notice}>{notice}</p>)}
       {links.map((link) => <button key={link.url} className="text-button provider-usage-link" onClick={() => { void run("openLink", { href: link.url }); }}>{link.label}</button>)}

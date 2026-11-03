@@ -1195,6 +1195,12 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - The provider title for several accounts is `Claude · (3)` instead of `Claude · 3 accounts`, which did not fit a narrow side panel. Text only.
 - Validation: new unit tests covering three accounts with one exhausted, a 24 h/72 h Fable scenario, per-account columns, the all-exhausted fallback, a no-weekly account and a single exhausted account.
 
+#### Unreleased (after v0.3.7) — compact sections and foldable windows
+
+- When a provider reports more than one kind of limit (Claude's Session / Week / Fable, Kimi's week and month), each window folds to its title line, in both Pooled and Per account views. Folded, a per-account window shows the lowest remaining share and a pooled one keeps its value. A provider with a single window (for example Codex's weekly limit) never folds. Folded windows are remembered per provider in the sidebar's view state.
+- Usage rows and machine rows use less vertical space. Per-account bars keep a 3 px gap; machine rows, chips and actions are tighter.
+- Validation: browser fixture checks bar spacing, folding and the "lowest" title in Per account, folding in Pooled, and that a single-window provider has no fold. Screenshots: `sidebar-compact.png`, `usage-folded.png`.
+
 ### Status bar meters
 
 #### v0.3.7

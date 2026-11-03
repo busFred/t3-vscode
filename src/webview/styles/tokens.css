@@ -1004,3 +1004,26 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .environments fieldset input:not([type=checkbox]) { width: 100%; box-sizing: border-box; }
 /* Below any usable height the setup notice would push the Sessions tabs away; Settings still shows it. */
 @media (max-height: 120px) { .sidebar-front > .provider-setup { display: none; } }
+/* Compact sidebar sections: usage rows and machine rows use the least vertical space that stays readable. */
+.account-usage-body { padding-bottom: 4px; }
+.account-limit { margin-top: 3px; }
+.account-limit > div:first-child { line-height: 1.25; }
+.account-limit-accounts { margin-top: 1px; }
+.account-limit-account { margin: 0; line-height: 1.15; gap: 0 6px; }
+.account-limit-account .account-limit-value { line-height: 1.15; }
+.account-plan { line-height: 1.3; }
+.environments-body { padding: 0 4px 4px; }
+.environments-body > .env-hint { margin: 2px 6px 1px; line-height: 1.3; }
+.env-row { padding: 2px 6px; gap: 0 6px; line-height: 1.25; }
+.env-row .env-name, .env-row .env-meta { line-height: 1.25; }
+.machine-capabilities { gap: 1px 6px; line-height: 1.25; }
+.machine-capabilities .text-button { padding-block: 0; line-height: 1.25; }
+.env-chip { line-height: 1.4; }
+.env-add { margin-top: 1px; }
+/* Per-account windows fold to one line; bars keep a little air between them. */
+.account-limit-group > summary { display: flex; align-items: center; gap: 3px; margin-left: -3px; font-size: .6875rem; line-height: 1.25; cursor: pointer; list-style: none; }
+.account-limit-group > summary::-webkit-details-marker { display: none; }
+.account-limit-group > summary > svg { flex: none; color: var(--muted-foreground); }
+.account-limit-group > summary > span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-limit-group:not([open]) > summary > .account-limit-value { color: var(--muted-foreground); }
+.account-limit-accounts { display: grid; row-gap: 3px; }

@@ -242,8 +242,41 @@ try {
   await separator.press('End'); await titlesOnScreen();
   await separator.dblclick();
   assert.equal(await page.locator('.environments').getAttribute('data-sized'), null);
+  // Per-account usage and machine rows stay compact.
+  await separator.dblclick();
+  await page.evaluate(() => {
+    const at = (hours) => new Date(Date.now() + hours * 3_600_000).toISOString();
+    const account = (email, values) => ({ id: `${email}.json`, driver: "claudeAgent", email, plan: "Claude Subscription", usageLimits: { checkedAt: at(0), windows: [
+      { id: "five_hour", kind: "session", label: "Session", usedPercent: values[0], resetsAt: at(4) }, { id: "seven_day", kind: "weekly", label: "Weekly", usedPercent: values[1], resetsAt: at(100) }, { id: "seven_day_fable", kind: "weekly", label: "Fable", usedPercent: values[2], resetsAt: at(102) }] } });
+    window.__replace({ usagePanelAccounts: "perAccount", environments: { local: { label: "Local workstation", host: "localhost" }, indicator: "ok", rows: ["Build machine", "GPU box"].map((label, index) => ({ environmentId: `compact-${index}`, label, host: `compact-${index}.example`, status: "connected", expiresAt: null, ignored: false })) },
+      usageLimitSources: [{ id: "hub", kind: "cliproxy", label: "CLI Proxy", checkedAt: at(0), accounts: [account("a@example.test", [3, 47, 2]), account("b@example.test", [0, 100, 0]), account("c@example.test", [100, 100, 4])] }] });
+  });
+  const usageChoice = page.getByLabel('Usage provider');
+  if (await usageChoice.count()) { const claude = await usageChoice.locator('option', { hasText: 'Claude' }).first().getAttribute('value'); if (claude) await usageChoice.selectOption(claude); }
+  if (await page.getByLabel('Multiple accounts').count()) await page.getByLabel('Multiple accounts').selectOption('perAccount');
+  await page.screenshot({ path: `${evidence}/sidebar-compact.png` });
+  const rowGap = await page.locator('.account-limit-account').evaluateAll(rows => rows.length > 1 ? rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().bottom : 0);
+  assert.ok(rowGap >= 2 && rowGap <= 5, `per-account usage bars keep a small gap: ${rowGap}px apart`);
+  // Each window folds to its title, which then shows the lowest remaining share.
+  const sessionGroup = page.locator('.account-limit-group').filter({ hasText: 'Session' });
+  await sessionGroup.locator('summary').click();
+  assert.equal(await sessionGroup.evaluate(element => element.open), false);
+  await sessionGroup.locator('summary', { hasText: /lowest 0%/ }).waitFor();
+  assert.equal(await sessionGroup.locator('.account-limit-account').first().isVisible(), false);
+  await page.screenshot({ path: `${evidence}/usage-folded.png` });
+  await sessionGroup.locator('summary').click();
+  assert.equal(await sessionGroup.evaluate(element => element.open), true);
+  // Pooled windows fold too (the title keeps the value); a provider with a single kind of limit never folds.
+  await page.getByLabel('Multiple accounts').selectOption('pooled');
+  const pooledWeek = page.locator('.account-limit-group').filter({ hasText: 'Week' });
+  await pooledWeek.locator('summary').click();
+  assert.equal(await pooledWeek.locator('.account-limit-bar').isVisible(), false);
+  await pooledWeek.locator('summary', { hasText: /\d+% left/ }).waitFor();
+  await pooledWeek.locator('summary').click();
+  await page.evaluate(() => window.__replace({ usageLimitSources: [{ id: "hub", kind: "cliproxy", label: "CLI Proxy", checkedAt: new Date().toISOString(), accounts: [{ id: "solo.json", driver: "claudeAgent", email: "solo@example.test", plan: "Claude Subscription", usageLimits: { checkedAt: new Date().toISOString(), windows: [{ id: "seven_day", kind: "weekly", label: "Weekly", usedPercent: 40, resetsAt: new Date(Date.now() + 3_600_000).toISOString() }] } }] }] }));
+  await page.waitForFunction(() => document.querySelectorAll('.account-limit-group').length === 0 && document.querySelectorAll('.account-limit-bar').length === 1, null, { timeout: 5000 });
   await page.locator('.account-usage > summary').click();
-  await page.evaluate(() => window.__replace({ environments: undefined, peerLinks: undefined }));
+  await page.evaluate(() => window.__replace({ environments: undefined, peerLinks: undefined, usageLimitSources: undefined }));
   await page.evaluate(() => { document.body.dataset.surface = "panel"; window.__replace({}); });
   await page.getByRole("textbox", { name: "Search threads" }).waitFor({ state: "hidden" });
   await page.screenshot({ path: `${evidence}/chat-sidebar.png` });
