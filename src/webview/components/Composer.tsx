@@ -1,3 +1,4 @@
+import { isManagedDriverAllowed, managedPolicyDeniedMessage, managedRuntimeModeDenial } from "@t3tools/contracts";
 import { ImageCaptionEditor } from "./ImageCaptionEditor";
 import { bridge } from "../bridge-client";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -124,7 +125,8 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     ?? (state.draft.supportsNoProject ? "No project" : "Choose project");
   const preparations = activeWorktreePreparations(state);
   // A new chat bound for a machine that dropped, or waiting for a clone there, keeps its draft; sending waits until it is ready.
-  const sendBlock = draftSendBlock(state);
+  const policyBlock = managedRuntimeModeDenial(state.managedPolicy, runtimeMode) ?? (provider && state.managedPolicy && !isManagedDriverAllowed(state.managedPolicy, provider.driver) ? managedPolicyDeniedMessage(state.managedPolicy.organization, `${provider.driver} providers`) : undefined);
+  const sendBlock = policyBlock ?? draftSendBlock(state);
   const setupBlocked = preparations.some((item) => !item.background && item.phase !== "ready") || !!sendBlock;
   const worktreeLabel = composerWorktreeLabel(state);
   const workspace = state.draft.workspace;
@@ -365,7 +367,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       const choice = speed.choices.find((item) => item.id === event.target.value); if (!choice) return;
       setBusy(true); void run("setModelOption", { ...target, optionId: speed.optionId, value: choice.value }).finally(() => setBusy(false));
     }}>{speed.current ? null : <option value="" disabled>{speed.explicit ? "Unavailable" : "Default"}</option>}{speed.choices.map((choice) => <option key={choice.id} value={choice.id} title={choice.description}>{speedChoiceLabel(choice)}</option>)}</select></label> : null}
-    <select aria-label="Permission mode" value={runtimeMode} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => { void run("setModes", { ...target, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes ?? ["approval-required", "auto", "full-access"]).map((mode) => <option key={mode} value={mode}>{runtimeLabels[mode]}</option>)}</select>
+    <select aria-label="Permission mode" value={runtimeMode} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => { void run("setModes", { ...target, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes ?? ["approval-required", "auto", "full-access"]).map((mode) => <option key={mode} value={mode} disabled={!!managedRuntimeModeDenial(state.managedPolicy, mode)} title={managedRuntimeModeDenial(state.managedPolicy, mode)}>{runtimeLabels[mode]}</option>)}</select>
     {state.remoteSession ? null : <WorktreeSelector state={state} disabled={busy || state.sending || thread?.providerNativeSubagent === true} />}
   </div>;
   return <div className="composer-area"><div className="composer-column">
@@ -467,7 +469,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
             : <span className="composer-shortcuts" aria-hidden="true"><span>{running ? "Enter to queue" : "Enter to send"}</span><span>{running && state.queue?.canSteer ? `${steerShortcut} to steer` : "Shift+Enter for a new line"}</span></span>}
           {thread?.forceStopRunId ? <button className="stop-button" title="Agent not responding to Stop" onClick={() => { void run("forceStop", { threadId: thread.id, runId: thread.forceStopRunId }); }}>Force stop</button> : null}
           {canStop && thread ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
-          <button className="send-button" aria-label="Send message" title={shortcutHint} disabled={disabled || setupBlocked || picking || placingPicked || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
+          <button className="send-button" aria-label="Send message" title={policyBlock ?? shortcutHint} disabled={disabled || setupBlocked || picking || placingPicked || !selection || attachments.some((file) => file.pending || !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
         </div>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { isManagedSettingPath } from "@t3tools/contracts";
 import { useState } from "react";
 import { ArrowLeftIcon, PlusIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
@@ -9,6 +10,10 @@ import { branchPolicyLabel } from "./WorktreeSessionBranch";
 export function WorktreeSettings({ state, settings, onClose }: { readonly state: HostStateSnapshot; readonly settings: WorktreeProjectSettings; readonly onClose: () => void }) {
   const [draft, setDraft] = useState(settings); const [busy, setBusy] = useState(false); const [failed, setFailed] = useState(false);
   const run = useActions();
+  const policy = state.localManagedPolicy;
+  const locked = (path: string) => isManagedSettingPath(policy, path);
+  const projectLock = (field: string) => locked(field) || locked(`projectSettingsOverrides.${draft.projectId}.${field}`);
+  const managed = policy ? `Managed by ${policy.organization}.` : undefined;
   const patch = (change: Partial<WorktreeProjectSettings>) => { setFailed(false); setDraft({ ...draft, ...change }); };
   const environment = (change: Partial<WorktreeEnvironmentProfile>) => patch({ environment: { ...draft.environment, ...change } });
   const cleanup = (change: Partial<WorktreeProjectSettings["cleanup"]>) => patch({ cleanup: { ...draft.cleanup, ...change } });
@@ -18,7 +23,7 @@ export function WorktreeSettings({ state, settings, onClose }: { readonly state:
     <header><button type="button" className="text-button" disabled={busy} onClick={onClose}><ArrowLeftIcon size={13} />Worktrees</button><h2>Worktree settings</h2></header>
     <div className="task-editor-fields"><p className="task-context">{state.projects.find((project) => project.id === draft.projectId)?.title}</p>{failed ? <p className="task-status" role="alert">Save failed. Your edits are kept.</p> : null}
       <fieldset disabled={busy}>
-        <details className="task-workspace" open><summary>Project actions · synced with T3</summary><small>The selected setup action runs when a worktree is created. Waiting setup finishes before the first agent starts.</small>
+        <details className="task-workspace" open><summary>Project actions · synced with T3</summary><fieldset disabled={projectLock("defaultProjectScripts")} title={projectLock("defaultProjectScripts") ? managed : undefined}><small>The selected setup action runs when a worktree is created. Waiting setup finishes before the first agent starts.</small>
           {draft.actions.map((action) => <fieldset key={action.id}>
             <label>Name<input required aria-label="Action name" value={action.name} onChange={(event) => updateAction(action.id, { name: event.target.value })} /></label>
             <label>Command<textarea required aria-label={`Command for ${action.name || "action"}`} value={action.command} onChange={(event) => updateAction(action.id, { command: event.target.value })} /></label>
@@ -30,7 +35,7 @@ export function WorktreeSettings({ state, settings, onClose }: { readonly state:
           </fieldset>)}
           <div className="worktree-actions"><button type="button" onClick={() => patch({ actions: [...draft.actions, { id: crypto.randomUUID(), name: "", command: "", icon: "configure", runOnWorktreeCreate: false, async: false }] })}><PlusIcon size={12} />Add action</button></div>
           <details className="task-workspace"><summary>Actions from project configuration</summary>{draft.fileError ? <p className="task-status">{draft.fileError}</p> : null}{!draft.fileActions.length ? <small>No file actions found.</small> : null}{draft.fileActions.map((action) => <div key={action.id}><small>{action.name}</small><pre className="worktree-log">{action.command}</pre><div className="worktree-actions"><button type="button" disabled={draft.actions.some((item) => item.id === action.id)} onClick={() => patch({ actions: [...draft.actions.map((item) => action.runOnWorktreeCreate ? { ...item, runOnWorktreeCreate: false } : item), { ...action }] })}>Import action</button></div></div>)}</details>
-        </details>
+        </fieldset></details>
         <details className="task-workspace" open><summary>Python environment · extension managed</summary><small>Shared across this extension’s windows. T3 Web has no environment profile editor. Project actions use this environment helper; arbitrary agent commands require explicit conda run.</small>
           <label className="task-enabled"><input type="checkbox" checked={draft.environment.enabled} onChange={(event) => environment({ enabled: event.target.checked })} />Prepare an isolated environment per checkout</label>
           <fieldset disabled={!draft.environment.enabled}>
@@ -44,18 +49,18 @@ export function WorktreeSettings({ state, settings, onClose }: { readonly state:
           </fieldset>
         </details>
         <details className="task-workspace"><summary>Creation defaults · synced with T3</summary>
-          <label className="task-enabled"><input type="checkbox" checked={draft.startFromOrigin} onChange={(event) => patch({ startFromOrigin: event.target.checked })} />Start from origin</label>
-          <label>Branch prefix<input aria-label="Worktree branch prefix" value={draft.branchPrefix} onChange={(event) => patch({ branchPrefix: event.target.value })} /></label>
-          <label>Worktree location (T3 service-wide)<input disabled={!draft.capabilities?.worktreesDirectory} aria-label="Worktree location" value={draft.location} onChange={(event) => patch({ location: event.target.value })} /></label>
+          <label className="task-enabled"><input type="checkbox" disabled={projectLock("newWorktreesStartFromOrigin")} title={projectLock("newWorktreesStartFromOrigin") ? managed : undefined} checked={draft.startFromOrigin} onChange={(event) => patch({ startFromOrigin: event.target.checked })} />Start from origin</label>
+          <label>Branch prefix<input disabled={projectLock("branchNamePrefix")} title={projectLock("branchNamePrefix") ? managed : undefined} aria-label="Worktree branch prefix" value={draft.branchPrefix} onChange={(event) => patch({ branchPrefix: event.target.value })} /></label>
+          <label>Worktree location (T3 service-wide)<input disabled={!draft.capabilities?.worktreesDirectory || locked("worktreesDirectory")} title={locked("worktreesDirectory") ? managed : undefined} aria-label="Worktree location" value={draft.location} onChange={(event) => patch({ location: event.target.value })} /></label>
           {!draft.capabilities?.worktreesDirectory ? <small>This server does not support changing the worktree directory.</small> : null}
-          <label>Submodules<select aria-label="Worktree submodules" value={draft.submodules} onChange={(event) => patch({ submodules: event.target.value as WorktreeProjectSettings["submodules"] })}><option value="recursive">Recursive</option><option value="top-level">Top level</option><option value="none">None</option></select></label>
+          <label>Submodules<select disabled={projectLock("worktreeSubmodules")} title={projectLock("worktreeSubmodules") ? managed : undefined} aria-label="Worktree submodules" value={draft.submodules} onChange={(event) => patch({ submodules: event.target.value as WorktreeProjectSettings["submodules"] })}><option value="recursive">Recursive</option><option value="top-level">Top level</option><option value="none">None</option></select></label>
           <label className="task-enabled"><input type="checkbox" checked={draft.copyEnv} onChange={(event) => patch({ copyEnv: event.target.checked })} />Copy .env files (extension)</label>
         </details>
         <details className="task-workspace"><summary>Session branches · extension only</summary>
           <label>When a session’s checkout changes branch<select aria-label="Default session branch policy" value={draft.branchPolicy ?? "follow"} onChange={(event) => patch({ branchPolicy: event.target.value as "follow" | "pinned" })}><option value="follow">{branchPolicyLabel("follow")}</option><option value="pinned">{branchPolicyLabel("pinned")}</option></select></label>
           <small>Sessions stay bound to their checkout folder. Following records the checkout’s current branch when you send a message. Keeping the branch holds messages until the checkout is switched back or you use its branch. Each session can override this in Session checkout.</small>
         </details>
-        <details className="task-workspace"><summary>Cleanup · synced with T3</summary>
+        <details className="task-workspace"><summary>Cleanup · synced with T3</summary><fieldset disabled={projectLock("worktreeCleanup")} title={projectLock("worktreeCleanup") ? managed : undefined}>
           <label className="task-enabled"><input type="checkbox" checked={draft.cleanup.enabled} onChange={(event) => cleanup({ enabled: event.target.checked })} />Enable automatic cleanup</label>
           <fieldset disabled={!draft.cleanup.enabled}>
             <label>Inactive for (days; 0 disables)<input type="number" min="0" aria-label="Cleanup inactive days" value={draft.cleanup.inactiveDays} onChange={(event) => cleanup({ inactiveDays: Math.max(0, Number(event.target.value) || 0) })} /></label>
@@ -65,7 +70,7 @@ export function WorktreeSettings({ state, settings, onClose }: { readonly state:
             <label>Keep checkouts with<select disabled={!draft.capabilities?.cleanupRetention} aria-label="Cleanup preserve local files" value={draft.cleanup.keepLocalFiles} onChange={(event) => cleanup({ keepLocalFiles: event.target.value as WorktreeProjectSettings["cleanup"]["keepLocalFiles"] })}><option value="any">Any local files</option><option value="uncommitted">Uncommitted files</option><option value="tracked">Tracked changes</option></select></label>
           </fieldset>
           {!draft.capabilities?.cleanupRetention ? <small>This server does not support settled retention or local-file cleanup guards.</small> : null}
-        </details>
+        </fieldset></details>
         <details className="task-workspace"><summary>Environment cleanup · extension only</summary>
           <label className="task-enabled"><input type="checkbox" checked={draft.environment.autoCleanup ?? true} onChange={(event) => environment({ autoCleanup: event.target.checked })} />Clean up environments of deleted worktrees</label>
           <small>Checked when Worktrees opens or refreshes. Owned environments are removed after a 24-hour grace period from confirmed checkout removal. Moved or inaccessible checkouts and known active work are skipped. Separately launched Python processes may still be using an environment; turn this off to retain it.</small>

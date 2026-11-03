@@ -1,6 +1,7 @@
 export function StatusView(props: {
   readonly title: string;
   readonly detail?: string;
+  readonly managedOrganization?: string;
   readonly actions?: ReadonlyArray<{ readonly label: string; readonly onClick: () => void }>;
 }) {
   return (
@@ -8,6 +9,7 @@ export function StatusView(props: {
       <div className="status-card">
         <div className="status-title">{props.title}</div>
         {props.detail ? <div className="status-detail">{props.detail}</div> : null}
+        {props.managedOrganization ? <div className="status-detail">Managed by {props.managedOrganization}</div> : null}
         {props.actions && props.actions.length > 0 ? (
           <div className="status-actions">
             {props.actions.map((action) => (

@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import * as Schema from 'effect/Schema';
-import { ProjectId, ProjectScript, ServerSettings } from '@t3tools/contracts';
+import { isManagedSettingPath, ProjectId, ProjectScript, ServerSettings, type ManagedPolicySummary } from '@t3tools/contracts';
 import { resolveProjectScripts } from '@t3tools/shared/projectScripts';
 import { resolveProjectSettings, resolveWorktreeCleanup } from '@t3tools/shared/projectSettings';
 import { parseT3ProjectFile } from '@t3tools/shared/t3ProjectFile';
@@ -13,6 +13,7 @@ import { parseWorktreeEnvironmentProfile, type WorktreeEnvironmentManager } from
 
 export interface WorktreeSettingsProject { id: string; workspaceRoot: string; scripts: readonly unknown[] }
 export interface WorktreeSettingsClient {
+  readonly config?: { readonly managedPolicy?: ManagedPolicySummary } | null;
   getSettings?: () => Promise<unknown>;
   updateSettings?: (patch: unknown) => Promise<unknown>;
   readonly worktreeSettingsCapabilities?: { readonly worktreesDirectory: boolean; readonly cleanupRetention: boolean; readonly runOnSettle: boolean };
@@ -232,10 +233,30 @@ export class WorktreeSettingsStore {
     if (!support.runOnSettle && nextActions.some((action) => (action.runOnSettle ?? false) !== (priorScripts.find((script) => script.id === action.id)?.runOnSettle ?? false))) throw new Error('This T3 server does not support settle actions. Upgrade the server.');
     // Keep desktop-only preview metadata when editing an existing service action.
     const defaultProjectScripts = nextActions.map((action) => ({ ...priorScripts.find((script) => script.id === action.id), ...action }));
-    await client.updateSettings({ ...(support.worktreesDirectory ? { worktreesDirectory: location } : {}), projectSettingsOverrides: { [project.id]: { ...priorOverride, defaultProjectScripts,
-      newWorktreesStartFromOrigin: startFromOrigin, worktreeSubmodules: value.submodules, branchNamePrefix: branchPrefix,
-      worktreeCleanup: enabled ? { mode: 'custom', rules: { ...(support.cleanupRetention ? { worktreeKeepWhen: keepWhen[retention], worktreeSettledAfterDays: settledDays } : {}), worktreeAfterDays: inactiveDays || null, worktreeOnMerge: merged, worktreeOnDelete: priorCleanup.worktreeOnDelete, worktreeUnchanged: unchanged } } : { mode: 'off' },
-    } } });
+    const policy = client.config?.managedPolicy;
+    const previousView = policy ? await this.load(scope, project, client) : undefined;
+    const projectPath = `projectSettingsOverrides.${project.id}`;
+    const locked = (path: string) => isManagedSettingPath(policy, path) ||
+      (path.startsWith(`${projectPath}.`) && isManagedSettingPath(policy, path.slice(projectPath.length + 1)));
+    const changes: Array<[string, unknown, unknown]> = [
+      ['worktreesDirectory', location, previousView?.location],
+      [`${projectPath}.defaultProjectScripts`, nextActions, previousView?.actions],
+      [`${projectPath}.newWorktreesStartFromOrigin`, startFromOrigin, previousView?.startFromOrigin],
+      [`${projectPath}.worktreeSubmodules`, value.submodules, previousView?.submodules],
+      [`${projectPath}.branchNamePrefix`, branchPrefix, previousView?.branchPrefix],
+      [`${projectPath}.worktreeCleanup`, value.cleanup, previousView?.cleanup],
+    ];
+    for (const [path, next, previous] of changes) if (locked(path) && JSON.stringify(next) !== JSON.stringify(previous)) throw new Error(`Managed by ${policy!.organization}.`);
+    const override = { ...priorOverride, defaultProjectScripts, newWorktreesStartFromOrigin: startFromOrigin,
+      worktreeSubmodules: value.submodules, branchNamePrefix: branchPrefix,
+      worktreeCleanup: enabled ? { mode: 'custom', rules: { ...(support.cleanupRetention ? { worktreeKeepWhen: keepWhen[retention], worktreeSettledAfterDays: settledDays } : {}), worktreeAfterDays: inactiveDays || null, worktreeOnMerge: merged, worktreeOnDelete: priorCleanup.worktreeOnDelete, worktreeUnchanged: unchanged } } : { mode: 'off' } };
+    for (const key of Object.keys(override)) if (locked(`${projectPath}.${key}`)) {
+      if (Object.hasOwn(priorOverride, key)) (override as Record<string, unknown>)[key] = (priorOverride as Record<string, unknown>)[key];
+      else delete (override as Record<string, unknown>)[key];
+    }
+    const patch = { ...(support.worktreesDirectory && !locked('worktreesDirectory') ? { worktreesDirectory: location } : {}),
+      ...(!(policy?.lockedSettings.some((path) => path === projectPath || projectPath.startsWith(`${path}.`))) && Object.keys(override).length ? { projectSettingsOverrides: { [project.id]: override } } : {}) };
+    if (Object.keys(patch).length) await client.updateSettings(patch);
     await this.environmentManager.saveProfile(scope, environment);
     // A malformed local file was already unusable; saving replaces it as before.
     await this.mutateLocal(scope, project, async () => {

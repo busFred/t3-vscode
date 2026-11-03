@@ -58,14 +58,14 @@ export function EnvironmentsSection({ state }: { readonly state: HostStateSnapsh
         <LaptopMinimalIcon size={14} />
         <div className="env-name"><span>{local.label}</span><span className="env-chip">This computer</span></div>
         <div className="env-state"><span className="env-resting"><Dot tone="ok" />Connected</span></div>
-        <div className="env-meta">{meta(local.host, local.serverVersion)}</div>
+        <div className="env-meta">{meta(local.host, local.serverVersion)}{state.localManagedPolicy ? <span className="env-managed">Managed by {state.localManagedPolicy.organization}</span> : null}</div>
       </div> : null}
       {environments.rows.map((row) => <div className={`env-row${row.ignored ? " ignored" : ""}`} key={row.environmentId}>
         <ServerIcon size={14} />
         <div className="env-name"><span title={row.label}>{row.label}</span></div>
         <div className={`env-state ${row.status}`}>{stateOf(row)}</div>
         {/* Error text can be long and technical, so the address stays visible and the reason sits in the tooltip. */}
-        <div className="env-meta" title={row.status === "expiring" ? undefined : row.detail}>{meta(row.host, row.serverVersion)}</div>
+        <div className="env-meta" title={row.status === "expiring" ? undefined : row.detail}>{meta(row.host, row.serverVersion)}{row.managedOrganization ? <span className="env-managed">Managed by {row.managedOrganization}</span> : null}</div>
       </div>)}
       <button className="text-button env-add" onClick={() => act("add")}><PlusIcon size={13} />Add machine…</button>
       {environments.rows.length === 0 ? <p className="env-hint">In T3 Code on the other machine, choose Create link, then paste the link here. Its sessions for this repository appear in Sessions.</p> : null}

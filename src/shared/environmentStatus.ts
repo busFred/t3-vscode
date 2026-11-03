@@ -5,6 +5,7 @@ export type EnvironmentDisplayStatus = "connected" | "connecting" | "reconnectin
 export type EnvironmentIndicator = "ok" | "warn" | "error";
 export interface EnvironmentRow {
   readonly environmentId: string; readonly label: string; readonly host: string; readonly serverVersion?: string;
+  readonly managedOrganization?: string;
   readonly status: EnvironmentDisplayStatus; readonly detail?: string; readonly expiresAt: number | null;
   /** The user ignored this exact problem; it no longer colours the section's dot. */
   readonly ignored: boolean;

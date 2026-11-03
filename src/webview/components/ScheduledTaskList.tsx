@@ -17,12 +17,12 @@ export function ScheduledTaskRows({ state, tasks }: { readonly state: HostStateS
           {task.lastRunStatus === "running" ? <small className="task-run-state"><CircleDashedIcon size={12} />Running</small>
             : task.lastRunError ? <small className="task-run-state failed" title={task.lastRunError}><CircleXIcon size={12} />Last run failed</small> : null}
           <small title={`${taskScheduleLabel(task.schedule)} · ${model?.name ?? task.modelSelection.model} · ${origin}`}>{taskScheduleLabel(task.schedule)} · {model?.name ?? task.modelSelection.model}</small>
-          {task.blockedByPolicy !== undefined ? <small className="task-status" role="alert">{task.blockedByPolicy}</small> : null}
+          {task.blockedByPolicy !== undefined ? <small className="task-policy-notice" role="alert" title={task.blockedByPolicy}>{task.blockedByPolicy}</small> : null}
           <CalendarClockIcon size={12} />
         </span>
       </button>
       <button className="icon-button" disabled={busy !== null || task.lastRunStatus === "running"} aria-label={`Run ${task.title} now`} title="Run now" onClick={() => { setBusy(task.id); void run("runScheduledTask", { taskId: task.id, projectId: task.projectId }).finally(() => setBusy(null)); }}><PlayIcon size={13} /></button>
-      <input type="checkbox" checked={task.enabled} disabled={busy !== null} aria-label={`Enable ${task.title}`} title={task.enabled ? "Enabled" : "Disabled"} onChange={(event) => { setBusy(task.id); void run("setScheduledTaskEnabled", { taskId: task.id, projectId: task.projectId, enabled: event.target.checked }).finally(() => setBusy(null)); }} />
+      <input type="checkbox" checked={task.enabled} disabled={busy !== null || (!task.enabled && !!task.blockedByPolicy)} aria-label={`Enable ${task.title}`} title={task.blockedByPolicy ?? (task.enabled ? "Enabled" : "Disabled")} onChange={(event) => { setBusy(task.id); void run("setScheduledTaskEnabled", { taskId: task.id, projectId: task.projectId, enabled: event.target.checked }).finally(() => setBusy(null)); }} />
     </div>;
   })}{!tasks.length ? <p className="empty-list">No scheduled tasks.</p> : null}</div>;
 }

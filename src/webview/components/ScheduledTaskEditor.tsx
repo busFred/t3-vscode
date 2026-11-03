@@ -1,3 +1,4 @@
+import { managedCapabilityDenial, isManagedDriverAllowed } from "@t3tools/contracts";
 import { emptyWebhookFilterDraft, parseWebhookFilterDrafts, webhookFilterDrafts, WEBHOOK_FILTER_OPS, type WebhookFilterDraft } from "@t3tools/client-runtime/scheduled-task-webhook";
 import { bridge } from "../bridge-client";
 import type { ScheduledTaskWebhookDelivery, ScheduledTaskWebhookDeliverySummary } from "@t3tools/contracts";
@@ -46,7 +47,8 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
   const stale = !!draft.base && !state.scheduledTasks?.loading && (!saved || saved.editVersion !== draft.base.editVersion);
   const provider = state.providers.find((provider) => provider.instanceId === draft.modelSelection?.instanceId);
   const model = provider?.models.find((model) => model.slug === draft.modelSelection?.model);
-  const unavailable = !provider?.enabled || !provider.installed || provider.availability === "unavailable" || !model;
+  const webhookDenial = managedCapabilityDenial(state.localManagedPolicy, "webhookTasks");
+  const unavailable = (provider && !isManagedDriverAllowed(state.localManagedPolicy, provider.driver)) || !provider?.enabled || !provider.installed || provider.availability === "unavailable" || !model;
   const effort = effortDescriptor(model, draft.modelSelection);
   const effortChoices = effort?.options.filter((option) => !effort.promptInjectedValues?.includes(option.id)) ?? [];
   const effortValue = draft.modelSelection?.options?.find((option) => option.id === effort?.id)?.value ?? (effortChoices.some((option) => option.id === effort?.currentValue) ? effort?.currentValue : undefined) ?? effortChoices.find((option) => option.isDefault)?.id ?? effortChoices[0]?.id ?? "";
@@ -57,7 +59,7 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
   const filters = draft.filters ?? [];
   const parsedFilters = parseWebhookFilterDrafts(filters);
   const scheduleValid = draft.scheduleType === "interval" ? Number.isSafeInteger(interval) && interval >= 60_000 : draft.scheduleType === "once" ? !!draft.runAt && !Number.isNaN(Date.parse(draft.runAt)) : draft.scheduleType === "webhook" ? "filters" in parsedFilters : draft.scheduleType === "fixed_time" && /^([01]?\d|2[0-3]):[0-5]\d$/.test(draft.timeOfDay);
-  const valid = !!draft.title.trim() && !!draft.prompt.trim() && !unavailable && scheduleValid && !!project && !stale && state.scheduledTasks?.loading !== true;
+  const valid = !!draft.title.trim() && !!draft.prompt.trim() && !unavailable && scheduleValid && !(draft.enabled && draft.scheduleType === "webhook" && webhookDenial) && !!project && !stale && state.scheduledTasks?.loading !== true;
   const submit = async () => {
     if (!valid || saving) return; setSaving(true); setFailed(false);
     const previousSchedule = draft.base && supportedSchedule(draft.base.schedule) && draft.base.schedule.type === draft.scheduleType ? draft.base.schedule : {};
@@ -96,7 +98,7 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
       </select></label> : null}
       {speed && isPremiumSpeed(speed.current) ? <small className="task-status">{speed.explicit ? "" : "The server default is "}{speed.current!.label} speed: each run costs more.</small> : null}
       <label>Schedule<select aria-label="Task schedule" value={draft.scheduleType} disabled={draft.scheduleType === "unsupported"} onChange={(event) => patch({ scheduleType: event.target.value as TaskDraft["scheduleType"] })}>
-        <option value="interval">Every interval</option><option value="fixed_time">At a time</option><option value="once">Once</option><option value="webhook">Webhook</option>{draft.scheduleType === "unsupported" ? <option value="unsupported">Newer schedule — edit in T3 Web</option> : null}
+        <option value="interval">Every interval</option><option value="fixed_time">At a time</option><option value="once">Once</option><option value="webhook" disabled={!!webhookDenial} title={webhookDenial}>Webhook</option>{draft.scheduleType === "unsupported" ? <option value="unsupported">Newer schedule — edit in T3 Web</option> : null}
       </select></label>
       {draft.scheduleType === "interval" ? <label>Run every (minutes)<input type="number" min="1" step="any" aria-label="Task interval minutes" value={draft.minutes} onChange={(event) => patch({ minutes: event.target.value })} /></label> : draft.scheduleType === "fixed_time" ? <>
         <label>Time on {state.environment?.label ?? "server"}<input type="time" aria-label="Task time" value={draft.timeOfDay} onChange={(event) => patch({ timeOfDay: event.target.value })} /></label>
@@ -104,10 +106,45 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
         {draft.weekdays?.length === 0 ? <small>Choose at least one day.</small> : null}
       </> : null}
       {draft.scheduleType === "once" ? <label>Run on<input type="datetime-local" aria-label="Task run date and time" value={draft.runAt} onChange={(event) => patch({ runAt: event.target.value })} /></label> : null}
-      {draft.scheduleType === "webhook" ? <div>
-        {saved?.webhook ? <><p>Endpoint: {rotated ?? saved.webhook.url ?? saved.webhook.path}</p><button type="button" disabled={!saved.webhook.url} onClick={() => { if (saved.webhook?.url) void navigator.clipboard.writeText(rotated ?? saved.webhook.url); }}>Copy endpoint</button>{!saved.webhook.url ? <small>Link this environment to T3 Connect for a public URL.</small> : null}<p>Secret: {saved.webhook.hasSecret ? "Set" : "Not set"}</p><button type="button" onClick={() => { if (!window.confirm("Rotate this webhook URL? The current URL stops working.")) return; void bridge.request<{ task: ScheduledTask }>("rotateWebhookToken", { taskId: draft.id, projectId: draft.projectId }).then(({ task }) => setRotated(task.webhook?.url ?? task.webhook?.path ?? null), (error) => setWebhookError(String(error))); }}>Rotate token</button><button type="button" onClick={() => void bridge.request<{ deliveries: ReadonlyArray<ScheduledTaskWebhookDeliverySummary> }>("listWebhookDeliveries", { taskId: draft.id, projectId: draft.projectId }).then((result) => setDeliveries(result.deliveries), (error) => setWebhookError(String(error)))}>Recent deliveries</button></> : <p>Save this task to create an endpoint.</p>}
-        {webhookError ? <p role="alert">{webhookError}</p> : null}{deliveries ? <ul>{deliveries.map((delivery) => <li key={delivery.id}><button type="button" onClick={() => void bridge.request<{ delivery: ScheduledTaskWebhookDelivery }>("getWebhookDelivery", { taskId: draft.id, projectId: draft.projectId, deliveryId: delivery.id }).then((result) => setDeliveryDetail(result.delivery), (error) => setWebhookError(String(error)))}>{delivery.outcome} · {dateTime(new Date(delivery.receivedAt))}</button></li>)}</ul> : null}{deliveryDetail ? <div><p>{deliveryDetail.method} · {deliveryDetail.outcome}</p><pre>{deliveryDetail.error ?? deliveryDetail.body}</pre></div> : null}
-        <p>All filters must match.</p>{filters.map((filter) => <div key={filter.id}><input aria-label="Filter path" placeholder="body.action" value={filter.path} onChange={(event) => patch({ filters: filters.map((row) => row.id === filter.id ? { ...row, path: event.target.value } : row) })} /><select aria-label="Filter operator" value={filter.op} onChange={(event) => patch({ filters: filters.map((row) => row.id === filter.id ? { ...row, op: event.target.value as WebhookFilterDraft["op"] } : row) })}>{WEBHOOK_FILTER_OPS.map((op) => <option key={op.op} value={op.op}>{op.label}</option>)}</select>{filter.op !== "exists" ? <input aria-label="Filter value" value={filter.value} onChange={(event) => patch({ filters: filters.map((row) => row.id === filter.id ? { ...row, value: event.target.value } : row) })} /> : null}<button type="button" onClick={() => patch({ filters: filters.filter((row) => row.id !== filter.id) })}>Remove filter</button></div>)}<button type="button" onClick={() => patch({ filters: [...filters, emptyWebhookFilterDraft()] })}>Add filter</button>{"error" in parsedFilters ? <p role="alert">{parsedFilters.error}</p> : null}
+      {draft.scheduleType === "webhook" ? <div className="task-webhook">
+        {webhookDenial ? <p className="task-status" role="alert">{webhookDenial}</p> : null}
+        {saved?.webhook ? <><p className="task-webhook-endpoint">Endpoint: {rotated ?? saved.webhook.url ?? saved.webhook.path}</p>
+          <button type="button" disabled={!saved.webhook.url} onClick={() => { if (saved.webhook?.url) void navigator.clipboard.writeText(rotated ?? saved.webhook.url); }}>Copy endpoint</button>
+          {!saved.webhook.url ? <small>Link this environment to T3 Connect for a public URL.</small> : null}
+          <p className="task-webhook-secret">Secret: {saved.webhook.hasSecret ? "Set" : "Not set"}</p>
+          <button type="button" onClick={() => {
+            if (!window.confirm("Rotate this webhook URL? The current URL stops working.")) return;
+            void bridge.request<{ task: ScheduledTask }>("rotateWebhookToken", { taskId: draft.id, projectId: draft.projectId })
+              .then(({ task }) => setRotated(task.webhook?.url ?? task.webhook?.path ?? null), (error) => setWebhookError(String(error)));
+          }}>Rotate token</button>
+          <button type="button" onClick={() => void bridge.request<{ deliveries: ReadonlyArray<ScheduledTaskWebhookDeliverySummary> }>(
+            "listWebhookDeliveries", { taskId: draft.id, projectId: draft.projectId },
+          ).then((result) => setDeliveries(result.deliveries), (error) => setWebhookError(String(error)))}>Recent deliveries</button>
+        </> : <p>Save this task to create an endpoint.</p>}
+        {webhookError ? <p className="task-status" role="alert">{webhookError}</p> : null}
+        {deliveries ? <ul className="task-deliveries">{deliveries.map((delivery) => <li key={delivery.id}>
+          <button type="button" onClick={() => void bridge.request<{ delivery: ScheduledTaskWebhookDelivery }>(
+            "getWebhookDelivery", { taskId: draft.id, projectId: draft.projectId, deliveryId: delivery.id },
+          ).then((result) => setDeliveryDetail(result.delivery), (error) => setWebhookError(String(error)))}>
+            {delivery.outcome} · {dateTime(new Date(delivery.receivedAt))}
+          </button>
+        </li>)}</ul> : null}
+        {deliveryDetail ? <div className="task-delivery-detail"><p>{deliveryDetail.method} · {deliveryDetail.outcome}</p>
+          <pre>{deliveryDetail.error ?? deliveryDetail.body}</pre></div> : null}
+        <p>All filters must match.</p>
+        {filters.map((filter) => <div className="task-filter-row" key={filter.id}>
+          <input aria-label="Filter path" placeholder="body.action" value={filter.path}
+            onChange={(event) => patch({ filters: filters.map((row) => row.id === filter.id ? { ...row, path: event.target.value } : row) })} />
+          <select aria-label="Filter operator" value={filter.op}
+            onChange={(event) => patch({ filters: filters.map((row) => row.id === filter.id ? { ...row, op: event.target.value as WebhookFilterDraft["op"] } : row) })}>
+            {WEBHOOK_FILTER_OPS.map((op) => <option key={op.op} value={op.op}>{op.label}</option>)}
+          </select>
+          {filter.op !== "exists" ? <input aria-label="Filter value" value={filter.value}
+            onChange={(event) => patch({ filters: filters.map((row) => row.id === filter.id ? { ...row, value: event.target.value } : row) })} /> : null}
+          <button type="button" onClick={() => patch({ filters: filters.filter((row) => row.id !== filter.id) })}>Remove filter</button>
+        </div>)}
+        <button type="button" onClick={() => patch({ filters: [...filters, emptyWebhookFilterDraft()] })}>Add filter</button>
+        {"error" in parsedFilters ? <p className="task-status" role="alert">{parsedFilters.error}</p> : null}
       </div> : null}
       {draft.base?.blockedByPolicy !== undefined ? <p className="task-status" role="alert">{draft.base.blockedByPolicy}</p> : null}
       <label>Post results to<select aria-label="Task result destination" value={draft.threadId ?? ""} onChange={(event) => patch({ threadId: event.target.value || null })}>
@@ -125,7 +162,7 @@ export function ScheduledTaskEditor({ state, draft, onChange, onReturn, onReload
       </fieldset>
     </div>
     <footer><button type="button" disabled={saving} onClick={() => onReturn(true)}>Cancel</button><button type="submit" className="primary" disabled={!valid || saving || draft.scheduleType === "fixed_time" && draft.weekdays?.length === 0}>{saving ? "Saving…" : "Save task"}</button></footer>
-    {pickerOpen && anchor.current ? <ModelPicker state={state} selection={draft.modelSelection} anchor={anchor.current} onClose={closePicker} onSelect={(modelSelection) => {
+    {pickerOpen && anchor.current ? <ModelPicker state={{ ...state, managedPolicy: state.localManagedPolicy }} selection={draft.modelSelection} anchor={anchor.current} onClose={closePicker} onSelect={(modelSelection) => {
       if (modelSelection.instanceId === draft.modelSelection?.instanceId && modelSelection.model === draft.modelSelection.model) { patch({ modelSelection }); return; }
       const descriptors = state.providers.find((provider) => provider.instanceId === modelSelection.instanceId)?.models.find((model) => model.slug === modelSelection.model)?.capabilities?.optionDescriptors ?? [];
       const next = { ...modelSelection, ...(modelSelection.options ? { options: modelSelection.options.filter((option) => {

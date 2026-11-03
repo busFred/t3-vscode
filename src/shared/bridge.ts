@@ -275,6 +275,8 @@ export interface HostStateSnapshot {
   readonly usagePanelAccounts?: import("./usage.js").AccountsDisplay;
   readonly notice?: string;
   readonly connectionSetup?: ConnectionSetup;
+  readonly managedPolicy?: import("@t3tools/contracts").ManagedPolicySummary | undefined;
+  readonly localManagedPolicy?: import("@t3tools/contracts").ManagedPolicySummary;
   readonly environment?: { readonly environmentId: string; readonly label: string; readonly serverVersion?: string };
   /** Set when the active session runs on a paired remote machine: checkout actions, saved-turn diffs and file restores are unavailable. */
   readonly remoteSession?: { readonly environmentId: string; readonly label: string };

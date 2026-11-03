@@ -1,3 +1,4 @@
+import { isManagedDriverAllowed, managedPolicyDeniedMessage } from "@t3tools/contracts";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { GripVerticalIcon, CheckIcon, StarIcon } from "lucide-react";
@@ -92,7 +93,8 @@ export function ModelPicker({ state, selection, anchor, onClose, onSelect }: {
     </nav><div className="model-options">{providers.map((provider) => {
       const models = entries.filter((entry) => entry.provider.instanceId === provider.instanceId);
       if (!models.length) return null;
-      const unavailable = !provider.installed || provider.availability === "unavailable";
+      const denial = state.managedPolicy && !isManagedDriverAllowed(state.managedPolicy, provider.driver) ? managedPolicyDeniedMessage(state.managedPolicy.organization, `${provider.driver} providers`) : undefined;
+      const unavailable = !provider.installed || provider.availability === "unavailable" || !!denial;
       const ordered = orderedProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId));
       const visibleSlugs = new Set(visibleProviderModels(provider, getProviderModelPreference(preferences, provider.instanceId), !managing && showLegacy).map((model) => model.slug));
       return <section key={provider.instanceId} data-model-provider={provider.instanceId}><header>{provider.displayName ?? provider.instanceId}{!provider.installed ? " · Not installed" : provider.availability === "unavailable" ? " · Unavailable" : ""}</header>
@@ -111,7 +113,7 @@ export function ModelPicker({ state, selection, anchor, onClose, onSelect }: {
               reorder(provider.instanceId, model.slug, event.key === "ArrowUp" ? ordered[to]!.slug : ordered[to + 1]?.slug ?? null, ordered.map((entry) => entry.slug));
             }}><GripVerticalIcon size={14} /></button> : null}
           {managing ? <span className="model-manage-name" title={model.slug}>{model.name}{model.isLegacy ? <small>Legacy</small> : null}</span>
-            : <button className="model-choice" disabled={busy || unavailable} title={model.slug} aria-pressed={selection?.instanceId === provider.instanceId && selection.model === model.slug} onClick={() => {
+            : <button className="model-choice" disabled={busy || unavailable} title={denial ?? model.slug} aria-pressed={selection?.instanceId === provider.instanceId && selection.model === model.slug} onClick={() => {
             if (onSelect) {
               onSelect(selection?.instanceId === provider.instanceId && selection.model === model.slug ? selection : selectionForModel(provider.instanceId, model, selection)); close(); return;
             }

@@ -1,5 +1,5 @@
 import { conversationPullRequests, pullRequestHost, pullRequestOperations, type PullRequestOperation } from "../shared/pullRequests.js";
-import { managedCapabilityDenial, pendingGuestMessageCount, type ThreadGuestShare } from "@t3tools/contracts";
+import { clampManagedRuntimeMode, isManagedDriverAllowed, managedPolicyDeniedMessage, managedRuntimeModeDenial, managedCapabilityDenial, pendingGuestMessageCount, type ThreadGuestShare } from "@t3tools/contracts";
 import { relayMcpAppRequest, type McpAppNativePort } from "./mcpApps.js";
 import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
 import { mcpAppFileName } from "@t3tools/shared/mcpApp";
@@ -910,7 +910,7 @@ export class HostState {
       const status = environmentDisplayStatus(entry, now);
       const detail = status === "expiring" && entry.expiresAt !== null ? expiryLabel(entry.expiresAt, now) : status === "reconnecting" || status === "expired" ? entry.error : undefined;
       return { environmentId: entry.environmentId, label: entry.label, host: hostOf(entry.httpBaseUrl), status, expiresAt: entry.expiresAt,
-        ignored: entry.ignoredStatus === status, ...(entry.serverVersion ? { serverVersion: entry.serverVersion } : {}), ...(detail ? { detail } : {}) };
+        ignored: entry.ignoredStatus === status, ...(this.client.configForEnvironment?.(entry.environmentId)?.managedPolicy?.organization ? { managedOrganization: this.client.configForEnvironment!(entry.environmentId)!.managedPolicy!.organization } : {}), ...(entry.serverVersion ? { serverVersion: entry.serverVersion } : {}), ...(detail ? { detail } : {}) };
     });
     return { environments: { rows, indicator: environmentIndicator(rows),
       ...(descriptor && this.server ? { local: { label: descriptor.label, host: hostOf(this.server.origin), serverVersion: descriptor.serverVersion } } : {}) } };
@@ -1272,7 +1272,7 @@ export class HostState {
   }
   newThread(projectId?: string, viewId = SIDEBAR_VIEW_ID): Promise<string> { return this.enqueue(() => this.createThread(projectId, viewId)); }
   private availableModel(preferred?: ModelSelection | null, config = this.client.config): ModelSelection | null {
-    const providers = config?.providers.filter((provider) => provider.enabled && provider.installed && provider.availability !== "unavailable") ?? [];
+    const providers = config?.providers.filter((provider) => provider.enabled && provider.installed && provider.availability !== "unavailable" && isManagedDriverAllowed(config?.managedPolicy, provider.driver)) ?? [];
     if (preferred && providers.some((provider) => provider.instanceId === preferred.instanceId && provider.models.some((model) => model.slug === preferred.model))) return preferred;
     for (const provider of providers) {
       const model = provider.models.find((item) => item.isDefault) ?? provider.models[0];
@@ -1287,8 +1287,9 @@ export class HostState {
   }
   private compatibleRuntimeMode(selection: ModelSelection | null, preferred: RuntimeMode, config = this.client.config): RuntimeMode {
     const supported = config?.providers.find((provider) => provider.instanceId === selection?.instanceId)?.supportedRuntimeModes;
-    if (!supported?.length || supported.includes(preferred)) return preferred;
-    return supported.includes("approval-required") ? "approval-required" : supported[0]!;
+    const modes = supported?.length ? supported : RuntimeMode.literals;
+    const compatible = modes.includes(preferred) ? preferred : modes.includes("approval-required") ? "approval-required" : modes[0]!;
+    return clampManagedRuntimeMode(config?.managedPolicy, compatible, modes) ?? compatible;
   }
   private conversationDraft(view: ViewState): ConversationDraft {
     const machine = this.draftMachine(view), machines = this.machineChoices(machine);
@@ -1416,6 +1417,11 @@ export class HostState {
       const view = this.requireView(viewId);
       let thread = this.requireThread(id);
       if (thread.archivedAt) throw new Error("Restore this thread before sending a message.");
+      const config = this.configForThread(id);
+      const modeDenial = managedRuntimeModeDenial(config?.managedPolicy, thread.runtimeMode);
+      if (modeDenial) throw new Error(modeDenial);
+      const currentProvider = config?.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId);
+      if (currentProvider && !isManagedDriverAllowed(config?.managedPolicy, currentProvider.driver)) throw new Error(managedPolicyDeniedMessage(config!.managedPolicy!.organization, `${currentProvider.driver} providers`));
       if (thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") throw new Error("This subagent conversation is controlled by its provider. Return to the parent conversation to send instructions.");
       view.sending = true; this.emit();
       try {
@@ -1743,6 +1749,7 @@ export class HostState {
       const selection = Schema.decodeUnknownSync(ModelSelectionSchema)(input);
       const config = id === undefined ? this.draftConfig(view) : this.configForThread(id);
       const provider = config?.providers.find((item) => item.instanceId === selection.instanceId);
+      if (provider && !isManagedDriverAllowed(config?.managedPolicy, provider.driver)) throw new Error(managedPolicyDeniedMessage(config!.managedPolicy!.organization, `${provider.driver} providers`));
       if (!provider?.enabled || !provider.installed || provider.availability === "unavailable" || !provider.models.some((model) => model.slug === selection.model)) throw new Error("This model is unavailable.");
       if (id === undefined) {
         view.draftModelSelection = selection;
@@ -1838,12 +1845,14 @@ export class HostState {
         const draft = this.conversationDraft(view);
         const mode = input.runtimeMode === undefined ? draft.runtimeMode : Schema.decodeUnknownSync(RuntimeMode)(input.runtimeMode);
         const interaction = input.interactionMode === undefined ? draft.interactionMode : Schema.decodeUnknownSync(ProviderInteractionMode)(input.interactionMode);
+        const denial = managedRuntimeModeDenial(this.draftConfig(view)?.managedPolicy, mode); if (denial) throw new Error(denial);
         if (this.compatibleRuntimeMode(draft.modelSelection, mode, this.draftConfig(view)) !== mode) throw new Error("This provider does not support that permission mode.");
         view.draftRuntimeMode = mode; view.draftInteractionMode = interaction; this.emit(); return;
       }
       const thread = this.requireThread(id);
       if (input.runtimeMode !== undefined) {
         const mode = Schema.decodeUnknownSync(RuntimeMode)(input.runtimeMode);
+        const denial = managedRuntimeModeDenial(this.configForThread(id)?.managedPolicy, mode); if (denial) throw new Error(denial);
         const supported = this.configForThread(id)?.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId)?.supportedRuntimeModes;
         if (supported && !supported.includes(mode)) throw new Error("This provider does not support that permission mode.");
         await this.client.dispatch({ type: "thread.runtime-mode.set", commandId: randomUUID(), threadId: id, runtimeMode: mode });
@@ -2501,6 +2510,8 @@ export class HostState {
       workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()), taskDefaultSpeed: resolveTaskDefaultSpeed(this.options.taskDefaultSpeed?.()), usagePanelAccounts: resolveAccountsDisplay(this.options.usagePanelAccounts?.() ?? this.usagePanelAccounts),
       dateFormat: resolveDateFormat(this.options.dateFormat?.()), timeFormat: resolveTimeFormat(this.options.timeFormat?.()), appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
       ...(this.notice ? { notice: this.notice } : {}),
+      ...((activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))?.managedPolicy ? { managedPolicy: (activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))!.managedPolicy } : {}),
+      ...(this.client.config?.managedPolicy ? { localManagedPolicy: this.client.config.managedPolicy } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
       scheduledTasks: { loading: this.scheduledTasksLoading, ...(this.scheduledTaskError ? { error: this.scheduledTaskError } : {}), tasks: this.scheduledTasks.filter((task) => this.visibleProjects().some((project) => project.id === task.projectId)).map((task) => {
         const association = this.options.taskOrigins?.().find((origin) => origin.environmentId === descriptor?.environmentId && origin.projectId === task.projectId && origin.taskId === task.id);
@@ -2668,6 +2679,7 @@ export class HostState {
       const selection = Schema.decodeUnknownSync(ModelSelectionSchema)(input.modelSelection);
       const provider = this.client.config?.providers.find((provider) => provider.instanceId === selection.instanceId);
       const model = provider?.models.find((model) => model.slug === selection.model);
+      if (provider && !isManagedDriverAllowed(this.client.config?.managedPolicy, provider.driver)) throw new Error(managedPolicyDeniedMessage(this.client.config!.managedPolicy!.organization, `${provider.driver} providers`));
       if (!provider?.enabled || !provider.installed || provider.availability === "unavailable" || !model) throw new Error("Choose an available model for this task.");
       const changedModel = !previous || previous.modelSelection.instanceId !== selection.instanceId || previous.modelSelection.model !== selection.model;
       for (const option of selection.options ?? []) {
@@ -2686,7 +2698,11 @@ export class HostState {
         threadId: target, workspaceStrategy: input.workspaceStrategy ?? previous?.workspaceStrategy ?? { type: "root" },
         modelSelection: selection, runtimeMode: previous?.runtimeMode ?? this.compatibleRuntimeMode(selection, "full-access"),
         interactionMode: previous?.interactionMode ?? "default", createdBy: previous?.createdBy ?? "user", creationSource: previous?.creationSource ?? "web" });
-      if (previous && this.compatibleRuntimeMode(selection, previous.runtimeMode) !== previous.runtimeMode) throw new Error("This model cannot keep the task's permission mode. Choose a compatible provider.");
+      const webhookDenial = managedCapabilityDenial(this.client.config?.managedPolicy, "webhookTasks");
+      if (payload.enabled && payload.schedule.type === "webhook" && webhookDenial) throw new Error(webhookDenial);
+      const modeDenial = payload.enabled && payload.threadId === null ? managedRuntimeModeDenial(this.client.config?.managedPolicy, payload.runtimeMode) : undefined;
+      if (modeDenial) throw new Error(modeDenial);
+      if (previous && provider.supportedRuntimeModes?.length && !provider.supportedRuntimeModes.includes(previous.runtimeMode)) throw new Error("This model cannot keep the task's permission mode. Choose a compatible provider.");
       if (origin) {
         if (!this.options.saveTaskOrigin) throw new Error("Task origin storage is unavailable.");
         await this.options.saveTaskOrigin({ environmentId: this.server!.descriptor.environmentId, projectId, taskId: input.id, threadId: origin.originThreadId ?? null });
@@ -2704,7 +2720,10 @@ export class HostState {
   setScheduledTaskEnabled(id: string, projectId: string, enabled: unknown): Promise<void> {
     return this.enqueue(async () => {
       if (typeof enabled !== "boolean") throw new Error("Invalid enabled setting.");
-      await this.freshTask(id, projectId);
+      const task = await this.freshTask(id, projectId);
+      const denial = enabled && supportedSchedule(task.schedule) && task.schedule.type === "webhook" ? managedCapabilityDenial(this.client.config?.managedPolicy, "webhookTasks") : undefined;
+      const modeDenial = enabled && task.threadId === null ? managedRuntimeModeDenial(this.client.config?.managedPolicy, task.runtimeMode) : undefined;
+      if (denial ?? modeDenial) throw new Error(denial ?? modeDenial);
       const result = await this.client.setScheduledTaskEnabled(id, enabled);
       this.scheduledTasks = this.scheduledTasks.map((task) => task.id === id ? result.task : task); this.emit();
     });

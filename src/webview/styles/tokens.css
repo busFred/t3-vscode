@@ -935,3 +935,20 @@ body:has(.image-caption-editor) .visual-expanded { z-index: 130; }
 .guest-pending-messages li { margin: 8px 0 8px auto; padding: 12px; max-width: 80%; border: 1px solid var(--vscode-widget-border); border-radius: 12px; }
 .guest-pending-messages p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .guest-message-badge { border-radius: 8px; padding: 0 5px; color: var(--vscode-badge-foreground); background: var(--vscode-badge-background); }
+
+.task-webhook { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; min-width: 0; font-size: .75rem; }
+.task-webhook p { margin: 0; overflow-wrap: anywhere; }
+.task-webhook button { padding: 5px 8px; border: 1px solid var(--input); border-radius: 5px; color: var(--foreground); }
+.task-webhook button:hover:not(:disabled) { background: var(--vscode-toolbar-hoverBackground); }
+.task-webhook-endpoint { width: 100%; padding: 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--card); }
+.task-webhook-secret { color: var(--muted-foreground); }
+.task-deliveries { list-style: none; margin: 0; padding: 0; width: 100%; max-height: 160px; overflow: auto; border: 1px solid var(--border); border-radius: 5px; }
+.task-deliveries li + li { border-top: 1px solid var(--border); }
+.task-deliveries button { width: 100%; border: 0; text-align: left; }
+.task-delivery-detail { width: 100%; min-width: 0; padding: 7px; border: 1px solid var(--border); border-radius: 5px; }
+.task-delivery-detail pre { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-filter-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; width: 100%; }
+.task-filter-row button { justify-self: start; }
+.scheduled-task-meta > .task-policy-notice { color: var(--vscode-editorWarning-foreground, #cca700); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.env-managed { display: block; overflow-wrap: anywhere; white-space: normal; color: var(--muted-foreground); }

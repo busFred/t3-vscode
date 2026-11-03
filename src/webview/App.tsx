@@ -77,6 +77,7 @@ export function App() {
   else content = <StatusView
     title={state.phase === "pairing" ? "Pairing with T3 Code…" : "Connecting to T3 Code…"}
     detail={state.notice ?? state.environment?.label ?? state.home}
+    {...(state.localManagedPolicy ? { managedOrganization: state.localManagedPolicy.organization } : {})}
   />;
   if (sidebar && lastSidebarState.current) {
     // Retain sidebar navigation, scroll, groups and task drafts during same-server recovery.

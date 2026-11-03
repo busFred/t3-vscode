@@ -198,3 +198,17 @@ test('session branch overrides are bounded, dropping the oldest first', async ()
     assert.equal(Object.keys(sessions).length, 1000); assert.equal(sessions['thread-0'], undefined); assert.equal(sessions['thread-1000'], 'pinned');
   } finally { await f.close(); }
 });
+
+test('managed settings reject edits and omit locked values from service writes', async () => {
+  const f = await fixture();
+  try {
+    const client = { ...f.client, config: { managedPolicy: { organization: 'Example', lockedSettings: ['worktreesDirectory', 'branchNamePrefix'] } } };
+    const loaded = await f.store.load('scope', f.project, client);
+    await assert.rejects(f.store.save('scope', f.project, client, { ...loaded, location: '/changed' }), /Managed by Example/);
+    await assert.rejects(f.store.save('scope', f.project, client, { ...loaded, branchPrefix: 'changed' }), /Managed by Example/);
+    await f.store.save('scope', f.project, client, { ...loaded, startFromOrigin: !loaded.startFromOrigin });
+    const patch = f.writes[0] as { worktreesDirectory?: string; projectSettingsOverrides: Record<string, Record<string, unknown>> };
+    assert.equal(patch.worktreesDirectory, undefined);
+    assert.equal(patch.projectSettingsOverrides.project!.branchNamePrefix, 'prior');
+  } finally { await f.close(); }
+});
