@@ -268,6 +268,10 @@ export class BridgeHandler {
           { sourceThreadId: stringParam(params, "sourceThreadId"), itemId: stringParam(params, "itemId") },
           stringParam(params, "appMethod"), params.input, {
             confirm: async (text) => (await (await import("vscode")).window.showWarningMessage(text, { modal: true }, "Allow")) === "Allow",
+            confirmTool: async (text) => {
+              const choice = await (await import("vscode")).window.showWarningMessage(text, { modal: true }, "Allow once", "Allow for this session");
+              return choice === "Allow for this session" ? "session" : choice === "Allow once" ? "once" : "deny";
+            },
             openLink: async (url) => { await this.openLink(url, id()); },
             saveFile: async (name, bytes) => {
               const vscode = await import("vscode");

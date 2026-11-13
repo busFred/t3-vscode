@@ -5,13 +5,27 @@ import * as Schema from "effect/Schema";
 import type { T3Client } from "./t3Client.js";
 import { isObject, paramsObject, stringParam } from "../shared/bridge.js";
 
+/** What the user chose when an MCP app asked to act (T3 0.1.9 adds the session-wide answer). */
+export type McpAppDecision = "once" | "session" | "deny";
+
 export interface McpAppNativePort {
   confirm(message: string): Promise<boolean>;
+  /** Offers "Allow once" and "Allow for this session"; falls back to `confirm` where unavailable. */
+  confirmTool?(message: string): Promise<McpAppDecision>;
   openLink(url: string): Promise<void>;
   saveFile(name: string, bytes: Uint8Array): Promise<void>;
 }
 export type McpAppTransport = Pick<T3Client, "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext">;
 const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Tool calls the user allowed for the rest of this session, keyed by conversation and app server.
+ * Scoped per conversation: allowing an app in one chat must not speak for another.
+ */
+const sessionAllowed = new Set<string>();
+const sessionKey = (conversationThreadId: string, server: string) => `${conversationThreadId}\u0000${server}`;
+/** Forgets session approvals; a reconnect or a reload must not inherit an earlier decision. */
+export function clearMcpAppSessionApprovals(): void { sessionAllowed.clear(); }
 
 /** Keep RPC authority in the host: app-supplied fields cannot replace validated scope. */
 export async function relayMcpAppRequest(client: McpAppTransport, scope: { threadId: string; itemId: string; conversationThreadId: string }, app: McpAppReference,
@@ -19,13 +33,26 @@ export async function relayMcpAppRequest(client: McpAppTransport, scope: { threa
   const params = paramsObject(raw);
   const input = { ...params, ...scope };
   const ask = async (message: string) => { if (!await native.confirm(message)) throw new Error("Declined by the user."); };
+  /**
+   * A writing tool call. Asking once per action is the default; the user may allow this app for the
+   * rest of the session. Only tool calls are session-approvable — sending a message as the user and
+   * downloading a file stay one-off, because they act outside the app.
+   */
+  const askTool = async (message: string) => {
+    const key = sessionKey(scope.conversationThreadId, app.server);
+    if (sessionAllowed.has(key)) return;
+    if (!native.confirmTool) return ask(message);
+    const decision = await native.confirmTool(message);
+    if (decision === "deny") throw new Error("Declined by the user.");
+    if (decision === "session") sessionAllowed.add(key);
+  };
   switch (method) {
     case "tools/info": return client.mcpAppToolInfo(Schema.decodeUnknownSync(McpAppToolInfoInput)(input));
     case "tools/call": {
       const call = Schema.decodeUnknownSync(McpAppCallToolInput)(input);
       const info = await client.mcpAppToolInfo({ threadId: call.threadId, itemId: call.itemId, name: call.name });
       if (!info.callable) throw new Error("This app cannot call that tool.");
-      if (!info.readOnly) await ask(`Allow ${app.server} to run ${info.title ?? call.name}?\n${JSON.stringify(call.arguments, null, 2)}`);
+      if (!info.readOnly) await askTool(`Allow ${app.server} to run ${info.title ?? call.name}?\n${JSON.stringify(call.arguments, null, 2)}`);
       return client.mcpAppCallTool(call);
     }
     case "resources/read": return client.mcpAppReadResource(Schema.decodeUnknownSync(McpAppReadResourceInput)(input));

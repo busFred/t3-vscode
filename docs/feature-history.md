@@ -1006,6 +1006,21 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### MCP Apps
 
+#### Unreleased — allow an app for the session
+
+- An MCP app's writing tool call can be allowed for the rest of the session, matching T3 Code 0.1.9,
+  instead of confirming every action. The prompt now offers **Allow once** and
+  **Allow for this session**; dismissing it still declines.
+- The approval is scoped to the conversation that granted it, so allowing an app in one chat does
+  not speak for another, and it is forgotten when the host is disposed — a reload starts over.
+- Only tool calls are session-approvable. Sending a message as the user and saving a file keep their
+  own one-off confirmation, because they act outside the app.
+- Read-only tool calls are unaffected; they never required approval.
+- Validation: `src/host/mcpApps.test.ts` covers repeated prompting under Allow once, silence after a
+  session approval, a second conversation still asking and refusing, `ui/message` keeping its own
+  confirmation, and prompting resuming once approvals are cleared.
+
+
 #### v0.3.7
 
 - Render supported MCP tool apps inline in the transcript. Tool writes, messages and file downloads ask for approval; links require a click in the app.

@@ -7,7 +7,7 @@ import { hiddenThreadKeys } from "@t3tools/client-runtime/state/thread-tag-filte
 import { threadKey } from "@t3tools/client-runtime/state/entities";
 import { planPinnedReorder, sortPinnedThreadsByOrderKey } from "@t3tools/client-runtime/state/thread-sort";
 import { canStopSubagent } from "../shared/subagentStop.js";
-import { relayMcpAppRequest, type McpAppNativePort } from "./mcpApps.js";
+import { clearMcpAppSessionApprovals, relayMcpAppRequest, type McpAppNativePort } from "./mcpApps.js";
 import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
 import { mcpAppFileName } from "@t3tools/shared/mcpApp";
 import { WorktreeCoordinator, parseWorktreeChoice, type WorktreeTransport, type WorktreeHandoff } from "./worktrees.js";
@@ -3092,6 +3092,8 @@ export class HostState {
     if (this.worktreePoll) clearTimeout(this.worktreePoll);
     this.composerDrafts.dispose();
     this.disposed = true; this.worktrees?.dispose(); this.client.onClose = null; this.client.onConfig = null;
+    // A session-wide MCP app approval lasts only as long as this host; a reload starts over.
+    clearMcpAppSessionApprovals();
     this.visits.dispose(); if (this.snoozeWake) clearTimeout(this.snoozeWake.timer);
     for (const stop of this.cloneStreams.values()) void stop().catch(() => undefined); this.cloneStreams.clear();
     if (this.emitTimer) clearTimeout(this.emitTimer);

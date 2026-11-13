@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ThreadId, TurnItemId, type OrchestrationV2TurnItem } from "@t3tools/contracts";
 import { viewsHarness, publishText, FakeTransport } from "./testing/fakeTransport.js";
-import { relayMcpAppRequest, type McpAppNativePort } from "./mcpApps.js";
+import { clearMcpAppSessionApprovals, relayMcpAppRequest, type McpAppDecision, type McpAppNativePort, type McpAppTransport } from "./mcpApps.js";
 import { BridgeHandler, WebviewRegistry } from "./bridge.js";
 import { FakeWebview } from "./testing/fakeWebview.js";
 import { SIDEBAR_VIEW_ID } from "./hostState.js";
@@ -86,4 +86,46 @@ test("Inherited apps send requests to the source thread and model context to the
   client.threadHandlers.get("second")!({ kind: "snapshot", snapshotSequence: 2, projection: { ...projection, visibleTurnItems: [{ position: 0, visibility: "inherited", sourceThreadId: ThreadId.make("first"), sourceItemId: item.id, item }] } });
   await host.mcpAppRequest("second", source, "ui/update-model-context", { structuredContent: { selected: 1 }, conversationThreadId: "third" }, native);
   assert.deepEqual(client.mcpAppRequests.at(-1)?.input, { threadId: "first", itemId: "app-item", conversationThreadId: "second", structuredContent: { selected: 1 } });
+});
+
+test("An MCP app can be allowed for the session, per conversation, and only for tool calls", async () => {
+  clearMcpAppSessionApprovals();
+  // The shared fake reports every tool read-only, which never needs approval; a writing tool does.
+  const calls: Array<string> = [];
+  const client: McpAppTransport = {
+    mcpAppToolInfo: async () => ({ callable: true, readOnly: false, tool: { name: "fixture" } }),
+    mcpAppCallTool: async () => { calls.push("call"); return { content: [{ type: "text", text: "fixture" }] }; },
+    mcpAppReadResource: async () => ({ contents: [{ text: "fixture" }] }),
+    mcpAppUpdateModelContext: async () => {},
+  } as unknown as McpAppTransport;
+  const asked: string[] = [];
+  let decision: McpAppDecision = "once";
+  const prompting: McpAppNativePort & { sendMessage(text: string): Promise<void> } = {
+    ...native,
+    confirm: async (message) => { asked.push(`confirm:${message.split("\n")[0]}`); return true; },
+    confirmTool: async (message) => { asked.push(`tool:${message.split("\n")[0]}`); return decision; },
+  };
+  const call = (conversationThreadId: string) => relayMcpAppRequest(client, { ...scope, conversationThreadId }, app, "tools/call", { name: "plot", arguments: { x: 1 } }, prompting);
+
+  // Writing tool calls ask every time until the user allows the app for the session.
+  await call("fork"); await call("fork");
+  assert.equal(asked.filter((entry) => entry.startsWith("tool:")).length, 2, "Allow once does not carry to the next call");
+
+  decision = "session";
+  await call("fork");
+  const afterSession = asked.length;
+  await call("fork"); await call("fork");
+  assert.equal(asked.length, afterSession, "A session approval stops the prompting");
+  assert.equal(calls.length, 5, "Every allowed call still reaches the server");
+
+  // The approval belongs to the conversation that granted it.
+  decision = "deny";
+  await assert.rejects(call("other-thread"), /Declined/, "Another conversation still asks, and can refuse");
+
+  // Sending a message as the user is not session-approvable: it acts outside the app.
+  await relayMcpAppRequest(client, scope, app, "ui/message", { text: "hello" }, prompting);
+  assert.ok(asked.at(-1)?.startsWith("confirm:"), "ui/message keeps its own one-off confirmation");
+  clearMcpAppSessionApprovals();
+  decision = "deny";
+  await assert.rejects(call("fork"), /Declined/, "Clearing approvals makes the app ask again");
 });
