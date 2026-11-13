@@ -3,6 +3,7 @@ import type { ThreadSummary } from "../../shared/bridge";
 import { conversationPullRequests, currentPullRequest, pullRequestHost, pullRequestLabel, type PullRequestOperation, type PullRequestResponse } from "../../shared/pullRequests";
 import { resolvePullRequestDetailChecks } from "@t3tools/client-runtime/pull-request-checks";
 import { bridge } from "../bridge-client";
+import { parsePullRequestAnchor, pullRequestAnchorLabel, pullRequestOpenTarget } from "../../shared/pullRequestLinks";
 import { PullRequestStateController, type PullRequestState } from "../pullRequestState";
 import { WorktreePopover } from "./WorktreePopover";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -47,8 +48,12 @@ function PullRequestPanel({ thread, link }: { thread: ThreadSummary; link: NonNu
   const running = state.loading.generateReviewGuide || guideResult?.run?._tag === "Running";
   const stale = guide && guideResult.currentHeadSha && guide.headSha !== guideResult.currentHeadSha;
   const open = (href: string) => void bridge.request("openLink", { href, threadId: thread.id });
+  // T3 0.1.9 opens a pull request link at what it references. The canonical address from the server
+  // names only the request, so preferring it dropped a link to a comment, diff line or tab.
+  const target = pullRequestOpenTarget(link.url, detail?.url ?? summary?.url ?? null);
+  const targetLabel = pullRequestAnchorLabel(parsePullRequestAnchor(target));
   return <section className="conversation-pr" aria-label={`${definition.changeRequest.singular} #${link.number}`}>
-    <header><strong>{definition.changeRequest.shortLabel} #{link.number} · {detail?.state ?? summary?.state ?? link.snapshot?.state ?? "unknown"}{(detail?.isDraft ?? summary?.isDraft ?? link.snapshot?.isDraft) ? " · draft" : ""}</strong><button type="button" onClick={() => open(detail?.url ?? summary?.url ?? link.url)}>Open</button><button type="button" onClick={() => void controller.current?.refresh()}>Refresh</button></header>
+    <header><strong>{definition.changeRequest.shortLabel} #{link.number} · {detail?.state ?? summary?.state ?? link.snapshot?.state ?? "unknown"}{(detail?.isDraft ?? summary?.isDraft ?? link.snapshot?.isDraft) ? " · draft" : ""}</strong><button type="button" title={targetLabel ? `Open this ${definition.changeRequest.singular}'s ${targetLabel}` : undefined} onClick={() => open(target)}>Open{targetLabel ? <small className="pr-open-target"> {targetLabel}</small> : null}</button><button type="button" onClick={() => void controller.current?.refresh()}>Refresh</button></header>
     <h3>{detail?.title ?? summary?.title ?? link.snapshot?.title ?? "Loading…"}</h3>
     <p>{detail ? `${detail.checks.length} checks · ${detail.checks.filter(check => check.status === "success").length} passed · ${detail.checks.filter(check => check.status === "failure" || check.status === "cancelled").length} failed · ${detail.checks.filter(check => check.status === "pending" || check.status === "action-required").length} pending` : `Checks ${summary?.checksState ?? link.snapshot?.checksState ?? "unknown"}`}{detail ? ` · ${detail.changedFiles} files · +${detail.additions} −${detail.deletions}` : ""}</p>
     {detail?.checks.map((check, index) => <div key={`${check.name}:${index}`}>{check.name}: {check.status}</div>)}

@@ -388,6 +388,19 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Pull requests on conversations
 
+#### Unreleased — open a link at what it references
+
+- Opening a pull request keeps what its link pointed at, matching T3 Code 0.1.9's pull request deep
+  links: a review comment, a diff line, the checks tab or the commit list.
+- Fixes a real defect. The panel preferred the server's canonical address, which names only the
+  request, so an agent's link to a specific comment landed on the request's root. The canonical
+  address is still used for a plain link, and preferred when it already names the same target.
+- The Open control now says what it will open, such as "Open comment" or "Open checks".
+- Uses the vendored `pullRequestAnchor` parser, so GitHub and GitLab forms are both understood.
+- Validation: 7 unit tests in `src/shared/pullRequestLinks.test.ts`, covering each target kind, the
+  canonical-address preference, a missing canonical address, GitLab paths and a malformed URL.
+
+
 #### v0.3.7
 
 - Show linked pull or merge requests in Sessions and the conversation header. The header opens details, checks, change breakdowns and review guides, with refresh and browser links.
