@@ -46,6 +46,19 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
   await reset(""); await message.focus();
   await message.pressSequentially("typed before a failed send");
   await expected("typed before a failed send");
+  // Watch the attribute itself. Toggling `disabled` is what clears a textarea's native undo stack,
+  // so a send must never set it — regression guard for the mechanism, not just the symptom.
+  const watchDisabled = () => message.evaluate((element: HTMLTextAreaElement) => {
+    (window as unknown as { __disabledSeen: boolean }).__disabledSeen = false;
+    const observer = new MutationObserver(() => { if (element.disabled) (window as unknown as { __disabledSeen: boolean }).__disabledSeen = true; });
+    observer.observe(element, { attributes: true, attributeFilter: ["disabled"] });
+    (window as unknown as { __disabledObserver: MutationObserver }).__disabledObserver = observer;
+  });
+  const disabledSeen = () => page.evaluate(() => {
+    const scope = window as unknown as { __disabledObserver?: MutationObserver; __disabledSeen?: boolean };
+    scope.__disabledObserver?.disconnect(); return scope.__disabledSeen === true;
+  });
+  await watchDisabled();
   client.failNextDispatch = "fixture refused this dispatch";
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await page.waitForFunction(() => !(document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.readOnly);
@@ -55,6 +68,19 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
   const afterFailedSend = await message.inputValue();
   assert.ok(afterFailedSend.length < "typed before a failed send".length && "typed before a failed send".startsWith(afterFailedSend),
     `a failed send must leave typing undoable, not ${JSON.stringify(afterFailedSend)}`);
+  assert.equal(await disabledSeen(), false, "a failed send must not toggle the textarea's disabled attribute, which would clear its undo stack");
+
+  // The same guard across a send that succeeds and clears the draft.
+  await reset(""); await message.focus();
+  await message.pressSequentially("typed before a successful send");
+  await expected("typed before a successful send");
+  await watchDisabled();
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expected("");
+  assert.equal(await disabledSeen(), false, "a successful send must not toggle the textarea's disabled attribute either");
+  // A sent message must not come back on undo: the clear is deliberately not a native edit.
+  await message.focus(); await message.press("Control+z");
+  assert.equal(await message.inputValue(), "", "undo must not resurrect a message that was already sent");
 
   // Plain typed text, with no programmatic edit anywhere in its history, stays in the textarea's own undo stack.
   await reset(""); await message.focus();

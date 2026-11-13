@@ -882,9 +882,16 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
   and says to try again. The uploads continue regardless, so a later send still uses them.
 - The suggested-prompt control gained an accessible name of its own (`Use suggested prompt: …`); its
   name previously came from the suggestion text, which told a screen reader nothing about the action.
-- Validation: `scripts/verify-composer-undo.ts` gains two scenarios — using a suggested prompt costs
-  exactly one undo step and redoes cleanly, and a failed send leaves earlier typing undoable. Both
-  run in real browser context through `scripts/verify-views.ts`, which now passes end to end.
+- Validation: `scripts/verify-composer-undo.ts` gains scenarios for using a suggested prompt (exactly
+  one undo step, redoing cleanly), a failed send leaving earlier typing undoable, and a successful
+  send neither resurrecting the sent message on undo nor clearing the stack. A MutationObserver
+  guards the mechanism itself: the textarea's `disabled` attribute must never be set during a send,
+  since that attribute toggle is what clears the stack. All run through `scripts/verify-views.ts`,
+  which passes end to end.
+- Not covered here: the real-VS-Code gate (`scripts/verify-native-undo.mjs` via
+  `verify-edh.mjs --undo-only`) needs a display and a real clipboard, so it must still be run on a
+  desktop session before any VSIX. It does not depend on the `disabled` attribute, so this change
+  does not alter what it exercises.
 
 #### Unreleased — send while attachments upload
 
