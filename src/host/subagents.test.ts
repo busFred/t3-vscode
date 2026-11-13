@@ -44,7 +44,9 @@ test("A parent reads as waiting when the server's background roster holds comple
   client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1, threads: client.shell.threads.map((entry) => entry.id === "first" ? { ...entry, status: "completed" as const, activityRunStatus: null, pendingBackgroundTasks: [{ taskId: "task-1", kind: "subagent" as const, childThreadId: ThreadId.make("second"), description: "Investigate flaky test" }] } : entry) };
   client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
   const parent = host.snapshot().threads.find((entry) => entry.id === "first")!;
-  assert.deepEqual(parent.backgroundWork, { subagents: 1, monitors: 0, tasks: 0, commands: 0, holdsCompletion: true, startedAt: null });
+  assert.deepEqual(parent.backgroundWork, { subagents: 1, monitors: 0, tasks: 0, commands: 0, holdsCompletion: true, startedAt: null,
+    // The roster itself travels with the counts, so the chat can name what it is waiting on.
+    items: [{ kind: "subagent", label: "Investigate flaky test" }] });
   assert.equal(parent.waitingOnSubagents, undefined, "the descendant-scan fallback found nothing; the roster is a separate signal");
 });
 

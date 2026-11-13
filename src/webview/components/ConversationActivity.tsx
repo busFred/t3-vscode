@@ -15,7 +15,8 @@ export function ConversationActivity({ state }: { readonly state: HostStateSnaps
   const [backgroundOpen, setBackgroundOpen] = useState(false);
   // T3 0.1.9 shows details for background work. The roster says what still holds the thread's
   // completion; the counts alone never said which command or monitor that was.
-  const thread = state.threads.find((entry) => entry.id === state.activeThreadId);
+  // Rendered from partial snapshots too, so never assume the thread list is present.
+  const thread = (state.threads ?? []).find((entry) => entry.id === state.activeThreadId);
   const background = thread?.backgroundWork;
   const backgroundItems = background?.items ?? [];
   const completed = tasks?.steps.filter((step) => step.status === "completed").length ?? 0;
