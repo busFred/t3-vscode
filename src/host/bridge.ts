@@ -454,6 +454,7 @@ export class BridgeHandler {
           if (this.viewActions.showUsage) await this.viewActions.showUsage(viewId, params.accountKey as string | undefined);
           else await (await import("vscode")).commands.executeCommand("t3-vscode.showUsage", params.accountKey);
           break;
+        case "threadLink": return { id: message.id, result: this.hostState.threadLink(stringParam(params, "threadId")) };
         case "openWebUi": await (await import("vscode")).env.openExternal((await import("vscode")).Uri.parse(this.hostState.webUiUrl(viewId))); break;
         case "copyText": {
           if (typeof params.text !== "string") throw new Error("Invalid text.");

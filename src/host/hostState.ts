@@ -72,6 +72,7 @@ import type { T3Client, Subscription } from "./t3Client.js";
 import type { MultiEnvironmentClient } from "./multiEnvironmentClient.js";
 import { DEFAULT_APPEARANCE, resolveAppearance, type AppearanceSettings } from "../shared/appearance.js";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { hostedThreadLink } from "@t3tools/shared/threadLinks";
 import { presentThreadShell } from "@t3tools/client-runtime/state/models";
 import { canSnooze, effectiveSnoozed, threadWokeAt, isThreadWokeUnseen } from "@t3tools/client-runtime/state/thread-settled";
 import { unseenRun } from "../shared/threadAttention.js";
@@ -3045,6 +3046,17 @@ export class HostState {
       const result = await this.client.runScheduledTask(id);
       this.scheduledTasks = this.scheduledTasks.map((task) => task.id === id ? result.task : task); this.emit();
     });
+  }
+  /**
+   * A link that opens this conversation from outside T3 Code (T3 0.1.7). The hosted app hands off
+   * to the desktop app, the mobile app, or itself, so it is shareable where the local origin is not.
+   */
+  threadLink(threadId: string): string {
+    if (!this.server || this.phase !== "ready") throw new Error("Connect to a local T3 Code server first.");
+    const thread = this.findThread(threadId);
+    if (!thread) throw new Error("This conversation is no longer available.");
+    const environmentId = this.remoteThread(threadId)?.environmentId ?? this.server.descriptor.environmentId;
+    return hostedThreadLink({ environmentId: EnvironmentId.make(environmentId), threadId: ThreadId.make(threadId) });
   }
   webUiUrl(viewId = SIDEBAR_VIEW_ID): string {
     if (!this.server || this.phase !== "ready") throw new Error("Connect to a local T3 Code server first.");

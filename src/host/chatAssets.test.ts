@@ -52,3 +52,10 @@ test("Tool output images resolve by position and only from the item that produce
   await assert.rejects(host.chatAsset("first", source, { kind: "tool-output-image", index: -1 }), /does not belong/);
   assert.equal(client.assetRequests.length, before + 1);
 });
+
+test("A thread link addresses the hosted app, scoped to the conversation's own machine", async (t) => {
+  const { host } = await viewsHarness(); t.after(() => host.dispose());
+  const link = host.threadLink("first");
+  assert.match(link, /^https:\/\/app\.t3\.codes\/threads\/[^/]+\/first$/, "The link opens from outside T3 Code");
+  assert.throws(() => host.threadLink("outside-thread"), /no longer available/);
+});

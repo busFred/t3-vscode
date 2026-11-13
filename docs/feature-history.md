@@ -310,6 +310,16 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Conversation management
 
+#### Unreleased — copy a shareable thread link
+
+- Add **Copy → Link**, matching T3 Code 0.1.7's shareable thread links. The Copy submenu previously
+  offered only Path, Branch and Thread ID, none of which open the conversation anywhere.
+- The link addresses the hosted app, which hands off to the desktop app, the mobile app or itself,
+  so it works outside T3 Code. This is distinct from the existing one-time, expiring guest share.
+- The host resolves it, scoping a conversation on a paired machine to that machine's environment;
+  a local conversation's summary does not carry an environment id.
+- Validation: `src/host/chatAssets.test.ts` covers the link's shape and the unavailable-thread error.
+
 #### Unreleased — model switch history
 
 - Show where the model or reasoning effort changed in a conversation, matching T3 Code 0.1.7. The

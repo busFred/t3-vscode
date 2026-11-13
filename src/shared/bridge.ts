@@ -37,7 +37,7 @@ export const Methods = {
   searchThreads: "searchThreads", composerSuggestions: "composerSuggestions", openTurnDiff: "openTurnDiff", turnDiffSummary: "turnDiffSummary", openMergeDiff: "openMergeDiff", refreshUsage: "refreshUsage",
   queueAction: "queueAction", reorderPins: "reorderPins", stopSubagent: "stopSubagent",
   revertConversation: "revertConversation", dismissRewindMarker: "dismissRewindMarker", restorePreview: "restorePreview", restoreFiles: "restoreFiles", openRestoreDiff: "openRestoreDiff", compareRestoredFile: "compareRestoredFile",
-  openWebUi: "openWebUi", configureUsage: "configureUsage", setUsagePanelAccounts: "setUsagePanelAccounts", showUsage: "showUsage",
+  openWebUi: "openWebUi", threadLink: "threadLink", configureUsage: "configureUsage", setUsagePanelAccounts: "setUsagePanelAccounts", showUsage: "showUsage",
   environmentAction: "environmentAction", watchSessions: "watchSessions",
 } as const;
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];

@@ -74,6 +74,9 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     ...(thread.worktreePath ?? workspaceRoot ? [{ kind: "action" as const, key: "path", label: "Path", run: () => copy((thread.worktreePath ?? workspaceRoot)!) }] : []),
     ...(thread.branch ? [{ kind: "action" as const, key: "branch", label: "Branch", run: () => copy(thread.branch!) }] : []),
     { kind: "action", key: "id", label: "Thread ID", run: () => copy(thread.id) },
+    // T3 0.1.7: a link that opens the conversation from outside T3 Code. The host resolves the
+    // environment, which a local conversation's summary does not carry.
+    { kind: "action", key: "link", label: "Link", run: () => { onClose(); void run("threadLink", { threadId: thread.id }).then((link) => { if (typeof link === "string") void run("copyText", { text: link }); }); } },
   ];
   const items: MenuItem[] = [
     { kind: "action", key: "pin", label: `${thread.pinned ? "Unpin" : "Pin"} thread`, icon: <PinIcon size={ICON} />, run: () => choose(thread.pinned ? "unpin" : "pin") },
