@@ -49,3 +49,19 @@ test("Unchanged thread summaries keep their identity across decoded states", () 
   const reordered = decoder.decode(withThreads(4, [third[1], summary("x", "X")])).state.threads;
   assert.equal(reordered[1], first[0]);
 });
+
+test("A push that changes no row hands back the same transcript and providers", () => {
+  // The view runs several passes over the transcript and keys its memos on that identity, so a
+  // fresh copy per push redoes all of them and re-renders rows that did not change.
+  const decoder = new TranscriptDecoder();
+  const providers = [{ instanceId: "codex", models: [] }] as unknown as HostStateSnapshot["providers"];
+  const wire = (extra: object) => ({ revision: 1, phase: "ready", threads: [], providers, ...extra }) as never;
+  const first = decoder.decode(wire({ transcript: [row("a", "one"), row("b", "two")] }));
+  const second = decoder.decode(wire({ providers: structuredClone(providers), transcriptPatch: { keys: ["a", "b"], rows: [] } }));
+  assert.equal(second.state.transcript, first.state.transcript, "unchanged rows keep the array's identity");
+  assert.equal(second.state.providers, first.state.providers, "an unchanged catalogue keeps its identity");
+
+  const third = decoder.decode(wire({ transcriptPatch: { keys: ["a", "b"], rows: [row("b", "changed")] } }));
+  assert.notEqual(third.state.transcript, second.state.transcript, "a changed row produces a new array");
+  assert.equal(third.state.transcript[0], second.state.transcript[0], "while the untouched row keeps its identity");
+});

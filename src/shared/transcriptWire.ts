@@ -58,11 +58,18 @@ export class TranscriptDecoder {
   private rows: ReadonlyMap<string, TranscriptItem> = new Map();
   private threads: ReadonlyMap<string, HostStateSnapshot["threads"][number]> = new Map();
   private previousThreads: HostStateSnapshot["threads"] = [];
+  private previousTranscript: HostStateSnapshot["transcript"] = [];
+  private previousProviders: HostStateSnapshot["providers"] | undefined;
   /** `complete` is false when a patch names a row this webview never received; request a whole state then. */
   decode(state: WireState): { state: HostStateSnapshot; complete: boolean } {
     const decoded = this.decodeTranscript(state);
     if (!Array.isArray(decoded.state.threads)) return decoded;
-    return { ...decoded, state: { ...decoded.state, threads: this.shareThreads(decoded.state.threads) } };
+    // `providers` is rebuilt by the host every push, and its identity feeds the contexts that carry
+    // subagent status and model names, so a fresh object re-renders every subagent card for nothing.
+    const providers = Array.isArray(decoded.state.providers)
+      ? shareStructure(this.previousProviders, decoded.state.providers) : decoded.state.providers;
+    this.previousProviders = providers;
+    return { ...decoded, state: { ...decoded.state, providers, threads: this.shareThreads(decoded.state.threads) } };
   }
   /** Unchanged thread summaries keep their identity across pushes so memoized session rows skip re-rendering. */
   private shareThreads(threads: HostStateSnapshot["threads"]): HostStateSnapshot["threads"] {
@@ -73,11 +80,20 @@ export class TranscriptDecoder {
     return result;
   }
   private decodeTranscript(state: WireState): { state: HostStateSnapshot; complete: boolean } {
-    if (!("transcriptPatch" in state)) { this.rows = new Map(state.transcript.map((row) => [row.key, row])); return { state, complete: true }; }
+    if (!("transcriptPatch" in state)) {
+      this.rows = new Map(state.transcript.map((row) => [row.key, row]));
+      this.previousTranscript = state.transcript;
+      return { state, complete: true };
+    }
     const { transcriptPatch, ...rest } = state;
     const changed = new Map(transcriptPatch.rows.map((row) => [row.key, row]));
-    const transcript = transcriptPatch.keys.flatMap((key) => { const row = changed.get(key) ?? this.rows.get(key); return row ? [row] : []; });
+    const built = transcriptPatch.keys.flatMap((key) => { const row = changed.get(key) ?? this.rows.get(key); return row ? [row] : []; });
+    // A push that changes no row must hand back the same array: the view runs several passes over
+    // the transcript and keys its memos on that identity, so a fresh copy redoes all of them.
+    const previous = this.previousTranscript;
+    const transcript = built.length === previous.length && built.every((row, index) => row === previous[index]) ? previous : built;
     this.rows = new Map(transcript.map((row) => [row.key, row]));
+    this.previousTranscript = transcript;
     return { state: { ...rest, transcript }, complete: transcript.length === transcriptPatch.keys.length };
   }
 }

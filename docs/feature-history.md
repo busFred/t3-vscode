@@ -271,6 +271,20 @@ Task entries open independent editor tabs with the same preview/keep behavior. E
 
 ### Independent chat views
 
+#### Unreleased — `verify-views.ts` queue section is unstable
+
+- The queue section of `scripts/verify-views.ts` fails intermittently on the "Unsupported steering
+  safely queues" step, where the dispatch resolves to `start_immediately` against an expected
+  `queue_after_active`. The rate moves with machine load, from clean to roughly half of runs.
+- It is **not** caused by the performance work: reverting the decoder and markdown changes leaves
+  the same rate, and the commit before them shows it too.
+- Two real defects in the check were fixed along the way and are worth keeping: it read the *last*
+  `message.dispatch` after only waiting for the composer to clear, so under load it asserted against
+  the previous submission's mode; and it proceeded as soon as the Send-now control vanished, which
+  is a different signal from the composer seeing a running turn. Neither fully stabilises it.
+- Unit tests and `scripts/verify-ui.mjs` are stable and green throughout. This check needs a
+  deliberate look at how the fixture drives queue state; it should not be read as passing.
+
 #### Unreleased — build each push once, and not at all for the sidebar
 
 - The thread list is derived once per push instead of once per open view. Nothing in it depends on
@@ -1045,6 +1059,25 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Validation: typecheck clean; 575/575 unit tests, including all eleven formats rendered for 5 April 2017; the browser fixture's date-format checks pass (`verify-ui.mjs` again stops only at the unrelated subagent-archive step). Fresh-context Sonnet regression review against `e93e17a`: APPROVE WITH NITS. Applied: removed the dead locale fallback in `sessionActivityLabel`. Kept: the Restore preview's elapsed-time ages (pre-existing rounding).
 
 ### Streaming and progressive history
+
+#### Unreleased — fewer wasted renders while a reply streams
+
+- A push that changes no transcript row now hands the view the **same array** it had. The decoder
+  rebuilt it every time, so several whole-transcript passes re-ran, and the row renderer changed
+  identity, on pushes caused by entirely different conversations.
+- The provider catalogue keeps its identity too. The host rebuilds it on every push, and that
+  identity feeds the contexts carrying subagent status and model names, so a fresh object
+  re-rendered every subagent card for nothing.
+- A streaming reply's trailing block is re-rendered at most every 120 ms once it passes 2 KB. From
+  the first list, quote, indented or HTML line onwards the remainder stays one block that is
+  re-parsed in full on each update — about 7 ms at 1 KB and 40–55 ms at 8 KB, growing with the
+  reply. Only that block's text lags: the split rules and the block keys holding mounted media and
+  diagrams are untouched, and when streaming stops the live text is returned directly, so a finished
+  reply never waits on a timer.
+- Validation: decoder identity is covered by a unit test (unchanged rows keep the array, a changed
+  row produces a new one while untouched rows keep theirs). `scripts/verify-ui.mjs`, which includes
+  the streaming row-overlap check, passes.
+
 
 #### v0.0.1
 

@@ -1,5 +1,5 @@
 /** T3 markdown/media presentation, with native file and external-link actions. */
-import { Fragment, createContext, memo, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { Fragment, createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -75,8 +75,36 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source,
   }, [parsedContext, attachments, threadId, assetSource]);
   const scope = useMemo(() => ({ threadId, assetSource, streaming, inlineAttachment }), [threadId, assetSource, streaming, inlineAttachment]);
   const blocks = useMemo(() => splitMarkdownBlocks(normalizeMathMarkdown(text)), [text]);
-  return <MarkdownScopeContext.Provider value={scope}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}>{blocks.map((block, index) => <Fragment key={index}>{index ? "\n" : null}<MarkdownBlock text={block} /></Fragment>)}</div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
+  const liveTail = blocks[blocks.length - 1] ?? "";
+  const shownTail = useThrottledTail(liveTail, streaming === true && liveTail.length > TAIL_THROTTLE_BYTES);
+  return <MarkdownScopeContext.Provider value={scope}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}>{blocks.map((block, index) => <Fragment key={index}>{index ? "\n" : null}<MarkdownBlock text={index === blocks.length - 1 ? shownTail : block} /></Fragment>)}</div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
 });
+
+/**
+ * Hold a streaming reply's trailing block back to a fixed cadence once it is long.
+ *
+ * Earlier blocks are split off and memoized, but from the first list, quote, indented or HTML line
+ * onwards the remainder stays one block, which is re-parsed in full on every update: measured at
+ * about 7 ms at 1 KB and 40-55 ms at 8 KB, growing as the reply does.
+ *
+ * Only the tail's text lags, never the split rules or the block keys that keep media and diagrams
+ * mounted. When streaming stops the live text is returned directly, so the finished reply is always
+ * complete and never waits on a timer.
+ */
+const TAIL_THROTTLE_MS = 120;
+const TAIL_THROTTLE_BYTES = 2048;
+function useThrottledTail(text: string, throttle: boolean): string {
+  const [shown, setShown] = useState(text);
+  const lastAt = useRef(0);
+  useEffect(() => {
+    if (!throttle) return;
+    const wait = TAIL_THROTTLE_MS - (Date.now() - lastAt.current);
+    if (wait <= 0) { lastAt.current = Date.now(); setShown(text); return; }
+    const timer = setTimeout(() => { lastAt.current = Date.now(); setShown(text); }, wait);
+    return () => clearTimeout(timer);
+  }, [text, throttle]);
+  return throttle ? shown : text;
+}
 
 const MarkdownBlock = memo(function MarkdownBlock({ text }: { text: string }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeKatex, { strict: "ignore", trust: false, throwOnError: false }]]}

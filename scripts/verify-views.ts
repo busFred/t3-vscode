@@ -857,8 +857,15 @@ try {
   assert.equal(await second.getByRole("combobox", { name: "Follow-up delivery" }).count(), 0);
   const submitFollowUp = async (page: Page, text: string, shortcut: string, mode: "auto" | "queue" | "steer") => {
     const message = page.getByRole("textbox", { name: "Message", exact: true });
+    const dispatches = () => client.commands.filter((item) => item.type === "message.dispatch").length;
+    const before = dispatches();
     await message.fill(text); await message.press(shortcut);
     await page.waitForFunction(() => (document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.value === "");
+    // The composer clears in the webview before the command reaches the host, so waiting only on
+    // the empty field read the *previous* submission's dispatch under load and asserted its mode.
+    const deadline = Date.now() + 10_000;
+    while (dispatches() === before && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(dispatches() > before, `no message.dispatch arrived for ${JSON.stringify(text)}`);
     const command = client.commands.findLast((item) => item.type === "message.dispatch");
     assert.equal(command?.type, "message.dispatch");
     if (command?.type === "message.dispatch") {
@@ -889,6 +896,10 @@ try {
   // Since v0.2.4 the control is offered only for an idle or steerable turn, so an unsteerable
   // active turn removes it rather than showing it disabled.
   await second.waitForFunction(() => !document.querySelector('[aria-label="Send queued message now"]'));
+  // The dispatch mode below depends on the composer seeing a running turn, which is a different
+  // signal from that control disappearing; waiting on the control alone raced the state push and
+  // queued against an idle composer, which starts immediately instead.
+  await second.waitForFunction(() => (document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.placeholder === "Send a follow-up…");
   await submitFollowUp(second, "Unsupported steering safely queues", "Control+Enter", "queue");
   assert.equal((await input.getAttribute("title"))?.includes("to steer"), false);
   publishTurn(client, "second");
