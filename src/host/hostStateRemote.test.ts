@@ -347,6 +347,16 @@ test("Remote sessions open the web UI under their own environment id", async (t)
 });
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 20));
+/**
+ * Wait for background host work (remote checkout listing, copying env files) to reach a state.
+ * A fixed sleep raced the full suite, where these files run alongside each other and 20ms is not
+ * always enough; this keeps the assertions exact while tolerating a loaded machine.
+ */
+const settledUntil = async (predicate: () => boolean, timeoutMs = 5_000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5));
+  await settled();
+};
 
 test("A new chat can run on a paired machine with the same repository; its server launches the thread with the first message", async (t) => {
   const f = await fixture(); t.after(f.cleanup);
@@ -355,7 +365,7 @@ test("A new chat can run on a paired machine with the same repository; its serve
   const draft = f.host.snapshot().draft;
   assert.deepEqual([draft.environmentId, draft.projectId, draft.workspaceRoot, draft.workspace], ["studio", "remote-match", "/home/dev/widget", { type: "root" }]);
   assert.equal(f.host.snapshot().providers[0]?.displayName, "Remote Kimi", "the model menu lists that machine's providers");
-  await settled();
+  await settledUntil(() => (f.host.snapshot().draft.remoteCheckouts?.items.length ?? 0) > 1);
   assert.deepEqual(f.host.snapshot().draft.remoteCheckouts?.items.map((item) => [item.path, item.branch, item.root]), [["/home/dev/widget", "main", true], ["/home/dev/widget-x", "feature/x", false]]);
   await f.host.sendMessage("Hello from here");
   assert.equal(f.client.launches.length, 1);
@@ -372,7 +382,7 @@ test("A new chat can run on a paired machine with the same repository; its serve
 
 test("A new chat on a paired machine can use its root, one of its worktrees or a new worktree", async (t) => {
   const f = await fixture({ withWorktrees: true }); t.after(f.cleanup);
-  await f.host.chooseMachine("studio"); await settled();
+  await f.host.chooseMachine("studio"); await settledUntil(() => Boolean(f.host.snapshot().draft.remoteCheckouts));
   await assert.rejects(f.host.configureWorktree({ type: "existing", path: "/home/dev/elsewhere" }, "remote-match"), /listed on that machine/);
   await assert.rejects(f.host.configureWorktree({ type: "pr", reference: "12", baseRef: "main" }, "remote-match"), /root checkout, one of its worktrees or a new worktree/);
   await assert.rejects(f.host.configureWorktree({ type: "existing", path: "/home/dev/widget-x" }, "local-project"), /machine this chat runs on/);
@@ -486,7 +496,7 @@ test("Cloning onto a machine points the new chat there; sending waits for the cl
   assert.deepEqual([f.host.snapshot().draft.clone?.phase, f.host.snapshot().draft.clone?.percent, f.host.snapshot().draft.clone?.name], ["running", 42, "acme/widget"]);
   await assert.rejects(f.host.sendMessage("Too early"), /Cloning repository on Dev Box/);
   f.client.cloneHandlers.get("devbox")!([cloneSnapshot(input.projectId, "done", { percent: 100 })]);
-  await settled();
+  await settledUntil(() => f.client.fileWrites.length > 0);
   assert.deepEqual(f.client.fileWrites.map((write) => [write.cwd, write.relativePath, write.contents]), [["~/src/widget", ".env", "TOKEN=fixture\n"]], "only listed files are copied");
   assert.equal(f.host.snapshot().draft.clone, undefined);
   await f.host.sendMessage("Now it is ready");
@@ -537,7 +547,7 @@ test("A finished clone that dropped off the machine's list still gets its files,
   f.client.shellHandler?.({ kind: "snapshot", snapshot: f.client.shell });
   await remove(join(f.repo, ".env.local"));
   f.client.cloneHandlers.get("devbox")!([]);
-  await settled();
+  await settledUntil(() => f.client.fileWrites.length > 0 && f.host.snapshot().draft.clone?.copy?.phase === "failed");
   assert.deepEqual(f.client.fileWrites.map((write) => write.relativePath), [".env"]);
   const clone = f.host.snapshot().draft.clone;
   assert.equal(clone?.copy?.phase, "failed");
