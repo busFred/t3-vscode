@@ -40,7 +40,7 @@ function mockBridge() {
     const params = request.params ?? {};
     if (request.method === "restoreComposerDraft") { window.postMessage({ id: request.id, result: { draft: window.__drafts[params.draftKey]?.draft ?? { text: "", contexts: [] }, selection: window.__drafts[params.draftKey]?.selection } }, '*'); return; }
     if (request.method === "saveComposerDraft") { window.__drafts[params.draftKey] = params; window.postMessage({ id: request.id, result: true }, '*'); return; }
-    if (request.method === "uploadAttachment") { const image = { key: 'pasted-upload', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length, previewUrl: `data:${params.mimeType};base64,${params.base64}`, environmentId: 'fixture', attachment: { type: 'image', id: 'pending-pasted', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length } }; setTimeout(() => window.postMessage({ id: request.id, result: image }, '*'), 50); return; }
+    if (request.method === "uploadAttachment") { const image = { key: 'pasted-upload', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length, previewUrl: `data:${params.mimeType};base64,${params.base64}`, environmentId: 'fixture', attachment: { type: 'image', id: 'pending-pasted', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length } }; setTimeout(() => window.postMessage({ id: request.id, result: image }, '*'), window.__uploadDelayMs ?? 50); return; }
     if (request.method === "pickAttachments") { const file = { key: 'picked-upload', name: 'outside-workspace.txt', mimeType: 'text/plain', sizeBytes: 3, environmentId: 'fixture', attachment: { type: 'file', id: 'pending-picked', name: 'outside-workspace.txt', mimeType: 'text/plain', sizeBytes: 3 } }; window.postMessage({ id: request.id, result: { attachments: [file], errors: [] } }, '*'); return; }
     if (request.method === "chatAsset") { setTimeout(() => window.postMessage({ id: request.id, result: { url: `${location.origin}/${params.reference.kind === "media" || params.reference.kind === "attachment" ? "image.svg" : "visual.html"}`, expiresAt: Date.now() + 60_000 } }, "*"), 0); return; }
     if (["selectThread", "openSessionTab"].includes(request.method)) window.__replace({ activeThreadId: params.threadId });
@@ -650,6 +650,23 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await page.waitForFunction(() => window.__requests.some(request => request.method === 'sendMessage' && request.params.text.includes('![this result]') && request.params.attachmentIds?.includes('pending-pasted')));
   await page.waitForFunction(() => !document.querySelector('.composer-attachment'));
+  // T3 0.1.9: sending is allowed while an attachment is still uploading. The send waits the upload
+  // out and still carries its id, rather than the button refusing the click.
+  await page.evaluate(() => { window.__uploadDelayMs = 1500; window.__requests.length = 0; });
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Still uploading.');
+  await page.getByRole('textbox', { name: 'Message', exact: true }).evaluate((element, bytes) => {
+    element.focus(); element.setSelectionRange(element.value.length, element.value.length);
+    const transfer = new DataTransfer(); transfer.items.add(new File([Uint8Array.from(atob(bytes), c => c.charCodeAt(0))], 'slow.png', { type: 'image/png' }));
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
+  }, png);
+  await page.waitForFunction(() => document.querySelector('.composer-attachment .attachment-state')?.textContent.includes('Uploading'));
+  assert.equal(await page.getByRole('button', { name: 'Send message', exact: true }).isEnabled(), true, 'Send stays available while an attachment uploads');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__requests.some(request => request.method === 'sendMessage')), false, 'The send waits for the upload instead of dropping the attachment');
+  await page.waitForFunction(() => window.__requests.some(request => request.method === 'sendMessage' && request.params.attachmentIds?.includes('pending-pasted')), null, { timeout: 15000 });
+  await page.waitForFunction(() => !document.querySelector('.composer-attachment'));
+  assert.equal(await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue(), '', 'A completed send clears the draft it was holding');
+  await page.evaluate(() => { window.__uploadDelayMs = 50; });
   await page.evaluate(() => window.__replace({ activeThreadId: undefined, projects: [], threads: [], transcript: [],
     draft: { projectId: null, workspaceRoot: null, supportsNoProject: true, modelSelection: { instanceId: "codex", model: "gpt-6-astra" }, runtimeMode: "auto", interactionMode: "default" } }));
   await page.getByRole("button", { name: "Choose project", exact: true }).filter({ hasText: "No project" }).waitFor();

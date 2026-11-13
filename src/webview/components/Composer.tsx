@@ -6,7 +6,7 @@ import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIco
 import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
-import { clearDraft, readDraftSelection, registerDraftTextEditor, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useDraftRecovery, useComposerDraft, type DraftTextEdit } from "../composerDrafts";
+import { clearDraft, readDraft, readDraftSelection, registerDraftTextEditor, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useDraftRecovery, useComposerDraft, type DraftTextEdit } from "../composerDrafts";
 import { assistantQuoteLabel, assistantQuoteNumbers, contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, insertFileReference, removeContextReference, syncAssistantQuoteLabels, type FileReference } from "../../shared/composerContext";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
@@ -18,7 +18,7 @@ import { useBridgeQuery } from "../useBridgeQuery";
 import { ComposerSuggestions } from "./ComposerSuggestions";
 import { ConversationActivity } from "./ConversationActivity";
 import { resolveComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
-import { addDraftAttachments, hasPendingAttachmentWork, usePendingAttachmentWork, pasteAttachments, pasteComposerClipboard, removeDraftAttachment, trackAttachmentWork } from "../composerAttachments";
+import { addDraftAttachments, hasPendingAttachmentWork, pasteAttachments, pasteComposerClipboard, removeDraftAttachment, settleDraftAttachments, trackAttachmentWork } from "../composerAttachments";
 import { buildComposerClipboard, parseComposerClipboardHtml, type ComposerClipboardPayload } from "../../shared/composerClipboard";
 import { writeComposerClipboard } from "../composerClipboard";
 import type { DraftAttachment, TextSelection } from "../../shared/composerAttachments";
@@ -293,13 +293,28 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const running = Boolean(thread?.activeRunId || state.queue?.activeRunId || state.acknowledgedWorking);
   const canStop = running || Boolean(thread?.waitingOnSubagents || thread?.backgroundWork);
   const shortcutHint = `${running ? `Enter to queue${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Enter to send"} · Shift+Enter for a new line`;
-  const placingAttachment = usePendingAttachmentWork(draftKey);
   const send = async (steer = false) => {
     const value = formatComposerMessage(text, contexts);
-    if ((!value && !attachments.length) || disabled || setupBlocked || !selection || picking || placingPicked || attachments.some((file) => file.pending || !file.attachment) || hasPendingAttachmentWork(draftKey)) return;
+    if ((!value && !attachments.length) || disabled || setupBlocked || !selection || picking || placingPicked) return;
     setBusy(true);
+    // T3 0.1.9 sends while attachments upload. The server still needs every attachment id, so the
+    // send waits out the in-flight uploads instead of the button refusing the click. The draft and
+    // its text stay put meanwhile, so a failure below leaves the message recoverable.
+    if (hasPendingAttachmentWork(draftKey) || attachments.some((file) => file.pending)) {
+      setAttachmentError(null);
+      await settleDraftAttachments(draftKey);
+    }
+    // Re-read after settling: an upload may have resolved, failed, or been removed while waiting.
+    const settled = readDraft(draftKey).attachments ?? [];
+    const unusable = settled.filter((file) => file.pending || !file.attachment);
+    if (unusable.length) {
+      // Never send a message that silently drops the files it refers to.
+      const failed = unusable.find((file) => file.error);
+      setAttachmentError(failed?.error ?? `Could not upload ${unusable.map((file) => file.name).join(", ")}.`);
+      setBusy(false); textarea.current?.focus(); return;
+    }
     const mode = resolveComposerDispatchMode({ running, activeTurnDefault: "queue", alternateModifier: steer && state.queue?.canSteer === true });
-    const sent = await run("sendMessage", { text: value, mode, attachmentIds: attachments.map((file) => file.attachment!.id), attachmentReferences: attachments.flatMap((file) => file.contextId ? [{ contextId: file.contextId, attachmentId: file.attachment!.id }] : []), ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
+    const sent = await run("sendMessage", { text: value, mode, attachmentIds: settled.map((file) => file.attachment!.id), attachmentReferences: settled.flatMap((file) => file.contextId ? [{ contextId: file.contextId, attachmentId: file.attachment!.id }] : []), ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
     if (sent) clearDraft(draftKey);
     setBusy(false); textarea.current?.focus();
   };
@@ -470,7 +485,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
             : <span className="composer-shortcuts" aria-hidden="true"><span>{running ? "Enter to queue" : "Enter to send"}</span><span>{running && state.queue?.canSteer ? `${steerShortcut} to steer` : "Shift+Enter for a new line"}</span></span>}
           {thread?.forceStopRunId ? <button className="stop-button" title="Agent not responding to Stop" onClick={() => { void run("forceStop", { threadId: thread.id, runId: thread.forceStopRunId }); }}>Force stop</button> : null}
           {canStop && thread ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
-          <button className="send-button" aria-label="Send message" title={policyBlock ?? shortcutHint} disabled={disabled || setupBlocked || picking || placingPicked || !selection || attachments.some((file) => file.pending || !file.attachment) || placingAttachment || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
+          <button className="send-button" aria-label="Send message" title={policyBlock ?? shortcutHint} disabled={disabled || setupBlocked || picking || placingPicked || !selection || attachments.some((file) => !file.pending && !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
         </div>
       </div>
     </div>

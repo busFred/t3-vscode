@@ -749,7 +749,17 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 
 ### Attachment presentation
 
-#### v0.1.23 — same-version rebuild
+#### Unreleased — send while attachments upload
+
+- Send is available while an attachment is still uploading, matching T3 Code 0.1.9. The send waits
+  the outstanding uploads out and then dispatches with their ids, rather than the button refusing
+  the click until every upload finishes.
+- An upload that fails blocks that send instead of quietly dropping the file: the composer keeps the
+  message and its attachments and reports the failure, so nothing is lost.
+- Validation: `scripts/verify-ui.mjs` holds an upload open for 1.5s, asserts Send stays enabled,
+  asserts no `sendMessage` is dispatched while the upload is in flight, then asserts the eventual
+  request carries the attachment id and clears the draft. The paste-undo checks in the same script
+  and `scripts/verify-composer-undo.ts` still pass.
 
 Ctrl/Cmd+click (or Alt+Enter) on an inline image reference opens an image-caption editor with Preview, Save and Cancel. Saving changes only that reference label, preserves attachment identity and uses the composer’s native undo history; thumbnail previews remain available.
 
