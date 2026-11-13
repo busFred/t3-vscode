@@ -716,6 +716,20 @@ Typed composer text uses the editor foreground for stronger contrast, while plac
 
 ### Context window meter
 
+#### Unreleased — use T3's own context-window derivation
+
+- Derive the meter through `client-runtime/state/context-window` instead of the local re-derivation,
+  adopting the module T3 Code 0.1.9 ships.
+- Two cases the local version silently showed no meter for now work: a provider that reports the
+  window on the provider thread rather than per turn, and a forked conversation, which inherits the
+  usage of the run it forked from until it records a turn of its own. A thread's own turn still
+  outranks inherited usage.
+- The meter's own shape, thresholds and formatting are unchanged, so the ring still appears only for
+  usage the provider actually sized.
+- Validation: the existing 8 tests still pass unchanged; 3 added for provider-thread usage,
+  fork inheritance and a thread's own turn taking precedence.
+
+
 #### v0.2.2
 
 - Add a small ring + percent to the composer's formatting toolbar, immediately left of "List assist". It reads the active thread's latest provider turn with a known context ceiling (`OrchestrationV2ProviderTurnTokenUsage`, extension docs/mockups/context-meter-options.md) and is hidden entirely until that usage is known, so a new thread or a provider that never reports it reserves no space. The ring and percent follow the existing warning/error theme colors at 55%/85% usage; the title tooltip gives exact tokens, percent and cached tokens.

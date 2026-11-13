@@ -1,4 +1,5 @@
 import type { OrchestrationV2ThreadProjection } from "@t3tools/contracts";
+import { deriveLatestContextWindowSnapshot, latestProviderTurnTokenUsage } from "@t3tools/client-runtime/state/context-window";
 
 export interface ContextUsageSnapshot {
   readonly usedTokens: number;
@@ -14,21 +15,28 @@ const ERROR_PERCENT = 85;
 /**
  * Latest provider-reported usage for the thread, or null when none is known yet.
  *
- * Only a turn with a `maxTokens` ceiling can show a ring (#8144); turns the provider never sized stay excluded
- * rather than rendering a meter with no scale. Ties fall back to array order, matching the lack of a stronger
- * signal when two turns report the same instant.
+ * Delegates to T3's own derivation (`client-runtime/state/context-window`) rather than re-deriving
+ * it. That covers two cases the earlier local version missed: a provider that reports usage on the
+ * provider thread rather than per turn, and a forked conversation, which inherits the usage of the
+ * run it forked from until it records a turn of its own.
+ *
+ * Only usage with a `maxTokens` ceiling can show a ring (#8144); a turn the provider never sized
+ * stays excluded rather than rendering a meter with no scale.
  */
 export function latestContextUsage(projection: OrchestrationV2ThreadProjection | null | undefined): ContextUsageSnapshot | null {
   if (!projection) return null;
-  let latest: ContextUsageSnapshot | null = null;
-  for (const turn of projection.providerTurns) {
-    const usage = turn.tokenUsage;
-    if (!usage || !usage.maxTokens) continue;
-    if (latest && usage.updatedAt < latest.updatedAt) continue;
-    latest = { usedTokens: usage.usedTokens, maxTokens: usage.maxTokens, updatedAt: usage.updatedAt,
-      ...(usage.cachedInputTokens === undefined ? {} : { cachedInputTokens: usage.cachedInputTokens }) };
-  }
-  return latest;
+  const providerThread = projection.providerThreads.find((thread) => thread.id === projection.thread.activeProviderThreadId);
+  const live = latestProviderTurnTokenUsage(projection.providerTurns, projection, providerThread);
+  const snapshot = deriveLatestContextWindowSnapshot(projection.visibleTurnItems, live, providerThread);
+  const maxTokens = snapshot?.maxTokens ?? null;
+  if (!snapshot || maxTokens === null || maxTokens <= 0) return null;
+  const cached = snapshot.cachedInputTokens ?? null;
+  return {
+    usedTokens: snapshot.usedTokens,
+    maxTokens,
+    updatedAt: snapshot.updatedAt,
+    ...(cached === null ? {} : { cachedInputTokens: cached }),
+  };
 }
 
 export function contextUsagePercent(usage: Pick<ContextUsageSnapshot, "usedTokens" | "maxTokens">): number {
