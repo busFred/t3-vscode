@@ -271,6 +271,29 @@ Task entries open independent editor tabs with the same preview/keep behavior. E
 
 ### Independent chat views
 
+#### Unreleased — build each push once, and not at all for the sidebar
+
+- The thread list is derived once per push instead of once per open view. Nothing in it depends on
+  which view is being built, but the per-view derivation cache is reset for every snapshot, so a
+  three-view push derived and allocated the whole list three times. It is cached only inside a push:
+  attention state depends on the clock, so a later push must re-derive for a snooze to expire.
+- The Sessions sidebar no longer builds or receives a transcript. Nothing under `SidebarView` reads
+  one, yet it auto-selects the newest conversation, so every push mapped every row and sent the
+  largest field in the payload for a surface that never renders it. Its `activeThreadId` still
+  stands, which is what the usage meter and the selected-row highlight use, and it no longer opens a
+  prompt-suggestion stream either, since it renders no composer.
+- This is configured by the extension (`rendersTranscript`) rather than hard-coded to the sidebar's
+  id, because a host driven directly — tests, scripts — legitimately uses that id as a general view
+  and still expects a complete snapshot.
+- Measured on 300 conversations with one 4,000-item conversation and three open views, timing a real
+  push rather than a direct snapshot call: **median 26.64 ms → 16.62 ms, p90 45.71 ms → 19.45 ms**,
+  and the sidebar's payload 2,136 KB → 231 KB. The coalescing budget is 32 ms, which the baseline
+  p90 exceeded.
+- Validation: a host test pins the production configuration — a sessions-only view yields an empty
+  transcript while keeping its selection, a chat view still gets one, and the suggestion stream
+  follows the composer.
+
+
 #### v0.1.23 — same-version rebuild
 
 Session resources retain the current History selection for restoration. Opening the previous session from the sidebar creates/reuses the correct editor, while conversation drafts remain independent.

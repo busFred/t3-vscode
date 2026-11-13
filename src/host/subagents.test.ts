@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EnvironmentId, ProviderDriverKind, NodeId, ProviderInstanceId, ThreadId, TurnItemId, type OrchestrationV2Subagent, type OrchestrationV2TurnItem } from "@t3tools/contracts";
-import { viewsHarness } from "./testing/fakeTransport.js";
+import { viewsHarness, publishText } from "./testing/fakeTransport.js";
+import { SIDEBAR_VIEW_ID } from "./hostState.js";
 import { v2Now, v2Projection } from "../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 import * as DateTime from "effect/DateTime";
 
@@ -167,4 +168,21 @@ test("Neither an auth refresh nor a dynamic tool call is offered as a child appr
     await host.selectThread("first");
     assert.equal(host.snapshot().childRequests, undefined, `${kind} is not an approval`);
   }
+});
+
+test("A sessions-only view is built without a transcript, and opens no suggestion stream", async (t) => {
+  // The production wiring marks the Sessions sidebar this way (src/extension.ts): nothing under
+  // SidebarView reads a transcript, so building and pushing one there is pure cost.
+  const { host, client } = await viewsHarness({ rendersTranscript: (viewId) => viewId !== SIDEBAR_VIEW_ID });
+  t.after(() => host.dispose());
+  host.registerView("chat-tab");
+  await host.selectThread("first", SIDEBAR_VIEW_ID);
+  await host.selectThread("first", "chat-tab");
+  publishText(client, "first", "a reply the chat tab shows");
+
+  assert.deepEqual(host.snapshot(SIDEBAR_VIEW_ID).transcript, [], "the sidebar carries no transcript");
+  assert.equal(host.snapshot(SIDEBAR_VIEW_ID).activeThreadId, "first", "but still knows its selection");
+  assert.ok(host.snapshot("chat-tab").transcript.length > 0, "a chat view still gets one");
+  // The suggestion stream belongs to surfaces that render a composer.
+  assert.equal(client.promptSuggestionHandlers.has("first"), true, "the chat tab subscribes");
 });

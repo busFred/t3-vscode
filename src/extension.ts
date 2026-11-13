@@ -48,6 +48,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const modelPreferences = new ModelPreferenceStore(context.globalState);
   const taskOrigins = new TaskOriginStore(context.globalState);
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),
+    // The Sessions sidebar renders no transcript, so it is not built or pushed for that view.
+    rendersTranscript: (viewId: string) => viewId !== SIDEBAR_VIEW_ID,
     worktreeRefreshMinutes: () => readRefreshSettings().worktreeIntervalMinutes,
     worktreeStorageRoot: resolve(context.globalStorageUri.fsPath, "worktrees"),
     restoreStorageRoot: resolve(context.globalStorageUri.fsPath, "restore"),

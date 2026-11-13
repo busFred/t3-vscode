@@ -245,11 +245,11 @@ export class FakeTransport implements HostTransport {
   getTurnItem: HostTransport["getTurnItem"] = async () => ({ item: null });
 }
 function structuredCloneShell() { return { ...v2ShellSnapshot, projects: [...v2ShellSnapshot.projects], threads: [...v2ShellSnapshot.threads], archivedThreads: [] }; }
-export async function harness(options: Pick<HostStateOptions, "taskOrigins" | "saveTaskOrigin" | "workspaceRoot" | "workspaceRoots" | "pickProject" | "draftStore" | "appearance" | "messageNavigation" | "taskDefaultSpeed" | "favoriteModels" | "saveFavoriteModels" | "modelPreferences" | "saveModelPreferences" | "searchPreferences" | "saveSearchPreferences" | "archiveRefreshDelayMs"> = {}, client = new FakeTransport()) {
+export async function harness(options: Pick<HostStateOptions, "rendersTranscript" | "taskOrigins" | "saveTaskOrigin" | "workspaceRoot" | "workspaceRoots" | "pickProject" | "draftStore" | "appearance" | "messageNavigation" | "taskDefaultSpeed" | "favoriteModels" | "saveFavoriteModels" | "modelPreferences" | "saveModelPreferences" | "searchPreferences" | "saveSearchPreferences" | "archiveRefreshDelayMs"> = {}, client = new FakeTransport()) {
   const host = new HostState({ home: "/tmp/fake-t3-test", credentials, discover: async () => ({ ok: true, server }), reconnectDelayMs: 0, ...options }, client);
   await host.start(); return { host, client };
 }
-export async function viewsHarness(options: Pick<HostStateOptions, "taskOrigins" | "saveTaskOrigin" | "draftStore" | "appearance" | "messageNavigation" | "favoriteModels" | "saveFavoriteModels" | "modelPreferences" | "saveModelPreferences" | "searchPreferences" | "saveSearchPreferences"> = {}) {
+export async function viewsHarness(options: Pick<HostStateOptions, "taskOrigins" | "saveTaskOrigin" | "draftStore" | "appearance" | "messageNavigation" | "favoriteModels" | "saveFavoriteModels" | "modelPreferences" | "saveModelPreferences" | "searchPreferences" | "saveSearchPreferences" | "rendersTranscript"> = {}) {
   const client = new FakeTransport();
   client.shell = { ...client.shell, projects: [
     { ...v2Project, workspaceRoot: "/tmp/t3-vscode", title: "t3-vscode" },

@@ -100,6 +100,13 @@ export interface HostStateOptions {
   /** Where "Restore files to this point" saves kept files' pre-restore bytes, before re-applying them. */
   readonly restoreStorageRoot?: string;
   readonly assertTrustedWorkspace?: () => Promise<void>;
+  /**
+   * Whether a view renders a transcript. The Sessions sidebar does not — nothing under
+   * `SidebarView` reads one — so building and pushing it there costs a full row mapping and the
+   * largest field in the payload for nothing. Defaults to every view, so a host driven directly
+   * (tests, scripts) keeps the complete snapshot.
+   */
+  readonly rendersTranscript?: (viewId: string) => boolean;
   readonly taskOrigins?: () => ReadonlyArray<TaskOrigin>;
   readonly saveTaskOrigin?: (origin: TaskOrigin) => PromiseLike<void>;
   readonly draftStore?: ComposerDraftStore;
@@ -222,6 +229,13 @@ export class HostState {
   private revision = 0;
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
   private emitting: Map<string, HostStateSnapshot> | null = null;
+  /**
+   * The thread list for the emit in progress. Nothing in it depends on which view is being built,
+   * yet the per-view derivation memo is reset for every snapshot, so a three-view emit derived and
+   * allocated the whole list three times. Held only for the duration of one emit, so a later emit
+   * still re-derives: attention state depends on the clock, and a snooze expiring must show.
+   */
+  private emitThreads: HostStateSnapshot["threads"] | null = null;
   /** Thread and project derivations memoized while one snapshot is built; null outside a build so state changes are always seen. */
   private derived: Map<string, unknown> | null = null;
   private readonly clipboardNonce = randomUUID();
@@ -1365,13 +1379,15 @@ export class HostState {
     }
     for (const id of selected) {
       const open = [...this.views.values()].some((view) => view.activeThreadId === id);
+      // Only a surface that renders a composer can offer a suggestion; a sessions-only view cannot.
+      const composed = [...this.views.entries()].some(([key, view]) => view.activeThreadId === id && this.options.rendersTranscript?.(key) !== false);
       if (!open && !watched.has(id)) continue;
       const previous = this.threads.get(id);
       // Only a remote stream that ended with its connection is resumed; local subscriptions are never duplicated.
       if (previous && (previous.subscription || !this.remoteThread(id))) {
         // A thread first subscribed as watched (an expanded subagent row) and only later opened
         // reaches here, so its suggestion subscription is reconciled rather than never started.
-        if (previous.subscription) this.reconcilePromptSuggestion(id, previous, open);
+        if (previous.subscription) this.reconcilePromptSuggestion(id, previous, composed);
         continue;
       }
       if (!this.remoteConnected(id)) continue;
@@ -1384,7 +1400,7 @@ export class HostState {
         });
         if (this.disposed || this.threads.get(id) !== state) await subscription();
         else state.subscription = subscription;
-        if (state.subscription) this.reconcilePromptSuggestion(id, state, open);
+        if (state.subscription) this.reconcilePromptSuggestion(id, state, composed);
       } catch (cause) {
         this.threads.delete(id);
         // An expanded row only refines subagent status; it must not fail the conversation being opened.
@@ -2875,64 +2891,25 @@ export class HostState {
     try { state = this.buildSnapshot(viewId); } finally { this.derived = outer; }
     this.emitting?.set(viewId, state); return state;
   }
-  private buildSnapshot(viewId: string): HostStateSnapshot {
-    const view = this.requireView(viewId), now = Date.now();
-    const activeThreadId = this.findThread(view.activeThreadId)?.id;
-    const state = activeThreadId ? this.threads.get(activeThreadId) : undefined;
-    const projection = state?.projection;
-    const descriptor = this.server?.descriptor;
-    const threads = this.visibleThreads();
-    const delegatedChildren = new Map<string, OrchestrationV2ThreadShell[]>();
-    for (const child of threads) if (child.delegatedFrom) delegatedChildren.set(child.delegatedFrom.threadId, [...delegatedChildren.get(child.delegatedFrom.threadId) ?? [], child]);
-    const threadById = new Map<string, OrchestrationV2ThreadShell>(threads.map((thread) => [thread.id, thread]));
-    const visibleThreadIds = new Set(threadById.keys());
-    const subagentActivity = this.subagentActivity();
-    const environmentOf = (id: string) => EnvironmentId.make(this.remoteThread(id)?.environmentId ?? descriptor?.environmentId ?? "local");
-    const tagEnvironments = new Map<string, { environmentId: EnvironmentId; threads: OrchestrationV2ThreadShell[]; hiddenTags: ReadonlyArray<string> | null }>();
-    for (const thread of this.allThreads()) {
-      const environmentId = environmentOf(thread.id), settings = this.configForThread(thread.id)?.settings;
-      const hiddenTags = settings?.hideTaggedThreads ? settings.hiddenThreadTags.map(tag => tag.trim()).filter(Boolean) : [];
-      const entry = tagEnvironments.get(environmentId) ?? { environmentId, threads: [], hiddenTags: hiddenTags.length ? hiddenTags : null };
-      entry.threads.push(thread); tagEnvironments.set(environmentId, entry);
-    }
-    const hiddenKeys = hiddenThreadKeys([...tagEnvironments.values()]);
-    const stopTargets = new Map<string, NonNullable<ThreadSummary["stopSubagent"]>>();
-    for (const parent of threads) for (const agent of this.threads.get(parent.id)?.projection?.subagents ?? []) {
-      if (!this.stoppableSubagent(agent)) continue;
-      const childId = agent.remoteChild?.threadId ?? agent.childThreadId;
-      if (childId && (!agent.remoteChild || environmentOf(childId) === agent.remoteChild.environmentId)) stopTargets.set(childId, { threadId: parent.id, subagentId: agent.id });
-    }
-    const accepted = activeThreadId ? this.acceptedMessages.get(activeThreadId) : undefined;
-    const acceptedRun = accepted ? projection?.runs.find(run => run.userMessageId === accepted.messageId) : undefined;
-    const observedActive = threadActiveRun(projection);
-    const acknowledgedWorking = accepted && !observedActive && !(acceptedRun && ["completed", "failed", "cancelled", "interrupted", "rolled_back"].includes(acceptedRun.status)) ? accepted : undefined;
-    if (accepted && !acknowledgedWorking && activeThreadId) this.acceptedMessages.delete(activeThreadId);
-    return {
-      peerLinks: this.peerLinksSnapshot(), linkRequestPeers: this.peerLinksSnapshot(activeThreadId),
-      ...(acknowledgedWorking ? { acknowledgedWorking } : {}),
-      ...(this.worktrees ? { worktrees: this.worktrees.snapshot() } : {}),
-      ...(viewId === SIDEBAR_VIEW_ID ? { machineCheckouts: this.sidebarMachineCheckouts() } : {}),
-      revision: this.revision, clipboardNonce: this.clipboardNonce, phase: this.phase, home: this.options.home,
-      connectionSetup: { ...this.setup, ...(this.connectionProblem ? { problem: this.connectionProblem } : {}) },
-      searchPreferences: this.searchPreferences,
-      ...(this.sessionSearches.get(viewId) ? { sessionSearch: this.sessionSearches.get(viewId)!.state } : {}),
-      workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()), taskDefaultSpeed: resolveTaskDefaultSpeed(this.options.taskDefaultSpeed?.()), usagePanelAccounts: resolveAccountsDisplay(this.options.usagePanelAccounts?.() ?? this.usagePanelAccounts),
-      dateFormat: resolveDateFormat(this.options.dateFormat?.()), timeFormat: resolveTimeFormat(this.options.timeFormat?.()), appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
-      ...(this.notice ? { notice: this.notice } : {}),
-      ...((activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))?.managedPolicy ? { managedPolicy: (activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))!.managedPolicy } : {}),
-      ...(this.client.config?.managedPolicy ? { localManagedPolicy: this.client.config.managedPolicy } : {}),
-      ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
-      scheduledTasks: { loading: this.scheduledTasksLoading, ...(this.scheduledTaskError ? { error: this.scheduledTaskError } : {}), tasks: (() => { const origins = this.options.taskOrigins?.(); return this.scheduledTasks.filter((task) => this.visibleProjects().some((project) => project.id === task.projectId)).map((task) => {
-        const association = origins?.find((origin) => origin.environmentId === descriptor?.environmentId && origin.projectId === task.projectId && origin.taskId === task.id);
-        const serverOrigin = typeof task.originThreadId === "string" && this.findThread(task.originThreadId)?.projectId === task.projectId ? task.originThreadId : null;
-        return { ...task, editVersion: taskEditVersion(task), originThreadId: association ? association.threadId : serverOrigin, originKnown: !!association || serverOrigin !== null };
-      }); })() },
-      projects: this.visibleProjects().map((project) => { const remote = this.remoteProject(project.id);
-        return { id: project.id, title: project.title, workspaceRoot: project.workspaceRoot, ...(remote ? { environmentLabel: remote.label, environmentId: remote.environmentId } : {}) }; }),
-      ...(activeThreadId && this.remoteThread(activeThreadId) ? { remoteSession: this.remoteThread(activeThreadId)! } : {}),
-      ...this.environmentsSection(),
-      ...(() => { const projectMachines = viewId === SIDEBAR_VIEW_ID ? this.projectMachines() : undefined; return projectMachines ? { projectMachines } : {}; })(),
-      threads: withSubagentWorkingState(threads.map((thread) => {
+  /**
+   * The thread list for one emit. Nothing in it depends on the view being built, so a
+   * multi-view emit can share one list; the per-view derivation memo is reset per snapshot,
+   * which is why this is cached separately. Only cached inside an emit: outside one there is
+   * no scope to invalidate it, and attention state depends on the clock.
+   */
+  private threadList(threads: ReadonlyArray<OrchestrationV2ThreadShell>, context: {
+    readonly now: number;
+    readonly visibleThreadIds: ReadonlySet<string>;
+    readonly environmentOf: (id: string) => EnvironmentId;
+    readonly stopTargets: ReadonlyMap<string, NonNullable<ThreadSummary["stopSubagent"]>>;
+    readonly delegatedChildren: ReadonlyMap<string, OrchestrationV2ThreadShell[]>;
+    readonly descriptor: DiscoveredServer["descriptor"] | undefined;
+    readonly hiddenKeys: ReturnType<typeof hiddenThreadKeys>;
+    readonly subagentActivity: ReturnType<HostState["subagentActivity"]>;
+  }): HostStateSnapshot["threads"] {
+    const { now, visibleThreadIds, environmentOf, stopTargets, delegatedChildren, descriptor, hiddenKeys, subagentActivity } = context;
+    if (this.emitThreads) return this.emitThreads;
+          const built = withSubagentWorkingState(threads.map((thread) => {
         // visibleTurnItems lags each thread's own settled record (#the subagent's child thread
         // settles before the parent's turn item stops showing "Running"), so the roster above
         // (backgroundWork) is the primary signal and this transcript scan is only a fallback for
@@ -3030,7 +3007,69 @@ export class HostState {
           ...(subagentWorking ? { activityRunStatus: "running", workingStartedAt: subagent.startedAt } : {}),
           ...(subagentOutcome ? { subagentOutcome } : {}),
         };
-      })),
+    }));
+    if (this.emitting) this.emitThreads = built;
+    return built;
+  }
+  private buildSnapshot(viewId: string): HostStateSnapshot {
+    const sessionsOnly = this.options.rendersTranscript?.(viewId) === false;
+    const view = this.requireView(viewId), now = Date.now();
+    const activeThreadId = this.findThread(view.activeThreadId)?.id;
+    const state = activeThreadId ? this.threads.get(activeThreadId) : undefined;
+    const projection = state?.projection;
+    const descriptor = this.server?.descriptor;
+    const threads = this.visibleThreads();
+    const delegatedChildren = new Map<string, OrchestrationV2ThreadShell[]>();
+    for (const child of threads) if (child.delegatedFrom) delegatedChildren.set(child.delegatedFrom.threadId, [...delegatedChildren.get(child.delegatedFrom.threadId) ?? [], child]);
+    const threadById = new Map<string, OrchestrationV2ThreadShell>(threads.map((thread) => [thread.id, thread]));
+    const visibleThreadIds = new Set(threadById.keys());
+    const subagentActivity = this.subagentActivity();
+    const environmentOf = (id: string) => EnvironmentId.make(this.remoteThread(id)?.environmentId ?? descriptor?.environmentId ?? "local");
+    const tagEnvironments = new Map<string, { environmentId: EnvironmentId; threads: OrchestrationV2ThreadShell[]; hiddenTags: ReadonlyArray<string> | null }>();
+    for (const thread of this.allThreads()) {
+      const environmentId = environmentOf(thread.id), settings = this.configForThread(thread.id)?.settings;
+      const hiddenTags = settings?.hideTaggedThreads ? settings.hiddenThreadTags.map(tag => tag.trim()).filter(Boolean) : [];
+      const entry = tagEnvironments.get(environmentId) ?? { environmentId, threads: [], hiddenTags: hiddenTags.length ? hiddenTags : null };
+      entry.threads.push(thread); tagEnvironments.set(environmentId, entry);
+    }
+    const hiddenKeys = hiddenThreadKeys([...tagEnvironments.values()]);
+    const stopTargets = new Map<string, NonNullable<ThreadSummary["stopSubagent"]>>();
+    for (const parent of threads) for (const agent of this.threads.get(parent.id)?.projection?.subagents ?? []) {
+      if (!this.stoppableSubagent(agent)) continue;
+      const childId = agent.remoteChild?.threadId ?? agent.childThreadId;
+      if (childId && (!agent.remoteChild || environmentOf(childId) === agent.remoteChild.environmentId)) stopTargets.set(childId, { threadId: parent.id, subagentId: agent.id });
+    }
+    const accepted = activeThreadId ? this.acceptedMessages.get(activeThreadId) : undefined;
+    const acceptedRun = accepted ? projection?.runs.find(run => run.userMessageId === accepted.messageId) : undefined;
+    const observedActive = threadActiveRun(projection);
+    const acknowledgedWorking = accepted && !observedActive && !(acceptedRun && ["completed", "failed", "cancelled", "interrupted", "rolled_back"].includes(acceptedRun.status)) ? accepted : undefined;
+    if (accepted && !acknowledgedWorking && activeThreadId) this.acceptedMessages.delete(activeThreadId);
+    return {
+      peerLinks: this.peerLinksSnapshot(), linkRequestPeers: this.peerLinksSnapshot(activeThreadId),
+      ...(acknowledgedWorking ? { acknowledgedWorking } : {}),
+      ...(this.worktrees ? { worktrees: this.worktrees.snapshot() } : {}),
+      ...(viewId === SIDEBAR_VIEW_ID ? { machineCheckouts: this.sidebarMachineCheckouts() } : {}),
+      revision: this.revision, clipboardNonce: this.clipboardNonce, phase: this.phase, home: this.options.home,
+      connectionSetup: { ...this.setup, ...(this.connectionProblem ? { problem: this.connectionProblem } : {}) },
+      searchPreferences: this.searchPreferences,
+      ...(this.sessionSearches.get(viewId) ? { sessionSearch: this.sessionSearches.get(viewId)!.state } : {}),
+      workspaceRoots: this.workspaceRoots(), messageNavigation: resolveMessageNavigation(this.options.messageNavigation?.()), taskDefaultSpeed: resolveTaskDefaultSpeed(this.options.taskDefaultSpeed?.()), usagePanelAccounts: resolveAccountsDisplay(this.options.usagePanelAccounts?.() ?? this.usagePanelAccounts),
+      dateFormat: resolveDateFormat(this.options.dateFormat?.()), timeFormat: resolveTimeFormat(this.options.timeFormat?.()), appearance: resolveAppearance(this.options.appearance?.() ?? DEFAULT_APPEARANCE),
+      ...(this.notice ? { notice: this.notice } : {}),
+      ...((activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))?.managedPolicy ? { managedPolicy: (activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))!.managedPolicy } : {}),
+      ...(this.client.config?.managedPolicy ? { localManagedPolicy: this.client.config.managedPolicy } : {}),
+      ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
+      scheduledTasks: { loading: this.scheduledTasksLoading, ...(this.scheduledTaskError ? { error: this.scheduledTaskError } : {}), tasks: (() => { const origins = this.options.taskOrigins?.(); return this.scheduledTasks.filter((task) => this.visibleProjects().some((project) => project.id === task.projectId)).map((task) => {
+        const association = origins?.find((origin) => origin.environmentId === descriptor?.environmentId && origin.projectId === task.projectId && origin.taskId === task.id);
+        const serverOrigin = typeof task.originThreadId === "string" && this.findThread(task.originThreadId)?.projectId === task.projectId ? task.originThreadId : null;
+        return { ...task, editVersion: taskEditVersion(task), originThreadId: association ? association.threadId : serverOrigin, originKnown: !!association || serverOrigin !== null };
+      }); })() },
+      projects: this.visibleProjects().map((project) => { const remote = this.remoteProject(project.id);
+        return { id: project.id, title: project.title, workspaceRoot: project.workspaceRoot, ...(remote ? { environmentLabel: remote.label, environmentId: remote.environmentId } : {}) }; }),
+      ...(activeThreadId && this.remoteThread(activeThreadId) ? { remoteSession: this.remoteThread(activeThreadId)! } : {}),
+      ...this.environmentsSection(),
+      ...(() => { const projectMachines = viewId === SIDEBAR_VIEW_ID ? this.projectMachines() : undefined; return projectMachines ? { projectMachines } : {}; })(),
+      threads: this.threadList(threads, { now, visibleThreadIds, environmentOf, stopTargets, delegatedChildren, descriptor, hiddenKeys, subagentActivity }),
       // A new conversation offers its chosen machine's providers.
       providers: (activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))?.providers ?? [],
       archiveLoaded: this.archive !== null, archiveLoading: this.archiveLoad !== null, ...(this.archiveError ? { archiveError: this.archiveError } : {}),
@@ -3042,7 +3081,11 @@ export class HostState {
       ...(activeThreadId ? this.revertState(activeThreadId, projection) : {}),
       ...conversationActivity(projection),
       contextUsage: latestContextUsage(projection),
-      transcript: projection ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => {
+      // The Sessions sidebar renders no transcript (no component under SidebarView reads one), so
+      // building and pushing it there costs a full row mapping and the largest field in the
+      // payload for nothing. Its activeThreadId still stands, which is what the usage meter and
+      // the selected-row highlight need.
+      transcript: projection && !sessionsOnly ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => {
         const source = this.threads.get(row.sourceThreadId)?.projection ?? projection;
         const status = row.item.type === "checkpoint" && row.item.runId ? indexBy(source.runs, "id", (run) => run.id as string).get(row.item.runId)?.status : undefined;
         const agent = row.item.type === "subagent" ? source.subagents.find(agent => agent.id === (row.item as Extract<OrchestrationV2TurnItem, { type: "subagent" }>).subagentId) : undefined;
@@ -3200,9 +3243,10 @@ export class HostState {
   private emit(): void {
     if (this.disposed) return;
     this.revision += 1;
-    const outer = this.emitting; this.emitting = new Map();
+    const outer = this.emitting, outerThreads = this.emitThreads;
+    this.emitting = new Map(); this.emitThreads = null;
     try { for (const [listener, viewId] of this.listeners) listener(this.snapshot(viewId)); }
-    finally { this.emitting = outer; }
+    finally { this.emitting = outer; this.emitThreads = outerThreads; }
     this.scheduleSnoozeWake(); this.updateVisits();
   }
   async dispose(): Promise<void> {
