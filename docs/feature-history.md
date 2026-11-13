@@ -780,9 +780,9 @@ Typed composer text uses the editor foreground for stronger contrast, while plac
   server that does not serve it simply offers no suggestions rather than reporting an error or
   failing to open the conversation.
 - Validation: `scripts/verify-ui.mjs` covers the chip appearing, being withheld over a draft,
-  filling the composer, and undoing in one step. `scripts/verify-composer-undo.ts` was **not** run:
-  it is a module driven by `scripts/verify-views.ts`, which is broken by pre-existing drift (see
-  below), so this insertion path has no real-VS-Code undo coverage yet.
+  filling the composer, and undoing in one step. `scripts/verify-composer-undo.ts` also passes, via
+  `scripts/verify-views.ts`, which drives it; running that module's file directly does nothing,
+  since it exports a function and has no entry point of its own.
 
 
 #### v0.3.7
@@ -865,6 +865,27 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 
 ### Attachment presentation
 
+#### Unreleased — a send no longer costs the composer's undo history
+
+- A message in flight now holds the composer **read-only** instead of disabled. Toggling a
+  textarea's `disabled` attribute clears its native undo stack, so a send that then failed silently
+  cost the user every undo step behind their text. `readOnly` blocks typing the same way while
+  leaving that stack and the caret intact, so a failed send is now fully recoverable.
+- This was a pre-existing defect — the released v0.3.11 behaves the same way — that the
+  send-while-uploading change made easier to reach, since a send can now be started during an upload
+  and fail afterwards.
+- A successful send still clears the draft without that clear becoming an undoable edit: programmatic
+  draft writes skip the native replay while the field is read-only, exactly as they did while it was
+  disabled. Typing during a send stays blocked, so clearing cannot discard text written meanwhile.
+- The wait for in-flight uploads is now bounded at 30 seconds. The composer is held while a send
+  waits, so a stalled upload previously had no escape hatch; the send now hands the composer back
+  and says to try again. The uploads continue regardless, so a later send still uses them.
+- The suggested-prompt control gained an accessible name of its own (`Use suggested prompt: …`); its
+  name previously came from the suggestion text, which told a screen reader nothing about the action.
+- Validation: `scripts/verify-composer-undo.ts` gains two scenarios — using a suggested prompt costs
+  exactly one undo step and redoes cleanly, and a failed send leaves earlier typing undoable. Both
+  run in real browser context through `scripts/verify-views.ts`, which now passes end to end.
+
 #### Unreleased — send while attachments upload
 
 - Send is available while an attachment is still uploading, matching T3 Code 0.1.9. The send waits
@@ -875,8 +896,7 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 - Validation: `scripts/verify-ui.mjs` holds an upload open for 1.5s, asserts Send stays enabled,
   asserts no `sendMessage` is dispatched while the upload is in flight, then asserts the eventual
   request carries the attachment id and clears the draft. The paste-undo checks in the same script
-  still pass. `scripts/verify-composer-undo.ts` was not run; see the note under the suggested-prompt
-  entry.
+  and `scripts/verify-composer-undo.ts` (through `scripts/verify-views.ts`) still pass.
 
 Ctrl/Cmd+click (or Alt+Enter) on an inline image reference opens an image-caption editor with Preview, Save and Cancel. Saving changes only that reference label, preserves attachment identity and uses the composer’s native undo history; thumbnail previews remain available.
 
@@ -1935,21 +1955,22 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 
 #### Unreleased — `verify-views.ts` found broken since before v0.3.11
 
-- `scripts/verify-views.ts` does not run to completion, and has not since before the v0.3.11 release.
-  It drives `scripts/verify-composer-undo.ts`, so the composer's real undo regression guard has not
-  been executing either. Confirmed against the released baseline `79eb3a4`, which fails the same way.
+- `scripts/verify-views.ts` did not run to completion, and had not since before the v0.3.11 release.
+  Confirmed against the released baseline `79eb3a4`, which fails the same way. The composer's undo
+  guard was unaffected — `verifyComposerUndo` runs early in that script and passed throughout — but
+  every check after the queue section was being skipped. It now runs end to end again.
 - Three stale expectations repaired here: the queue control's label (`Steer with queued message` no
   longer exists anywhere in `src/`; it is `Send queued message now`), that control being *absent*
   rather than disabled for an unsteerable active turn since v0.2.4, and the Copy submenu's contents,
   which this release legitimately extends with **Link**.
-- One remains, at the "Unsupported steering safely queues" step: the dispatch mode resolves to
-  `start_immediately` where the script expects `queue_after_active`. Repairing that needs a
-  deliberate decision about the intended queue semantics, so it was left rather than guessed at, and
-  the script still stops there.
-- This is why `AGENTS.md`'s native-undo gate matters: the gate script is separate
-  (`scripts/verify-native-undo.mjs`, via `verify-edh.mjs --undo-only`) and must be run in real
-  VS Code before any VSIX. `scripts/verify-native-turns.mjs` carried the same stale label and was
-  corrected too, though it was not run here.
+- A fourth apparent failure at the "Unsupported steering safely queues" step turned out to be a
+  consequence of the third: the stale wait timed out after 30s and left the queue in a state the
+  next step then misread. With the wait corrected, the dispatch mode resolves as expected and the
+  script passes.
+- `scripts/verify-native-turns.mjs` carried the same stale label and was corrected too, though it
+  was not run here: it needs real VS Code. The separate native-undo gate
+  (`scripts/verify-native-undo.mjs`, via `verify-edh.mjs --undo-only`) still must be run in real
+  VS Code before any VSIX.
 
 #### Unreleased — vendored T3 Code pinned to 0.1.9
 

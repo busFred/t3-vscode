@@ -131,7 +131,16 @@ export class FakeTransport implements HostTransport {
   secretAnswers: Array<unknown> = [];
   secretAnswerError: Error | null = null;
   async answerSecretRequest(input: unknown) { if (this.secretAnswerError) throw this.secretAnswerError; this.secretAnswers.push(input); }
+  /** Make the next dispatch reject once, so a caller can exercise a failed send. */
+  failNextDispatch: string | null = null;
+  /** Predicted next prompts, delivered like the server's own subscription. */
+  readonly promptSuggestionHandlers = new Map<string, Parameters<NonNullable<HostTransport["subscribePromptSuggestion"]>>[1]>();
+  subscribePromptSuggestion: NonNullable<HostTransport["subscribePromptSuggestion"]> = async (id, handler) => {
+    this.promptSuggestionHandlers.set(id, handler);
+    return async () => { this.promptSuggestionHandlers.delete(id); };
+  };
   async dispatch(raw: unknown) {
+    if (this.failNextDispatch !== null) { const reason = this.failNextDispatch; this.failNextDispatch = null; throw new Error(reason); }
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(raw); this.commands.push(command);
     if (command.type === "thread.tag.set" || command.type === "thread.pin.reorder") {
       this.shell = { ...this.shell, threads: this.shell.threads.map(thread => thread.id !== command.threadId ? thread : command.type === "thread.pin.reorder"

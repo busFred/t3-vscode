@@ -17,6 +17,20 @@ export function trackAttachmentWork<T>(draftKey: string, work: Promise<T>): Prom
 /** A paste or drop still placing its reference (or uploading); sending now would drop it from the message. */
 export function hasPendingAttachmentWork(draftKey: string): boolean { return (pending.get(draftKey)?.size ?? 0) > 0; }
 export async function settleDraftAttachments(draftKey: string): Promise<void> { await Promise.allSettled([...(pending.get(draftKey) ?? [])]); }
+/**
+ * Wait for a draft's uploads, but not forever: a send holds the composer while it waits, so a
+ * stalled upload would otherwise leave the field uneditable with nothing the user could do.
+ * Resolves true when the work settled, false when the deadline passed first — the uploads keep
+ * running either way, so a later send can still use them.
+ */
+export async function settleDraftAttachmentsWithin(draftKey: string, timeoutMs: number): Promise<boolean> {
+  const work = [...(pending.get(draftKey) ?? [])];
+  if (!work.length) return true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); });
+  try { return await Promise.race([Promise.allSettled(work).then(() => true as const), deadline]); }
+  finally { if (timer) clearTimeout(timer); }
+}
 export function addDraftAttachments(draftKey: string, attachments: ReadonlyArray<DraftAttachment>, selection?: TextSelection, options?: AttachmentInsertionOptions): number | undefined {
   const added = attachments.map((file) => ({ ...file, contextId: file.contextId ?? `${file.mimeType.startsWith("image/") ? "image" : "file"}_${crypto.randomUUID()}` }));
   let cursor: number | undefined;

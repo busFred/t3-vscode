@@ -18,7 +18,7 @@ import { useBridgeQuery } from "../useBridgeQuery";
 import { ComposerSuggestions } from "./ComposerSuggestions";
 import { ConversationActivity } from "./ConversationActivity";
 import { resolveComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
-import { addDraftAttachments, hasPendingAttachmentWork, pasteAttachments, pasteComposerClipboard, removeDraftAttachment, settleDraftAttachments, trackAttachmentWork } from "../composerAttachments";
+import { addDraftAttachments, hasPendingAttachmentWork, pasteAttachments, pasteComposerClipboard, removeDraftAttachment, settleDraftAttachmentsWithin, trackAttachmentWork } from "../composerAttachments";
 import { buildComposerClipboard, parseComposerClipboardHtml, type ComposerClipboardPayload } from "../../shared/composerClipboard";
 import { writeComposerClipboard } from "../composerClipboard";
 import type { DraftAttachment, TextSelection } from "../../shared/composerAttachments";
@@ -65,6 +65,8 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   }, [state.activeThreadId]);
   useEffect(() => { if (text.length || contexts.length || attachments.length) markTouched(); }, [text, contexts, attachments]);
   const [busy, setBusy] = useState(false);
+  /** How long a send waits for in-flight uploads before handing the composer back to the user. */
+  const UPLOAD_WAIT_MS = 30_000;
   // T3 0.1.8 predicts a next prompt once a run finishes. Dismissal is per run, so a later
   // suggestion still appears.
   const [dismissedSuggestionRun, setDismissedSuggestionRun] = useState<string | null>(null);
@@ -139,6 +141,14 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       : workspace.type === "branch" ? state.worktrees?.branches.find((item) => item.projectId === (thread?.projectId ?? state.draft.projectId) && item.name === workspace.branch)?.path ?? null : null
     : thread?.worktreePath ?? state.projects.find((item) => item.id === (thread?.projectId ?? state.draft.projectId))?.workspaceRoot ?? state.draft.workspaceRoot;
   const disabled = !recovery.ready || busy || state.sending || thread?.archived === true || thread?.providerNativeSubagent === true;
+  /**
+   * A message in flight must not toggle the textarea's `disabled` attribute: doing so clears the
+   * element's native undo stack, so a send that then failed silently cost the user their history.
+   * `readOnly` blocks edits the same way while leaving that stack — and the caret — intact, and it
+   * still prevents typing during the send, so a successful clear cannot discard text typed meanwhile.
+   */
+  const inFlight = busy || state.sending;
+  const inputDisabled = !recovery.ready || thread?.archived === true || thread?.providerNativeSubagent === true;
   const inputSelection = (): TextSelection => ({ start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length });
   const editing = useRef(false);
   const numberingUndo = useRef<{ before: string; after: string; selection: TextSelection } | null>(null);
@@ -163,7 +173,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   // programmatic change is replayed into it as an edit instead. Unfocused or unmounted, the store write still stands.
   const editText = useCallback((previous: string, next: string, mode: DraftTextEdit) => {
     const input = textarea.current;
-    if (!input || input.disabled || !input.isConnected || input.value !== previous) return;
+    if (!input || input.disabled || input.readOnly || !input.isConnected || input.value !== previous) return;
     if (document.activeElement !== input) {
       if (mode !== "take-focus") return;
       input.focus(); if (document.activeElement !== input) return;
@@ -309,7 +319,12 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     // its text stay put meanwhile, so a failure below leaves the message recoverable.
     if (hasPendingAttachmentWork(draftKey) || attachments.some((file) => file.pending)) {
       setAttachmentError(null);
-      await settleDraftAttachments(draftKey);
+      // Bounded: the composer is read-only while this send owns it, so a stalled upload must not
+      // hold it indefinitely. The uploads continue regardless, so sending again later still works.
+      if (!await settleDraftAttachmentsWithin(draftKey, UPLOAD_WAIT_MS)) {
+        setAttachmentError("Still uploading. Send again once the attachments finish, or remove them.");
+        setBusy(false); textarea.current?.focus(); return;
+      }
     }
     // Re-read after settling: an upload may have resolved, failed, or been removed while waiting.
     const settled = readDraft(draftKey).attachments ?? [];
@@ -403,7 +418,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     <MachineChip state={state} disabled={busy || state.sending} />
     <div className="composer-box" onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); addFiles([...event.dataTransfer.files]); } }}>
       <ComposerFormatting disabled={disabled || picking} listAssist={editingPreferences.listAssist} contextUsage={state.contextUsage} onListAssist={() => setEditingPreferences({ listAssist: !editingPreferences.listAssist })} onAttach={pickFiles} onFormat={applyFormat} onIndent={(outdent) => applyEdit(indentMarkdown(text, inputSelection(), outdent, true), true)} />
-      {promptSuggestion ? <div className="prompt-suggestion"><button type="button" className="prompt-suggestion-apply" title="Use this prompt" onClick={() => {
+      {promptSuggestion ? <div className="prompt-suggestion"><button type="button" className="prompt-suggestion-apply" title="Use this prompt" aria-label={`Use suggested prompt: ${promptSuggestion.text}`} onClick={() => {
         // Through applyEdit, so the insertion joins the textarea's own undo history.
         applyEdit({ start: 0, end: text.length, text: promptSuggestion.text, selection: { start: promptSuggestion.text.length, end: promptSuggestion.text.length } });
         setDismissedSuggestionRun(promptSuggestion.runId);
@@ -430,7 +445,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         </div>)}
       </div> : null}
       {attachmentError ? <div className="composer-attachment-error" role="alert">{attachmentError}</div> : null}
-      <textarea ref={textarea} data-opening={opening || undefined} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description={`${openModifier}+click a file reference to open its source, an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor. A plain click only moves the caret, so a reference can be edited by hand.`} disabled={disabled || picking} rows={2}
+      <textarea ref={textarea} data-opening={opening || undefined} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description={`${openModifier}+click a file reference to open its source, an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor. A plain click only moves the caret, so a reference can be edited by hand.`} disabled={inputDisabled || picking} readOnly={inFlight} rows={2}
         onBlur={(event) => onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })}
         onClick={(event) => {
           // Opening a reference moves the focus away, so the caret it was opened from is remembered here rather than on blur.

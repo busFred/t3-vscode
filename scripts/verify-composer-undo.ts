@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import type { Page } from "playwright-core";
 import type { HostState } from "../src/host/hostState.js";
 import { publishText, type FakeTransport } from "../src/host/testing/fakeTransport.js";
+import { RunId } from "@t3tools/contracts";
 
 export async function verifyComposerUndo(page: Page, host: HostState, client: FakeTransport, viewId: string, selectAssistantText: (page: Page, text: string) => Promise<unknown>) {
   const message = page.getByRole("textbox", { name: "Message", exact: true });
@@ -20,6 +21,40 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, value);
     element.dispatchEvent(new Event("input", { bubbles: true }));
   }, value);
+
+  // A suggested next prompt (T3 0.1.8) is an insertion path like any other: using one must cost
+  // exactly one undo step, and must not reach back into the typing before it.
+  await reset(""); await message.focus();
+  await message.pressSequentially("typed before a suggestion");
+  await expected("typed before a suggestion");
+  client.promptSuggestionHandlers.get(threadId)?.({ runId: RunId.make("undo-suggestion-run"), text: "Add a regression test." });
+
+  // The chip is offered only over an empty composer, so clear what was typed first.
+  await reset(""); await message.focus();
+  await page.getByRole("button", { name: "Use suggested prompt: Add a regression test." }).click();
+  await expected("Add a regression test.");
+  await focused();
+  await message.press("Control+z");
+  await expected("");
+  await message.press("Control+y");
+  await expected("Add a regression test.");
+  client.promptSuggestionHandlers.get(threadId)?.(null);
+  await page.waitForFunction(() => !document.querySelector(".prompt-suggestion"));
+
+  // A send that fails must not cost the user their undo history. The composer is held read-only
+  // while a send is in flight rather than disabled, because toggling `disabled` clears that stack.
+  await reset(""); await message.focus();
+  await message.pressSequentially("typed before a failed send");
+  await expected("typed before a failed send");
+  client.failNextDispatch = "fixture refused this dispatch";
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await page.waitForFunction(() => !(document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.readOnly);
+  await expected("typed before a failed send");
+  await message.focus();
+  await message.press("Control+z");
+  const afterFailedSend = await message.inputValue();
+  assert.ok(afterFailedSend.length < "typed before a failed send".length && "typed before a failed send".startsWith(afterFailedSend),
+    `a failed send must leave typing undoable, not ${JSON.stringify(afterFailedSend)}`);
 
   // Plain typed text, with no programmatic edit anywhere in its history, stays in the textarea's own undo stack.
   await reset(""); await message.focus();
@@ -153,5 +188,5 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
   // "Live reply in" is already on screen, so wait for the streamed chunks to go: a late snapshot would otherwise re-render later checks mid-step.
   await page.waitForFunction(() => document.body.textContent?.includes("Live reply in") && !document.body.textContent.includes("streamed chunk"));
   await reset(original);
-  console.log("PASS: native undo for typing, picked files, nested native paste, first/repeated quotes and a mid-typing host snapshot.");
+  console.log("PASS: native undo for typing, picked files, nested native paste, first/repeated quotes, a mid-typing host snapshot, a suggested prompt and a failed send.");
 }
