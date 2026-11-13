@@ -2,7 +2,7 @@ import { isManagedDriverAllowed, managedPolicyDeniedMessage, managedRuntimeModeD
 import { ImageCaptionEditor } from "./ImageCaptionEditor";
 import { bridge } from "../bridge-client";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon, ZapIcon } from "lucide-react";
+import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon, WandSparklesIcon, ZapIcon } from "lucide-react";
 import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
@@ -65,6 +65,9 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   }, [state.activeThreadId]);
   useEffect(() => { if (text.length || contexts.length || attachments.length) markTouched(); }, [text, contexts, attachments]);
   const [busy, setBusy] = useState(false);
+  // T3 0.1.8 predicts a next prompt once a run finishes. Dismissal is per run, so a later
+  // suggestion still appears.
+  const [dismissedSuggestionRun, setDismissedSuggestionRun] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   // Picked files wait here until the commit that re-enables the textarea, so their insertion replays into its undo history.
   // The replay runs a frame later: inside React's effect flush, the controlled textarea would be reset after the input event.
@@ -293,6 +296,10 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const running = Boolean(thread?.activeRunId || state.queue?.activeRunId || state.acknowledgedWorking);
   const canStop = running || Boolean(thread?.waitingOnSubagents || thread?.backgroundWork);
   const shortcutHint = `${running ? `Enter to queue${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Enter to send"} · Shift+Enter for a new line`;
+  // Never over a draft the user is writing, never while sending, and not once dismissed.
+  const suggested = state.promptSuggestion;
+  const promptSuggestion = suggested && !text.trim() && !attachments.length && !disabled && !setupBlocked
+    && suggested.runId !== dismissedSuggestionRun && suggested.text.trim() ? suggested : null;
   const send = async (steer = false) => {
     const value = formatComposerMessage(text, contexts);
     if ((!value && !attachments.length) || disabled || setupBlocked || !selection || picking || placingPicked) return;
@@ -396,6 +403,12 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     <MachineChip state={state} disabled={busy || state.sending} />
     <div className="composer-box" onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); addFiles([...event.dataTransfer.files]); } }}>
       <ComposerFormatting disabled={disabled || picking} listAssist={editingPreferences.listAssist} contextUsage={state.contextUsage} onListAssist={() => setEditingPreferences({ listAssist: !editingPreferences.listAssist })} onAttach={pickFiles} onFormat={applyFormat} onIndent={(outdent) => applyEdit(indentMarkdown(text, inputSelection(), outdent, true), true)} />
+      {promptSuggestion ? <div className="prompt-suggestion"><button type="button" className="prompt-suggestion-apply" title="Use this prompt" onClick={() => {
+        // Through applyEdit, so the insertion joins the textarea's own undo history.
+        applyEdit({ start: 0, end: text.length, text: promptSuggestion.text, selection: { start: promptSuggestion.text.length, end: promptSuggestion.text.length } });
+        setDismissedSuggestionRun(promptSuggestion.runId);
+      }}><WandSparklesIcon size={12} /><span>{promptSuggestion.text}</span></button>
+        <button type="button" className="icon-button" aria-label="Dismiss suggested prompt" onClick={() => setDismissedSuggestionRun(promptSuggestion.runId)}><XIcon size={12} /></button></div> : null}
       {suggestionsOpen ? <ComposerSuggestions items={items} selected={highlighted} pending={suggestions.pending} error={suggestions.error} onSelect={chooseSuggestion} onHighlight={setSuggestionIndex} /> : null}
       {attachments.length || visibleContexts.length ? <div className="composer-chips" role="group" aria-label="Message attachments and references">
         {attachments.map((file) => {

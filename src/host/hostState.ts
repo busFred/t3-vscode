@@ -89,7 +89,7 @@ import type { SessionSearchOptions } from "../shared/sessionSearch.js";
 import { resolveSearchPreferences, type SearchPreferences, type SessionSearchPreview } from "../shared/sessionSearchPresentation.js";
 import { defaultProviderModelPreference, getProviderModelPreference, orderedProviderModels, type ModelPickerPreferences } from "../shared/modelPreferences.js";
 
-export type HostTransport = Pick<T3Client, "pullRequestRequest" | "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream" | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext"> & Partial<Pick<T3Client, "linkPeer" | "unlinkPeer">> & { mintPeerPairingCodeOn?: (environmentId: string, access: import("@t3tools/contracts").AuthMcpClientAccess) => Promise<string> } & { listPeerLinks?: (threadId?: string) => ReturnType<T3Client["listPeerLinks"]> } & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy" | "directEndpoints">> | null }
+export type HostTransport = Pick<T3Client, "pullRequestRequest" | "listScheduledTasks" | "subscribeScheduledTasks" | "upsertScheduledTask" | "setScheduledTaskEnabled" | "runScheduledTask" | "rotateWebhookToken" | "listWebhookDeliveries" | "getWebhookDelivery" | "connected" | "onClose" | "onConfig" | "connect" | "disconnect" | "snapshotShell" | "subscribeShell" | "subscribeThread" | "getThreadProjection" | "dispatch" | "answerSecretRequest" | "createProject" | "ensureScratchProject" | "getHistory" | "getTurnItem" | "snapshotArchive" | "searchThreads" | "searchPaths" | "refreshProviders" | "captureTurnBaseline" | "findTurnBaseline" | "getSavedTurnDiff" | "getDiffFileContents" | "forceStopThread" | "answerLinkRequest" | "createGuestShare" | "searchThreadStream" | "mcpAppCallTool" | "mcpAppToolInfo" | "mcpAppReadResource" | "mcpAppUpdateModelContext"> & Partial<Pick<T3Client, "subscribePromptSuggestion">> & Partial<Pick<T3Client, "linkPeer" | "unlinkPeer">> & { mintPeerPairingCodeOn?: (environmentId: string, access: import("@t3tools/contracts").AuthMcpClientAccess) => Promise<string> } & { listPeerLinks?: (threadId?: string) => ReturnType<T3Client["listPeerLinks"]> } & Partial<WorktreeTransport> & { readonly config: Pick<ServerConfig, "providers" | "scratchWorkspaceRoot" | "usageLimitSources"> & Partial<Pick<ServerConfig, "environment" | "settings" | "managedPolicy" | "directEndpoints">> | null }
   // Remote environments: assets and attachments live on the server that owns the conversation.
   & { createAssetUrl(resource: AssetResource, threadId?: string): ReturnType<T3Client["createAssetUrl"]>;
     uploadAttachment(input: AttachmentCreateUploadUrlInput, bytes: Uint8Array, environmentId?: string): ReturnType<T3Client["uploadAttachment"]>;
@@ -135,9 +135,12 @@ interface ThreadState {
   history: ThreadHistoryMeta;
   loading: boolean;
   subscription: Subscription | null;
+  /** Predicted next prompt (T3 0.1.8); null where the server offers none or does not serve it. */
+  promptSuggestion: { readonly runId: string; readonly text: string } | null;
+  promptSuggestionSubscription: Subscription | null;
 }
 const threadActiveRun = (projection: OrchestrationV2ThreadProjection | null | undefined) => projection ? deriveThreadQueueWorkflowState(projection).activeRun : undefined;
-const blankThread = (): ThreadState => ({ projection: null, sequence: -1, history: EMPTY_THREAD_HISTORY_META, loading: true, subscription: null });
+const blankThread = (): ThreadState => ({ projection: null, sequence: -1, history: EMPTY_THREAD_HISTORY_META, loading: true, subscription: null, promptSuggestion: null, promptSuggestionSubscription: null });
 export const SIDEBAR_VIEW_ID = "sidebar";
 interface ViewState {
   workspaceChoice?: WorktreeChoice;
@@ -1039,7 +1042,7 @@ export class HostState {
     for (const state of threads) this.retainHistory(state);
     this.shellSubscription = null;
     await shell?.();
-    for (const state of threads) await state.subscription?.();
+    for (const state of threads) { await state.subscription?.(); await state.promptSuggestionSubscription?.(); }
   }
   private async connect(forcePair: boolean): Promise<void> {
     await this.stopSubscriptions();
@@ -1351,7 +1354,7 @@ export class HostState {
     for (const [id, state] of this.threads) {
       if (selected.has(id)) continue;
       // Delete first so callbacks and history responses in flight cannot revive this projection.
-      this.threads.delete(id); this.retainedHistory.delete(id); await state.subscription?.();
+      this.threads.delete(id); this.retainedHistory.delete(id); await state.subscription?.(); await state.promptSuggestionSubscription?.();
     }
     for (const id of selected) {
       const open = [...this.views.values()].some((view) => view.activeThreadId === id);
@@ -1369,6 +1372,17 @@ export class HostState {
         });
         if (this.disposed || this.threads.get(id) !== state) await subscription();
         else state.subscription = subscription;
+        // Suggestions are an extra; a server that does not serve them must not break opening a
+        // conversation, so this is deliberately not awaited into the failure path above.
+        if (open && state.subscription) void this.client.subscribePromptSuggestion?.(id, (suggestion) => {
+          if (this.disposed || this.threads.get(id) !== state) return;
+          const next = suggestion ? { runId: suggestion.runId as string, text: suggestion.text } : null;
+          if (next?.text === state.promptSuggestion?.text && next?.runId === state.promptSuggestion?.runId) return;
+          state.promptSuggestion = next; this.scheduleEmit();
+        }).then((stop) => {
+          if (this.disposed || this.threads.get(id) !== state) void stop();
+          else state.promptSuggestionSubscription = stop;
+        }, () => undefined);
       } catch (cause) {
         this.threads.delete(id);
         // An expanded row only refines subagent status; it must not fail the conversation being opened.
@@ -2971,6 +2985,8 @@ export class HostState {
       })(),
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
       threadLoading: state?.loading ?? false, sending: view.sending,
+      // Offered only while the composer is empty of its own text; a draft is the user's own intent.
+      ...(state?.promptSuggestion ? { promptSuggestion: state.promptSuggestion } : {}),
     };
   }
   private async loadScheduledTasks(): Promise<void> {

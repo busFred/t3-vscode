@@ -219,11 +219,30 @@ try {
   await page.evaluate(() => window.__replace({ pending: { approvals: [{ id: 'a', kind: 'command', title: 'Run tests', createdAt: new Date().toISOString() }], userInputs: [], secrets: [] } }));
   await page.waitForFunction(() => document.querySelector('.turn-announcer')?.textContent === 'Approval needed');
   await page.evaluate(() => window.__replace({ pending: { approvals: [], userInputs: [], secrets: [] } }));
+  // T3 0.1.8 predicts a next prompt once a run finishes.
+  await page.evaluate(() => window.__replace({ promptSuggestion: { runId: 'run-1', text: 'Add a regression test for the fix.' } }));
+  const suggestion = page.locator('.prompt-suggestion-apply');
+  await suggestion.waitFor();
+  const message = page.getByRole('textbox', { name: 'Message', exact: true });
+  await message.fill('my own draft');
+  await page.waitForFunction(() => !document.querySelector('.prompt-suggestion'), null, { timeout: 5000 });
+  await message.fill('');
+  await suggestion.waitFor();
+  await suggestion.click();
+  assert.equal(await message.inputValue(), 'Add a regression test for the fix.', 'Applying the suggestion fills the composer');
+  // Protected behaviour: the insertion must join the textarea's own undo history.
+  await message.press('Control+z');
+  assert.equal(await message.inputValue(), '', 'Applying a suggestion is one native undo step');
+  await page.evaluate(() => window.__replace({ promptSuggestion: undefined }));
+  await page.waitForFunction(() => !document.querySelector('.prompt-suggestion'));
+  await message.fill('');
   // T3 0.1.8: images a tool returned in its own output lead its details, ahead of the inputs.
   await page.evaluate(() => window.__replace({ transcript: [window.__fixtures.toolImages] }));
-  const toolGroup = page.locator('.work-group-toggle');
-  if (await toolGroup.count()) await toolGroup.first().click();
-  await page.getByRole('button', { name: /screenshot/i }).first().click();
+  // The row may sit inside a collapsed work group; expand it only if it is not already reachable.
+  const screenshotRow = page.getByRole('button', { name: /screenshot/i });
+  if (!(await screenshotRow.count())) await page.locator('.work-group-toggle').first().click();
+  await screenshotRow.first().waitFor();
+  await screenshotRow.first().click();
   await page.locator('.tool-output-images img').first().waitFor();
   assert.equal(await page.locator('.tool-output-images img').count(), 1, 'The image block renders; the text block is not an image');
   assert.equal(await page.evaluate(() => window.__requests.some(request => request.method === 'chatAsset' && request.params.reference.kind === 'tool-output-image' && request.params.reference.index === 0)), true, 'The image is requested by its position in the output');

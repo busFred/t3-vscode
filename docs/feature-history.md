@@ -767,6 +767,22 @@ Typed composer text uses the editor foreground for stronger contrast, while plac
 
 ### Slash commands and file suggestions
 
+#### Unreleased — suggested next prompt
+
+- Offer the server's predicted next prompt above an empty composer, matching T3 Code 0.1.8. Clicking
+  it fills the composer; it can also be dismissed.
+- Shown only over an empty composer with no attachments: a draft is the user's own intent and must
+  not be replaced. Dismissal is per run, so a later suggestion still appears.
+- Applied through the composer's native insertion path, so using a suggestion stays a single
+  Ctrl+Z step like every other insertion.
+- The subscription fails softly. `orchestration.subscribePromptSuggestion` arrived in T3 Code 0.1.8
+  and no capability advertises it, while this extension still supports servers from 0.1.5, so a
+  server that does not serve it simply offers no suggestions rather than reporting an error or
+  failing to open the conversation.
+- Validation: `scripts/verify-ui.mjs` covers the chip appearing, being withheld over a draft,
+  filling the composer, and undoing in one step; `scripts/verify-composer-undo.ts` still passes.
+
+
 #### v0.3.7
 
 - Refresh stale provider workspace catalogs before offering workspace skills and commands, using T3’s freshness rules.

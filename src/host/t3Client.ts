@@ -15,7 +15,7 @@ import {
   ORCHESTRATION_PROTOCOL_HEADER, ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   type OrchestrationV2ShellSnapshot, type OrchestrationV2ShellStreamItem,
   type OrchestrationV2ThreadStreamItem, type ServerConfig, type OrchestrationV2SearchThreadResult,
-  type ReviewDiffFileContentsInput, ProviderInstanceId, type AssetResource, type AttachmentCreateUploadUrlInput, ChatAttachment,
+  type ReviewDiffFileContentsInput, ProviderInstanceId, type AssetResource, type AttachmentCreateUploadUrlInput, ChatAttachment, type OrchestrationV2PromptSuggestion,
   ProjectCloneStartInput, type ProjectCloneListEvent,
 } from "@t3tools/contracts";
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
@@ -132,6 +132,14 @@ export class T3Client {
     }), handler);
   }
   getThreadProjection(id: string) { return this.run(this.requireSession().client[V2.getThreadProjection]({ threadId: threadId(id) })); }
+  /**
+   * Predicted next prompt for a thread (T3 0.1.8). The server floor is 0.1.5 and no capability
+   * advertises this, so an older server rejects the method; callers treat a failure as "no
+   * suggestions" rather than surfacing an error.
+   */
+  subscribePromptSuggestion(id: string, handler: (suggestion: OrchestrationV2PromptSuggestion) => void): Promise<Subscription> {
+    return this.subscribe(this.requireSession().client[V2.subscribePromptSuggestion]({ threadId: threadId(id) }), handler);
+  }
   async dispatch(input: unknown): Promise<void> {
     const command = Schema.decodeUnknownSync(OrchestrationV2Command)(input);
     await this.run(this.requireSession().client[V2.dispatchCommand](command));

@@ -334,6 +334,8 @@ export interface HostStateSnapshot {
   readonly history: { readonly hasMore: boolean; readonly loading: boolean; readonly error: string | null };
   readonly threadLoading: boolean;
   readonly sending: boolean;
+  /** A predicted next prompt for the finished run (T3 0.1.8); absent where the server offers none. */
+  readonly promptSuggestion?: { readonly runId: string; readonly text: string };
 }
 /** A `request_secret` the agent is waiting on. Never carries the secret value. */
 export interface PendingSecretRequest { turnItemId: string; label: string; reason: string; placeholder?: string; delivery?: "file"; createdAt: string | null }

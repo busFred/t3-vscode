@@ -840,6 +840,13 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .child-approval-kind { flex: none; text-transform: uppercase; letter-spacing: .04em; font-size: .5625rem;
   color: var(--muted-foreground); border: 1px solid var(--input); border-radius: 3px; padding: 0 3px; }
 .child-approval-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+/* Predicted next prompt, offered above an empty composer. */
+.prompt-suggestion { display: flex; align-items: center; gap: 4px; margin: 0 0 4px; }
+.prompt-suggestion-apply { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; text-align: left;
+  background: var(--card); color: var(--muted-foreground); border: 1px dashed var(--input); border-radius: 4px;
+  padding: 3px 6px; font-size: .6875rem; cursor: pointer; }
+.prompt-suggestion-apply:hover { color: var(--foreground); border-color: var(--ring); }
+.prompt-suggestion-apply > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .work-group { margin-bottom: 6px; }.work-group-toggle { padding: 4px 0; }
 
 .timeline-footer:has(.response-header) { height: auto; min-height: 42px; padding-top: 3px; }
