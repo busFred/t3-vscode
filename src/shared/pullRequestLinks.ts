@@ -24,14 +24,16 @@ export function pullRequestAnchorLabel(anchor: PullRequestAnchor | null): string
 
 /**
  * The URL to open for a link, preferring the canonical address but keeping the link's own target
- * when it names one. A canonical URL that already carries the same target is used as-is.
+ * when it names one and the canonical address names none.
  */
 export function pullRequestOpenTarget(linkUrl: string, canonicalUrl?: string | null): string {
   const canonical = canonicalUrl?.trim();
   if (!canonical) return linkUrl;
   const target = parsePullRequestAnchor(linkUrl);
   if (!target) return canonical;
-  // The canonical address already points at the same place, so it loses nothing.
+  // A canonical address that names a target of its own is the more specific one and is preferred.
+  // In practice the host API returns the request's root, which names none, so the link's target
+  // wins; this branch only matters if a caller passes an already-anchored canonical address.
   if (parsePullRequestAnchor(canonical)) return canonical;
   return linkUrl;
 }

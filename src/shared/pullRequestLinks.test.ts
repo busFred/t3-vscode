@@ -19,7 +19,9 @@ test("Without a canonical address the link is opened as stored", () => {
   assert.equal(pullRequestOpenTarget(PR, "   "), PR, "a blank canonical URL is not an address");
 });
 
-test("A canonical address that already names a target is preferred", () => {
+test("A canonical address naming a target of its own is the more specific one and wins", () => {
+  // Only presence is compared, not equality: the host API returns the request root, which names no
+  // target, so this branch only applies to a caller that passes an already-anchored address.
   const canonical = `${PR}/checks`;
   assert.equal(pullRequestOpenTarget(`${PR}#discussion_r1`, canonical), canonical);
 });

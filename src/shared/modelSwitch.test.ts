@@ -62,3 +62,11 @@ test("A missing or malformed selection draws no row instead of throwing", () => 
   assert.equal(describeModelSwitch({ model: 42 }, { model: 42 }, name), null);
   assert.equal(describeModelSwitch({ model: 42 }, selection("gpt-6-luna"), name)?.to, "GPT-6 Luna");
 });
+
+test("Every effort dial T3 recognises is treated as one, not just the common three", () => {
+  // A partial list silently dropped the row: an effort-only change looked like no change at all.
+  for (const id of ["reasoningEffort", "effort", "reasoning", "variant", "reasoning_effort", "thinking_level"]) {
+    const dial = (value: string): ModelSwitchSelection => ({ instanceId: "p", model: "m", options: [{ id, value }] });
+    assert.equal(describeModelSwitch(dial("low"), dial("high"), name)?.changed, "effort", id);
+  }
+});

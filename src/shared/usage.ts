@@ -257,11 +257,13 @@ export function perAccountRows(group: UsageGroup, now = Date.now()): ReadonlyArr
  * The general session/week/month allowances are not model-scoped, so they are not options.
  */
 export function usageModelNames(rows: ReadonlyArray<MeterRow>): ReadonlyArray<string> {
-  return [...new Set(rows.flatMap((row) => row.window && !row.primary ? [row.label] : []))];
+  // A model quota is a specialised *weekly* allowance. A reported window of some other kind is not
+  // model-scoped and must not be offered as a model to filter by.
+  return [...new Set(rows.flatMap((row) => row.window && !row.primary && row.window.kind === "weekly" ? [row.label] : []))];
 }
 
 /** Narrow rows to one model's quota; a null model keeps every row, including the general ones. */
 export function filterByUsageModel<T extends MeterRow>(rows: ReadonlyArray<T>, model: string | null): ReadonlyArray<T> {
   if (!model) return rows;
-  return rows.filter((row) => Boolean(row.window) && !row.primary && row.label === model);
+  return rows.filter((row) => row.window?.kind === "weekly" && !row.primary && row.label === model);
 }

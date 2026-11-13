@@ -1045,6 +1045,8 @@ export class HostState {
     for (const state of threads) { await state.subscription?.(); await state.promptSuggestionSubscription?.(); }
   }
   private async connect(forcePair: boolean): Promise<void> {
+    // A session-wide MCP app approval belongs to one connected session, not to the next one.
+    clearMcpAppSessionApprovals();
     await this.stopSubscriptions();
     this.peerLists.clear(); this.peerListErrors.clear();
     await this.client.disconnect();
@@ -1361,7 +1363,12 @@ export class HostState {
       if (!open && !watched.has(id)) continue;
       const previous = this.threads.get(id);
       // Only a remote stream that ended with its connection is resumed; local subscriptions are never duplicated.
-      if (previous && (previous.subscription || !this.remoteThread(id))) continue;
+      if (previous && (previous.subscription || !this.remoteThread(id))) {
+        // A thread first subscribed as watched (an expanded subagent row) and only later opened
+        // reaches here, so its suggestion subscription is reconciled rather than never started.
+        if (previous.subscription) this.reconcilePromptSuggestion(id, previous, open);
+        continue;
+      }
       if (!this.remoteConnected(id)) continue;
       if (previous) this.retainHistory(previous);
       const state: ThreadState = previous ? { ...blankThread(), projection: previous.projection } : blankThread(); this.threads.set(id, state);
@@ -1372,23 +1379,42 @@ export class HostState {
         });
         if (this.disposed || this.threads.get(id) !== state) await subscription();
         else state.subscription = subscription;
-        // Suggestions are an extra; a server that does not serve them must not break opening a
-        // conversation, so this is deliberately not awaited into the failure path above.
-        if (open && state.subscription) void this.client.subscribePromptSuggestion?.(id, (suggestion) => {
-          if (this.disposed || this.threads.get(id) !== state) return;
-          const next = suggestion ? { runId: suggestion.runId as string, text: suggestion.text } : null;
-          if (next?.text === state.promptSuggestion?.text && next?.runId === state.promptSuggestion?.runId) return;
-          state.promptSuggestion = next; this.scheduleEmit();
-        }).then((stop) => {
-          if (this.disposed || this.threads.get(id) !== state) void stop();
-          else state.promptSuggestionSubscription = stop;
-        }, () => undefined);
+        if (state.subscription) this.reconcilePromptSuggestion(id, state, open);
       } catch (cause) {
         this.threads.delete(id);
         // An expanded row only refines subagent status; it must not fail the conversation being opened.
         if (open) throw cause;
       }
     }
+  }
+  /**
+   * Start or stop a thread's predicted-next-prompt subscription to match whether it is open.
+   *
+   * Suggestions are an extra: `subscribePromptSuggestion` arrived in T3 0.1.8 while this client
+   * still supports 0.1.5, and no capability advertises it, so a rejection must not fail opening a
+   * conversation. Watched-only threads do not need it — nothing renders a composer for them.
+   */
+  private reconcilePromptSuggestion(id: string, state: ThreadState, open: boolean): void {
+    if (!open) {
+      const stop = state.promptSuggestionSubscription;
+      if (!stop) return;
+      state.promptSuggestionSubscription = null;
+      if (state.promptSuggestion) { state.promptSuggestion = null; this.scheduleEmit(); }
+      void stop().catch(() => undefined);
+      return;
+    }
+    if (state.promptSuggestionSubscription || !this.client.subscribePromptSuggestion) return;
+    // Claimed up front, so a second pass cannot open a duplicate while this one is in flight.
+    state.promptSuggestionSubscription = async () => undefined;
+    void this.client.subscribePromptSuggestion(id, (suggestion) => {
+      if (this.disposed || this.threads.get(id) !== state) return;
+      const next = suggestion ? { runId: suggestion.runId as string, text: suggestion.text } : null;
+      if (next?.text === state.promptSuggestion?.text && next?.runId === state.promptSuggestion?.runId) return;
+      state.promptSuggestion = next; this.scheduleEmit();
+    }).then((stop) => {
+      if (this.disposed || this.threads.get(id) !== state || !state.promptSuggestionSubscription) void stop();
+      else state.promptSuggestionSubscription = stop;
+    }, () => { if (this.threads.get(id) === state) state.promptSuggestionSubscription = null; });
   }
   /** Earlier pages a user loaded survive a resubscribe; the new snapshot carries only the latest window. */
   private retainHistory(state: ThreadState): void {
@@ -2976,7 +3002,9 @@ export class HostState {
             if (childParent !== parentId || seen.has(child.id)) continue;
             seen.add(child.id); queue.push(child.id);
             const request = child.pendingRuntimeRequest;
-            if (!request || request.kind === "user_input" || request.kind === "auth_refresh") continue;
+            // Mirror derivePendingThreadRequests: a question belongs to the child, and neither an
+            // auth refresh nor a dynamic tool call is an approval the user accepts or declines.
+            if (!request || request.kind === "user_input" || request.kind === "auth_refresh" || request.kind === "dynamic_tool_call") continue;
             rows.push({ threadId: child.id, title: child.title || "Untitled", requestId: request.id, kind: request.kind,
               createdAt: request.createdAt ? DateTime.formatIso(request.createdAt) : null });
           }

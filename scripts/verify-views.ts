@@ -577,7 +577,8 @@ try {
   await copyItem.focus(); await manager.keyboard.press("ArrowRight");
   await manager.getByRole("menu", { name: "Copy", exact: true }).waitFor();
   assert.equal(await manager.evaluate(() => document.activeElement?.textContent), "Path");
-  assert.deepEqual(await manager.getByRole("menu", { name: "Copy", exact: true }).getByRole("menuitem").allTextContents(), ["Path", "Thread ID"]);
+  // Link opens the conversation from outside T3 Code (T3 0.1.7); Branch is absent without one.
+  assert.deepEqual(await manager.getByRole("menu", { name: "Copy", exact: true }).getByRole("menuitem").allTextContents(), ["Path", "Thread ID", "Link"]);
   await manager.keyboard.press("ArrowLeft");
   await manager.getByRole("menu", { name: "Copy", exact: true }).waitFor({ state: "detached" });
   assert.equal(await copyItem.evaluate((node) => document.activeElement === node), true, "ArrowLeft returns to the parent item");
@@ -878,14 +879,16 @@ try {
   await third.getByRole("textbox", { name: "Message", exact: true }).fill("Narrow editor queue draft");
   await third.screenshot({ path: `${evidence}/narrow-editor-queue-and-tasks.png` });
   assert.equal(await third.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
-  await second.getByRole("button", { name: "Steer with queued message" }).first().click();
+  await second.getByRole("button", { name: "Send queued message now" }).first().click();
   await third.waitForFunction(() => document.querySelectorAll('.queued-message').length === 1);
   await second.getByRole("button", { name: "Cancel queued message" }).click();
   await third.getByRole("button", { name: "Collapse queued messages" }).waitFor({ state: "hidden" });
   assert.equal(await input.inputValue(), "Independent draft after queue actions");
   assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Narrow editor queue draft");
   publishActivity(client, "second", false);
-  await second.waitForFunction(() => (document.querySelector('[aria-label="Steer with queued message"]') as HTMLButtonElement)?.disabled);
+  // Since v0.2.4 the control is offered only for an idle or steerable turn, so an unsteerable
+  // active turn removes it rather than showing it disabled.
+  await second.waitForFunction(() => !document.querySelector('[aria-label="Send queued message now"]'));
   await submitFollowUp(second, "Unsupported steering safely queues", "Control+Enter", "queue");
   assert.equal((await input.getAttribute("title"))?.includes("to steer"), false);
   publishTurn(client, "second");

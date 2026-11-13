@@ -19,12 +19,17 @@ export type McpAppTransport = Pick<T3Client, "mcpAppCallTool" | "mcpAppToolInfo"
 const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
 
 /**
- * Tool calls the user allowed for the rest of this session, keyed by conversation and app server.
- * Scoped per conversation: allowing an app in one chat must not speak for another.
+ * Tool calls the user allowed for the rest of this session, keyed by conversation, app server and
+ * tool name.
+ *
+ * Scoped per conversation, so allowing an app in one chat does not speak for another, and per tool,
+ * because the prompt names one tool: answering "for this session" about `plot` must not also allow
+ * a destructive tool on the same server.
  */
 const sessionAllowed = new Set<string>();
-const sessionKey = (conversationThreadId: string, server: string) => `${conversationThreadId}\u0000${server}`;
-/** Forgets session approvals; a reconnect or a reload must not inherit an earlier decision. */
+const sessionKey = (conversationThreadId: string, server: string, tool: string) =>
+  `${conversationThreadId}\u0000${server}\u0000${tool}`;
+/** Forgets session approvals. Called on every (re)connection and on teardown. */
 export function clearMcpAppSessionApprovals(): void { sessionAllowed.clear(); }
 
 /** Keep RPC authority in the host: app-supplied fields cannot replace validated scope. */
@@ -38,8 +43,8 @@ export async function relayMcpAppRequest(client: McpAppTransport, scope: { threa
    * rest of the session. Only tool calls are session-approvable — sending a message as the user and
    * downloading a file stay one-off, because they act outside the app.
    */
-  const askTool = async (message: string) => {
-    const key = sessionKey(scope.conversationThreadId, app.server);
+  const askTool = async (message: string, tool: string) => {
+    const key = sessionKey(scope.conversationThreadId, app.server, tool);
     if (sessionAllowed.has(key)) return;
     if (!native.confirmTool) return ask(message);
     const decision = await native.confirmTool(message);
@@ -52,7 +57,7 @@ export async function relayMcpAppRequest(client: McpAppTransport, scope: { threa
       const call = Schema.decodeUnknownSync(McpAppCallToolInput)(input);
       const info = await client.mcpAppToolInfo({ threadId: call.threadId, itemId: call.itemId, name: call.name });
       if (!info.callable) throw new Error("This app cannot call that tool.");
-      if (!info.readOnly) await askTool(`Allow ${app.server} to run ${info.title ?? call.name}?\n${JSON.stringify(call.arguments, null, 2)}`);
+      if (!info.readOnly) await askTool(`Allow ${app.server} to run ${info.title ?? call.name}?\n${JSON.stringify(call.arguments, null, 2)}`, call.name);
       return client.mcpAppCallTool(call);
     }
     case "resources/read": return client.mcpAppReadResource(Schema.decodeUnknownSync(McpAppReadResourceInput)(input));

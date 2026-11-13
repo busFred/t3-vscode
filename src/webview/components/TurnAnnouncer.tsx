@@ -14,14 +14,17 @@ const MIN_INTERVAL_MS = 1_000;
 export function TurnAnnouncer({ state }: { readonly state: HostStateSnapshot }) {
   const thread = state.threads.find((entry) => entry.id === state.activeThreadId);
   const running = Boolean(thread?.activeRunId || state.queue?.activeRunId || state.sending);
+  // Only the newest row is announced, so do not allocate a copy of the whole transcript on every
+  // render: a streaming turn renders many times a second.
+  const newest = state.transcript.at(-1);
   const phrase = turnAnnouncement({
     running,
-    items: state.transcript.map((row) => ({
-      type: row.item.type,
-      label: row.toolLabel ?? row.item.title ?? null,
-      status: row.item.status ?? null,
-      ...("streaming" in row.item ? { streaming: row.item.streaming === true } : {}),
-    })),
+    items: newest ? [{
+      type: newest.item.type,
+      label: newest.toolLabel ?? newest.item.title ?? null,
+      status: newest.item.status ?? null,
+      ...("streaming" in newest.item ? { streaming: newest.item.streaming === true } : {}),
+    }] : [],
     pendingApprovals: state.pending.approvals.length,
     pendingQuestions: state.pending.userInputs.length,
     pendingSecrets: state.pending.secrets.length,

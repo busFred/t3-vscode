@@ -30,3 +30,9 @@ test("A selected model keeps only that model's quota", () => {
 test("A model that is no longer reported filters to nothing rather than falling back to everything", () => {
   assert.deepEqual(filterByUsageModel(rows, "Retired"), []);
 });
+
+test("A reported window of another kind is not a model quota", () => {
+  const other: MeterRow = { label: "Credits", short: "C", primary: false, window: { id: "credits", label: "Credits", kind: "other" } as MeterRow["window"] };
+  assert.deepEqual(usageModelNames([...rows, other]), ["Opus", "Fable"]);
+  assert.deepEqual(filterByUsageModel([...rows, other], "Credits"), []);
+});

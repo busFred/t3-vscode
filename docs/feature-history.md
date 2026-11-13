@@ -780,7 +780,9 @@ Typed composer text uses the editor foreground for stronger contrast, while plac
   server that does not serve it simply offers no suggestions rather than reporting an error or
   failing to open the conversation.
 - Validation: `scripts/verify-ui.mjs` covers the chip appearing, being withheld over a draft,
-  filling the composer, and undoing in one step; `scripts/verify-composer-undo.ts` still passes.
+  filling the composer, and undoing in one step. `scripts/verify-composer-undo.ts` was **not** run:
+  it is a module driven by `scripts/verify-views.ts`, which is broken by pre-existing drift (see
+  below), so this insertion path has no real-VS-Code undo coverage yet.
 
 
 #### v0.3.7
@@ -873,7 +875,8 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 - Validation: `scripts/verify-ui.mjs` holds an upload open for 1.5s, asserts Send stays enabled,
   asserts no `sendMessage` is dispatched while the upload is in flight, then asserts the eventual
   request carries the attachment id and clears the draft. The paste-undo checks in the same script
-  and `scripts/verify-composer-undo.ts` still pass.
+  still pass. `scripts/verify-composer-undo.ts` was not run; see the note under the suggested-prompt
+  entry.
 
 Ctrl/Cmd+click (or Alt+Enter) on an inline image reference opens an image-caption editor with Preview, Save and Cancel. Saving changes only that reference label, preserves attachment identity and uses the composer’s native undo history; thumbnail previews remain available.
 
@@ -1930,6 +1933,24 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 
 ### Isolated development and packaging
 
+#### Unreleased — `verify-views.ts` found broken since before v0.3.11
+
+- `scripts/verify-views.ts` does not run to completion, and has not since before the v0.3.11 release.
+  It drives `scripts/verify-composer-undo.ts`, so the composer's real undo regression guard has not
+  been executing either. Confirmed against the released baseline `79eb3a4`, which fails the same way.
+- Three stale expectations repaired here: the queue control's label (`Steer with queued message` no
+  longer exists anywhere in `src/`; it is `Send queued message now`), that control being *absent*
+  rather than disabled for an unsteerable active turn since v0.2.4, and the Copy submenu's contents,
+  which this release legitimately extends with **Link**.
+- One remains, at the "Unsupported steering safely queues" step: the dispatch mode resolves to
+  `start_immediately` where the script expects `queue_after_active`. Repairing that needs a
+  deliberate decision about the intended queue semantics, so it was left rather than guessed at, and
+  the script still stops there.
+- This is why `AGENTS.md`'s native-undo gate matters: the gate script is separate
+  (`scripts/verify-native-undo.mjs`, via `verify-edh.mjs --undo-only`) and must be run in real
+  VS Code before any VSIX. `scripts/verify-native-turns.mjs` carried the same stale label and was
+  corrected too, though it was not run here.
+
 #### Unreleased — vendored T3 Code pinned to 0.1.9
 
 - Move the vendored protocol and client-runtime packages from `61c3794` (0.1.6) to tag `v0.1.9`
@@ -1947,7 +1968,9 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
   `@effect/tsgo` inference and plain `tsc` rejects. `./state/thread-history-merge` no longer needs a
   hand-added export.
 - Validation: typecheck clean; 741/741 unit tests across three consecutive runs; `pnpm run build`
-  clean, with no three.js, JSZip or `@pierre/diffs` code reaching either bundle. Live against an
+  clean, with no three.js or JSZip reaching either bundle. (`@pierre/diffs` is present by design:
+  `src/host/turnDiff.ts` imports `parsePatchFiles` directly. The vendor caveat concerns the
+  *vendored client-runtime's* diff modules, which stay unreached.) Live against an
   isolated T3 Code **0.1.9** server (temporary base directory, port 47778): pairing, the bearer
   exchange, shell decode (27 advertised models), thread creation and projection load, rename
   round-tripping through the shell stream, archive, reconnect and delete all pass.

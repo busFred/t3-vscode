@@ -60,8 +60,8 @@ export async function verifyNativeTurns({ home, evidence, workbench, panel, side
     await workbench.keyboard.press('Enter');
     await panel.wait('document.querySelector(".queued-preview")?.textContent.includes("QUEUE-STEER-OK")');
     await workbench.screenshot({ path: join(evidence, "edh-queue-and-tasks.png") });
-    await panel.wait('!document.querySelector("[aria-label=\\"Steer with queued message\\"]").disabled');
-    await panel.evaluate('document.querySelector("[aria-label=\\"Steer with queued message\\"]").click()');
+    await panel.wait('!document.querySelector("[aria-label=\\"Send queued message now\\"]").disabled');
+    await panel.evaluate('document.querySelector("[aria-label=\\"Send queued message now\\"]").click()');
     await panel.wait('!document.querySelector(".queued-message")');
     await setMessage("Also include CTRL-STEER-OK in your final response.");
     await panel.wait('!document.querySelector(".send-button").disabled');

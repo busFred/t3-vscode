@@ -14,9 +14,6 @@ export function trackAttachmentWork<T>(draftKey: string, work: Promise<T>): Prom
   return work;
 }
 /** Re-renders while a draft's paste or drop work starts and finishes, so Send re-enables when it is done. */
-export function usePendingAttachmentWork(draftKey: string): boolean {
-  return useSyncExternalStore((listener) => { workListeners.add(listener); return () => { workListeners.delete(listener); }; }, () => hasPendingAttachmentWork(draftKey));
-}
 /** A paste or drop still placing its reference (or uploading); sending now would drop it from the message. */
 export function hasPendingAttachmentWork(draftKey: string): boolean { return (pending.get(draftKey)?.size ?? 0) > 0; }
 export async function settleDraftAttachments(draftKey: string): Promise<void> { await Promise.allSettled([...(pending.get(draftKey) ?? [])]); }

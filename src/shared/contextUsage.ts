@@ -21,7 +21,8 @@ const ERROR_PERCENT = 85;
  * run it forked from until it records a turn of its own.
  *
  * Only usage with a `maxTokens` ceiling can show a ring (#8144); a turn the provider never sized
- * stays excluded rather than rendering a meter with no scale.
+ * stays excluded rather than rendering a meter with no scale. Ties on `updatedAt` go to the later
+ * entry, since live upserts append.
  */
 export function latestContextUsage(projection: OrchestrationV2ThreadProjection | null | undefined): ContextUsageSnapshot | null {
   if (!projection) return null;

@@ -1,3 +1,5 @@
+import { REASONING_EFFORT_OPTION_IDS } from "@t3tools/client-runtime/state/thread-execution";
+
 /**
  * A model or effort change recorded on the user message that followed it (T3 0.1.7).
  *
@@ -19,8 +21,12 @@ export interface ModelSwitchSummary {
   readonly changed: "model" | "effort" | "both";
 }
 
-/** Option ids that name the reasoning/effort dial across the providers T3 advertises. */
-const EFFORT_OPTION_IDS = ["effort", "reasoningEffort", "thinking_level"];
+/**
+ * Option ids that name the reasoning/effort dial. Taken from T3's own list rather than a local copy:
+ * a partial list silently dropped the whole row for a provider whose dial is `reasoning`, `variant`
+ * or `reasoning_effort`, because an effort-only change then looked like no change at all.
+ */
+const EFFORT_OPTION_IDS = REASONING_EFFORT_OPTION_IDS;
 
 const text = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim() : undefined;

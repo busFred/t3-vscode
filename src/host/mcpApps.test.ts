@@ -122,6 +122,11 @@ test("An MCP app can be allowed for the session, per conversation, and only for 
   decision = "deny";
   await assert.rejects(call("other-thread"), /Declined/, "Another conversation still asks, and can refuse");
 
+  // It also belongs to the tool the prompt named: a session answer about one tool must not allow
+  // a different, possibly destructive tool on the same app server.
+  const otherTool = () => relayMcpAppRequest(client, scope, app, "tools/call", { name: "delete_all", arguments: {} }, prompting);
+  await assert.rejects(otherTool(), /Declined/, "A different tool on the same server still asks");
+
   // Sending a message as the user is not session-approvable: it acts outside the app.
   await relayMcpAppRequest(client, scope, app, "ui/message", { text: "hello" }, prompting);
   assert.ok(asked.at(-1)?.startsWith("confirm:"), "ui/message keeps its own one-off confirmation");

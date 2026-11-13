@@ -155,3 +155,16 @@ test("A child's approval is answerable from its parent, and a child's question i
   client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
   assert.equal(host.snapshot().childRequests, undefined, "a child's question stays with the child");
 });
+
+test("Neither an auth refresh nor a dynamic tool call is offered as a child approval", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  for (const kind of ["auth_refresh", "dynamic_tool_call"]) {
+    client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1,
+      threads: client.shell.threads.map((entry) => entry.id === "second" ? { ...entry,
+        lineage: { ...entry.lineage, parentThreadId: ThreadId.make("first"), relationshipToParent: "subagent" as const },
+        pendingRuntimeRequest: { id: `req-${kind}`, kind, createdAt: DateTime.makeUnsafe(Date.now()) } } : entry) as never };
+    client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
+    await host.selectThread("first");
+    assert.equal(host.snapshot().childRequests, undefined, `${kind} is not an approval`);
+  }
+});
