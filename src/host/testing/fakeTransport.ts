@@ -226,6 +226,10 @@ export class FakeTransport implements HostTransport {
     return id;
   }
   getHistory: HostTransport["getHistory"] = async () => ({ snapshotSequence: 0, items: [], nextCursor: null, hasMoreHistory: false });
+  /** Make a thread's projection fetchable without subscribing it, as the server would. */
+  seedProjection(id: string, projection: Parameters<typeof Object.assign>[0]): void {
+    this.snapshots.set(id, { kind: "snapshot", snapshotSequence: 1, projection } as Extract<OrchestrationV2ThreadStreamItem, { kind: "snapshot" }>);
+  }
   getThreadProjection: HostTransport["getThreadProjection"] = async (id) => {
     const snapshot = this.snapshots.get(id); if (snapshot?.kind !== "snapshot") throw new Error("Projection not found."); return snapshot.projection;
   };

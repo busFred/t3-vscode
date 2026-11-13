@@ -5,7 +5,7 @@ import { resolvePendingUserInputAnswer, setPendingUserInputCustomAnswer, toggleP
 import { type ComponentProps, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ThreadPendingApproval, ThreadPendingUserInput } from "@t3tools/client-runtime/state/thread-requests";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
-import type { HostStateSnapshot, PendingSecretRequest } from "../../shared/bridge";
+import type { ChildRequestSummary, HostStateSnapshot, PendingSecretRequest } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { ComposerPendingApprovalPanel } from "./t3/ComposerPendingApprovalPanel";
 
@@ -158,6 +158,34 @@ function SecretRequestCard({ request, threadId, open, onToggle }: { request: Pen
   </form>;
 }
 
+/**
+ * An approval held by a descendant conversation, answerable here (T3 0.1.7).
+ *
+ * Only accept/decline is offered: the child's own tab carries the full request detail, and this
+ * exists so a parent is not blocked waiting on a child the reader has not opened.
+ */
+function ChildApprovalCard({ request }: { readonly request: ChildRequestSummary }) {
+  const run = useActions();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const respond = (decision: "accept" | "decline") => {
+    setBusy(true); setError(null);
+    void run("respondToRequest", { threadId: request.threadId, requestId: request.requestId, decision })
+      .then((ok) => { if (!ok) setError("This request could not be answered. Open the conversation to respond."); })
+      .finally(() => setBusy(false));
+  };
+  return <section className="pending-request child-approval" aria-label={`Approval for ${request.title}`}>
+    <header><span className="child-approval-kind">{request.kind.replace(/[-_]/g, " ")}</span><strong title={request.title}>{request.title}</strong></header>
+    <p className="subtle">A delegated conversation is waiting for approval.</p>
+    <div className="child-approval-actions">
+      <button type="button" className="btn" disabled={busy} onClick={() => respond("decline")}>Decline</button>
+      <button type="button" className="btn primary" disabled={busy} onClick={() => respond("accept")}>Approve</button>
+      <button type="button" className="text-button" disabled={busy} onClick={() => { void run("selectThread", { threadId: request.threadId }); }}>Open conversation</button>
+    </div>
+    {error ? <p role="alert">{error}</p> : null}
+  </section>;
+}
+
 export function PendingRequests({ state }: { state: HostStateSnapshot }) {
   // Keyed by requestId so each request keeps its own collapsed state; unseen requests start expanded.
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -171,5 +199,7 @@ export function PendingRequests({ state }: { state: HostStateSnapshot }) {
     {approval ? <ApprovalCard key={approval.requestId} approval={approval} pendingCount={state.pending.approvals.length} threadId={threadId} open={!collapsed[approval.requestId]} onToggle={() => toggle(approval.requestId)} /> : null}
     {prompt ? <UserInput key={prompt.requestId} prompt={prompt} threadId={threadId} open={!collapsed[prompt.requestId]} onToggle={() => toggle(prompt.requestId)} /> : null}
     {secret ? <SecretRequestCard key={secret.turnItemId} request={secret} threadId={threadId} open={!collapsed[secret.turnItemId]} onToggle={() => toggle(secret.turnItemId)} /> : null}
+    {/* The conversation's own requests come first; a child's approval is someone else's turn. */}
+    {(state.childRequests ?? []).map((request) => <ChildApprovalCard key={`${request.threadId}:${request.requestId}`} request={request} />)}
   </div>;
 }

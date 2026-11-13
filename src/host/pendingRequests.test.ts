@@ -74,3 +74,21 @@ test("Link answers use the dedicated RPC, preserve payloads and reject non-local
   await assert.rejects(view.request("answerLinkRequest", { threadId: "first", turnItemId: "link", answer: { type: "link", pairingCode: "private-code" } }), error => error instanceof Error && !error.message.includes("private-code"));
   assert.equal(linkRequestAnswerInput(card, { type: "link", target: { url: card.url! }, access: "full-access", pairingCode: " " }), null);
 });
+
+test("A child's approval is answered without the child being subscribed", async t => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  await host.selectThread("first");
+  // The child has no subscription of its own, so the host must read its projection on demand.
+  assert.equal(client.threadHandlers.has("second"), false, "the child is not subscribed");
+  client.seedProjection("second", { ...v2Projection,
+    thread: { ...v2Projection.thread, id: ThreadId.make("second") },
+    runtimeRequests: [request({ id: "child-approval" })] });
+  await host.respondToRequest({ threadId: "second", requestId: "child-approval", decision: "accept" });
+  const command = client.commands.at(-1)!;
+  assert.equal(command.type, "runtime-request.respond");
+  assert.deepEqual([(command as { threadId: string }).threadId, (command as { requestId: string }).requestId], ["second", "child-approval"]);
+  // A request the child does not actually have is still refused.
+  await assert.rejects(host.respondToRequest({ threadId: "second", requestId: "absent", decision: "accept" }), /no longer pending/);
+  // A thread outside this workspace cannot be answered at all.
+  await assert.rejects(host.respondToRequest({ threadId: "outside-thread", requestId: "child-approval", decision: "accept" }), /not available/);
+});

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { EnvironmentId, ProviderDriverKind, NodeId, ProviderInstanceId, ThreadId, TurnItemId, type OrchestrationV2Subagent, type OrchestrationV2TurnItem } from "@t3tools/contracts";
 import { viewsHarness } from "./testing/fakeTransport.js";
 import { v2Now, v2Projection } from "../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
+import * as DateTime from "effect/DateTime";
 
 test("Subagent lineage remains scoped and native children are read-only while app-owned children can receive messages", async (t) => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose());
@@ -134,4 +135,23 @@ test("A paired remote task reflects the owning child's live shell status without
     assert.equal(children[0]!.thread.subagentOutcome, status === "failed" ? "failed" : undefined);
     assert.equal(children[0]!.thread.readOnlyHint, undefined);
   }
+});
+
+test("A child's approval is answerable from its parent, and a child's question is not", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  const asChild = (entry: typeof client.shell.threads[number], request: { id: string; kind: string }) => ({ ...entry,
+    lineage: { ...entry.lineage, parentThreadId: ThreadId.make("first"), relationshipToParent: "subagent" as const },
+    pendingRuntimeRequest: { id: request.id, kind: request.kind, createdAt: DateTime.makeUnsafe(Date.now()) } });
+  client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1,
+    threads: client.shell.threads.map((entry) => entry.id === "second" ? asChild(entry, { id: "req-1", kind: "permission" }) : entry) as never };
+  client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
+  await host.selectThread("first");
+  assert.deepEqual(host.snapshot().childRequests?.map((row) => [row.threadId, row.requestId, row.kind]), [["second", "req-1", "permission"]],
+    "the parent surfaces the child's approval");
+
+  // A question belongs to the child, which is where its answer panel lives.
+  client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1,
+    threads: client.shell.threads.map((entry) => entry.id === "second" ? asChild(entry, { id: "req-2", kind: "user_input" }) : entry) as never };
+  client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
+  assert.equal(host.snapshot().childRequests, undefined, "a child's question stays with the child");
 });

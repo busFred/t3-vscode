@@ -834,6 +834,12 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
   clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 /* What a pull request link points at, beside Open. */
 .conversation-pr .pr-open-target { opacity: .75; }
+/* An approval held by a delegated conversation, answerable from its parent. */
+.child-approval header { display: flex; align-items: baseline; gap: 6px; }
+.child-approval header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.child-approval-kind { flex: none; text-transform: uppercase; letter-spacing: .04em; font-size: .5625rem;
+  color: var(--muted-foreground); border: 1px solid var(--input); border-radius: 3px; padding: 0 3px; }
+.child-approval-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 .work-group { margin-bottom: 6px; }.work-group-toggle { padding: 4px 0; }
 
 .timeline-footer:has(.response-header) { height: auto; min-height: 42px; padding-top: 3px; }

@@ -50,7 +50,7 @@ import { turnItemNeedsDetailFetch, turnItemOutputImages, turnItemOutputText } fr
 import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
-import type { AddMachineTarget, MachineChoice, MachineClone, RemoteCheckouts, ThreadSummary, HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, SecretRequestAnswerParams, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch, RewindMarker, RestoreResult, RestorePreview } from "../shared/bridge.js";
+import type { ChildRequestSummary, AddMachineTarget, MachineChoice, MachineClone, RemoteCheckouts, ThreadSummary, HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, SecretRequestAnswerParams, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch, RewindMarker, RestoreResult, RestorePreview } from "../shared/bridge.js";
 import { slashSuggestions } from "../shared/composerSuggestions.js";
 import { presentRunStop } from "@t3tools/client-runtime/state/thread-execution";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
@@ -2038,7 +2038,10 @@ export class HostState {
   respondToRequest(input: RequestResponse): Promise<void> {
     return this.enqueue(async () => {
       this.requireThread(input.threadId);
-      const state = this.threads.get(input.threadId)?.projection;
+      // A child's approval can be answered from its parent (T3 0.1.7), where the child has no
+      // subscription of its own, so fall back to reading its projection on demand. requireThread
+      // above already proved the thread belongs to this workspace.
+      const state = this.threads.get(input.threadId)?.projection ?? await this.client.getThreadProjection(input.threadId).catch(() => null);
       const request = state?.runtimeRequests.find((request) => request.id === input.requestId && request.status === "pending");
       if (!request) throw new Error("This request is no longer pending.");
       if (request.responseCapability.type === "not_resumable") throw new Error("The provider process has ended. Restart the turn to respond.");
@@ -2945,6 +2948,27 @@ export class HostState {
         });
       }) : [],
       pending: projection ? { ...derivePendingThreadRequests(projection), secrets: derivePendingSecretRequests(projection.visibleTurnItems) } : { approvals: [], userInputs: [], secrets: [] },
+      ...(() => {
+        // Approvals held by a visible descendant. Read from the shell, so no child subscription is
+        // needed; a question stays with the child, which is where its answer panel belongs.
+        if (!activeThreadId) return {};
+        const rows: ChildRequestSummary[] = [];
+        const seen = new Set([activeThreadId]);
+        const queue = [activeThreadId];
+        while (queue.length) {
+          const parentId = queue.shift()!;
+          for (const child of this.visibleThreads()) {
+            const childParent = child.delegatedFrom?.threadId ?? child.lineage.parentThreadId;
+            if (childParent !== parentId || seen.has(child.id)) continue;
+            seen.add(child.id); queue.push(child.id);
+            const request = child.pendingRuntimeRequest;
+            if (!request || request.kind === "user_input" || request.kind === "auth_refresh") continue;
+            rows.push({ threadId: child.id, title: child.title || "Untitled", requestId: request.id, kind: request.kind,
+              createdAt: request.createdAt ? DateTime.formatIso(request.createdAt) : null });
+          }
+        }
+        return rows.length ? { childRequests: rows } : {};
+      })(),
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
       threadLoading: state?.loading ?? false, sending: view.sending,
     };

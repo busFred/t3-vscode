@@ -326,6 +326,11 @@ export interface HostStateSnapshot {
   readonly rollbackFailure?: string | null;
   readonly transcript: ReadonlyArray<TranscriptItem>;
   readonly pending: PendingThreadRequests & { readonly secrets: ReadonlyArray<PendingSecretRequest> };
+  /**
+   * Approvals waiting on a visible descendant conversation, answerable from here (T3 0.1.7) so the
+   * reader does not have to open the child's own tab to unblock it.
+   */
+  readonly childRequests?: ReadonlyArray<ChildRequestSummary>;
   readonly history: { readonly hasMore: boolean; readonly loading: boolean; readonly error: string | null };
   readonly threadLoading: boolean;
   readonly sending: boolean;
@@ -363,4 +368,13 @@ export interface TurnDiffSummary {
   readonly worktreeName?: string;
   readonly files: ReadonlyArray<{ path: string; additions: number; deletions: number }>;
   readonly merges?: ReadonlyArray<{ sourceThreadId: string; sourceTitle: string; sourceBranch: string; destinationBranch: string; appliedAt: string; files: ReadonlyArray<{ path: string; additions: number; deletions: number }> }>;
+}
+
+/** A pending request on a descendant conversation, surfaced on its ancestor. */
+export interface ChildRequestSummary {
+  readonly threadId: string;
+  readonly title: string;
+  readonly requestId: string;
+  readonly kind: string;
+  readonly createdAt: string | null;
 }

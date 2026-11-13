@@ -572,6 +572,23 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Subagent conversations
 
+#### Unreleased — answer a child's approval from its parent
+
+- A delegated conversation's approval can be approved or declined from its parent, matching T3 Code
+  0.1.7's child approvals. Snooze and wake already accounted for them; answering still meant opening
+  the child's own tab.
+- Only approvals are surfaced. A child's *question* stays with the child, which is where its answer
+  panel and its full context live.
+- Descendants are walked transitively, so an approval several levels down still reaches the ancestor
+  being read, and the parent's own requests are always shown first.
+- Answering a child needs no subscription to it: the host reads that conversation's projection on
+  demand, having already proved the conversation belongs to this workspace. A request the child does
+  not actually hold is still refused, as is a thread outside the workspace.
+- Validation: `src/host/subagents.test.ts` covers the parent surfacing an approval and a question
+  staying with the child; `src/host/pendingRequests.test.ts` covers answering an unsubscribed child,
+  a missing request and a thread outside the workspace.
+
+
 #### v0.3.11
 
 - Keep finished tasks delegated to another machine beneath their parent after the parent is opened. A long parent's history arrives windowed (only running tasks and tasks from recent runs), so older completed remote tasks dropped out of the parent's task list and their conversations showed as top-level sessions. Children that name their parent (`delegatedFrom`) are now always nested; the parent's own task record still wins when present.
