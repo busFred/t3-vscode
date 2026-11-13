@@ -166,6 +166,30 @@ try {
   assert.equal(await page.locator(".projects-sidebar").count(), 0);
   await page.evaluate(() => window.__replace({ transcript: [window.__fixtures.user, window.__fixtures.assistant], pending: { approvals: [], userInputs: [] } }));
   await page.getByText("The core chat is ready.", { exact: false }).waitFor();
+  // T3 0.1.7 records the model/effort in force when a message was sent, if it had just changed.
+  assert.equal(await page.locator('.model-switch-row').count(), 0, 'A message without a recorded switch draws no row');
+  await page.evaluate(() => {
+    const { user, assistant } = window.__fixtures;
+    const switched = { ...user, key: 'switch-user', item: { ...user.item, id: 'switch-user',
+      modelSwitch: { from: { instanceId: 'codex', model: 'gpt-6-astra', options: [{ id: 'reasoningEffort', value: 'low' }] },
+        to: { instanceId: 'kimi-acp', model: 'kimi-for-coding', options: [{ id: 'reasoningEffort', value: 'max' }] } } } };
+    window.__replace({ transcript: [switched, assistant] });
+  });
+  await page.locator('.model-switch-row').waitFor();
+  assert.equal(await page.locator('.model-switch-from').textContent(), 'GPT-6 Astra (low)', 'The switch names the catalog model it moved from, with its effort');
+  assert.equal(await page.locator('.model-switch-to').textContent(), 'Kimi for Coding (max)', 'and the model it moved to');
+  assert.equal(await page.locator('.model-switch-what').textContent(), 'Model', 'A model change is labelled as one');
+  // A slug the catalog no longer advertises still renders, rather than the change disappearing.
+  await page.evaluate(() => {
+    const { user, assistant } = window.__fixtures;
+    const retired = { ...user, key: 'retired-user', item: { ...user.item, id: 'retired-user',
+      modelSwitch: { from: { instanceId: 'codex', model: 'retired-slug' }, to: { instanceId: 'codex', model: 'gpt-6-astra' } } } };
+    window.__replace({ transcript: [retired, assistant] });
+  });
+  await page.locator('.model-switch-row').waitFor();
+  assert.equal(await page.locator('.model-switch-from').textContent(), 'retired-slug', 'An unadvertised model falls back to its slug');
+  await page.evaluate(() => window.__replace({ transcript: [window.__fixtures.user, window.__fixtures.assistant] }));
+  await page.waitForFunction(() => !document.querySelector('.model-switch-row'));
   await page.getByPlaceholder("Ask anything, or describe a task…").waitFor();
   await page.waitForFunction(() => {
     let node = document.querySelector(".assistant-message");

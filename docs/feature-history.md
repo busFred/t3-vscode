@@ -310,6 +310,17 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Conversation management
 
+#### Unreleased — model switch history
+
+- Show where the model or reasoning effort changed in a conversation, matching T3 Code 0.1.7. The
+  server already recorded the switch on the user message that followed it; nothing rendered it.
+- The row names the catalog display names, adds the effort on both sides only when the effort is
+  what moved, and keeps a slug the server no longer advertises rather than hiding the change.
+- Reads the wire's permissive selection shape: the legacy `provider` key and object-form options
+  are normalized, so messages stored by older servers render instead of throwing.
+- Validation: 11 unit tests in `src/shared/modelSwitch.test.ts`; `scripts/verify-ui.mjs` asserts the
+  row's absence without a switch, both labels and the change kind with one, and the slug fallback.
+
 #### Unreleased — snoozing an open question
 
 - Snooze is now offered for a conversation with an open question, matching T3 Code 0.1.8 (upstream

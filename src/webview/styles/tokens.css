@@ -812,6 +812,13 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .message-timestamp { font-size: .625rem; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
 
 .steer-label { display: block; color: var(--muted-foreground); font-size: .6875rem; margin-bottom: 3px; }
+/* Recorded model/effort change, shown above the message that was sent with the new selection. */
+.model-switch-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; justify-content: flex-end;
+  color: var(--muted-foreground); font-size: .6875rem; margin-bottom: 4px; }
+.model-switch-what { text-transform: uppercase; letter-spacing: .04em; font-size: .625rem; opacity: .8; }
+.model-switch-from { text-decoration: line-through; opacity: .75; }
+.model-switch-to { color: var(--foreground); }
+.model-switch-arrow { opacity: .7; }
 .work-group { margin-bottom: 6px; }.work-group-toggle { padding: 4px 0; }
 
 .timeline-footer:has(.response-header) { height: auto; min-height: 42px; padding-top: 3px; }

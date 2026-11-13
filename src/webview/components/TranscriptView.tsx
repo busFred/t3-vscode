@@ -9,6 +9,8 @@ import type { HostStateSnapshot, TranscriptItem, WireTurnItem } from "../../shar
 import { RestorePreview } from "./RestorePreview";
 import { RemoteSessionContext, useRemoteSession } from "../remoteSession";
 import { useActions } from "../actions";
+import { ModelNamesContext, useModelName } from "../modelNames";
+import { describeModelSwitch } from "../../shared/modelSwitch";
 import { getQuestionAnswerText } from "@t3tools/client-runtime/work-log/user-input";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails } from "./t3/WorkLog";
@@ -137,6 +139,19 @@ const TurnItem = memo(function TurnItem(props: { row: TranscriptItem; threadId: 
   const target = useContext(SearchTargetContext);
   return <div data-search-row={props.row.key} className={target?.rowKey === props.row.key ? "session-match-row" : undefined}><TurnContent {...props} /></div>;
 });
+/** T3 0.1.7 records the model/effort in force when a message was sent, if it had just changed. */
+function ModelSwitchRow({ item }: { item: Extract<TranscriptItem["item"], { type: "user_message" }> }) {
+  const name = useModelName();
+  const change = item.modelSwitch ? describeModelSwitch(item.modelSwitch.from, item.modelSwitch.to, name) : null;
+  if (!change) return null;
+  const what = change.changed === "effort" ? "Effort" : "Model";
+  return <div className="model-switch-row" role="note" aria-label={`${what} changed from ${change.from} to ${change.to}`}>
+    <span className="model-switch-what">{what}</span>
+    <span className="model-switch-from">{change.from}</span>
+    <span className="model-switch-arrow" aria-hidden="true">→</span>
+    <span className="model-switch-to">{change.to}</span>
+  </div>;
+}
 const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: { row: TranscriptItem; threadId: string; environmentId: string }) {
   const { item } = row; const run = useActions();
   // References come out before quotes are stripped: the stripper matches `> ` lines anywhere, so running it
@@ -146,7 +161,7 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
   const markdown = (text: string) => <ChatMarkdown text={text} threadId={threadId} assetSource={assetSource} {...(item.type === "user_message" ? { context: item.context, attachments: item.attachments, source: { environmentId, threadId: row.sourceThreadId, messageId: item.messageId, author: "user" as const } } : {})} />;
   const openThread = (id: string) => { void run("selectThread", { threadId: id }); };
   switch (item.type) {
-    case "user_message": return <article className="message user-message" data-item-type={item.type}><div className="user-bubble">{item.inputIntent === "steer" ? <span className="steer-label">↪ Steer</span> : null}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{sent.text || !sent.references.length ? markdown(stripRenderedAssistantQuotes(sent.text)) : null}<MessageReferences references={sent.references} scope={row.key} threadId={threadId} /></div>{/* Copy and search keep the sent payload: a row hides the snapshot from the page, not from the user. */}<RevertActions row={row} threadId={threadId} timestamp={item.startedAt} copyText={renderedMessageText(item.text)} /></article>;
+    case "user_message": return <article className="message user-message" data-item-type={item.type}><ModelSwitchRow item={item} /><div className="user-bubble">{item.inputIntent === "steer" ? <span className="steer-label">↪ Steer</span> : null}{item.attachments.length ? <div className="attachments">{item.attachments.map((attachment, index) => /^(image|video|audio)\//.test(attachment.mimeType) ? <div className="attachment-thumbnail" key={attachment.id}><ChatMedia src={attachment.name} alt={attachment.name} threadId={threadId} source={assetSource} attachmentId={attachment.id} kind={attachment.mimeType.startsWith("video/") ? "video" : attachment.mimeType.startsWith("audio/") ? "audio" : "image"} /><span>{attachment.name}</span></div> : <span key={index}><FileIcon size={12} />{attachment.name}</span>)}</div> : null}{sent.text || !sent.references.length ? markdown(stripRenderedAssistantQuotes(sent.text)) : null}<MessageReferences references={sent.references} scope={row.key} threadId={threadId} /></div>{/* Copy and search keep the sent payload: a row hides the snapshot from the page, not from the user. */}<RevertActions row={row} threadId={threadId} timestamp={item.startedAt} copyText={renderedMessageText(item.text)} /></article>;
     case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}>
       {!item.runId ? <AssistantHeader /> : null}
       <ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} assetSource={assetSource} streaming={item.streaming} />
@@ -227,6 +242,12 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     displayCache.current = next; return result;
   }, [transcript]);
   const subagentState = useMemo(() => ({ threads: state.threads, providers: state.providers, ...(state.activeThreadId ? { activeThreadId: state.activeThreadId } : {}) }), [state.threads, state.providers, state.activeThreadId]);
+  // Slug to display name for recorded model switches, rebuilt only when the catalog itself changes.
+  const modelNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const provider of state.providers) for (const model of provider.models) if (model.name) names.set(model.slug, model.name);
+    return names;
+  }, [state.providers]);
   const boundaries = useMemo(() => responseBoundaries(transcript), [transcript]);
   const thread = state.threads.find(thread => thread.id === id);
   const activeRun = thread?.activeRunId ?? state.queue?.activeRunId ?? (state.acknowledgedWorking ? state.transcript.find(row => row.item.type === "user_message" && row.item.messageId === state.acknowledgedWorking?.messageId)?.item.runId : null);
@@ -373,7 +394,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source message…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading && !working)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length && !working) return <div className="chat-empty"><p>Loading conversation…</p></div>;
-  return <SearchTargetContext.Provider value={searchTarget ?? null}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><SubagentState value={subagentState}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation"
+  return <ModelNamesContext.Provider value={modelNames}><SearchTargetContext.Provider value={searchTarget ?? null}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><SubagentState value={subagentState}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation"
     onPointerDown={startReading} onKeyDown={startReading} onTouchStart={startReading} onWheel={(event) => { startReading(); if (event.deltaY < 0) loadEarlierAtTop(); }}>
     {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
     {navigationNotice ? <div className="citation-source-notice" role="status">{navigationNotice}</div> : null}
@@ -392,5 +413,5 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
         {id && state.restoreResult ? <RestoreResultRow threadId={id} result={state.restoreResult} /> : null}
       </div>}
     />
-  </div></SubagentState></RemoteSessionContext.Provider></SearchTargetContext.Provider>;
+  </div></SubagentState></RemoteSessionContext.Provider></SearchTargetContext.Provider></ModelNamesContext.Provider>;
 }
