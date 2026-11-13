@@ -474,6 +474,23 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Conversation status and notifications
 
+#### Unreleased — screen reader turn announcements
+
+- Narrate a turn's progress to assistive technology, matching T3 Code 0.1.9, so a screen-reader user
+  can follow what the agent is doing without leaving the composer. Previously only a few individual
+  rows carried `role="status"`, with nothing announcing the turn as a whole.
+- A polite, atomic live region, visually hidden but still rendered so it is actually read. It
+  announces only when the phrase changes and no more than once a second, because assistive
+  technology queues every update and a fast turn would otherwise talk over itself.
+- Anything waiting on the person wins — a secret request, then approvals, then questions — since
+  that is the only state where the reader must act. A streaming reply says "Replying" once rather
+  than narrating each chunk, and settles to "Assistant replied".
+- Work in flight is announced by its own label, falling back to what kind of work it is.
+- Validation: 10 unit tests in `src/shared/turnAnnouncements.test.ts`; `scripts/verify-ui.mjs`
+  asserts the region is polite, is clipped away visually while still rendered, and announces a
+  pending approval.
+
+
 #### v0.3.7
 
 - Show approval reasons, supported decline feedback, question previews and initial answers, and secret delivery information.

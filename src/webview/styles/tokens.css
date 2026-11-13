@@ -829,6 +829,9 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .background-list li > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .background-list li.command > span { font-family: var(--vscode-editor-font-family, monospace); }
 .background-list li > small { flex: none; text-transform: capitalize; opacity: .8; }
+/* Announced to assistive technology only; never shown. Not `display: none`, which is not read. */
+.turn-announcer { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 .work-group { margin-bottom: 6px; }.work-group-toggle { padding: 4px 0; }
 
 .timeline-footer:has(.response-header) { height: auto; min-height: 42px; padding-top: 3px; }

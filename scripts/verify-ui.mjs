@@ -207,6 +207,18 @@ try {
   assert.equal(await page.locator('.background-list li').first().locator('small').textContent(), 'Awaited', 'Work the agent waits on is marked');
   await page.evaluate(() => window.__replace({ threads: window.__state.threads.map(({ backgroundWork, ...thread }) => thread) }));
   await page.waitForFunction(() => !document.querySelector('.background-section'));
+  // T3 0.1.9 announces a turn's progress, so a screen reader can follow without leaving the composer.
+  const announcer = page.locator('.turn-announcer');
+  await announcer.waitFor({ state: 'attached' });
+  assert.equal(await announcer.getAttribute('aria-live'), 'polite', 'Announcements must not interrupt');
+  // The visually-hidden pattern: still rendered (so it is announced), but occupying no layout.
+  assert.equal(await announcer.evaluate((element) => {
+    const box = element.getBoundingClientRect(); const style = getComputedStyle(element);
+    return box.width <= 1 && box.height <= 1 && style.clipPath !== 'none' && style.display !== 'none';
+  }), true, 'The live region is clipped away visually but still readable by assistive technology');
+  await page.evaluate(() => window.__replace({ pending: { approvals: [{ id: 'a', kind: 'command', title: 'Run tests', createdAt: new Date().toISOString() }], userInputs: [], secrets: [] } }));
+  await page.waitForFunction(() => document.querySelector('.turn-announcer')?.textContent === 'Approval needed');
+  await page.evaluate(() => window.__replace({ pending: { approvals: [], userInputs: [], secrets: [] } }));
   // T3 0.1.8: images a tool returned in its own output lead its details, ahead of the inputs.
   await page.evaluate(() => window.__replace({ transcript: [window.__fixtures.toolImages] }));
   const toolGroup = page.locator('.work-group-toggle');

@@ -7,6 +7,7 @@ import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { Composer } from "./Composer";
 import { TranscriptView } from "./TranscriptView";
+import { TurnAnnouncer } from "./TurnAnnouncer";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { withAssistantCitationComment } from "../../shared/messageCitations.js";
 import { readDraft, updateDraft } from "../composerDrafts";
@@ -112,6 +113,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
       <div className="chat-reading" data-find-layout={findOpen && thread ? searchPreferences.layout : undefined}>
       {findOpen && thread ? <SessionFind key={`find:${thread.id}`} state={state} preferences={searchPreferences} onPreferences={setSearchPreferences} onClose={closeFind} onSearch={setSearchOptions} onSelect={(target) => { setSearchTarget(target); if (target) setCitationTarget(null); }} /> : null}
       <div className="chat-conversation" key="conversation">
+      <TurnAnnouncer state={state} />
       {thread?.relationshipToParent === "subagent" ? <div className="subagent-parent-bar">{parent ? <button className="subagent-parent-link" onClick={() => { void run("selectThread", { threadId: parent.id }); }}><ArrowLeftIcon size={12} /><BotIcon size={12} /><span>Subagent of · {parent.title || "Untitled"}</span></button> : <span>Subagent conversation · parent unavailable in this workspace</span>}</div> : null}
       <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} searchTarget={findOpen ? searchTarget : null} searchOptions={findOpen ? searchOptions : null} onNavigate={() => { setCitationTarget(null); setSearchTarget(null); }} />
       <AssistantSelectionMenu key={`${state.environment?.environmentId}:${state.activeThreadId}`} viewport={viewport} onQuote={openComment} />
