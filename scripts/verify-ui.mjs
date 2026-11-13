@@ -193,6 +193,20 @@ try {
   assert.equal(await page.locator('.model-switch-from').textContent(), 'retired-slug', 'An unadvertised model falls back to its slug');
   await page.evaluate(() => window.__replace({ transcript: [window.__fixtures.user, window.__fixtures.assistant] }));
   await page.waitForFunction(() => !document.querySelector('.model-switch-row'));
+  // T3 0.1.9 shows details for background work: what still holds a Waiting conversation.
+  await page.evaluate(() => window.__replace({ threads: window.__state.threads.map((thread) => thread.id === window.__state.activeThreadId
+    ? { ...thread, backgroundWork: { subagents: 0, monitors: 1, tasks: 0, commands: 2, holdsCompletion: true, startedAt: null,
+        items: [{ kind: 'command', label: 'pnpm run dev', awaited: true }, { kind: 'command', label: 'tail -f log' }, { kind: 'monitor', label: 'watch tests' }] } }
+    : thread) }));
+  const backgroundSummary = page.locator('.background-section .activity-summary');
+  await backgroundSummary.waitFor();
+  assert.match(await backgroundSummary.textContent(), /1 monitor, 2 commands running/, 'The summary names commands, not just subagents');
+  assert.equal(await page.locator('.background-list li').count(), 0, 'The roster starts collapsed');
+  await backgroundSummary.click();
+  assert.deepEqual(await page.locator('.background-list li > span').allTextContents(), ['pnpm run dev', 'tail -f log', 'watch tests']);
+  assert.equal(await page.locator('.background-list li').first().locator('small').textContent(), 'Awaited', 'Work the agent waits on is marked');
+  await page.evaluate(() => window.__replace({ threads: window.__state.threads.map(({ backgroundWork, ...thread }) => thread) }));
+  await page.waitForFunction(() => !document.querySelector('.background-section'));
   // T3 0.1.8: images a tool returned in its own output lead its details, ahead of the inputs.
   await page.evaluate(() => window.__replace({ transcript: [window.__fixtures.toolImages] }));
   const toolGroup = page.locator('.work-group-toggle');

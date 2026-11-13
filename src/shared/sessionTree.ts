@@ -79,6 +79,9 @@ export function waitingSummary(thread: Pick<ThreadSummary, "backgroundWork">): s
   const parts: string[] = [];
   if (work.subagents) parts.push(`${work.subagents} subagent${work.subagents === 1 ? "" : "s"}`);
   if (work.monitors) parts.push(`${work.monitors} monitor${work.monitors === 1 ? "" : "s"}`);
+  // Commands were counted by the roster but never named, so a thread held only by a background
+  // command read as "Waiting on subagents".
+  if (work.commands) parts.push(`${work.commands} command${work.commands === 1 ? "" : "s"}`);
   if (work.tasks) parts.push(`${work.tasks} task${work.tasks === 1 ? "" : "s"}`);
   return parts.length ? `${parts.join(", ")} running` : "Waiting on subagents";
 }

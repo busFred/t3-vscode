@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CheckIcon, ChevronDownIcon, CircleDotIcon, CircleIcon, CornerUpRightIcon, GripVerticalIcon, ListOrderedIcon, ListTodoIcon, PencilIcon, PlayIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, CircleDotIcon, CircleIcon, CornerUpRightIcon, GripVerticalIcon, HourglassIcon, ListOrderedIcon, ListTodoIcon, PencilIcon, PlayIcon, TerminalIcon, UsersIcon, XIcon } from "lucide-react";
+import { waitingSummary } from "../../shared/sessionTree";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 
@@ -11,6 +12,12 @@ export function ConversationActivity({ state }: { readonly state: HostStateSnaps
   const [queueOpen, setQueueOpen] = useState(true);
   const [tasksOpen, setTasksOpen] = useState(false);
   const queue = state.queue; const tasks = state.tasks;
+  const [backgroundOpen, setBackgroundOpen] = useState(false);
+  // T3 0.1.9 shows details for background work. The roster says what still holds the thread's
+  // completion; the counts alone never said which command or monitor that was.
+  const thread = state.threads.find((entry) => entry.id === state.activeThreadId);
+  const background = thread?.backgroundWork;
+  const backgroundItems = background?.items ?? [];
   const completed = tasks?.steps.filter((step) => step.status === "completed").length ?? 0;
   const current = tasks?.steps.find((step) => step.status === "running") ?? tasks?.steps.find((step) => step.status === "pending") ?? tasks?.steps.at(-1);
   const action = async (kind: string, id?: string, params?: object) => {
@@ -18,7 +25,7 @@ export function ConversationActivity({ state }: { readonly state: HostStateSnaps
     const ok = await run("queueAction", { threadId: state.activeThreadId, action: kind, ...(id ? { runId: id } : {}), ...params });
     setBusy(null); return ok;
   };
-  if (!queue?.entries.length && !tasks) return null;
+  if (!queue?.entries.length && !tasks && !backgroundItems.length) return null;
   return <div className="conversation-activity">
     {queue?.entries.length ? <section className="queue-section">
       <button className="activity-summary" aria-label={`${queueOpen ? "Collapse" : "Expand"} queued messages`} aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListOrderedIcon size={14} /><span>Queued{queue.held ? " · Paused" : ""}</span><span className="activity-count">{queue.entries.length}</span><ChevronDownIcon size={13} className={queueOpen ? "expanded" : ""} /></button>
@@ -40,6 +47,9 @@ export function ConversationActivity({ state }: { readonly state: HostStateSnaps
     </section> : null}
     {tasks && current ? <section className="tasks-section"><button className="activity-summary" aria-label={`${tasksOpen ? "Collapse" : "Expand"} tasks: ${completed} of ${tasks.steps.length} complete`} aria-expanded={tasksOpen} onClick={() => setTasksOpen(!tasksOpen)}><ListTodoIcon size={14} /><span>Tasks</span><strong title={current.text}>{current.text}</strong><span className="activity-count">{completed}/{tasks.steps.length}</span>{tasks.steps.length <= 10 ? <span className="task-segments" aria-hidden="true">{tasks.steps.map((step, index) => <i className={step.status} key={index} />)}</span> : null}<ChevronDownIcon size={13} className={tasksOpen ? "expanded" : ""} /></button>
       {tasksOpen ? <ol className="task-list">{tasks.steps.map((step, index) => <li key={index} className={step.status}>{step.status === "completed" ? <CheckIcon size={13} /> : step.status === "running" ? <CircleDotIcon size={13} /> : <CircleIcon size={13} />}<span>{step.text}</span><small>{step.status === "running" ? "Running" : step.status === "completed" ? "Completed" : "Pending"}</small></li>)}</ol> : null}
+    </section> : null}
+    {backgroundItems.length ? <section className="background-section"><button className="activity-summary" aria-label={`${backgroundOpen ? "Collapse" : "Expand"} background work: ${waitingSummary(background ? { backgroundWork: background } : {})}`} aria-expanded={backgroundOpen} onClick={() => setBackgroundOpen(!backgroundOpen)}><HourglassIcon size={14} /><span>Background</span><strong>{waitingSummary(background ? { backgroundWork: background } : {})}</strong><span className="activity-count">{backgroundItems.length}</span><ChevronDownIcon size={13} className={backgroundOpen ? "expanded" : ""} /></button>
+      {backgroundOpen ? <ul className="background-list">{backgroundItems.map((item, index) => <li key={index} className={item.kind}>{item.kind === "command" ? <TerminalIcon size={13} /> : item.kind === "subagent" ? <UsersIcon size={13} /> : <CircleDotIcon size={13} />}<span title={item.label}>{item.label}</span><small>{item.awaited ? "Awaited" : item.kind === "background_task" ? "Task" : item.kind}</small></li>)}</ul> : null}
     </section> : null}
   </div>;
 }

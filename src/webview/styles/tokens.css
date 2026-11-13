@@ -823,6 +823,12 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 /* Images a tool returned in its own output, shown above the call's inputs. */
 .tool-output-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .tool-output-images .chat-image img { max-height: 320px; }
+/* Background roster: what still holds a Waiting conversation's completion. */
+.background-list { list-style: none; margin: 0; padding: 2px 0 0; display: flex; flex-direction: column; gap: 2px; }
+.background-list li { display: flex; align-items: center; gap: 5px; font-size: .6875rem; color: var(--muted-foreground); }
+.background-list li > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.background-list li.command > span { font-family: var(--vscode-editor-font-family, monospace); }
+.background-list li > small { flex: none; text-transform: capitalize; opacity: .8; }
 .work-group { margin-bottom: 6px; }.work-group-toggle { padding: 4px 0; }
 
 .timeline-footer:has(.response-header) { height: auto; min-height: 42px; padding-top: 3px; }

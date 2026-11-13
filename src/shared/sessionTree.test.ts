@@ -157,6 +157,10 @@ test("waitingSummary describes the roster's work, or falls back to a generic lab
   assert.equal(waitingSummary({ backgroundWork: { subagents: 2, monitors: 0, tasks: 0, commands: 0, holdsCompletion: true, startedAt: null } }), "2 subagents running");
   assert.equal(waitingSummary({ backgroundWork: { subagents: 1, monitors: 1, tasks: 0, commands: 0, holdsCompletion: true, startedAt: null } }), "1 subagent, 1 monitor running");
   assert.equal(waitingSummary({}), "Waiting on subagents");
+  // Commands were counted by the roster but never named, so a thread held only by a background
+  // command read as "Waiting on subagents".
+  assert.equal(waitingSummary({ backgroundWork: { subagents: 0, monitors: 0, tasks: 0, commands: 2, holdsCompletion: true, startedAt: null } }), "2 commands running");
+  assert.equal(waitingSummary({ backgroundWork: { subagents: 1, monitors: 0, tasks: 1, commands: 1, holdsCompletion: true, startedAt: null } }), "1 subagent, 1 command, 1 task running");
 });
 
 test("Session sorting uses last activity, natural titles, pinned precedence and sibling-only ordering", () => {

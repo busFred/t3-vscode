@@ -2907,6 +2907,13 @@ export class HostState {
             holdsCompletion: backgroundWorkHoldsCompletion(pendingBackgroundTasks),
             // The roster carries no timestamp per task, so Waiting counts from when the thread's own run ended.
             startedAt: thread.latestRunCompletedAt ? DateTime.formatIso(thread.latestRunCompletedAt) : null,
+            // The roster itself (T3 0.1.9 shows details for background commands). Bounded: a long
+            // roster must not bloat every snapshot this thread pushes to each view.
+            items: pendingBackgroundTasks.slice(0, 20).map((task) => ({
+              kind: task.kind,
+              label: task.description?.trim() || task.command?.trim() || task.taskId,
+              ...(task.awaited === true ? { awaited: true } : {}),
+            })),
           } } : {}),
           pendingRuntimeRequest: (() => {
             const request = thread.pendingRuntimeRequest ?? projection?.runtimeRequests.find((request) => request.status === "pending");

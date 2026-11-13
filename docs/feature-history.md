@@ -749,6 +749,22 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 
 ### Queue controls and task progress
 
+#### Unreleased — background work details
+
+- Add a collapsible **Background** section above the composer listing what still holds a Waiting
+  conversation's completion, matching T3 Code 0.1.9's background command details. The roster
+  previously reported only counts, so a reader could not tell which command or monitor was running.
+- Each row names the command or description, marks work the agent declared it waits on as
+  **Awaited**, and starts collapsed.
+- Fixes a related defect: `waitingSummary` counted background commands but never named them, so a
+  thread held only by a background command read as "Waiting on subagents".
+- The roster carried on each snapshot is capped at 20 entries so a long roster cannot bloat every
+  push to every open view.
+- Validation: `src/shared/sessionTree.test.ts` covers commands alone and mixed with other work;
+  `scripts/verify-ui.mjs` asserts the summary wording, that it starts collapsed, the expanded row
+  labels and the Awaited marker.
+
+
 #### v0.3.7
 
 - **Send now** starts a selected queued message when permitted, or steers the active turn when supported.

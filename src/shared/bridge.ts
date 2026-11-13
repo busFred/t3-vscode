@@ -193,6 +193,8 @@ export interface ThreadSummary {
     readonly commands: number;
     readonly holdsCompletion: boolean;
     readonly startedAt: string | null;
+    /** The roster itself, so a reader can see what is still running rather than only how much. */
+    readonly items?: ReadonlyArray<{ readonly kind: string; readonly label: string; readonly awaited?: boolean }>;
   };
 }
 export type ThreadSearchMatch = OrchestrationThreadSearchMatch;
