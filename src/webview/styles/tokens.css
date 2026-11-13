@@ -500,6 +500,7 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .account-limit-bar i { display: block; height: 100%; background: var(--vscode-progressBar-background, var(--primary)); }
 .account-limit small { color: var(--muted-foreground); font-size: .5625rem; white-space: nowrap; }
 /* Shares the provider row at that select's height, keeping its own width and font. */
+.usage-account-choice .usage-model-choice,
 .usage-account-choice .usage-display-choice { flex: none; align-self: stretch; max-width: 92px; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); border-radius: 3px; padding: 0 2px; font-size: .625rem; }
 .account-limit-accounts { margin: 2px 0 0 8px; }
 /* A fixed value column keeps every account's bar the same length within and across windows. */

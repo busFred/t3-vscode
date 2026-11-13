@@ -1217,6 +1217,19 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Account usage
 
+#### Unreleased — filter usage by model
+
+- Add a model filter beside the existing provider selector, completing T3 Code 0.1.7's "filter Usage
+  totals by provider and model". Choosing a model narrows the panel to that quota.
+- Only model-specific quotas are offered, such as Claude Opus or Fable. The general session, weekly
+  and monthly allowances are not model-scoped, and an unreported placeholder window is not a model.
+- The filter appears only where the selected account reports a model quota, and clears itself when a
+  provider switch leaves the chosen model unreported, rather than showing an empty panel.
+- Applies to both the pooled and per-account layouts.
+- Validation: 6 unit tests in `src/shared/usageModelFilter.test.ts`; `scripts/verify-ui.mjs` asserts
+  the offered options, that choosing one hides the other windows, and that clearing restores them.
+
+
 #### v0.3.7
 
 - Distinguish accounts by workspace when pooling or splitting usage, and show workspace identifiers where available.

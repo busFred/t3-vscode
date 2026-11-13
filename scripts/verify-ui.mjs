@@ -429,6 +429,16 @@ try {
   await page.screenshot({ path: `${evidence}/usage-folded.png` });
   await sessionGroup.locator('summary').click();
   assert.equal(await sessionGroup.evaluate(element => element.open), true);
+  // T3 0.1.7 filters usage by provider and model. Only model-specific quotas are offered.
+  const modelChoice = page.getByLabel('Usage model');
+  await modelChoice.waitFor();
+  assert.deepEqual(await modelChoice.locator('option').allTextContents(), ['All models', 'Fable'], 'The general session/weekly allowances are not models');
+  await modelChoice.selectOption('Fable');
+  await page.waitForFunction(() => !document.querySelector('.account-limit-group summary')?.textContent?.includes('Session'));
+  assert.equal(await page.locator('.account-limit-group').filter({ hasText: 'Fable' }).count(), 1, 'The chosen model stays');
+  assert.equal(await page.locator('.account-limit-group').filter({ hasText: 'Session' }).count(), 0, 'Other windows are filtered out');
+  await modelChoice.selectOption('');
+  await page.locator('.account-limit-group').filter({ hasText: 'Session' }).first().waitFor();
   // Pooled windows are one line each and never fold; a provider with a single kind of limit never folds either.
   await page.getByLabel('Multiple accounts').selectOption('pooled');
   await page.waitForFunction(() => document.querySelectorAll('.account-limit-group').length === 0 && document.querySelectorAll('.account-limit-bar').length === 3, null, { timeout: 5000 });

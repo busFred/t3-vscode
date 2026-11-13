@@ -251,3 +251,17 @@ export function perAccountRows(group: UsageGroup, now = Date.now()): ReadonlyArr
   return accountWindows(pooledAccount(group, now)).map((row) => ({ ...row, columns: group.reporting.map((account) => ({ account,
     window: row.window ? account.limits.windows.find((window) => window.kind === row.window!.kind && window.id === row.window!.id) ?? null : null })) }));
 }
+
+/**
+ * Model-specific quotas the rows report, such as Claude Opus or Fable (T3 0.1.7's usage filters).
+ * The general session/week/month allowances are not model-scoped, so they are not options.
+ */
+export function usageModelNames(rows: ReadonlyArray<MeterRow>): ReadonlyArray<string> {
+  return [...new Set(rows.flatMap((row) => row.window && !row.primary ? [row.label] : []))];
+}
+
+/** Narrow rows to one model's quota; a null model keeps every row, including the general ones. */
+export function filterByUsageModel<T extends MeterRow>(rows: ReadonlyArray<T>, model: string | null): ReadonlyArray<T> {
+  if (!model) return rows;
+  return rows.filter((row) => Boolean(row.window) && !row.primary && row.label === model);
+}
