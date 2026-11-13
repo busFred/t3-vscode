@@ -1097,6 +1097,11 @@ export class HostState {
   }
   private handleShell(item: OrchestrationV2ShellStreamItem): void {
     if (item.kind === "synchronized") return;
+    // T3 0.1.8 added `snapshot-required`: a resume gap the server cannot replay. It only arrives
+    // for a subscription that asked for `httpSnapshotFallback`, which this client never does
+    // (`t3Client.subscribeShell`), so there is no cursor to reload. Ignore it rather than treat it
+    // as a delta, which would read fields it does not carry.
+    if (item.kind === "snapshot-required") return;
     const previousWorkspaces = this.worktreeScopeKey();
     if (item.kind === "snapshot") {
       this.shell = ShellState.mergeShellSnapshotProjects(this.shell, item.snapshot,

@@ -60,8 +60,12 @@ test("Snooze moves a thread to the Snoozed shelf until it wakes, and Wake brings
   await host.threadAction("first", "unsnooze");
   assert.equal(client.commands.at(-1)?.type, "thread.unsnooze");
   assert.equal(summary(host, "first").snoozedUntil, undefined);
-  // A thread waiting on the person cannot be hidden.
+  // T3 0.1.8 (upstream e66c3168a4, "allow snoozing pending input requests") made snoozing an open
+  // question mean "ask me later", so a pending user_input no longer blocks it.
   updateThread(client, "second", { pendingRuntimeRequest: { id: "request", kind: "user_input", createdAt: DateTime.makeUnsafe(Date.now()) } });
+  assert.equal(summary(host, "second").canSnooze, true, "an open question can be deferred");
+  // An approval still waits on the person and cannot be hidden.
+  updateThread(client, "second", { pendingRuntimeRequest: { id: "request", kind: "permission", createdAt: DateTime.makeUnsafe(Date.now()) } });
   assert.equal(summary(host, "second").canSnooze, false);
   await assert.rejects(host.threadAction("second", "snooze", until), /waiting for you/);
 });

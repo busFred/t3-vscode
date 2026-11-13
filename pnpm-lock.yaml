@@ -8,7 +8,9 @@ overrides:
   effect: 4.1.2
 
 patchedDependencies:
-  '@legendapp/list@3.3.5': 5de1e981072a37b59dfa8d4fe241f9c802257d1ab21d44e809cbc73b8c0bbfe9
+  '@legendapp/list@3.3.5':
+    hash: 5de1e981072a37b59dfa8d4fe241f9c802257d1ab21d44e809cbc73b8c0bbfe9
+    path: patches/@legendapp__list@3.3.5.patch
 
 importers:
 
@@ -127,8 +129,8 @@ importers:
   vendor/client-runtime:
     dependencies:
       '@pierre/diffs':
-        specifier: 1.6.1
-        version: 1.6.1(@shikijs/themes@4.5.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: 1.7.0-beta.3
+        version: 1.7.0-beta.3(@shikijs/themes@4.5.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@t3tools/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -159,6 +161,9 @@ importers:
       '@t3tools/provider-pi':
         specifier: workspace:*
         version: link:../provider-pi
+      '@t3tools/secret-provider-definitions':
+        specifier: workspace:*
+        version: link:../secret-provider-definitions
       '@t3tools/shared':
         specifier: workspace:*
         version: link:../shared
@@ -177,6 +182,9 @@ importers:
       three:
         specifier: 0.180.0
         version: 0.180.0
+      unbash:
+        specifier: ^5.0.0
+        version: 5.1.0
 
   vendor/contracts:
     dependencies:
@@ -289,6 +297,36 @@ importers:
         specifier: 4.1.2
         version: 4.1.2
 
+  vendor/secret-provider-core:
+    dependencies:
+      '@t3tools/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      effect:
+        specifier: 4.1.2
+        version: 4.1.2
+
+  vendor/secret-provider-definitions:
+    dependencies:
+      '@t3tools/secret-provider-core':
+        specifier: workspace:*
+        version: link:../secret-provider-core
+      '@t3tools/secret-provider-onepassword':
+        specifier: workspace:*
+        version: link:../secret-provider-onepassword
+
+  vendor/secret-provider-onepassword:
+    dependencies:
+      '@t3tools/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@t3tools/secret-provider-core':
+        specifier: workspace:*
+        version: link:../secret-provider-core
+      effect:
+        specifier: 4.1.2
+        version: 4.1.2
+
   vendor/shared:
     dependencies:
       '@noble/curves':
@@ -303,9 +341,6 @@ importers:
       effect:
         specifier: 4.1.2
         version: 4.1.2
-      jose:
-        specifier: 6.2.2
-        version: 6.2.2
       mdast-util-directive:
         specifier: 3.1.0
         version: 3.1.0
@@ -357,9 +392,6 @@ importers:
       '@t3tools/source-control-core':
         specifier: workspace:*
         version: link:../source-control-core
-      effect:
-        specifier: 4.1.2
-        version: 4.1.2
 
   vendor/source-control-bitbucket:
     dependencies:
@@ -385,6 +417,15 @@ importers:
         specifier: 4.1.2
         version: 4.1.2
 
+  vendor/source-control-cursor-origin:
+    dependencies:
+      '@t3tools/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@t3tools/source-control-core':
+        specifier: workspace:*
+        version: link:../source-control-core
+
   vendor/source-control-definitions:
     dependencies:
       '@t3tools/source-control-azure-devops':
@@ -396,6 +437,9 @@ importers:
       '@t3tools/source-control-core':
         specifier: workspace:*
         version: link:../source-control-core
+      '@t3tools/source-control-cursor-origin':
+        specifier: workspace:*
+        version: link:../source-control-cursor-origin
       '@t3tools/source-control-forgejo':
         specifier: workspace:*
         version: link:../source-control-forgejo
@@ -417,9 +461,6 @@ importers:
       '@t3tools/source-control-core':
         specifier: workspace:*
         version: link:../source-control-core
-      effect:
-        specifier: 4.1.2
-        version: 4.1.2
 
   vendor/source-control-gitcafe:
     dependencies:
@@ -441,9 +482,6 @@ importers:
       '@t3tools/source-control-core':
         specifier: workspace:*
         version: link:../source-control-core
-      effect:
-        specifier: 4.1.2
-        version: 4.1.2
 
   vendor/source-control-gitlab:
     dependencies:
@@ -453,9 +491,6 @@ importers:
       '@t3tools/source-control-core':
         specifier: workspace:*
         version: link:../source-control-core
-      effect:
-        specifier: 4.1.2
-        version: 4.1.2
 
 packages:
 
@@ -901,8 +936,8 @@ packages:
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
 
-  '@pierre/diffs@1.6.1':
-    resolution: {integrity: sha512-XTfLW4bFETyosZfFNUoyRh1zPE4tmAijOoxdHx4X805tlaq/7/fuQXIiJSm21+jLkDo8vn5elQ+2O4YtMTKM0Q==}
+  '@pierre/diffs@1.7.0-beta.3':
+    resolution: {integrity: sha512-eAoAoL9aoO7vR9VV5NCLIuIAEr4yu5LsBnhTbyoy8wDFjT0y7bDrlhX8doO7FUb/MCd0Ldcd15Ga/yTOq2mjBA==}
     peerDependencies:
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
@@ -912,8 +947,11 @@ packages:
       react-dom:
         optional: true
 
-  '@pierre/highlights@0.2.0':
-    resolution: {integrity: sha512-hTpcOU1EzDAP4bYtEhxmMu2jwMvtkUydRUBUpWMSHTs3dw0IaC3Ld5ansMy18L0GE3b6Vfl2OGkLK+pWWpnBmw==}
+  '@pierre/highlights@0.5.0':
+    resolution: {integrity: sha512-G8gscrHrik3YjKd+tPTcmivJ/W0zRrtg4adVxnfX7+415+0Qplo6qUWuEX5R0UkA1fMhmE2sOSuLBMNGDtLhIw==}
+
+  '@pierre/patches@0.0.1':
+    resolution: {integrity: sha512-NycJQVQNuqmBdr7u1LsUcmkiIz1fRm9xhWZyRbm21oJYd0MVVCa45t9Lsuj5IKrTMBonxOuh4LMv+R3BpL4bmQ==}
 
   '@pierre/theme@1.1.0':
     resolution: {integrity: sha512-GC2OWTAfTIIWWYhPCygwG8t2EtePQkRfON4MI2rwIkJylmiyqIttJID2dCL8sUD8cNdEvYkEyfEHHKMeCiDLoQ==}
@@ -2326,9 +2364,6 @@ packages:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
 
-  jose@6.2.2:
-    resolution: {integrity: sha512-d7kPDd34KO/YnzaDOlikGpOurfF0ByC2sEV4cANCtdqLlTfBlw2p14O/5d/zv40gJPbIQxfES3nSx1/oYNyuZQ==}
-
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
@@ -3048,6 +3083,10 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  unbash@5.1.0:
+    resolution: {integrity: sha512-YVGyy4XqoZ2AVgHjVdL9cchMSurlXFHWviORa8RiU/Bnol4ooW5Lpyur/5XmbgDdyCKxymmgsEQsLGBMIJ/Agg==}
+    engines: {node: '>=14'}
+
   unconfig-core@7.5.0:
     resolution: {integrity: sha512-Su3FauozOGP44ZmKdHy2oE6LPjk51M/TRRjHv2HNCWiDvfvCoxC2lno6jevMA91MYAdCdwP05QnWdWpSbncX/w==}
 
@@ -3611,9 +3650,10 @@ snapshots:
     transitivePeerDependencies:
       - '@shikijs/themes'
 
-  '@pierre/diffs@1.6.1(@shikijs/themes@4.5.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@pierre/diffs@1.7.0-beta.3(@shikijs/themes@4.5.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
-      '@pierre/highlights': 0.2.0
+      '@pierre/highlights': 0.5.0
+      '@pierre/patches': 0.0.1
       '@pierre/theme': 2.0.0
       '@pierre/theming': 1.0.2(@pierre/theme@2.0.0)(@shikijs/themes@4.5.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(shiki@4.5.0)
       diff: 9.0.0
@@ -3626,7 +3666,9 @@ snapshots:
     transitivePeerDependencies:
       - '@shikijs/themes'
 
-  '@pierre/highlights@0.2.0': {}
+  '@pierre/highlights@0.5.0': {}
+
+  '@pierre/patches@0.0.1': {}
 
   '@pierre/theme@1.1.0': {}
 
@@ -4913,8 +4955,6 @@ snapshots:
 
   jiti@2.7.0: {}
 
-  jose@6.2.2: {}
-
   js-tokens@4.0.0: {}
 
   jsesc@3.1.0: {}
@@ -5950,6 +5990,8 @@ snapshots:
       underscore: 1.13.8
 
   typescript@5.9.3: {}
+
+  unbash@5.1.0: {}
 
   unconfig-core@7.5.0:
     dependencies:

@@ -2,9 +2,9 @@
 
 Source copied (src only) from the T3 Code repo:
 
-- **Upstream:** `/home/hungtien/Documents/playground/t3code`
-- **Git sha:** `61c3794c32b0eeebfac09add43e403618c65d2d7` (2026-11-02, upstream version 0.1.6)
-- **Previous pin:** `7812230572f2d7e042d8d14ada2381fc71377560` (2026-10-05, 0.0.45)
+- **Upstream:** <https://github.com/pingdotgg/t3code>
+- **Git sha:** `24e77473ec` (tag `v0.1.9`, 2026-11-11, upstream version 0.1.9)
+- **Previous pin:** `61c3794c32b0eeebfac09add43e403618c65d2d7` (2026-11-02, 0.1.6)
 
 ## What is here
 
@@ -14,13 +14,20 @@ Source copied (src only) from the T3 Code repo:
 | `@t3tools/shared` | `packages/shared` | `vendor/shared` | whole `src/` except `managedPolicyFile.ts` |
 | `@t3tools/client-runtime` | `packages/client-runtime` | `vendor/client-runtime` | whole `src/` |
 | `@t3tools/provider-*` (9 packages) | `packages/provider-*` | `vendor/provider-*` | client halves only |
-| `@t3tools/source-control-*` (8 packages) | `packages/source-control-*` | `vendor/source-control-*` | `shared/` halves and the registry only |
+| `@t3tools/source-control-*` (9 packages) | `packages/source-control-*` | `vendor/source-control-*` | `shared/` halves and the registry only |
+| `@t3tools/secret-provider-*` (3 packages) | `packages/secret-provider-*` | `vendor/secret-provider-*` | `shared/` definitions and the registry only |
 
 Since 0.1.x, `client-runtime` imports provider and source-control packages.
 Only the client-side modules it reaches are vendored: the files reachable from
 `@t3tools/provider-*/client`, `@t3tools/provider-core/modelShortName`,
-`@t3tools/source-control-definitions/registry` and
+`@t3tools/source-control-definitions/registry`,
+`@t3tools/secret-provider-definitions/registry` and
 `@t3tools/source-control-core/shared/{definition,threadPullRequests}`.
+
+0.1.9 added two closure packages: `source-control-cursor-origin` (reached from
+`source-control-definitions/registry`) and `secret-provider-definitions` with its
+`secret-provider-core` and `secret-provider-onepassword` definitions (reached from
+`client-runtime/src/secretRequest.ts`).
 `scripts/vendor-closure.mjs` computes that file set; its only external
 dependency is Effect. Their package.json files are trimmed to `name`, `version`,
 `type`, the reached `exports` and the dependencies those files import.
@@ -85,6 +92,7 @@ LIST=1 node scripts/vendor-closure.mjs "$UPSTREAM/packages" \
   @t3tools/provider-core/client @t3tools/provider-core/modelShortName \
   @t3tools/provider-{acp-registry,cursor,fx,grok,kiro,muse,opencode,pi}/client \
   @t3tools/source-control-definitions/registry \
+  @t3tools/secret-provider-definitions/registry \
   @t3tools/source-control-core/shared/definition @t3tools/source-control-core/shared/threadPullRequests
 ```
 
@@ -100,8 +108,9 @@ closure command. Then re-apply by hand (not scripted):
    dependency; drop `./testing/*` exports.
 4. In `client-runtime`: add the extension adapter subpath exports if upstream
    lacks them: `./rpc/session`, `./rpc/http`, `./connection/model`,
-   `./state/thread-history-merge`, `./state/server-config-projection`,
-   `./state/thread-tag-filter`.
+   `./state/server-config-projection`, `./state/thread-tag-filter`. Upstream has
+   exported `./state/thread-history-merge` natively since 0.1.6, so it no longer
+   needs adding.
 5. Preserve the Windows launcher correction in `shared/src/shell.ts`: escape
    command-path metacharacters without adding argument-style quotes, keeping
    argument escaping separate as in [cross-spawn](https://github.com/moxystudio/node-cross-spawn/blob/master/lib/util/escape.js).
@@ -111,6 +120,11 @@ closure command. Then re-apply by hand (not scripted):
    input, fixed-time and interval schedules keep unknown fields. Newer schedules
    stay visible and unedited fields survive a save.
    `src/host/scheduledTasks.test.ts` covers it.
+7. Preserve the `send` parameter annotations in `client-runtime/src/rpc/session.ts`
+   (the `Effect.map((protocol) => ...)` wrapper). Upstream typechecks with
+   `@effect/tsgo`, which infers those parameters from the spread `protocol`;
+   plain `tsc --noEmit` does not and fails with implicit `any` (TS7006). The
+   annotations read the types off `protocol.send` rather than widening them.
 
 No other local edits remain. Upstream now covers what earlier pins patched:
 secret requests, worktree settings, and unknown turn items. T3 skips unknown

@@ -1,0 +1,15 @@
+{
+  "name": "@t3tools/secret-provider-definitions",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./registry": {
+      "types": "./src/registry.ts",
+      "import": "./src/registry.ts"
+    }
+  },
+  "dependencies": {
+    "@t3tools/secret-provider-core": "workspace:*",
+    "@t3tools/secret-provider-onepassword": "workspace:*"
+  }
+}

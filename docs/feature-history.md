@@ -310,6 +310,15 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Conversation management
 
+#### Unreleased — snoozing an open question
+
+- Snooze is now offered for a conversation with an open question, matching T3 Code 0.1.8 (upstream
+  `e66c3168a4`, "allow snoozing pending input requests"): snoozing one means "ask me later", and
+  only a question newer than the snooze wakes it early. A pending approval, a subagent request, a
+  waiting guest message or a queued turn still blocks snoozing and still reads "waiting for you".
+- Carried in with the 0.1.9 vendor resync rather than authored here; `src/host/threadAttention.test.ts`
+  covers both the newly allowed question case and the still-blocked approval case.
+
 #### v0.3.7
 
 - Add and remove tags from thread actions; choose tags to hide and toggle hiding per environment.
@@ -1755,6 +1764,37 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - Extend `scripts/prepare-readme-fixture.ts` with a Git-backed demo workspace and a synthetic saved turn (baseline tree, two ready checkpoints and one completed run) and `scripts/capture-readme.mjs` with the matching capture steps; no capture calls a provider.
 
 ### Isolated development and packaging
+
+#### Unreleased — vendored T3 Code pinned to 0.1.9
+
+- Move the vendored protocol and client-runtime packages from `61c3794` (0.1.6) to tag `v0.1.9`
+  (`24e77473ec`, 2026-11-11), covering 882 upstream commits.
+- Vendor four new closure packages: `source-control-cursor-origin`, reached from the source-control
+  registry, and `secret-provider-{definitions,core,onepassword}`, reached from the client-runtime
+  secret-request module. External dependencies are still Effect only, which stays at 4.1.2.
+- No RPC was removed or renamed, so the minimum supported server stays 0.1.5.
+- Handle the new `snapshot-required` shell-stream event added in T3 Code 0.1.8. It answers only a resume that asked for
+  `httpSnapshotFallback`, which this client never requests, so all three subscription paths ignore
+  it instead of reading delta fields it does not carry.
+- Adopt upstream's `Schema.TaggedError` refusal signature in the MCP app frame.
+- Local vendor patches are now seven: the previous Windows launcher and scheduled-task adapters,
+  plus `send` parameter annotations in `client-runtime/src/rpc/session.ts`, which upstream leaves to
+  `@effect/tsgo` inference and plain `tsc` rejects. `./state/thread-history-merge` no longer needs a
+  hand-added export.
+- Validation: typecheck clean; 741/741 unit tests across three consecutive runs; `pnpm run build`
+  clean, with no three.js, JSZip or `@pierre/diffs` code reaching either bundle. Live against an
+  isolated T3 Code **0.1.9** server (temporary base directory, port 47778): pairing, the bearer
+  exchange, shell decode (27 advertised models), thread creation and projection load, rename
+  round-tripping through the shell stream, archive, reconnect and delete all pass.
+- Live provider turn verified with `scripts/verify-host.ts`: a focused new thread streams and
+  completes an assistant reply, rename/pin/unpin apply, and an archived thread stays selectable
+  across a reconnect and restores. `scripts/verify-scheduled-live.ts` also passes, covering task
+  list/subscribe/create/edit, model and low-effort persistence, origin and a disabled save — the
+  path that exercises the patched `contracts/src/scheduledTask.ts` against 0.1.9's new
+  `threadMode` field.
+- The default GPT-6 Luna account was at its usage limit, so both runs used an explicit
+  `T3_VSCODE_TEST_MODEL=claude-haiku-5-5`, the cheapest model the isolated server advertised. This
+  is the documented override for an inexpensive alternative, not a silent premium fallback.
 
 #### v0.0.1
 

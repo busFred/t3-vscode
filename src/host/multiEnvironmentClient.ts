@@ -122,7 +122,9 @@ export class MultiEnvironmentClient {
         if (!current()) { await client.disconnect(); return; }
         remote.shell = shell;
         const subscription = await client.subscribeShell((item) => {
-          if (!current() || item.kind === "synchronized") return;
+          // `snapshot-required` only answers an `httpSnapshotFallback` resume, which this client
+          // never requests; it carries no rows, so it is not a delta.
+          if (!current() || item.kind === "synchronized" || item.kind === "snapshot-required") return;
           remote.shell = item.kind === "snapshot"
             ? ShellState.mergeShellSnapshotProjects(remote.shell, item.snapshot, item.resolvedRepositoryIdentityRoots === undefined ? undefined : { resolvedRepositoryIdentityRoots: item.resolvedRepositoryIdentityRoots })
             : remote.shell ? ShellState.applyShellStreamEvent(remote.shell, item) : remote.shell;
@@ -231,7 +233,9 @@ export class MultiEnvironmentClient {
         // Local-only states pass the server's item through unchanged.
         handler(enrichment || !this.hasRemoteShells() ? item : { kind: "snapshot", snapshot: this.merged(this.primaryShell) });
       } else {
-        if (item.kind !== "synchronized" && this.primaryShell) this.primaryShell = ShellState.applyShellStreamEvent(this.primaryShell, item);
+        // `snapshot-required` carries no rows and is never requested here; pass it through
+        // without applying it as a delta.
+        if (item.kind !== "synchronized" && item.kind !== "snapshot-required" && this.primaryShell) this.primaryShell = ShellState.applyShellStreamEvent(this.primaryShell, item);
         handler(item);
       }
     });

@@ -1,0 +1,15 @@
+{
+  "name": "@t3tools/source-control-cursor-origin",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./shared/definition": {
+      "types": "./src/shared/definition.ts",
+      "import": "./src/shared/definition.ts"
+    }
+  },
+  "dependencies": {
+    "@t3tools/contracts": "workspace:*",
+    "@t3tools/source-control-core": "workspace:*"
+  }
+}

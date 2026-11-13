@@ -54,7 +54,7 @@ export function McpAppFrame(props: { app: McpAppReference; threadId: string; sou
       readResource: (input) => request("resources/read", input),
       updateModelContext: (input) => request("ui/update-model-context", input),
       openLink: async (url) => {
-        if (document.activeElement !== element || !navigator.userActivation?.isActive) throw new McpAppHostRefusal("Links open only from a click in the app.");
+        if (document.activeElement !== element || !navigator.userActivation?.isActive) throw new McpAppHostRefusal({ message: "Links open only from a click in the app." });
         await request("ui/open-link", { url });
       },
       sendMessage: (text) => request("ui/message", { text }),
@@ -62,7 +62,7 @@ export function McpAppFrame(props: { app: McpAppReference; threadId: string; sou
       downloadFile: async (files) => {
         try {
           await request("ui/download-file", { files: files.map((file) => ({ name: file.name, ...(file._tag === "embedded" ? { bytes: Array.from(file.bytes) } : { uri: file.uri }) })) });
-        } catch (cause) { throw new McpAppHostRefusal(cause instanceof Error ? cause.message : "Unable to save file."); }
+        } catch (cause) { throw new McpAppHostRefusal({ message: cause instanceof Error ? cause.message : "Unable to save file." }); }
       },
       onRequestTeardown: () => { void handle.teardown().then(() => setFailure(`The ${app.server} app was closed.`)); },
       onSizeChanged: (size) => { if (size.height !== undefined) setHeight(clampMcpAppHeight(size.height)); },
