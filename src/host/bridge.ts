@@ -279,7 +279,8 @@ export class BridgeHandler {
         case "chatAsset": {
           const reference = paramsObject(params.reference);
           const kind = stringParam(reference, "kind");
-          const assetReference = (kind === "html" || kind === "mcp-app") ? { kind } as const : kind === "attachment" ? { kind, attachmentId: stringParam(reference, "attachmentId") } as const : kind === "media" ? { kind, path: stringParam(reference, "path") } as const : null;
+          const assetReference = (kind === "html" || kind === "mcp-app") ? { kind } as const : kind === "attachment" ? { kind, attachmentId: stringParam(reference, "attachmentId") } as const : kind === "media" ? { kind, path: stringParam(reference, "path") } as const
+            : kind === "tool-output-image" ? { kind, index: Number(reference.index) } as const : null;
           if (!assetReference) throw new Error("Unsupported chat asset.");
           return { id: message.id, result: await this.hostState.chatAsset(id(), { sourceThreadId: stringParam(params, "sourceThreadId"), itemId: stringParam(params, "itemId") }, assetReference, viewId) };
         }

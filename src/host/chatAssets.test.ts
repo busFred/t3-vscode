@@ -30,3 +30,25 @@ test("Relative media follows the source conversation's worktree, matching native
   assert.equal(host.workspaceForThread("first"), "/tmp/worktrees/feature");
   assert.deepEqual(client.assetRequests[0], { _tag: "media-file", threadId: "first", path: "/tmp/worktrees/feature/assets/diagram.svg" });
 });
+
+test("Tool output images resolve by position and only from the item that produced them", async (t) => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  await host.selectThread("first"); publishText(client, "first", "before");
+  const png = "iVBORw0KGgo=";
+  const item: OrchestrationV2TurnItem = { ...((await client.getThreadProjection("first")).turnItems[0]!),
+    id: TurnItemId.make("mcp-tool"), threadId: ThreadId.make("first"), type: "dynamic_tool", status: "completed",
+    toolName: "screenshot", input: {},
+    output: { content: [{ type: "text", text: "captured" }, { type: "image", mimeType: "image/png", data: png }, { type: "image", mimeType: "image/png", data: png }] },
+  } as OrchestrationV2TurnItem;
+  const projection = await client.getThreadProjection("first");
+  client.threadHandlers.get("first")!({ kind: "snapshot", snapshotSequence: 2, projection: { ...projection, turnItems: [item],
+    visibleTurnItems: [{ position: 0, visibility: "local", sourceThreadId: item.threadId, sourceItemId: item.id, item }] } });
+  const source = { sourceThreadId: "first", itemId: "mcp-tool" };
+  const before = client.assetRequests.length;
+  await host.chatAsset("first", source, { kind: "tool-output-image", index: 1 });
+  assert.deepEqual(client.assetRequests[before], { _tag: "tool-output-image", threadId: "first", itemId: "mcp-tool", index: 1 });
+  // The index must name an image this item actually produced; the text block is not one of them.
+  await assert.rejects(host.chatAsset("first", source, { kind: "tool-output-image", index: 2 }), /does not belong/);
+  await assert.rejects(host.chatAsset("first", source, { kind: "tool-output-image", index: -1 }), /does not belong/);
+  assert.equal(client.assetRequests.length, before + 1);
+});

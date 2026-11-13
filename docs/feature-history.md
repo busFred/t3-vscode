@@ -961,6 +961,19 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Collapsed activity
 
+#### Unreleased — images from MCP and OpenCode tool output
+
+- Show image blocks a tool returned in its own output, matching T3 Code 0.1.8. They lead the tool's
+  details, ahead of its inputs, because the screenshot says more than the arguments that produced it.
+- Previously only `viewedImagePath`, `html_render` and MCP Apps were recognised; an arbitrary tool's
+  image fell through to the plain text output block.
+- The host resolves each image by its position in the output and refuses an index the item did not
+  produce, so one conversation's tool result cannot address another's.
+- Validation: `src/host/chatAssets.test.ts` covers resolution by position and rejection of both an
+  out-of-range index and the non-image block's position; `scripts/verify-ui.mjs` asserts the image
+  renders, is requested by position, and sits above the tool inputs.
+
+
 #### v0.0.1
 
 - Keep individual reasoning/tool details behind disclosures.

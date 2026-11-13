@@ -11,6 +11,7 @@ import { RemoteSessionContext, useRemoteSession } from "../remoteSession";
 import { useActions } from "../actions";
 import { ModelNamesContext, useModelName } from "../modelNames";
 import { describeModelSwitch } from "../../shared/modelSwitch";
+import { toolOutputImages } from "@t3tools/shared/toolOutput";
 import { getQuestionAnswerText } from "@t3tools/client-runtime/work-log/user-input";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails } from "./t3/WorkLog";
@@ -119,7 +120,13 @@ function DynamicTool({ row, threadId }: { row: TranscriptItem; threadId: string 
   if (visual) return <HtmlVisual visual={visual} threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} />;
   if (knownVisual && row.needsDetail) return <div className="visual-loading" role="status">{busy ? "Loading visualization…" : "Visualization is unavailable."}{!busy ? <button className="text-button" onClick={load}>{failed ? "Retry" : "Load visualization"}</button> : null}</div>;
   if (row.item.viewedImagePath) return <ChatMedia src={row.item.viewedImagePath} alt="Viewed image" threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} />;
-  const fallback = <Disclosure label={row.toolLabel ?? row.item.title ?? row.item.toolName ?? "Tool"} icon={<WrenchIcon size={14} />} row={row} threadId={threadId}><pre className="command-input">{typeof row.item.input === "string" ? row.item.input : JSON.stringify(row.item.input, null, 2)}</pre>{row.output ? <pre className="tool-output">{row.output}</pre> : <span className="subtle">{row.needsDetail ? "Expand again to retry loading output." : "No output."}</span>}</Disclosure>;
+  // MCP and OpenCode tools return image blocks in their own output (T3 0.1.8). They lead the
+  // details, ahead of the inputs, because a screenshot says more than the arguments that made it.
+  // The host resolves each image by position; the renderer only needs to know how many there are.
+  // An item whose output was trimmed from the wire has none until its detail is loaded.
+  const outputImages = row.item.outputOmitted === true ? [] : toolOutputImages(row.item.output);
+  const source = { sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id };
+  const fallback = <Disclosure label={row.toolLabel ?? row.item.title ?? row.item.toolName ?? "Tool"} icon={<WrenchIcon size={14} />} row={row} threadId={threadId}>{outputImages.length ? <div className="tool-output-images">{outputImages.map((_, index) => <ChatMedia key={index} src={`tool-output-${index}`} alt={outputImages.length > 1 ? `Tool output image ${index + 1}` : "Tool output image"} kind="image" threadId={threadId} source={source} reference={{ kind: "tool-output-image", index }} />)}</div> : null}<pre className="command-input">{typeof row.item.input === "string" ? row.item.input : JSON.stringify(row.item.input, null, 2)}</pre>{row.output ? <pre className="tool-output">{row.output}</pre> : <span className="subtle">{row.needsDetail ? "Expand again to retry loading output." : outputImages.length ? "No text output." : "No output."}</span>}</Disclosure>;
   const app = mcpAppFromToolItem(row.item);
   return app ? <McpAppFrame key={app.attachmentId} app={app} threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} revision={row.item.updatedAt} fallback={fallback} /> : fallback;
 }

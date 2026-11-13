@@ -819,6 +819,9 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .model-switch-from { text-decoration: line-through; opacity: .75; }
 .model-switch-to { color: var(--foreground); }
 .model-switch-arrow { opacity: .7; }
+/* Images a tool returned in its own output, shown above the call's inputs. */
+.tool-output-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.tool-output-images .chat-image img { max-height: 320px; }
 .work-group { margin-bottom: 6px; }.work-group-toggle { padding: 4px 0; }
 
 .timeline-footer:has(.response-header) { height: auto; min-height: 42px; padding-top: 3px; }

@@ -46,7 +46,7 @@ import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/tu
 import { canForkProjectedAssistantItem, deriveThreadQueueWorkflowState } from "@t3tools/client-runtime/state/thread-workflows";
 import { mergeOlderHistoryIntoProjection, EMPTY_THREAD_HISTORY_META, applyHistoryPageMeta, type ThreadHistoryMeta } from "@t3tools/client-runtime/state/thread-history-merge";
 import { resolveWorkEntryToolPresentation } from "@t3tools/client-runtime/work-log/presentation";
-import { turnItemNeedsDetailFetch, turnItemOutputText } from "@t3tools/client-runtime/work-log/item-detail";
+import { turnItemNeedsDetailFetch, turnItemOutputImages, turnItemOutputText } from "@t3tools/client-runtime/work-log/item-detail";
 import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
@@ -2719,6 +2719,13 @@ export class HostState {
       const app = item.type === "dynamic_tool" ? mcpAppFromToolItem(item) : undefined;
       if (!app) throw new Error("This item has no MCP app.");
       resource = { _tag: "attachment", attachmentId: app.attachmentId, fileName: mcpAppFileName(app), mimeType: "text/html", disposition: "inline", renderIntent: "mcp-app" };
+    } else if (reference.kind === "tool-output-image") {
+      // MCP and OpenCode tools return image blocks in their own output (T3 0.1.8). The server
+      // addresses them by position, so the index must name an image this very item produced.
+      const images = turnItemOutputImages(item);
+      const image = images[reference.index];
+      if (!image) throw new Error("This image does not belong to the selected tool result.");
+      resource = image;
     } else if (reference.kind === "attachment") {
       const attachment = item.type === "user_message" ? item.attachments.find((entry) => entry.id === reference.attachmentId) : null;
       if (!attachment) throw new Error("This attachment does not belong to the selected message.");

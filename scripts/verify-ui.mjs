@@ -20,7 +20,10 @@ const assistant = row("assistant_message", { messageId: "message-two", text: "Th
 const commandOutput = `Typecheck passed\n${Array.from({ length: 80 }, (_, line) => `Output line ${line}`).join('\n')}`;
 const command = { ...row("command_execution", { input: "pnpm run typecheck", output: commandOutput, exitCode: 0 }), output: commandOutput };
 const diff = row("file_change", { fileName: "src/host/t3Client.ts", additions: 2, deletions: 1, diffStr: "@@ -1,2 +1,3 @@\n-const thread = oldThread;\n+const thread = createdThread;\n+subscribe(thread);" });
-const fixtures = { user, assistant, command, diff };
+// MCP/OpenCode tools return image blocks in their own output (T3 0.1.8).
+const toolImages = row("dynamic_tool", { toolName: "screenshot", status: "completed", title: "screenshot", input: { url: "https://example.test" },
+  output: { content: [{ type: "text", text: "captured" }, { type: "image", mimeType: "image/png", data: "iVBORw0KGgo=" }] } });
+const fixtures = { user, assistant, command, diff, toolImages };
 const initial = {
   revision: 1, phase: "ready", home: "/tmp/t3-vscode-fixture", workspaceRoots: [], appearance, environment: { environmentId: "fixture", label: "Local development", serverVersion: "0.0.46" },
   projects: [{ id: "project-one", title: "t3-vscode", workspaceRoot: "/tmp/t3-vscode" }, { id: "project-two", title: "myt3code", workspaceRoot: "/tmp/myt3code" }],
@@ -42,7 +45,7 @@ function mockBridge() {
     if (request.method === "saveComposerDraft") { window.__drafts[params.draftKey] = params; window.postMessage({ id: request.id, result: true }, '*'); return; }
     if (request.method === "uploadAttachment") { const image = { key: 'pasted-upload', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length, previewUrl: `data:${params.mimeType};base64,${params.base64}`, environmentId: 'fixture', attachment: { type: 'image', id: 'pending-pasted', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length } }; setTimeout(() => window.postMessage({ id: request.id, result: image }, '*'), window.__uploadDelayMs ?? 50); return; }
     if (request.method === "pickAttachments") { const file = { key: 'picked-upload', name: 'outside-workspace.txt', mimeType: 'text/plain', sizeBytes: 3, environmentId: 'fixture', attachment: { type: 'file', id: 'pending-picked', name: 'outside-workspace.txt', mimeType: 'text/plain', sizeBytes: 3 } }; window.postMessage({ id: request.id, result: { attachments: [file], errors: [] } }, '*'); return; }
-    if (request.method === "chatAsset") { setTimeout(() => window.postMessage({ id: request.id, result: { url: `${location.origin}/${params.reference.kind === "media" || params.reference.kind === "attachment" ? "image.svg" : "visual.html"}`, expiresAt: Date.now() + 60_000 } }, "*"), 0); return; }
+    if (request.method === "chatAsset") { setTimeout(() => window.postMessage({ id: request.id, result: { url: `${location.origin}/${params.reference.kind === "media" || params.reference.kind === "attachment" || params.reference.kind === "tool-output-image" ? "image.svg" : "visual.html"}`, expiresAt: Date.now() + 60_000 } }, "*"), 0); return; }
     if (["selectThread", "openSessionTab"].includes(request.method)) window.__replace({ activeThreadId: params.threadId });
     if (request.method === "setModel") window.__replace(params.threadId
       ? { threads: window.__state.threads.map((thread) => thread.id === params.threadId ? { ...thread, modelSelection: params.modelSelection } : thread) }
@@ -190,6 +193,19 @@ try {
   assert.equal(await page.locator('.model-switch-from').textContent(), 'retired-slug', 'An unadvertised model falls back to its slug');
   await page.evaluate(() => window.__replace({ transcript: [window.__fixtures.user, window.__fixtures.assistant] }));
   await page.waitForFunction(() => !document.querySelector('.model-switch-row'));
+  // T3 0.1.8: images a tool returned in its own output lead its details, ahead of the inputs.
+  await page.evaluate(() => window.__replace({ transcript: [window.__fixtures.toolImages] }));
+  const toolGroup = page.locator('.work-group-toggle');
+  if (await toolGroup.count()) await toolGroup.first().click();
+  await page.getByRole('button', { name: /screenshot/i }).first().click();
+  await page.locator('.tool-output-images img').first().waitFor();
+  assert.equal(await page.locator('.tool-output-images img').count(), 1, 'The image block renders; the text block is not an image');
+  assert.equal(await page.evaluate(() => window.__requests.some(request => request.method === 'chatAsset' && request.params.reference.kind === 'tool-output-image' && request.params.reference.index === 0)), true, 'The image is requested by its position in the output');
+  assert.equal(await page.evaluate(() => {
+    const images = document.querySelector('.tool-output-images'); const input = document.querySelector('.command-input');
+    return !!images && !!input && (images.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  }), true, 'Output images come before the tool inputs');
+  await page.evaluate(() => window.__replace({ transcript: [window.__fixtures.user, window.__fixtures.assistant] }));
   await page.getByPlaceholder("Ask anything, or describe a task…").waitFor();
   await page.waitForFunction(() => {
     let node = document.querySelector(".assistant-message");

@@ -56,4 +56,6 @@ export function htmlVisualHeight(visual: HtmlVisual, width: number): number {
 }
 export interface ChatAssetSource { readonly sourceThreadId: string; readonly itemId: string }
 export interface ChatAsset { readonly url: string; readonly expiresAt: number }
-export type ChatAssetReference = { readonly kind: "html" } | { readonly kind: "mcp-app" } | { readonly kind: "attachment"; readonly attachmentId: string } | { readonly kind: "media"; readonly path: string };
+export type ChatAssetReference = { readonly kind: "html" } | { readonly kind: "mcp-app" } | { readonly kind: "attachment"; readonly attachmentId: string } | { readonly kind: "media"; readonly path: string }
+  /** An image block in a dynamic tool's own output (MCP and OpenCode results), by position. */
+  | { readonly kind: "tool-output-image"; readonly index: number };

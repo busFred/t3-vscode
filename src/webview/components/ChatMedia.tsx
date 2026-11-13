@@ -107,13 +107,15 @@ export function VisualDialog() {
   return visual ? <ExpandedVisual title={visual.title} className={visual.src ? "image-viewer" : ""} onClose={() => setVisual(null)}>{visual.src ? <ImageViewer key={visual.src} title={visual.title} src={visual.src} /> : <div className="mermaid-svg" dangerouslySetInnerHTML={{ __html: visual.svg ?? "" }} />}</ExpandedVisual> : null;
 }
 
-export function ChatMedia({ src, alt = "Image", threadId, source, attachmentId, kind: requestedKind }: {
+export function ChatMedia({ src, alt = "Image", threadId, source, attachmentId, kind: requestedKind, reference: explicitReference }: {
   src: string; alt?: string; threadId: string; source?: ChatAssetSource | undefined; attachmentId?: string; kind?: "image" | "video" | "audio";
+  /** Names the asset directly where `src` is not a path or attachment id, such as a tool output image. */
+  reference?: ChatAssetReference;
 }) {
   const run = useActions(); const [failed, setFailed] = useState(false);
   const classified = classifyMarkdownImageSource(src, "/");
-  const direct = !attachmentId && classified._tag === "Direct" && /^(https?:|data:(?:image|video|audio)\/)/i.test(classified.uri) ? classified.uri : null;
-  const reference: ChatAssetReference | null = attachmentId ? { kind: "attachment", attachmentId } : classified._tag === "WorkspaceFile" ? { kind: "media", path: src } : null;
+  const direct = !attachmentId && !explicitReference && classified._tag === "Direct" && /^(https?:|data:(?:image|video|audio)\/)/i.test(classified.uri) ? classified.uri : null;
+  const reference: ChatAssetReference | null = explicitReference ?? (attachmentId ? { kind: "attachment", attachmentId } : classified._tag === "WorkspaceFile" ? { kind: "media", path: src } : null);
   const { asset, error, retry } = useChatAsset(threadId, source, direct ? null : reference);
   const url = direct ?? asset?.url;
   const kind = requestedKind ?? mediaKindFromPath(src) ?? "image";
