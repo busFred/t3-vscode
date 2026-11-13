@@ -10,7 +10,10 @@ export type McpAppDecision = "once" | "session" | "deny";
 
 export interface McpAppNativePort {
   confirm(message: string): Promise<boolean>;
-  /** Offers "Allow once" and "Allow for this session"; falls back to `confirm` where unavailable. */
+  /**
+   * Offers "Allow once" and "Allow for this session"; falls back to `confirm` where unavailable.
+   * A session answer covers later calls to that same tool with any arguments, so the prompt says so.
+   */
   confirmTool?(message: string): Promise<McpAppDecision>;
   openLink(url: string): Promise<void>;
   saveFile(name: string, bytes: Uint8Array): Promise<void>;
@@ -57,7 +60,10 @@ export async function relayMcpAppRequest(client: McpAppTransport, scope: { threa
       const call = Schema.decodeUnknownSync(McpAppCallToolInput)(input);
       const info = await client.mcpAppToolInfo({ threadId: call.threadId, itemId: call.itemId, name: call.name });
       if (!info.callable) throw new Error("This app cannot call that tool.");
-      if (!info.readOnly) await askTool(`Allow ${app.server} to run ${info.title ?? call.name}?\n${JSON.stringify(call.arguments, null, 2)}`, call.name);
+      // Name the tool itself, not only its title: a server can give two tools the same title, and a
+      // session answer is keyed by the tool name and covers its later calls whatever the arguments.
+      const named = info.title && info.title !== call.name ? `${info.title} (${call.name})` : call.name;
+      if (!info.readOnly) await askTool(`Allow ${app.server} to run ${named}?\n${JSON.stringify(call.arguments, null, 2)}`, call.name);
       return client.mcpAppCallTool(call);
     }
     case "resources/read": return client.mcpAppReadResource(Schema.decodeUnknownSync(McpAppReadResourceInput)(input));

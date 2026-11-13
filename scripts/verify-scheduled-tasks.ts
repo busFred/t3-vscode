@@ -49,14 +49,14 @@ export async function verifyScheduledTasks(sidebar: Page, chat: Page, other: Pag
   await host.reconnect(); client.connect = connect;
   await sidebar.getByRole("textbox", { name: "Task name", exact: true }).waitFor();
   assert.equal(await sidebar.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Unsaved task draft");
-  await sidebar.evaluate(() => window.dispatchEvent(new MessageEvent("message", { data: { event: "showNavigation" } })));
+  await sidebar.evaluate(() => window.dispatchEvent(new MessageEvent("message", { data: { event: "showNavigation" }, source: window, origin: window.location.origin })));
   await sidebar.getByRole("tab", { name: "Sessions", exact: true }).waitFor();
   assert.equal(await sidebar.getByRole("tab", { name: "Sessions", exact: true }).getAttribute("aria-selected"), "true");
   await sidebar.getByRole("tab", { name: /^Tasks/ }).click();
   assert.equal(await sidebar.getByRole("textbox", { name: "Search tasks", exact: true }).inputValue(), "Other session");
   await sidebar.getByRole("button", { name: "Edit task Other session task" }).click();
   assert.equal(await sidebar.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Unsaved task draft");
-  await sidebar.evaluate(() => window.dispatchEvent(new MessageEvent("message", { data: { event: "showUsage", data: {} } })));
+  await sidebar.evaluate(() => window.dispatchEvent(new MessageEvent("message", { data: { event: "showUsage", data: {} }, source: window, origin: window.location.origin })));
   await sidebar.locator(".account-usage").waitFor({ state: "visible" });
   await sidebar.getByRole("button", { name: "Edit task Other session task" }).click();
   assert.equal(await sidebar.getByRole("textbox", { name: "Task name", exact: true }).inputValue(), "Unsaved task draft");

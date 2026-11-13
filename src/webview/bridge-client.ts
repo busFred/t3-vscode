@@ -37,10 +37,16 @@ class Bridge {
   private handleMessage = (event: MessageEvent): void => {
     // VS Code aliases window.parent to window in its injected API, although its
     // outer frame still forwards replies from the same webview origin.
-    if (event.source && event.source !== window) {
+    //
+    // The origin check runs for every sender, never only for an identified one. Chromium reports a
+    // null `source` when the sending frame was detached before delivery, and skipping the checks in
+    // that case let a child graphic post a forged `stateChanged` and remove itself to get it
+    // accepted. Graphics and MCP apps are framed without `allow-same-origin`, so their opaque
+    // origin fails here whether or not their window survived long enough to be identified.
+    if (event.source !== window) {
       if (event.origin === "null" || event.origin !== window.location.origin) return;
       // Child graphics are never bridge senders, including same-origin fixtures.
-      if ([...document.querySelectorAll("iframe")].some((frame) => frame.contentWindow === event.source)) return;
+      if (event.source && [...document.querySelectorAll("iframe")].some((frame) => frame.contentWindow === event.source)) return;
     }
     let msg = event.data as RpcResult & { event?: BridgeEvent; data?: unknown };
     // Decoded on arrival, including late or ignored replies, so the row cache mirrors the host's.

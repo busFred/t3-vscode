@@ -65,7 +65,7 @@ import { taskEditVersion, supportedSchedule, type TaskOrigin, type ScheduledTask
 import { sessionActivityAt } from "./sessionActivity.js";
 import { environmentDisplayStatus, environmentIndicator, expiryLabel, type EnvironmentRow } from "../shared/environmentStatus.js";
 import { pairWithServer, PairingError } from "./pairing.js";
-import { connectionSetup, discoverServer, type DiscoveredServer } from "./serverDiscovery.js";
+import { connectionSetup, discoverServer, sameOrigin, type DiscoveredServer } from "./serverDiscovery.js";
 import type { ConnectionProblem, ConnectionSetup } from "../shared/connectionSetup.js";
 import type { CredentialStore } from "./sessionStore.js";
 import type { T3Client, Subscription } from "./t3Client.js";
@@ -1062,7 +1062,12 @@ export class HostState {
     this.server = discovered.server;
     try {
       const stored = forcePair ? null : await this.options.credentials.get();
-      if (stored && stored.environmentId === this.server.descriptor.environmentId) {
+      // Bind the credential to the address it was issued for. The environment id alone is the
+      // server's own claim and is not secret — it travels in every shareable thread link — so a
+      // server that merely asserts a familiar id must not receive this machine's bearer token.
+      const sameServer = stored !== null && stored.environmentId === this.server.descriptor.environmentId
+        && sameOrigin(stored.origin, this.server.origin);
+      if (stored && sameServer) {
         this.setPhase("connecting");
         try { await this.client.connect(this.server, stored.accessToken); }
         catch (cause) {
@@ -2075,13 +2080,72 @@ export class HostState {
       await this.client.forceStopThread({ threadId: id, runId });
     });
   }
-  respondToRequest(input: RequestResponse): Promise<void> {
+  /**
+   * The detail of an approval held by a visible descendant, read on demand.
+   *
+   * Deliberately not carried on every snapshot: it needs that conversation's projection, and the
+   * parent does not subscribe to it. The card uses this so the reader sees the command or change
+   * being approved instead of only its conversation's title.
+   */
+  async childRequestDetail(threadId: string, requestId: string, viewId = SIDEBAR_VIEW_ID): Promise<{ requestKind: string; detail?: string; reason?: string }> {
+    this.requireThread(threadId);
+    const answerable = this.childApprovalRows(this.requireView(viewId).activeThreadId).some((row) => row.threadId === threadId && row.requestId === requestId);
+    if (!answerable) throw new Error("This request does not belong to a delegated conversation here.");
+    const projection = this.threads.get(threadId)?.projection ?? await this.client.getThreadProjection(threadId);
+    const approval = derivePendingThreadRequests(projection).approvals.find((entry) => entry.requestId === requestId);
+    if (!approval) throw new Error("This request is no longer pending.");
+    return { requestKind: approval.requestKind,
+      ...(approval.detail === undefined ? {} : { detail: approval.detail }),
+      ...(approval.reason === undefined ? {} : { reason: approval.reason }) };
+  }
+  /**
+   * Approvals held by a visible descendant of `activeThreadId`, read from the shell so no child
+   * subscription is needed. A question stays with the child, which is where its answer panel lives.
+   *
+   * Kept separate from `snapshot()` so the authority checks below can reuse it: building a whole
+   * snapshot to answer one card's question is the per-emit cost this client is trying to avoid.
+   */
+  private childApprovalRows(activeThreadId: string | undefined): ChildRequestSummary[] {
+    if (!activeThreadId) return [];
+    const rows: ChildRequestSummary[] = [];
+    const seen = new Set([activeThreadId]);
+    const queue = [activeThreadId];
+    const byParent = new Map<string, OrchestrationV2ThreadShell[]>();
+    for (const thread of this.visibleThreads()) {
+      const parentId = thread.delegatedFrom?.threadId ?? thread.lineage.parentThreadId;
+      if (parentId === null || parentId === undefined) continue;
+      const siblings = byParent.get(parentId);
+      if (siblings) siblings.push(thread); else byParent.set(parentId, [thread]);
+    }
+    while (queue.length) {
+      for (const child of byParent.get(queue.shift()!) ?? []) {
+        if (seen.has(child.id)) continue;
+        seen.add(child.id); queue.push(child.id);
+        const request = child.pendingRuntimeRequest;
+        // Mirror derivePendingThreadRequests: a question belongs to the child, and neither an auth
+        // refresh nor a dynamic tool call is an approval the user accepts or declines.
+        if (!request || request.kind === "user_input" || request.kind === "auth_refresh" || request.kind === "dynamic_tool_call") continue;
+        rows.push({ threadId: child.id, title: child.title || "Untitled", requestId: request.id, kind: request.kind,
+          createdAt: request.createdAt ? DateTime.formatIso(request.createdAt) : null });
+      }
+    }
+    return rows;
+  }
+  respondToRequest(input: RequestResponse, viewId = SIDEBAR_VIEW_ID): Promise<void> {
     return this.enqueue(async () => {
       this.requireThread(input.threadId);
+      const subscribed = this.threads.get(input.threadId)?.projection;
       // A child's approval can be answered from its parent (T3 0.1.7), where the child has no
-      // subscription of its own, so fall back to reading its projection on demand. requireThread
-      // above already proved the thread belongs to this workspace.
-      const state = this.threads.get(input.threadId)?.projection ?? await this.client.getThreadProjection(input.threadId).catch(() => null);
+      // subscription of its own. That on-demand read is deliberately narrower than the subscribed
+      // path: only an approval, only accept/decline, and only on a conversation the reader can
+      // actually see as a descendant. Anything else keeps requiring the conversation's own tab,
+      // so a forged or compromised renderer cannot answer arbitrary requests across the workspace.
+      if (!subscribed) {
+        const answerable = this.childApprovalRows(this.requireView(viewId).activeThreadId).some((row) => row.threadId === input.threadId && row.requestId === input.requestId);
+        if (!answerable) throw new Error("Open this conversation to respond to its request.");
+        if (input.decision !== "accept" && input.decision !== "decline") throw new Error("A delegated request can only be approved or declined from its parent.");
+      }
+      const state = subscribed ?? await this.client.getThreadProjection(input.threadId).catch(() => null);
       const request = state?.runtimeRequests.find((request) => request.id === input.requestId && request.status === "pending");
       if (!request) throw new Error("This request is no longer pending.");
       if (request.responseCapability.type === "not_resumable") throw new Error("The provider process has ended. Restart the turn to respond.");
@@ -2737,6 +2801,7 @@ export class HostState {
       ...native,
       // Revalidate after native dialogs before any side effect.
       confirm: async (message) => { const approved = await native.confirm(message); scope(); return approved; },
+      ...(native.confirmTool ? { confirmTool: async (message: string) => { const decision = await native.confirmTool!(message); scope(); return decision; } } : {}),
       sendMessage: async (text) => { scope(); await this.sendMessage(text, id, viewId); },
     });
   }
@@ -2988,29 +3053,7 @@ export class HostState {
         });
       }) : [],
       pending: projection ? { ...derivePendingThreadRequests(projection), secrets: derivePendingSecretRequests(projection.visibleTurnItems) } : { approvals: [], userInputs: [], secrets: [] },
-      ...(() => {
-        // Approvals held by a visible descendant. Read from the shell, so no child subscription is
-        // needed; a question stays with the child, which is where its answer panel belongs.
-        if (!activeThreadId) return {};
-        const rows: ChildRequestSummary[] = [];
-        const seen = new Set([activeThreadId]);
-        const queue = [activeThreadId];
-        while (queue.length) {
-          const parentId = queue.shift()!;
-          for (const child of this.visibleThreads()) {
-            const childParent = child.delegatedFrom?.threadId ?? child.lineage.parentThreadId;
-            if (childParent !== parentId || seen.has(child.id)) continue;
-            seen.add(child.id); queue.push(child.id);
-            const request = child.pendingRuntimeRequest;
-            // Mirror derivePendingThreadRequests: a question belongs to the child, and neither an
-            // auth refresh nor a dynamic tool call is an approval the user accepts or declines.
-            if (!request || request.kind === "user_input" || request.kind === "auth_refresh" || request.kind === "dynamic_tool_call") continue;
-            rows.push({ threadId: child.id, title: child.title || "Untitled", requestId: request.id, kind: request.kind,
-              createdAt: request.createdAt ? DateTime.formatIso(request.createdAt) : null });
-          }
-        }
-        return rows.length ? { childRequests: rows } : {};
-      })(),
+      ...(() => { const rows = this.childApprovalRows(activeThreadId); return rows.length ? { childRequests: rows } : {}; })(),
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
       threadLoading: state?.loading ?? false, sending: view.sending,
       // Offered only while the composer is empty of its own text; a draft is the user's own intent.

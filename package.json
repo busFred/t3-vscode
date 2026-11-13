@@ -440,7 +440,8 @@
           "t3-vscode.t3Home": {
             "type": "string",
             "default": "",
-            "description": "T3 home directory (the server's data dir, default ~/.t3 or $T3CODE_HOME). Empty = auto. Change only to point at an isolated/dev server.",
+            "scope": "machine",
+            "description": "T3 home directory (the server's data dir, default ~/.t3 or $T3CODE_HOME). Empty = auto. Change only to point at an isolated/dev server. Machine-scoped: a workspace cannot set it, because it decides which server receives this machine's credential.",
             "order": 1
           }
         }

@@ -91,10 +91,10 @@ const server = createServer(async (request, response) => {
       window.acquireVsCodeApi = () => ({ postMessage: (message) => {
         fetch('/rpc?view=' + viewId, { method: 'POST', body: JSON.stringify(message) }).then(response => response.json()).then(data => {
           window.__completed.push({ method: message.method, data });
-          window.dispatchEvent(new MessageEvent('message', { data }));
+          window.dispatchEvent(new MessageEvent('message', { data, source: window, origin: window.location.origin }));
         });
       }, getState: () => JSON.parse(sessionStorage.getItem("viewState") || "null"), setState: value => sessionStorage.setItem("viewState", JSON.stringify(value)) });
-      new EventSource('/events?view=' + viewId).onmessage = event => window.dispatchEvent(new MessageEvent('message', { data: JSON.parse(event.data) }));
+      new EventSource('/events?view=' + viewId).onmessage = event => window.dispatchEvent(new MessageEvent('message', { data: JSON.parse(event.data), source: window, origin: window.location.origin }));
       </script><script src="/webview.js?view=${id}"></script></body></html>`);
   } catch (cause) { response.writeHead(500); response.end(String(cause)); }
 });

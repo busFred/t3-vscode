@@ -22,6 +22,13 @@ export function HtmlVisual({ visual, threadId, source }: { visual: HtmlVisualDat
       if (event.source !== frame.current?.contentWindow || !event.data || typeof event.data !== "object") return;
       const request = event.data as { jsonrpc?: unknown; method?: unknown; id?: unknown; params?: { url?: unknown } };
       if (request.jsonrpc !== "2.0" || request.method !== "ui/open-link" || (typeof request.id !== "string" && typeof request.id !== "number") || typeof request.params?.url !== "string" || !/^https?:\/\//i.test(request.params.url)) return;
+      // A link must follow a click in the graphic, as MCP apps already require. Without this an
+      // agent's HTML opens links on render; VS Code only prompts for untrusted hosts, so a trusted
+      // one (a code host, say) would open silently with an attacker-chosen URL.
+      if (document.activeElement !== frame.current || !navigator.userActivation?.isActive) {
+        frame.current?.contentWindow?.postMessage({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message: "Links open only from a click in the graphic." } }, "*");
+        return;
+      }
       void run("openLink", { href: request.params.url, threadId }).then((ok) => {
         frame.current?.contentWindow?.postMessage({ jsonrpc: "2.0", id: request.id, ...(ok ? { result: {} } : { error: { code: -32000, message: "Could not open link." } }) }, "*");
       });

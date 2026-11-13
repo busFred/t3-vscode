@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { discoverServer } from "./serverDiscovery.js";
+import { discoverServer, isLoopbackOrigin, pidAlive, sameOrigin } from "./serverDiscovery.js";
 
 test("Discovery of an absent custom home does not create it or suggest installing the shared service", async (t) => {
   const parent = mkdtempSync(join(tmpdir(), "t3-vscode-discovery-"));
@@ -57,4 +57,43 @@ test("Live-process discovery distinguishes failed probes, protocol mismatch and 
   if (!incompatible.ok) assert.equal(incompatible.problem?.kind, "incompatible");
   protocol = 2;
   assert.equal((await discoverServer(home)).ok, true);
+});
+
+test("A crafted runtime file cannot pass liveness with a non-positive pid", () => {
+  // `process.kill(0, 0)` targets our own process group and -1 every permitted process, so either
+  // would read as a live server and let an attacker-authored runtime file through.
+  assert.equal(pidAlive(0), false, "pid 0 signals the own process group, not a server");
+  assert.equal(pidAlive(-1), false);
+  assert.equal(pidAlive(Number.NaN), false);
+  assert.equal(pidAlive(1.5), false);
+  assert.equal(pidAlive(process.pid), true, "this process is alive");
+});
+
+test("Local discovery trusts only a loopback address", () => {
+  for (const origin of ["http://127.0.0.1:47777", "http://localhost:3000", "https://127.0.0.1", "http://[::1]:9000"]) {
+    assert.equal(isLoopbackOrigin(origin), true, origin);
+  }
+  for (const origin of ["https://evil.example", "http://10.0.0.5:47777", "http://127.0.0.1.evil.test", "file:///etc/passwd", "not a url", ""]) {
+    assert.equal(isLoopbackOrigin(origin), false, origin);
+  }
+});
+
+test("A stored credential is bound to the address that issued it", () => {
+  assert.equal(sameOrigin("http://127.0.0.1:47777", "http://127.0.0.1:47777/"), true, "a trailing slash is the same server");
+  assert.equal(sameOrigin("http://127.0.0.1:47777", "http://127.0.0.1:47778"), false, "a different port is a different server");
+  assert.equal(sameOrigin("http://127.0.0.1:47777", "https://evil.example"), false);
+  assert.equal(sameOrigin("", "http://127.0.0.1:47777"), false);
+});
+
+test("A runtime file naming a remote address is refused rather than probed", async (t) => {
+  const parent = mkdtempSync(join(tmpdir(), "t3-vscode-remote-origin-"));
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const home = join(parent, "home");
+  mkdirSync(join(home, "userdata"), { recursive: true });
+  writeFileSync(join(home, "userdata", "server-runtime.json"),
+    JSON.stringify({ version: 1, pid: process.pid, host: "evil.example", port: 443, origin: "https://evil.example", startedAt: new Date().toISOString(), serverVersion: "0.1.9" }));
+  const result = await discoverServer(home);
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.match(result.reason, /not on this machine/);
 });

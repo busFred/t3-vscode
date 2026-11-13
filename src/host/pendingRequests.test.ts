@@ -75,20 +75,38 @@ test("Link answers use the dedicated RPC, preserve payloads and reject non-local
   assert.equal(linkRequestAnswerInput(card, { type: "link", target: { url: card.url! }, access: "full-access", pairingCode: " " }), null);
 });
 
-test("A child's approval is answered without the child being subscribed", async t => {
+test("A child's approval is answerable from its parent, and only that", async t => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  // "second" is a delegated child of "first" holding a pending approval, as the shell reports it.
+  client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1,
+    threads: client.shell.threads.map((entry) => entry.id === "second" ? { ...entry,
+      lineage: { ...entry.lineage, parentThreadId: ThreadId.make("first"), relationshipToParent: "subagent" as const },
+      pendingRuntimeRequest: { id: "child-approval", kind: "command", createdAt: v2Now } } : entry) as never };
+  client.shellHandler!({ kind: "snapshot", snapshot: client.shell });
   await host.selectThread("first");
-  // The child has no subscription of its own, so the host must read its projection on demand.
   assert.equal(client.threadHandlers.has("second"), false, "the child is not subscribed");
   client.seedProjection("second", { ...v2Projection,
     thread: { ...v2Projection.thread, id: ThreadId.make("second") },
     runtimeRequests: [request({ id: "child-approval" })] });
+
+  // What is being approved is readable on demand, so the card need not approve blind.
+  const detail = await host.childRequestDetail("second", "child-approval");
+  assert.equal(detail.requestKind, "command");
+
   await host.respondToRequest({ threadId: "second", requestId: "child-approval", decision: "accept" });
   const command = client.commands.at(-1)!;
   assert.equal(command.type, "runtime-request.respond");
   assert.deepEqual([(command as { threadId: string }).threadId, (command as { requestId: string }).requestId], ["second", "child-approval"]);
-  // A request the child does not actually have is still refused.
-  await assert.rejects(host.respondToRequest({ threadId: "second", requestId: "absent", decision: "accept" }), /no longer pending/);
+
+  // The on-demand path is narrower than a subscribed thread's: only accept or decline, never a
+  // standing grant, and never a request this parent does not actually surface.
+  await assert.rejects(host.respondToRequest({ threadId: "second", requestId: "child-approval", decision: "acceptForSession" }), /only be approved or declined/);
+  await assert.rejects(host.respondToRequest({ threadId: "second", requestId: "child-approval", answers: {} }), /only be approved or declined/);
+  await assert.rejects(host.respondToRequest({ threadId: "second", requestId: "absent", decision: "accept" }), /Open this conversation/);
+  await assert.rejects(host.childRequestDetail("second", "absent"), /does not belong/);
   // A thread outside this workspace cannot be answered at all.
   await assert.rejects(host.respondToRequest({ threadId: "outside-thread", requestId: "child-approval", decision: "accept" }), /not available/);
+
+  // An unrelated conversation in the workspace is not a delegated child, so it keeps its own tab.
+  await assert.rejects(host.respondToRequest({ threadId: "third", requestId: "child-approval", decision: "accept" }), /Open this conversation/);
 });

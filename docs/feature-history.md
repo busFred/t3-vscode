@@ -572,6 +572,24 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Subagent conversations
 
+#### Unreleased — the parent shows what it is approving
+
+- The card no longer offers a blind **Approve**. It showed only the request kind and the child's
+  title, so a reader could approve a command they never saw. Approve appears only once the request
+  itself is on screen, behind an explicit **Show request**; Decline and Open conversation stay.
+- The request is fetched only when asked for. Firing a query per card meant a round trip for every
+  delegated approval on screen, which also made `scripts/verify-views.ts` fail about one run in
+  four; six consecutive runs are clean with the lazy fetch.
+- The on-demand response path is narrowed to what the feature needs: an approval, accept or decline
+  only, on a conversation the reader actually sees as a descendant. It had accepted any decision —
+  including the standing `acceptForSession` — or free-form answers, for any conversation in the
+  workspace. Anything else requires that conversation's own tab.
+- The authority check reuses the same derivation the snapshot uses rather than building a whole
+  snapshot per call.
+- Validation: `src/host/pendingRequests.test.ts` covers the detail read, accept, and refusal of a
+  standing grant, of answers, of an unsurfaced request, of a non-descendant and of a thread outside
+  the workspace.
+
 #### Unreleased — answer a child's approval from its parent
 
 - A delegated conversation's approval can be approved or declined from its parent, matching T3 Code
@@ -1128,6 +1146,17 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Expand matched activity groups and command details when navigating session-search results.
 
 ### MCP Apps
+
+#### Unreleased — tighter approval scope and clearer prompts
+
+- A session approval is re-validated after the dialog, as the one-off confirmation already was, so a
+  tool cannot run against a conversation or item that went away while the prompt was open.
+- The prompt names the tool itself, not only its title: a server can give two tools the same title,
+  and a session answer covers later calls to that tool with any arguments. The dialog now says so.
+- HTML graphics must have focus and a real user activation before `ui/open-link`, the check MCP apps
+  already passed. Without it an agent's HTML opened links on render, and VS Code only prompts for
+  untrusted hosts — a trusted one would have opened silently.
+
 
 #### Unreleased — allow an app for the session
 
@@ -1720,6 +1749,24 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 ## Setup and settings
 
 ### Local connection and pairing
+
+#### Unreleased — bind the credential to the server it was issued for
+
+- `t3-vscode.t3Home` is now **machine-scoped**. It was the only one of eighteen settings without a
+  scope, so a repository's `.vscode/settings.json` could point it at a folder of the repository's
+  own choosing, and that setting decides which server receives this machine's credential.
+- Local discovery now trusts only a loopback address. A `server-runtime.json` naming a remote host
+  is refused with an explanation rather than probed; paired machines are reached through Manage
+  Environments, which carries its own token.
+- A non-positive pid no longer reads as a live server. `process.kill(0, 0)` targets the calling
+  process group and `-1` every permitted process, so a crafted runtime file passed the liveness
+  check — verified, not assumed.
+- A stored credential is reused only when the server's **origin** matches as well as its environment
+  id. That id is the server's own claim and is not secret — it travels in every shareable thread
+  link — so matching it alone was enough to be handed the bearer token.
+- Validation: four tests in `src/host/serverDiscovery.test.ts` covering the pid forms, loopback
+  acceptance and rejection, origin binding, and a runtime file naming a remote address.
+
 
 #### v0.3.7
 

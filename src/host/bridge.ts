@@ -269,7 +269,7 @@ export class BridgeHandler {
           stringParam(params, "appMethod"), params.input, {
             confirm: async (text) => (await (await import("vscode")).window.showWarningMessage(text, { modal: true }, "Allow")) === "Allow",
             confirmTool: async (text) => {
-              const choice = await (await import("vscode")).window.showWarningMessage(text, { modal: true }, "Allow once", "Allow for this session");
+              const choice = await (await import("vscode")).window.showWarningMessage(text, { modal: true, detail: "Allowing for this session covers later calls to this tool with any arguments, until the window reloads or reconnects." }, "Allow once", "Allow for this session");
               return choice === "Allow for this session" ? "session" : choice === "Allow once" ? "once" : "deny";
             },
             openLink: async (url) => { await this.openLink(url, id()); },
@@ -368,7 +368,7 @@ export class BridgeHandler {
           await this.hostState.respondToRequest({ threadId: id(), requestId: stringParam(params, "requestId"),
             ...(params.decision !== undefined ? { decision: params.decision } : {}),
             ...(typeof params.feedback === "string" ? { feedback: params.feedback } : {}),
-            ...(isObject(params.answers) ? { answers: params.answers } : {}) });
+            ...(isObject(params.answers) ? { answers: params.answers } : {}) }, viewId);
           break;
         }
         case "refreshPeerLinks": await this.hostState.refreshPeerLinks(typeof params.threadId === "string" ? id() : undefined); break;
@@ -459,6 +459,7 @@ export class BridgeHandler {
           else await (await import("vscode")).commands.executeCommand("t3-vscode.showUsage", params.accountKey);
           break;
         case "threadLink": return { id: message.id, result: this.hostState.threadLink(stringParam(params, "threadId")) };
+        case "childRequestDetail": return { id: message.id, result: await this.hostState.childRequestDetail(stringParam(params, "threadId"), stringParam(params, "requestId"), viewId) };
         case "openWebUi": await (await import("vscode")).env.openExternal((await import("vscode")).Uri.parse(this.hostState.webUiUrl(viewId))); break;
         case "copyText": {
           if (typeof params.text !== "string") throw new Error("Invalid text.");

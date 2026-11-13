@@ -57,12 +57,34 @@ export interface DiscoveredServer {
 }
 
 export const pidAlive = (pid: number): boolean => {
+  // Guard the non-positive signalling forms before asking the OS: `process.kill(0, 0)` targets our
+  // own process group and `-1` every permitted process, so either would read as a live server and
+  // let a crafted runtime file pass the liveness check.
+  if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
   } catch {
     return false;
   }
+};
+
+/** Same server address, compared by origin so a differing path or trailing slash does not matter. */
+export const sameOrigin = (left: string, right: string): boolean => {
+  try { return new URL(left).origin === new URL(right).origin; } catch { return false; }
+};
+
+/**
+ * A local server must answer on this machine. The runtime file names the address the extension
+ * then sends its credential to, so a file naming a remote host would redirect that credential.
+ * Paired remote machines are reached through `EnvironmentCatalog`, which carries its own token.
+ */
+export const isLoopbackOrigin = (origin: string): boolean => {
+  let url: URL;
+  try { url = new URL(origin); } catch { return false; }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return host === "localhost" || host === "::1" || host === "0:0:0:0:0:0:0:1" || /^127\.\d+\.\d+\.\d+$/.test(host);
 };
 
 export const readRuntimeState = (home: string): { state: ServerRuntimeState; path: string } | null => {
@@ -114,6 +136,13 @@ export const discoverServer = async (home: string, startupHint?: string): Promis
     };
   }
   const origin = found.state.origin;
+  if (!isLoopbackOrigin(origin)) {
+    return {
+      ok: false,
+      reason: `The server recorded in ${found.path} is at ${origin}, which is not on this machine. Local discovery only trusts a loopback address; pair a remote machine from Manage Environments instead.`,
+      problem: { kind: "unreachable" },
+    };
+  }
   let descriptor: ExecutionEnvironmentDescriptor;
   try {
     descriptor = await fetchDescriptor(origin);

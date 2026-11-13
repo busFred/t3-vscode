@@ -219,6 +219,19 @@ try {
   await page.evaluate(() => window.__replace({ pending: { approvals: [{ id: 'a', kind: 'command', title: 'Run tests', createdAt: new Date().toISOString() }], userInputs: [], secrets: [] } }));
   await page.waitForFunction(() => document.querySelector('.turn-announcer')?.textContent === 'Approval needed');
   await page.evaluate(() => window.__replace({ pending: { approvals: [], userInputs: [], secrets: [] } }));
+  // A detached frame posts with a null `source`, which must not bypass the sender checks: a child
+  // graphic could otherwise forge host state (fake approvals, attacker text in the composer).
+  const titleBefore = await page.locator('.chat-heading strong').first().textContent();
+  await page.evaluate(() => {
+    // A detached frame's message arrives with source null; dispatching one directly exercises that
+    // path without an inline script, which this page's CSP rightly refuses.
+    const forged = { ...window.__state, activeThreadId: 'forged', threads: [], projects: [], transcript: [], revision: window.__state.revision + 1000 };
+    window.dispatchEvent(new MessageEvent('message', { data: { event: 'stateChanged', data: forged }, source: null, origin: 'https://evil.example' }));
+  });
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('.chat-heading strong').first().textContent(), titleBefore,
+    'a forged stateChanged with a null source must be ignored');
+
   // T3 0.1.8 predicts a next prompt once a run finishes.
   await page.evaluate(() => window.__replace({ promptSuggestion: { runId: 'run-1', text: 'Add a regression test for the fix.' } }));
   const suggestion = page.locator('.prompt-suggestion-apply');

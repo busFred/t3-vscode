@@ -840,6 +840,9 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .child-approval-kind { flex: none; text-transform: uppercase; letter-spacing: .04em; font-size: .5625rem;
   color: var(--muted-foreground); border: 1px solid var(--input); border-radius: 3px; padding: 0 3px; }
 .child-approval-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.child-approval-detail { margin: 4px 0 0; padding: 4px 6px; max-height: 140px; overflow: auto;
+  background: var(--card); border: 1px solid var(--input); border-radius: 3px;
+  font-family: var(--vscode-editor-font-family, monospace); font-size: .6875rem; white-space: pre-wrap; }
 /* Predicted next prompt, offered above an empty composer. */
 .prompt-suggestion { display: flex; align-items: center; gap: 4px; margin: 0 0 4px; }
 .prompt-suggestion-apply { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; text-align: left;

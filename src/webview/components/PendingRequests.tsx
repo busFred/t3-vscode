@@ -7,6 +7,7 @@ import type { ThreadPendingApproval, ThreadPendingUserInput } from "@t3tools/cli
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import type { ChildRequestSummary, HostStateSnapshot, PendingSecretRequest } from "../../shared/bridge";
 import { useActions } from "../actions";
+import { useBridgeQuery } from "../useBridgeQuery";
 import { ComposerPendingApprovalPanel } from "./t3/ComposerPendingApprovalPanel";
 
 /** Grows with the answer like the composer, then scrolls; Enter submits and Shift+Enter inserts a newline. */
@@ -168,6 +169,13 @@ function ChildApprovalCard({ request }: { readonly request: ChildRequestSummary 
   const run = useActions();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // What is actually being approved. Fetched only when the reader asks to see it: the parent does
+  // not subscribe to the child, so this costs a round trip per card, and a conversation can hold
+  // several. Nothing is fetched while the card merely sits on screen.
+  const [revealed, setRevealed] = useState(false);
+  const detail = useBridgeQuery<{ requestKind: string; detail?: string; reason?: string }>(
+    "childRequestDetail", { threadId: request.threadId, requestId: request.requestId },
+    revealed ? `${request.threadId}:${request.requestId}` : null);
   const respond = (decision: "accept" | "decline") => {
     setBusy(true); setError(null);
     void run("respondToRequest", { threadId: request.threadId, requestId: request.requestId, decision })
@@ -176,10 +184,17 @@ function ChildApprovalCard({ request }: { readonly request: ChildRequestSummary 
   };
   return <section className="pending-request child-approval" aria-label={`Approval for ${request.title}`}>
     <header><span className="child-approval-kind">{request.kind.replace(/[-_]/g, " ")}</span><strong title={request.title}>{request.title}</strong></header>
-    <p className="subtle">A delegated conversation is waiting for approval.</p>
+    {detail.data?.detail ? <pre className="child-approval-detail">{detail.data.detail}</pre>
+      : detail.error ? <p className="subtle">Could not read what this conversation is asking for. Open it to respond.</p>
+      : revealed ? <p className="subtle">Reading what this conversation is asking for…</p>
+      : <p className="subtle">A delegated conversation is waiting for approval.</p>}
+    {detail.data?.reason ? <p className="subtle">{detail.data.reason}</p> : null}
     <div className="child-approval-actions">
       <button type="button" className="btn" disabled={busy} onClick={() => respond("decline")}>Decline</button>
-      <button type="button" className="btn primary" disabled={busy} onClick={() => respond("accept")}>Approve</button>
+      {/* Approving blind is the risk here, so Approve stays out of reach until the request is shown. */}
+      {detail.data?.detail
+        ? <button type="button" className="btn primary" disabled={busy} onClick={() => respond("accept")}>Approve</button>
+        : <button type="button" className="btn" disabled={busy || revealed} onClick={() => setRevealed(true)}>{revealed ? "Reading…" : "Show request"}</button>}
       <button type="button" className="text-button" disabled={busy} onClick={() => { void run("selectThread", { threadId: request.threadId }); }}>Open conversation</button>
     </div>
     {error ? <p role="alert">{error}</p> : null}
