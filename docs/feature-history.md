@@ -1806,6 +1806,20 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 
 ### Local connection and pairing
 
+#### Unreleased — the native-undo harness follows the new setting scope
+
+- Making `t3-vscode.t3Home` machine-scoped stopped `scripts/verify-edh.mjs` from working: it wrote
+  that setting into the workspace's `.vscode/settings.json`, which VS Code now correctly ignores, so
+  the test VS Code fell back to the default home and never saw the isolated server's fixture. The
+  harness sets it in the isolated profile's **user** settings instead, which stays entirely inside
+  the temporary profile directory.
+- This is the security fix proving itself: a workspace file can no longer choose which server
+  receives this machine's credential, including a workspace the extension's own tests create.
+- The harness also passes `--password-store=basic`. An invisible display has no keyring daemon, so
+  VS Code blocked on a modal about encrypted storage before any webview loaded, and this extension
+  keeps its credential in SecretStorage.
+- Verified afterwards that nothing was written to the real `~/.t3` outside logs and runtime files.
+
 #### Unreleased — bind the credential to the server it was issued for
 
 - `t3-vscode.t3Home` is now **machine-scoped**. It was the only one of eighteen settings without a

@@ -43,14 +43,17 @@ const require = createRequire(import.meta.url);
 const jsonc = createRequire(require.resolve("@vscode/vsce"))("jsonc-parser");
 const settingsFile = join(profile, "User/settings.json");
 let settingsText = await readFile(settingsFile, "utf8").catch(() => "{}");
-for (const [key, value] of Object.entries({ "update.mode": "none", "extensions.autoCheckUpdates": false, "extensions.autoUpdate": false, "window.zoomLevel": 0, "window.dialogStyle": "custom", "t3-vscode.fontSizeInterface": 16, "t3-vscode.fontSizePrompt": 14, "t3-vscode.fontSizeCode": 13, "security.workspace.trust.enabled": false })) {
+// `t3-vscode.t3Home` is machine-scoped, so a workspace file cannot set it -- that is deliberate,
+// since it decides which server receives this machine's credential. It belongs in this isolated
+// profile's user settings, which is still fully contained in the temporary profile directory.
+for (const [key, value] of Object.entries({ "t3-vscode.t3Home": home, "update.mode": "none", "extensions.autoCheckUpdates": false, "extensions.autoUpdate": false, "window.zoomLevel": 0, "window.dialogStyle": "custom", "t3-vscode.fontSizeInterface": 16, "t3-vscode.fontSizePrompt": 14, "t3-vscode.fontSizeCode": 13, "security.workspace.trust.enabled": false })) {
   settingsText = jsonc.applyEdits(settingsText, jsonc.modify(settingsText, [key], value, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
 }
 if (visualsOnly) settingsText = jsonc.applyEdits(settingsText, jsonc.modify(settingsText, ['files.simpleDialog.enable'], true, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
 await writeFile(settingsFile, settingsText);
 await mkdir(join(home, "workspace/.vscode"), { recursive: true });
 await writeFile(join(home, "workspace/.vscode/settings.json"), JSON.stringify({
-  "t3-vscode.t3Home": home, "workbench.startupEditor": "none", "workbench.colorTheme": "Default Dark Modern",
+  "workbench.startupEditor": "none", "workbench.colorTheme": "Default Dark Modern",
   "workbench.iconTheme": null,
   "diffEditor.renderSideBySide": true, "diffEditor.useInlineViewWhenSpaceIsLimited": false,
   "chat.disableAIFeatures": true,
@@ -70,6 +73,11 @@ const environment = isolatedDisplayEnvironment(isolated.display, baseEnvironment
 process.on("exit", () => isolated.stop());
 const child = spawn(process.env.VSCODE_BIN ?? "/usr/share/code/code", [
   "--no-sandbox", "--disable-gpu", "--new-window", "--profile=Default", "--skip-welcome", "--skip-release-notes", "--disable-workspace-trust",
+  // An invisible display has no keyring daemon, so VS Code blocks on a modal about storing
+  // encrypted data before any webview loads, and this extension keeps its credential in
+  // SecretStorage. Basic storage keeps the isolated profile self-contained; the owner's VS Code
+  // and its keyring are untouched.
+  "--password-store=basic",
   `--user-data-dir=${profile}`, `--extensions-dir=${profile}/extensions`, `--shared-data-dir=${profile}/shared-data`, `--remote-debugging-port=${port}`,
   `--extensionDevelopmentPath=${fileURLToPath(new URL("..", import.meta.url))}`, join(home, "workspace"),
 ], { env: environment, stdio: ["ignore", "pipe", "pipe"] });
