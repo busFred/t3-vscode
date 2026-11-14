@@ -1,266 +1,232 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Transcript round fold, composer and usage header</title>
+<title>Round fold, composer controls and usage header</title>
 <style>
+/* Page chrome only. */
 body.page { margin: 0; padding: 18px; font: 13px/1.5 "Segoe UI", system-ui, sans-serif; background: #f3f3f3; color: #3b3b3b; }
-.page > h1 { font-size: 16px; margin: 0 0 4px; }
-.page > p.lede { margin: 0 0 18px; max-width: 86ch; color: #555; }
-h2.section { font-size: 13px; margin: 26px 0 8px; padding-top: 14px; border-top: 1px solid #ddd; }
-h2.section span { font-weight: 400; color: #717171; }
+body.dark.page { background: #141414; color: #cccccc; }
+.page > h1 { font-size: 15px; margin: 0 0 4px; }
+.page > p.lede { margin: 0 0 14px; max-width: 86ch; opacity: .8; }
+.controls { margin-bottom: 18px; }
+.controls button { font: inherit; padding: 2px 10px; border: 1px solid #888; background: transparent; color: inherit; border-radius: 4px; cursor: pointer; }
+h2.section { font-size: 13px; margin: 24px 0 8px; padding-top: 12px; border-top: 1px solid currentColor; border-color: #0002; }
+.dark h2.section { border-color: #fff2; }
+h2.section span { font-weight: 400; opacity: .65; }
 .grid { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
-.card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px; }
-.card > h3 { font-size: 12px; margin: 0 0 2px; text-transform: uppercase; letter-spacing: .04em; color: #717171; }
-.card > p.note { margin: 0 0 10px; font-size: 12px; color: #717171; max-width: 46ch; }
-.card.before { border-color: #e0bcbc; } .card.after { border-color: #a9c9a9; }
+.case > h3 { font-size: 11px; margin: 0 0 3px; text-transform: uppercase; letter-spacing: .05em; opacity: .6; }
+.case > p { margin: 0 0 8px; font-size: 12px; opacity: .7; max-width: 42ch; }
 
-/* Chat surface, approximating the editor chat tab. */
-.chat { width: 430px; background: #fff; font-size: 12.5px; }
-.msg { margin: 0 0 10px; }
-.msg.user { background: #f0f0f0; border-radius: 8px; padding: 7px 9px; margin-left: 48px; }
-.msg.assistant { }
-.meta { color: #8a8a8a; font-size: 11px; margin-top: 3px; }
-.work { display: flex; align-items: center; gap: 5px; color: #616161; margin: 0 0 9px; font-size: 12px; }
-.work .chev { display: inline-block; width: 9px; }
-.shot { display: block; width: 100%; height: 86px; border: 1px solid #ddd; border-radius: 4px; margin: 6px 0;
-  background: repeating-linear-gradient(135deg, #eef2f7 0 9px, #e4eaf2 9px 18px); color: #90a0b4;
-  font-size: 11px; text-align: center; line-height: 86px; }
-.divider { display: flex; align-items: center; gap: 8px; color: #8a8a8a; font-size: 11px; margin: 9px 0; }
-.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #e4e4e4; }
+/* VS Code theme variables (Light Modern / Dark Modern approximations). */
+.pane {
+  --vscode-font-family: "Segoe UI", system-ui, sans-serif;
+  --vscode-editor-background: #ffffff; --vscode-editor-foreground: #3b3b3b; --vscode-descriptionForeground: #717171;
+  --vscode-input-border: #cecece; --vscode-dropdown-background: #ffffff; --vscode-dropdown-border: #cecece; --vscode-dropdown-foreground: #3b3b3b;
+  --vscode-panel-border: #e5e5e5; --vscode-sideBar-background: #f8f8f8; --vscode-editor-font-family: "Cascadia Mono", monospace;
+}
+.dark .pane {
+  --vscode-editor-background: #1f1f1f; --vscode-editor-foreground: #cccccc; --vscode-descriptionForeground: #9d9d9d;
+  --vscode-input-border: #3c3c3c; --vscode-dropdown-background: #313131; --vscode-dropdown-border: #3c3c3c; --vscode-dropdown-foreground: #cccccc;
+  --vscode-panel-border: #2b2b2b; --vscode-sideBar-background: #181818;
+}
+.pane {
+  --background: var(--vscode-editor-background); --foreground: var(--vscode-editor-foreground); --muted: var(--vscode-sideBar-background);
+  --muted-foreground: var(--vscode-descriptionForeground); --border: var(--vscode-panel-border); --input: var(--vscode-input-border);
+  --card: var(--vscode-editor-background); --primary: #005fb8; --font-size-prompt: 14px;
+  width: 404px; font-family: var(--vscode-font-family); font-size: .8125rem; line-height: 1.55;
+  color: var(--foreground); background: var(--background); border: 1px solid var(--border); padding: 10px;
+}
+.pane.sidebar { width: 300px; }
+.pane * { box-sizing: border-box; }
+.pane select, .pane button { font-family: inherit; }
+.pane .icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 27px; height: 27px; color: var(--muted-foreground); background: transparent; border: 0; border-radius: 6px; }
 
-/* The new round fold. */
-.fold { border: 1px solid #e0e0e0; border-radius: 6px; margin: 0 0 10px; background: #fcfcfc; }
-.fold > summary { list-style: none; cursor: pointer; padding: 7px 9px; display: flex; align-items: center; gap: 7px;
-  font-size: 12px; color: #4a4a4a; }
-.fold > summary::-webkit-details-marker { display: none; }
-.fold > summary .count { margin-left: auto; color: #8a8a8a; font-size: 11px; }
-.fold[open] > summary { border-bottom: 1px solid #eee; }
-.fold .body { padding: 9px; }
-.fold.live { background: #fff; border-color: #cddcf0; }
-.fold.live > summary { color: #1f5fa9; }
-.pulse { width: 7px; height: 7px; border-radius: 50%; background: #1f5fa9; display: inline-block; }
+/* ===== Copied unchanged from src/webview/styles/tokens.css ===== */
+.pane .work-group-toggle { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; color: inherit; border: 0; background: transparent; padding: 7px 0; font: inherit; font-size: .75rem; }
+.pane .work-group-toggle > span:first-of-type { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane .composer-box { border: 1px solid color-mix(in srgb, var(--foreground) 30%, var(--input)); border-radius: 4px; background: var(--card); padding: 8px; }
+.pane .composer-box textarea { width: 100%; resize: none; outline: none; border: 0; background: transparent; color: var(--foreground); min-height: 47px; max-height: 220px; padding: 1px 4px 5px; font-size: var(--font-size-prompt, 14px); line-height: 1.6; }
+.pane .composer-controls { display: flex; align-items: center; min-width: 0; gap: 4px; margin-top: 3px; font-size: .6875rem; }
+.pane .composer-controls select { field-sizing: content; border: 0; background: transparent; padding: 4px 2px; border-radius: 3px; max-width: 150px; font-size: inherit; color: var(--foreground); }
+.pane .model-trigger { display: flex; align-items: center; gap: 3px; flex: 1; min-width: 0; color: var(--foreground); border: 0; background: transparent; font-size: .75rem; font-weight: 600; padding: 4px 2px; border-radius: 3px; }
+.pane .usage-account-choice { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 4px 0 2px; }
+.pane .usage-account-choice select { flex: 1; min-width: 0; max-width: 100%; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border); padding: 3px; font-size: .75rem; }
+.pane .usage-account-choice .usage-display-choice { flex: none; align-self: stretch; max-width: 92px; border-radius: 3px; padding: 0 2px; font-size: .625rem; }
 
-/* Composer. */
-.composer { width: 430px; border: 1px solid #cfcfcf; border-radius: 8px; background: #fff; }
-.grip { height: 11px; display: flex; align-items: center; justify-content: center; cursor: ns-resize;
-  border-bottom: 1px solid #efefef; border-radius: 8px 8px 0 0; background: #fafafa; }
-.grip i { display: block; width: 26px; height: 3px; border-radius: 2px; background: #c6c6c6; }
-.composer .field { padding: 9px; color: #9a9a9a; }
-.composer .field.tall { min-height: 150px; }
-.footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 7px 9px; border-top: 1px solid #efefef; }
-.pill { border: 1px solid #cfcfcf; border-radius: 5px; padding: 1px 7px; font-size: 11.5px; background: #fff; }
-.pill.on { background: #005fb8; border-color: #005fb8; color: #fff; }
-.seg { display: inline-flex; border: 1px solid #cfcfcf; border-radius: 5px; overflow: hidden; }
-.seg span { padding: 1px 7px; font-size: 11.5px; border-right: 1px solid #e3e3e3; }
-.seg span:last-child { border-right: 0; }
-.seg span.on { background: #005fb8; color: #fff; }
-.perm { display: inline-flex; gap: 2px; border: 1px solid #cfcfcf; border-radius: 5px; padding: 1px; }
-.perm b { width: 22px; text-align: center; font-weight: 400; font-size: 12px; border-radius: 3px; cursor: default; }
-.perm b.on { background: #005fb8; color: #fff; }
-
-/* Usage header. */
-.usage { width: 300px; border: 1px solid #e0e0e0; border-radius: 6px; padding: 9px; background: #fff; }
-.usage .row { display: flex; align-items: center; gap: 5px; }
-.usage select { font: inherit; font-size: 11.5px; padding: 1px 3px; border: 1px solid #cfcfcf; border-radius: 4px; background: #fff; min-width: 0; }
-.usage .star { width: 14px; }
-.cramped select { max-width: 74px; }
-
-/* Context menu. */
-.menu { width: 198px; border: 1px solid #d0d0d0; border-radius: 6px; background: #fff; box-shadow: 0 6px 20px #0002; padding: 4px; }
-.menu div { padding: 4px 9px; font-size: 12px; border-radius: 4px; display: flex; justify-content: space-between; }
-.menu div.hi { background: #005fb8; color: #fff; }
-.menu hr { border: 0; border-top: 1px solid #ececec; margin: 4px 0; }
-.tag { display: inline-block; font-size: 10.5px; padding: 0 5px; border-radius: 9px; background: #eef3fa; color: #2b5f99; margin-left: 6px; }
+/* ===== Transcript rows, matching the shipped chat ===== */
+.pane .message { margin: 0 0 10px; font-size: .8125rem; }
+.pane .user-bubble { background: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; margin-left: 56px; }
+.pane .steer-label { display: block; color: var(--muted-foreground); font-size: .6875rem; margin-bottom: 3px; }
+.pane .message-timestamp { font-size: .625rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.pane .chat-media { display: block; height: 62px; border: 1px solid var(--border); border-radius: 4px; margin: 6px 0;
+  background: var(--muted); color: var(--muted-foreground); font-size: .6875rem; text-align: center; line-height: 62px; }
+.pane .system-divider { display: flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: .6875rem; margin: 8px 0; }
+.pane .system-divider::before, .pane .system-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.pane .chev { width: 13px; flex-shrink: 0; opacity: .8; }
+.pane .work-running { font-size: .6875rem; color: var(--muted-foreground); }
+/* The round fold reuses .work-group-toggle verbatim; only the nesting indent is new. */
+.pane .round-items { padding-left: 13px; border-left: 1px solid var(--border); margin-left: 6px; }
+.dark .pane code { background: #ffffff14; }
+.pane code { font-family: var(--vscode-editor-font-family); font-size: .75rem; background: #0000000d; padding: 0 3px; border-radius: 3px; }
 </style>
 <body class="page">
 <h1>Proposed UI changes</h1>
-<p class="lede">Mockups for the six items raised. Light theme only; every colour here comes from a VS Code theme
-variable in the real build. “Before” panels reproduce today’s shipped behaviour.</p>
+<p class="lede">Every control below is the extension’s existing one: the fold is the shipped
+<code>.work-group-toggle</code> row, the composer keeps its borderless <code>.composer-controls</code> selects, and the
+usage header keeps its bordered dropdowns. Styles between the marked rules are copied unchanged from
+<code>src/webview/styles/tokens.css</code>. Nothing introduces a new visual language.</p>
+<div class="controls"><button type="button" onclick="document.body.classList.toggle('dark')">Toggle dark</button></div>
 
-<h2 class="section">1. Round fold <span>— collapse a finished round’s intermediate output into one panel</span></h2>
+<h2 class="section">1. Round fold <span>— one more level of the fold that already exists</span></h2>
 <div class="grid">
-  <div class="card before">
-    <h3>Before · today</h3>
-    <p class="note">Every intermediate assistant message stays at top level. Only tool/reasoning rows fold.
-    A long session becomes a wall to scroll.</p>
-    <div class="chat">
-      <div class="msg user">build vsix</div>
-      <div class="work"><span class="chev">›</span> Worked for 37s</div>
-      <div class="msg assistant">Installing Xvfb here, version stays 0.3.11. I need your sudo password.<div class="meta">19:19:56</div></div>
-      <div class="work"><span class="chev">›</span> Worked for 5s</div>
-      <div class="divider">sudo password · saved to a private file</div>
-      <div class="work"><span class="chev">›</span> Worked for 15s</div>
-      <div class="msg assistant">Xvfb installed. Starting an isolated T3 server.<div class="meta">19:20:28</div></div>
-      <div class="work"><span class="chev">›</span> Worked for 26s</div>
-      <div class="msg assistant">Server up. Running the gate in real VS Code.<div class="meta">19:21:02</div></div>
-      <div class="work"><span class="chev">›</span> Worked for 24s</div>
-      <div class="msg assistant">The screenshot shows the real cause:<span class="shot">screenshot read mid-work</span></div>
-      <div class="work"><span class="chev">›</span> Worked for 20s</div>
-      <div class="msg assistant"><b>The gate passes — all ten scenarios.</b></div>
+  <div class="case"><h3>Before · today</h3>
+    <p>Each intermediate message sits at top level between work rows.</p>
+    <div class="pane">
+      <div class="message"><div class="user-bubble">build vsix</div></div>
+      <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 37s</span></button>
+      <div class="message">Installing Xvfb here, version stays 0.3.11.<div class="message-timestamp">19:19:56</div></div>
+      <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 5s</span></button>
+      <div class="system-divider">sudo password · saved to a private file</div>
+      <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 15s</span></button>
+      <div class="message">Xvfb installed. Starting an isolated T3 server.</div>
+      <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 26s</span></button>
+      <div class="message">The screenshot shows the real cause:<span class="chat-media">screenshot read mid-work</span></div>
+      <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 20s</span></button>
+      <div class="message"><strong>The gate passes — all ten scenarios.</strong></div>
     </div>
   </div>
 
-  <div class="card after">
-    <h3>After · settled round</h3>
-    <p class="note">Everything between your message and the round’s <em>final</em> answer folds into one panel —
-    intermediate messages, work groups, mid-work screenshots and request dividers. The final answer stays open.</p>
-    <div class="chat">
-      <div class="msg user">build vsix</div>
-      <details class="fold">
-        <summary><span class="chev">›</span> Worked for 18m 39s <span class="count">7 steps · 1 image</span></summary>
-      </details>
-      <div class="msg assistant"><b>The gate passes — all ten scenarios.</b><div class="meta">19:34:18</div></div>
+  <div class="case"><h3>After · settled round</h3>
+    <p>One more <code>.work-group-toggle</code> row, identical in style to the ones already there. The round’s final
+    answer stays outside it.</p>
+    <div class="pane">
+      <div class="message"><div class="user-bubble">build vsix</div></div>
+      <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 18m 39s</span><span class="work-running">7 steps</span></button>
+      <div class="message"><strong>The gate passes — all ten scenarios.</strong><div class="message-timestamp">19:34:18</div></div>
+    </div>
+
+    <h3 style="margin-top:16px">After · while the round runs</h3>
+    <p>Open while working, with the same running count the work rows already show. It folds when the round’s
+    final message lands.</p>
+    <div class="pane">
+      <div class="message"><div class="user-bubble">build vsix</div></div>
+      <button class="work-group-toggle"><span class="chev">⌄</span><span>Working — 4m 12s</span><span class="work-running">1 running</span></button>
+      <div class="round-items">
+        <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 37s</span></button>
+        <div class="message">Installing Xvfb here, version stays 0.3.11.</div>
+        <button class="work-group-toggle"><span class="chev">›</span><span>Running <code>apt-get install</code></span><span class="work-running">1 running</span></button>
+      </div>
     </div>
   </div>
 
-  <div class="card after">
-    <h3>After · expanded, showing nesting</h3>
-    <p class="note">Opening the fold restores today’s view exactly: the tool/reasoning groups are still their own
-    collapsed rows inside it. Two levels, not one flattened dump.</p>
-    <div class="chat">
-      <div class="msg user">build vsix</div>
-      <details class="fold" open>
-        <summary><span class="chev">⌄</span> Worked for 18m 39s <span class="count">7 steps · 1 image</span></summary>
-        <div class="body">
-          <div class="work"><span class="chev">›</span> Worked for 37s <span class="tag">nested, as today</span></div>
-          <div class="msg assistant">Installing Xvfb here, version stays 0.3.11.</div>
-          <div class="divider">sudo password · saved to a private file</div>
-          <div class="work"><span class="chev">›</span> Worked for 15s</div>
-          <div class="msg assistant">The screenshot shows the real cause:<span class="shot">screenshot read mid-work</span></div>
-        </div>
-      </details>
-      <div class="msg assistant"><b>The gate passes — all ten scenarios.</b></div>
+  <div class="case"><h3>After · expanded, showing the nesting</h3>
+    <p>Opening it gives today’s view back, indented one level. The tool and reasoning rows are still their own
+    collapsed groups inside.</p>
+    <div class="pane">
+      <div class="message"><div class="user-bubble">build vsix</div></div>
+      <button class="work-group-toggle"><span class="chev">⌄</span><span>Worked for 18m 39s</span><span class="work-running">7 steps</span></button>
+      <div class="round-items">
+        <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 37s</span></button>
+        <div class="message">Installing Xvfb here, version stays 0.3.11.<div class="message-timestamp">19:19:56</div></div>
+        <div class="system-divider">sudo password · saved to a private file</div>
+        <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 15s</span></button>
+        <div class="message">The screenshot shows the real cause:<span class="chat-media">screenshot read mid-work</span></div>
+      </div>
+      <div class="message"><strong>The gate passes — all ten scenarios.</strong></div>
     </div>
   </div>
 
-  <div class="card after">
-    <h3>After · while the round runs</h3>
-    <p class="note">Open and live while working, so progress is still visible. It folds itself the moment the
-    round’s final message lands — and never folds again if you reopen it.</p>
-    <div class="chat">
-      <div class="msg user">build vsix</div>
-      <details class="fold live" open>
-        <summary><span class="pulse"></span> Working — 4m 12s <span class="count">live</span></summary>
-        <div class="body">
-          <div class="work"><span class="chev">›</span> Worked for 37s</div>
-          <div class="msg assistant">Installing Xvfb here, version stays 0.3.11.</div>
-          <div class="work"><span class="chev">›</span> Running <code>apt-get install</code>…</div>
-        </div>
-      </details>
-    </div>
-  </div>
-
-  <div class="card after">
-    <h3>After · a steer reply is never folded</h3>
-    <p class="note">The thing you disliked in T3 Code. A steer starts its own segment and its reply stays at top
-    level; only the work it caused folds.</p>
-    <div class="chat">
-      <div class="msg user">↪ Steer · do not use astra; choose the cheapest model</div>
-      <details class="fold">
-        <summary><span class="chev">›</span> Worked for 1m 06s <span class="count">3 steps</span></summary>
-      </details>
-      <div class="msg assistant">Fair point — the gate’s fixture is sitting on GPT-6 Astra, which
-        <code>AGENTS.md</code> also forbids for live tests.<div class="meta">20:20:11</div></div>
+  <div class="case"><h3>After · a steer reply is never folded</h3>
+    <p>A steer opens its own round, so its reply is that round’s final message and stays out of the fold.</p>
+    <div class="pane">
+      <div class="message"><div class="user-bubble"><span class="steer-label">↪ Steer</span>do not use astra; choose the cheapest model</div></div>
+      <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 1m 06s</span><span class="work-running">3 steps</span></button>
+      <div class="message">Fair point — the gate’s fixture is sitting on GPT-6 Astra, which <code>AGENTS.md</code> also
+        forbids for live tests.<div class="message-timestamp">20:20:11</div></div>
     </div>
   </div>
 </div>
 
 <h2 class="section">2. Account &amp; usage header <span>— remove the model filter I added</span></h2>
 <div class="grid">
-  <div class="card before">
-    <h3>Before · today</h3>
-    <p class="note">Three selects in a 300px sidebar. The third is cramped and its purpose is not obvious.</p>
-    <div class="usage"><div class="row cramped">
-      <span class="star">✳</span>
+  <div class="case"><h3>Before · today</h3><p>Three dropdowns in a 300px sidebar; the third is cramped.</p>
+    <div class="pane sidebar"><div class="usage-account-choice">
+      <span class="provider-icon">✳</span>
       <select><option>Claude · (5)</option></select>
-      <select><option>Pooled</option></select>
-      <select><option>All models</option></select>
-    </div></div>
-  </div>
-  <div class="card after">
-    <h3>After · reverted</h3>
-    <p class="note">Back to two. Per-model quotas are still readable — each one is already its own foldable row
-    below, which is where they belong.</p>
-    <div class="usage"><div class="row">
-      <span class="star">✳</span>
-      <select style="flex:1"><option>Claude · (5)</option></select>
-      <select><option>Pooled</option></select>
-    </div></div>
-  </div>
+      <select class="usage-display-choice"><option>Pooled</option></select>
+      <select class="usage-display-choice"><option>All models</option></select>
+    </div></div></div>
+  <div class="case"><h3>After · reverted</h3><p>Back to the two it had. Per-model quotas stay as their own foldable
+    rows below.</p>
+    <div class="pane sidebar"><div class="usage-account-choice">
+      <span class="provider-icon">✳</span>
+      <select><option>Claude · (5)</option></select>
+      <select class="usage-display-choice"><option>Pooled</option></select>
+    </div></div></div>
 </div>
 
-<h2 class="section">3. Composer footer <span>— Ultracode, and the fourth permission level</span></h2>
+<h2 class="section">3. Composer controls <span>— Ultracode, and the fourth permission level</span></h2>
 <div class="grid">
-  <div class="card before">
-    <h3>Before · today</h3>
-    <p class="note">Speed offers Standard/Fast only; Ultracode is never shown. Permissions fall back to three
-    levels, silently dropping <em>Auto-accept edits</em>.</p>
-    <div class="composer">
-      <div class="field">Ask anything, or describe a task…</div>
-      <div class="footer">
-        <span class="pill">Claude Opus 5 ⌄</span>
-        <span class="pill">High (Default) ⌄</span>
-        <span class="pill">Normal ⌄</span>
-        <span class="pill">Auto ⌄</span>
+  <div class="case"><h3>Before · today</h3><p>Speed offers Standard/Fast only. Permissions fall back to three,
+    dropping <em>Auto-accept edits</em>.</p>
+    <div class="pane"><div class="composer-box">
+      <textarea rows="2" placeholder="Ask anything, or describe a task…"></textarea>
+      <div class="composer-controls">
+        <button class="model-trigger"><span>Claude Opus 5</span><span class="chev">⌄</span></button>
+        <select><option>High (Default)</option></select>
+        <select><option>Normal</option></select>
+        <select><option>Auto</option></select>
+        <select><option>Root</option></select>
       </div>
-    </div>
-  </div>
-  <div class="card after">
-    <h3>After</h3>
-    <p class="note">Ultracode joins Speed as the boolean option the server already advertises. Permissions show
-    all four contract levels, with the active one named.</p>
-    <div class="composer">
-      <div class="field">Ask anything, or describe a task…</div>
-      <div class="footer">
-        <span class="pill">Claude Opus 5 ⌄</span>
-        <span class="pill">High (Default) ⌄</span>
-        <span class="seg"><span class="on">Standard</span><span>Fast</span><span>Ultracode</span></span>
-        <span class="perm" title="Ask permission · Auto-accept edits · Auto · Full access">
-          <b>🔒</b><b>✎</b><b class="on">🛡</b><b>⚡</b></span>
+    </div></div></div>
+  <div class="case"><h3>After</h3><p>Ultracode becomes one more borderless select beside Speed, and the
+    permission select lists all four contract levels. No new control type.</p>
+    <div class="pane"><div class="composer-box">
+      <textarea rows="2" placeholder="Ask anything, or describe a task…"></textarea>
+      <div class="composer-controls">
+        <button class="model-trigger"><span>Claude Opus 5</span><span class="chev">⌄</span></button>
+        <select><option>High (Default)</option></select>
+        <select><option>Normal</option></select>
+        <select><option>Ultracode: Off</option></select>
+        <select><option>Auto-accept edits</option></select>
       </div>
-    </div>
-  </div>
+    </div></div></div>
 </div>
 
 <h2 class="section">4. Resizable composer <span>— drag the top edge</span></h2>
 <div class="grid">
-  <div class="card before">
-    <h3>Before · today</h3>
-    <p class="note">Auto-grows to a fixed 220px ceiling, then scrolls. A long message is read through a slot.</p>
-    <div class="composer"><div class="field" style="min-height:64px">A long message, visible only four lines at a time…</div>
-      <div class="footer"><span class="pill">Claude Opus 5 ⌄</span><span class="pill">Auto ⌄</span></div></div>
-  </div>
-  <div class="card after">
-    <h3>After</h3>
-    <p class="note">A grip on the top edge sets the ceiling, remembered per view. Double-click resets to
-    automatic. Same pattern as the sidebar section resize already shipped.</p>
-    <div class="composer">
-      <div class="grip"><i></i></div>
-      <div class="field tall">A long message, with room to read it…</div>
-      <div class="footer"><span class="pill">Claude Opus 5 ⌄</span><span class="pill">Auto ⌄</span></div>
-    </div>
-  </div>
+  <div class="case"><h3>Before · today</h3><p>Grows to a fixed 220px ceiling, then scrolls.</p>
+    <div class="pane"><div class="composer-box">
+      <textarea rows="2" style="min-height:56px">A long message, visible a few lines at a time…</textarea>
+      <div class="composer-controls"><button class="model-trigger"><span>Claude Opus 5</span><span class="chev">⌄</span></button><select><option>Auto</option></select></div>
+    </div></div></div>
+  <div class="case"><h3>After</h3><p>A grip on the box’s top edge sets the ceiling, remembered per view;
+    double-click resets to automatic. Same interaction as the sidebar section resize already shipped.</p>
+    <div class="pane"><div class="composer-box" style="padding-top:0">
+      <div style="height:11px;display:flex;align-items:center;justify-content:center;cursor:ns-resize">
+        <span style="display:block;width:24px;height:3px;border-radius:2px;background:var(--input)"></span></div>
+      <textarea rows="2" style="min-height:132px">A long message, with room to read it…</textarea>
+      <div class="composer-controls"><button class="model-trigger"><span>Claude Opus 5</span><span class="chev">⌄</span></button><select><option>Auto</option></select></div>
+    </div></div></div>
 </div>
 
 <h2 class="section">5. Image context menu <span>— copy the image, not its markdown</span></h2>
 <div class="grid">
-  <div class="card before">
-    <h3>Before · today</h3>
-    <p class="note">Right-clicking an image gives VS Code’s text menu. Copy puts nothing useful on the clipboard.</p>
-    <div class="menu"><div>Cut<span>Ctrl+X</span></div><div class="hi">Copy<span>Ctrl+C</span></div><div>Paste<span>Ctrl+V</span></div></div>
-  </div>
-  <div class="card after">
-    <h3>After</h3>
-    <p class="note">Images get their own menu, reusing the copy already behind the hover button. Text selections
-    keep the native menu untouched.</p>
-    <div class="menu">
-      <div class="hi">Copy image</div>
-      <div>Save image as…</div>
-      <hr>
-      <div>Open in editor</div>
-      <div>Copy reference</div>
-    </div>
-  </div>
+  <div class="case"><h3>Before · today</h3><p>Right-clicking an image gives VS Code’s text menu; Copy puts nothing
+    useful on the clipboard.</p>
+    <div class="pane" style="width:220px;padding:4px">
+      <div style="padding:4px 9px;font-size:.75rem;display:flex;justify-content:space-between">Cut<span>Ctrl+X</span></div>
+      <div style="padding:4px 9px;font-size:.75rem;display:flex;justify-content:space-between;background:var(--primary);color:#fff;border-radius:4px">Copy<span>Ctrl+C</span></div>
+      <div style="padding:4px 9px;font-size:.75rem;display:flex;justify-content:space-between">Paste<span>Ctrl+V</span></div>
+    </div></div>
+  <div class="case"><h3>After</h3><p>Images get the same menu shape the maths rows already use
+    (<code>MathContextMenu</code>), reusing the copy behind the hover button. Text selections keep the native menu.</p>
+    <div class="pane" style="width:220px;padding:4px">
+      <div style="padding:4px 9px;font-size:.75rem;background:var(--primary);color:#fff;border-radius:4px">Copy image</div>
+      <div style="padding:4px 9px;font-size:.75rem">Save image as…</div>
+      <div style="padding:4px 9px;font-size:.75rem">Open in editor</div>
+      <div style="padding:4px 9px;font-size:.75rem">Copy reference</div>
+    </div></div>
 </div>
 </body>
 </html>
