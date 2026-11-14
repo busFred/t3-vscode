@@ -949,6 +949,23 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 
 ### Attachment presentation
 
+#### Unreleased — VSIX rebuilt at 0.3.11 (UI round and performance)
+
+- `target-installer/t3-vscode-0.3.11.vsix`, 45 files, 3.71 MB, sha256
+  `937b0e718d1f54274e9ab9225409760eff0e63ba4911685821503b6b897cb215`, built from `88cf0be`. Built, **not published**; the manifest stays at 0.3.11 at the
+  owner's direction. The earlier unpublished build is kept as `t3-vscode-0.3.11-bff66da.vsix`.
+- Fresh-context regression review of `bff66da..b32bac9`: one blocking finding (a value reply through
+  the shared action runner replaced the view's state, blanking it after Save image and Copy link)
+  and eight smaller ones, all resolved in `03cb1d5`/`88cf0be`. A second fresh review of the fixes
+  found no blocking items; its one remaining weakness (order named by revision) was closed in
+  `88cf0be` with a test.
+- Validation on the packaged source: typecheck clean; 793/793 unit tests; `verify-ui.mjs` passes;
+  native-undo gate 12/12 in real VS Code (isolated `/tmp` home, `claude-haiku-5-5`). One earlier
+  gate run on the same source failed a single focus-return check (new chat panel, repeated quote,
+  composer focus after the sidebar) while its undo/redo steps passed; the rerun passed 12/12.
+  `verify-views.ts` passes up to its known-unstable queue section; `verify-worktrees.mjs` still
+  expects a repository heading the list no longer renders.
+
 #### Unreleased — VSIX built at 0.3.11
 
 - `target-installer/t3-vscode-0.3.11.vsix`, 45 files, 3.71 MB,
