@@ -5,7 +5,7 @@ import { useCollapsedUsageSections } from "../usageSections";
 import { collectExternalUsageLinks, formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
 import type { ServerProviderUsageWindow } from "@t3tools/contracts";
 import type { HostStateSnapshot } from "../../shared/bridge";
-import { usageAccountName, accountWindows, filterByUsageModel, groupOf, groupTitle, limitPresentations, perAccountRows, pooledAccount, soonestReset, usageGroups, usageModelNames, usageNotices, type AccountRow, type AccountsDisplay, type UsageGroup } from "../../shared/usage";
+import { usageAccountName, accountWindows, groupOf, groupTitle, limitPresentations, perAccountRows, pooledAccount, soonestReset, usageGroups, usageNotices, type AccountRow, type AccountsDisplay, type UsageGroup } from "../../shared/usage";
 import { meterResetLabel } from "../../shared/usageMeter";
 import { ProviderIcon } from "./ProviderIcon";
 import { useActions } from "../actions";
@@ -37,14 +37,7 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
   // Per account, each window folds when the provider reports more than one kind of limit (Claude's session/week/Fable,
   // Kimi's week/month); pooled windows are one line each, and a lone window never folds.
   const foldable = perAccount && !!account && accountWindows(account).filter((row) => row.window).length > 1;
-  // T3 0.1.7 filters usage by provider and model. The provider selector above is the first; this
-  // narrows to one model-specific quota (Claude Opus, Fable, ...) where the account reports any.
-  const [model, setModel] = useState<string | null>(null);
   const pooledRows = account ? accountWindows(account) : [];
-  const models = usageModelNames(perAccount && group ? perAccountRows(group, now) : pooledRows);
-  // A provider switch must not keep a model only the previous provider reported.
-  const activeModel = model && models.includes(model) ? model : null;
-  useEffect(() => { if (model && !models.includes(model)) setModel(null); }, [model, models.join("\u0000")]);
   const notices = usageNotices(state, group?.driver);
   const links = collectExternalUsageLinks(limitPresentations(state));
   const run = useActions();
@@ -90,12 +83,12 @@ export function AccountUsage({ state, request }: { readonly state: HostStateSnap
     <div className="account-usage-body">
       {group ? <div className="usage-account-choice"><ProviderIcon brand={group.brand} /><select aria-label="Usage provider" value={group.key} onChange={(event) => setKey(event.target.value)}>{groups.map((group) => <option value={group.key} key={group.key}>{groupTitle(group)}</option>)}</select>
         {several ? <select className="usage-display-choice" aria-label="Multiple accounts" title="How to show several accounts" value={display} onChange={(event) => chooseDisplay(event.target.value as AccountsDisplay)}><option value="pooled">Pooled</option><option value="perAccount">Per account</option></select> : null}
-        {models.length ? <select className="usage-model-choice" aria-label="Usage model" title="Show one model's quota" value={activeModel ?? ""} onChange={(event) => setModel(event.target.value || null)}><option value="">All models</option>{models.map((name) => <option value={name} key={name}>{name}</option>)}</select> : null}</div> : null}
+</div> : null}
       <div className="account-usage-update">{group?.source ? <small className="account-source" title={group.source}>{group.source}</small> : null}{group?.plan ? null : status}
         <button className="icon-button" aria-label="Refresh usage" title="Refresh usage" disabled={refreshing} onClick={() => { setRefreshing(true); void run("refreshUsage").finally(() => setRefreshing(false)); }}><RefreshCwIcon size={13} /></button><button className="icon-button" aria-label="Status meters" title="Status meters" onClick={() => { void run("configureUsage"); }}><Settings2Icon size={13} /></button></div>
       {group?.plan ? <div className="account-plan subtle"><p>{group.plan}</p>{status}</div> : null}
       {group && account ? <>
-        {perAccount ? filterByUsageModel(perAccountRows(group, now), activeModel).map((row) => accountRows(row, group)) : filterByUsageModel(pooledRows, activeModel).map((row) => limit(group, row.window, row.label))}
+        {perAccount ? perAccountRows(group, now).map((row) => accountRows(row, group)) : pooledRows.map((row) => limit(group, row.window, row.label))}
       </> : <p className="subtle">No provider accounts reported yet.</p>}
       {notices.map((notice) => <p className="usage-notice" key={notice}>{notice}</p>)}
       {links.map((link) => <button key={link.url} className="text-button provider-usage-link" onClick={() => { void run("openLink", { href: link.url }); }}>{link.label}</button>)}

@@ -1,8 +1,8 @@
-import { isManagedDriverAllowed, managedPolicyDeniedMessage, managedRuntimeModeDenial } from "@t3tools/contracts";
+import { RuntimeMode, isManagedDriverAllowed, managedPolicyDeniedMessage, managedRuntimeModeDenial } from "@t3tools/contracts";
 import { ImageCaptionEditor } from "./ImageCaptionEditor";
 import { bridge } from "../bridge-client";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon, WandSparklesIcon, ZapIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon, WandSparklesIcon, ZapIcon } from "lucide-react";
 import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
@@ -10,8 +10,9 @@ import { clearDraft, readDraft, readDraftSelection, registerDraftTextEditor, rem
 import { assistantQuoteLabel, assistantQuoteNumbers, contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, insertFileReference, removeContextReference, syncAssistantQuoteLabels, type FileReference } from "../../shared/composerContext";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
-import { effortDescriptor, effortOptionLabel, isPremiumSpeed, speedChoiceLabel, speedControl } from "../../shared/modelOptions";
+import { effortDescriptor, effortOptionLabel, isPremiumSpeed, speedChoiceLabel, speedControl, ultracodeOption } from "../../shared/modelOptions";
 import { ModelPicker } from "./ModelPicker";
+import { AUTO_COMPOSER_CEILING, ComposerResize, MIN_COMPOSER_HEIGHT, clampComposerHeight } from "./ComposerResize";
 import { detectComposerTrigger } from "../../shared/composerSuggestions";
 import { replaceTextRange } from "@t3tools/shared/composerTrigger";
 import { useBridgeQuery } from "../useBridgeQuery";
@@ -34,7 +35,9 @@ import { WorktreeSelector, composerWorktreeLabel } from "./WorktreeSelector";
 import { MachineChip, draftMachineAway, draftSendBlock } from "./MachineChip";
 import { activeWorktreePreparations, WorktreePreparation } from "./WorktreePreparation";
 
-const runtimeLabels: Record<string, string> = { "approval-required": "Ask permission", "auto-accept-edits": "Auto-accept edits", auto: "Auto", "full-access": "Full access" };
+// Every mode `RuntimeMode` defines; a provider that reports no modes falls back to all of them,
+// so each one needs a label.
+const runtimeLabels: Record<RuntimeMode, string> = { "approval-required": "Ask permission", "auto-accept-edits": "Auto-accept edits", auto: "Auto", "full-access": "Full access" };
 const steerShortcut = navigator.userAgent.includes("Mac") ? "Cmd+Enter" : "Ctrl+Enter";
 const openModifier = navigator.userAgent.includes("Mac") ? "Cmd" : "Ctrl";
 /** Native editing commands keep a programmatic change in the focused input's own undo stack; `setRangeText` is the last resort and does not. */
@@ -123,8 +126,11 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const speedLabel = speed?.current ? speedChoiceLabel(speed.current) : speed?.explicit ? "Unavailable" : "Default";
   const promptEffort = effort?.promptInjectedValues?.includes("ultrathink") && isClaudeUltrathinkPrompt(text);
   const modelLabel = model?.name ?? selection?.model ?? "Choose model";
+
   const effortValue = promptEffort ? "ultrathink" : String(effort ? getProviderOptionCurrentValue(effort) ?? "" : "");
   const effortLabel = effort?.options.find((option) => option.id === effortValue)?.label ?? "Default";
+  // The trigger carries the effort so it stays readable without opening the picker.
+  const triggerLabel = effort && effortValue ? `${modelLabel} · ${effortLabel}` : modelLabel;
   const project = state.projects.find((item) => item.id === state.draft.projectId);
   const projectLabel = project?.title ?? state.draft.workspaceRoot?.split(/[\\/]/).filter(Boolean).at(-1)
     ?? (state.draft.supportsNoProject ? "No project" : "Choose project");
@@ -269,11 +275,19 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     if (pending !== undefined) focus(new CustomEvent("t3-focus-composer", { detail: { draftKey, cursor: pending } }));
     return () => window.removeEventListener("t3-focus-composer", focus);
   }, [draftKey, onSelectionChange]);
+  // A height dragged with the grip holds while the text changes; otherwise the box grows with the text.
+  const [liveHeight, setLiveHeight] = useState<number | null | undefined>(undefined);
+  const chosenHeight = liveHeight !== undefined ? liveHeight : editingPreferences.height === null ? null : clampComposerHeight(editingPreferences.height);
   useEffect(() => {
     if (!textarea.current) return;
+    if (chosenHeight !== null) {
+      textarea.current.style.maxHeight = textarea.current.style.height = `${chosenHeight}px`;
+      return;
+    }
+    textarea.current.style.maxHeight = "";
     textarea.current.style.height = "auto";
-    textarea.current.style.height = `${Math.min(textarea.current.scrollHeight, 220)}px`;
-  }, [text, state.appearance.fontSizePrompt]);
+    textarea.current.style.height = `${Math.min(textarea.current.scrollHeight, AUTO_COMPOSER_CEILING)}px`;
+  }, [text, state.appearance.fontSizePrompt, chosenHeight]);
   useEffect(() => { setModelsOpen(false); }, [draftKey]);
   useEffect(() => { if (recovery.ready && textarea.current) { const selection = readDraftSelection(draftKey); if (selection) { textarea.current.setSelectionRange(selection.start, selection.end); setCursor(selection.start); } } }, [draftKey, recovery.ready]);
   useEffect(() => {
@@ -290,19 +304,17 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     const measure = () => {
       const modelStyle = getComputedStyle(modelButton);
       context.font = `${modelStyle.fontWeight} ${modelStyle.fontSize} ${modelStyle.fontFamily}`;
-      const modelWidth = context.measureText(modelLabel).width + 22;
+      const modelWidth = context.measureText(triggerLabel).width + 22 + (isPremiumSpeed(speed?.current) ? 16 : 0);
       const style = getComputedStyle(row);
       context.font = `400 ${style.fontSize} ${style.fontFamily}`;
       const traitsWidth = context.measureText(runtimeLabels[runtimeMode] ?? runtimeMode).width + 24
-        + (effort ? context.measureText(effortLabel).width + 24 : 0)
-        + (speed ? context.measureText(speedLabel).width + 24 + (isPremiumSpeed(speed.current) ? 16 : 0) : 0)
         + (state.worktrees && (state.draft.projectId || thread?.projectId) ? context.measureText(worktreeLabel).width + 44 : 0);
       setCompactControls(modelWidth + traitsWidth + 12 > row.clientWidth);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(row); measure();
     return () => observer.disconnect();
-  }, [modelLabel, effortLabel, Boolean(effort), speedLabel, Boolean(speed), runtimeMode, worktreeLabel, Boolean(state.worktrees), state.draft.projectId, thread?.projectId, state.appearance.fontSizeInterface]);
+  }, [triggerLabel, speedLabel, runtimeMode, worktreeLabel, Boolean(state.worktrees), state.draft.projectId, thread?.projectId, state.appearance.fontSizeInterface]);
   const running = Boolean(thread?.activeRunId || state.queue?.activeRunId || state.acknowledgedWorking);
   const canStop = running || Boolean(thread?.waitingOnSubagents || thread?.backgroundWork);
   const shortcutHint = `${running ? `Enter to queue${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Enter to send"} · Shift+Enter for a new line`;
@@ -393,23 +405,40 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     if (file && reference) { setCaptionReference({ reference, src: file.previewUrl }); return true; }
     return false;
   };
+  // Effort, speed and Ultracode belong to the chosen model, so they live in the model picker (a
+  // Reasoning column and its footer) rather than as three more selects in the composer row.
+  // Choosing Ultrathink still edits the prompt exactly as before; this only moves where it is offered.
+  const optionsDisabled = busy || thread?.providerNativeSubagent || !selection;
+  const chooseEffort = (value: string) => {
+    if (!effort) return;
+    if (effort.promptInjectedValues?.includes(value)) {
+      closeModels();
+      setText(text.trim() ? applyClaudePromptEffortPrefix(text, "ultrathink") : "Ultrathink:\n", "take-focus"); return;
+    }
+    if (promptEffort) {
+      const body = text.replace(/^Ultrathink:\s*/i, "");
+      if (isClaudeUltrathinkPrompt(body)) return;
+      setText(body, "take-focus");
+    }
+    setBusy(true); void run("setModelOption", { ...target, optionId: effort.id, value }).finally(() => setBusy(false));
+  };
+  const ultracode = ultracodeOption(model, selection);
+  const pickerExtras = {
+    reasoning: effort ? <div role="group" aria-label="Effort level" data-value={effortValue} title={effort.description ?? effort.label}><header>Reasoning</header>
+      {effort.options.map((option) => <div className="model-row" key={option.id}><button className="model-choice" data-value={option.id} aria-pressed={option.id === effortValue} title={option.description} disabled={optionsDisabled} onClick={() => chooseEffort(option.id)}>
+        <span>{effortOptionLabel(option)}</span>{option.id === effortValue ? <CheckIcon size={13} /> : null}</button></div>)}</div> : null,
+    footer: <>
+      {speed ? <label className={`speed-control${isPremiumSpeed(speed.current) ? " premium" : ""}`} title={isPremiumSpeed(speed.current) ? `${speed.current!.description ?? speed.current!.label}: costs more per request` : speed.label}>Speed{isPremiumSpeed(speed.current) ? <ZapIcon size={12} aria-hidden="true" /> : null}<select aria-label="Speed" value={speed.current?.id ?? ""} disabled={optionsDisabled} onChange={(event) => {
+        const choice = speed.choices.find((item) => item.id === event.target.value); if (!choice) return;
+        setBusy(true); void run("setModelOption", { ...target, optionId: speed.optionId, value: choice.value }).finally(() => setBusy(false));
+      }}>{speed.current ? null : <option value="" disabled>{speed.explicit ? "Unavailable" : "Default"}</option>}{speed.choices.map((choice) => <option key={choice.id} value={choice.id} title={choice.description}>{speedChoiceLabel(choice)}</option>)}</select></label> : null}
+      {ultracode ? <label title={ultracode.description ?? ultracode.label}>{ultracode.label}<select aria-label={ultracode.label} value={ultracode.value ? "on" : "off"} disabled={optionsDisabled} onChange={(event) => {
+        setBusy(true); void run("setModelOption", { ...target, optionId: ultracode.id, value: event.target.value === "on" }).finally(() => setBusy(false));
+      }}><option value="off">Off</option><option value="on">On</option></select></label> : null}
+    </>,
+  };
   const traits = <div className="composer-traits">
-    {effort ? <label className="effort-control" title={effort.description ?? effort.label}><select aria-label="Effort level" value={effortValue} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => {
-      if (effort.promptInjectedValues?.includes(event.target.value)) {
-        setText(text.trim() ? applyClaudePromptEffortPrefix(text, "ultrathink") : "Ultrathink:\n", "take-focus"); return;
-      }
-      if (promptEffort) {
-        const body = text.replace(/^Ultrathink:\s*/i, "");
-        if (isClaudeUltrathinkPrompt(body)) return;
-        setText(body, "take-focus");
-      }
-      setBusy(true); void run("setModelOption", { ...target, optionId: effort.id, value: event.target.value }).finally(() => setBusy(false));
-    }}>{getProviderOptionCurrentValue(effort) === undefined ? <option value="" disabled>Default</option> : null}{effort.options.map((option) => <option key={option.id} value={option.id} title={option.description}>{effortOptionLabel(option)}</option>)}</select></label> : null}
-    {speed ? <label className={`speed-control${isPremiumSpeed(speed.current) ? " premium" : ""}`} title={isPremiumSpeed(speed.current) ? `${speed.current!.description ?? speed.current!.label}: costs more per request` : speed.label}>{isPremiumSpeed(speed.current) ? <ZapIcon size={12} aria-hidden="true" /> : null}<select aria-label="Speed" value={speed.current?.id ?? ""} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => {
-      const choice = speed.choices.find((item) => item.id === event.target.value); if (!choice) return;
-      setBusy(true); void run("setModelOption", { ...target, optionId: speed.optionId, value: choice.value }).finally(() => setBusy(false));
-    }}>{speed.current ? null : <option value="" disabled>{speed.explicit ? "Unavailable" : "Default"}</option>}{speed.choices.map((choice) => <option key={choice.id} value={choice.id} title={choice.description}>{speedChoiceLabel(choice)}</option>)}</select></label> : null}
-    <select aria-label="Permission mode" value={runtimeMode} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => { void run("setModes", { ...target, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes ?? ["approval-required", "auto", "full-access"]).map((mode) => <option key={mode} value={mode} disabled={!!managedRuntimeModeDenial(state.managedPolicy, mode)} title={managedRuntimeModeDenial(state.managedPolicy, mode)}>{runtimeLabels[mode]}</option>)}</select>
+    <select aria-label="Permission mode" value={runtimeMode} disabled={busy || thread?.providerNativeSubagent || !selection} onChange={(event) => { void run("setModes", { ...target, runtimeMode: event.target.value }); }}>{(provider?.supportedRuntimeModes?.length ? provider.supportedRuntimeModes : RuntimeMode.literals).map((mode) => <option key={mode} value={mode} disabled={!!managedRuntimeModeDenial(state.managedPolicy, mode)} title={managedRuntimeModeDenial(state.managedPolicy, mode)}>{runtimeLabels[mode]}</option>)}</select>
     {state.remoteSession ? null : <WorktreeSelector state={state} disabled={busy || state.sending || thread?.providerNativeSubagent === true} />}
   </div>;
   return <div className="composer-area"><div className="composer-column">
@@ -421,6 +450,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     {thread?.providerNativeSubagent ? <p className="subagent-readonly" role="status">This conversation is controlled by its provider. Send instructions in the parent conversation.</p> : null}
     <MachineChip state={state} disabled={busy || state.sending} />
     <div className="composer-box" onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); addFiles([...event.dataTransfer.files]); } }}>
+      <ComposerResize height={chosenHeight} measure={() => textarea.current?.offsetHeight ?? MIN_COMPOSER_HEIGHT} onLive={setLiveHeight} onCommit={(height) => { setEditingPreferences({ height }); setLiveHeight(undefined); }} />
       <ComposerFormatting disabled={disabled || picking} listAssist={editingPreferences.listAssist} contextUsage={state.contextUsage} onListAssist={() => setEditingPreferences({ listAssist: !editingPreferences.listAssist })} onAttach={pickFiles} onFormat={applyFormat} onIndent={(outdent) => applyEdit(indentMarkdown(text, inputSelection(), outdent, true), true)} />
       {promptSuggestion ? <div className="prompt-suggestion"><button type="button" className="prompt-suggestion-apply" title="Use this prompt" aria-label={`Use suggested prompt: ${promptSuggestion.text}`} onClick={() => {
         // Through applyEdit, so the insertion joins the textarea's own undo history.
@@ -510,9 +540,9 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       }}><FolderIcon size={12} /><span>{projectLabel}</span><ChevronDownIcon size={11} /></button></div> : null}
       <div className="composer-bottom">
         <div ref={controls} className="composer-controls">
-          <button ref={modelTrigger} className="model-trigger" title={modelLabel} disabled={busy || thread?.providerNativeSubagent} onClick={() => setModelsOpen(!modelsOpen)} aria-expanded={modelsOpen} aria-label="Choose model"><span>{modelLabel}</span><ChevronDownIcon size={12} /></button>
-          {modelsOpen && modelTrigger.current ? <ModelPicker state={state} selection={selection} anchor={modelTrigger.current} onClose={closeModels} /> : null}
-          {compactControls ? <details ref={overflow} className="composer-options-overflow" onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary className="icon-button" aria-label="Effort and permissions" title="Effort, permissions and worktree"><MoreHorizontalIcon size={16} /></summary><div className="composer-options-popup">{traits}</div></details> : traits}
+          <button ref={modelTrigger} className="model-trigger" title={triggerLabel} data-effort={effortValue || undefined} disabled={busy || thread?.providerNativeSubagent} onClick={() => setModelsOpen(!modelsOpen)} aria-expanded={modelsOpen} aria-label="Choose model">{isPremiumSpeed(speed?.current) ? <ZapIcon size={12} aria-hidden="true" /> : null}<span>{triggerLabel}</span><ChevronDownIcon size={12} /></button>
+          {modelsOpen && modelTrigger.current ? <ModelPicker state={state} selection={selection} anchor={modelTrigger.current} onClose={closeModels} extras={pickerExtras} /> : null}
+          {compactControls ? <details ref={overflow} className="composer-options-overflow" onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary className="icon-button" aria-label="Permissions and worktree" title="Permissions and worktree"><MoreHorizontalIcon size={16} /></summary><div className="composer-options-popup">{traits}</div></details> : traits}
         </div>
         <div className="composer-send-controls">
           {sendBlock ? <span className="composer-shortcuts" role="status"><span>{sendBlock === "Send when it reconnects" ? "Your draft is kept" : sendBlock}</span><span>{sendBlock === "Send when it reconnects" ? sendBlock : "Your draft is kept"}</span></span>

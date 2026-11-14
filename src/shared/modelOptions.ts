@@ -14,6 +14,17 @@ export function effortDescriptor(model: ServerProviderModel | undefined, selecti
   return undefined;
 }
 
+/**
+ * Claude's Ultracode toggle. It was an effort level until upstream made it a boolean option, so
+ * it is read from the descriptors the model advertises and is absent for every other model.
+ */
+export function ultracodeOption(model: ServerProviderModel | undefined, selection: ModelSelection | null | undefined): { readonly id: string; readonly value: boolean; readonly label: string; readonly description?: string | undefined } | undefined {
+  const descriptor = getProviderOptionDescriptors({ caps: model?.capabilities ?? {}, selections: selection?.options })
+    .find((item) => item.id === "ultracode" && item.type === "boolean");
+  if (!descriptor) return undefined;
+  return { id: descriptor.id, value: getProviderOptionCurrentValue(descriptor) === true, label: descriptor.label, description: descriptor.description };
+}
+
 /** Option label, marked when the server advertises it as the model's default. */
 export function effortOptionLabel(option: { label: string; isDefault?: boolean | undefined }): string {
   return option.isDefault ? `${option.label} (Default)` : option.label;

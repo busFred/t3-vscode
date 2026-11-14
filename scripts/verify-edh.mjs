@@ -178,11 +178,16 @@ async function chooseLiveTestModel(view, favorite = false) {
   }
   await view.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   await view.wait('!document.querySelector(".model-picker")');
-  const level = await view.evaluate(`(() => { const select=document.querySelector('select[aria-label="Effort level"]'); return select && [...select.options].find(option=>option.value==='low')?.value; })()`);
-  if (level) {
-    await view.evaluate(`(() => { const select=document.querySelector('select[aria-label="Effort level"]');select.value=${JSON.stringify(level)};select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
-    await view.wait(`document.querySelector('select[aria-label="Effort level"]').value === ${JSON.stringify(level)} && !document.querySelector('select[aria-label="Effort level"]').disabled`);
+  // Effort lives in the model picker's Reasoning column: reopen it and choose the cheapest level the model offers.
+  await view.evaluate(`document.querySelector('.model-trigger').click()`);
+  await view.wait('document.querySelector(".model-picker")');
+  const low = `[aria-label="Effort level"] .model-choice[data-value="low"]`;
+  if (await view.evaluate(`!!document.querySelector(${JSON.stringify(low)})`)) {
+    await view.evaluate(`document.querySelector(${JSON.stringify(low)}).click()`);
+    await view.wait(`document.querySelector(${JSON.stringify(low)})?.getAttribute('aria-pressed') === 'true' && !document.querySelector(${JSON.stringify(low)}).disabled && document.querySelector('.model-trigger').dataset.effort === 'low'`);
   }
+  await view.evaluate(`document.querySelector('.model-trigger').click()`);
+  await view.wait('!document.querySelector(".model-picker")');
 }
 async function runCommand(label) {
   await workbench.bringToFront();

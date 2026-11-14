@@ -12,8 +12,10 @@ import { resolveChatFileLink } from "./fileLinks.js";
 import type { TurnDiff, TurnDiffFile } from "./turnDiff.js";
 import type { ReviewDiffFileContentsResult } from "@t3tools/contracts";
 import { parseDraftTransfer, type DraftTransfer } from "../shared/viewDraft.js";
-import { readFile, stat } from "node:fs/promises";
-import { basename } from "node:path";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { tmpdir } from "node:os";
+import { imageFileName, parseImageBytes } from "./imageFiles.js";
 import { PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
 import { searchPreferencePatch } from "../shared/sessionSearchPresentation.js";
 import { parseCustomSnooze } from "../shared/threadAttention.js";
@@ -464,6 +466,32 @@ export class BridgeHandler {
         case "copyText": {
           if (typeof params.text !== "string") throw new Error("Invalid text.");
           await (await import("vscode")).env.clipboard.writeText(params.text); break;
+        }
+        case "saveImage": {
+          // The webview re-encodes the displayed image as PNG; the host only owns the file dialog and the write.
+          const vscode = await import("vscode");
+          const bytes = parseImageBytes(params.data);
+          const destination = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(imageFileName(params.name)), filters: { Images: ["png"] }, title: "Save image" });
+          if (destination) await vscode.workspace.fs.writeFile(destination, bytes);
+          return { id: message.id, result: !!destination };
+        }
+        case "openImage": {
+          const vscode = await import("vscode");
+          const threadId = typeof params.threadId === "string" ? params.threadId : this.hostState.snapshot(viewId).activeThreadId ?? undefined;
+          if (typeof params.path === "string") {
+            // A workspace image resolves exactly as a chat file link does, so it cannot name a path a link could not.
+            const link = resolveChatFileLink(params.path, this.hostState.workspaceForThread(threadId));
+            await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(this.hostState.localPathForThread(threadId, link.path)));
+            break;
+          }
+          // An image with no file behind it (tool output, an attachment) opens from a private temp copy.
+          const bytes = parseImageBytes(params.data);
+          // A fresh, unpredictable 0700 folder directly under the temp dir: a fixed shared parent could
+          // be created first by another user on a shared machine.
+          const file = join(await mkdtemp(join(tmpdir(), "t3-vscode-image-")), imageFileName(params.name));
+          await writeFile(file, bytes, { mode: 0o600 });
+          await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(file));
+          break;
         }
         case "openLink": await this.openLink(stringParam(params, "href"), typeof params.threadId === "string" ? params.threadId : this.hostState.snapshot(viewId).activeThreadId ?? undefined); break;
       }

@@ -236,6 +236,12 @@ export class HostState {
    * still re-derives: attention state depends on the clock, and a snooze expiring must show.
    */
   private emitThreads: HostStateSnapshot["threads"] | null = null;
+  /**
+   * Transcripts mapped during the current emit, by active thread. The mapping depends on the thread,
+   * never on the view, so two tabs on one conversation share it instead of mapping every row twice.
+   * Like `emitThreads`, it lives for one emit only, so nothing can go stale between updates.
+   */
+  private emitTranscripts: Map<string, HostStateSnapshot["transcript"]> | null = null;
   /** Thread and project derivations memoized while one snapshot is built; null outside a build so state changes are always seen. */
   private derived: Map<string, unknown> | null = null;
   private readonly clipboardNonce = randomUUID();
@@ -2877,6 +2883,12 @@ export class HostState {
     this.encodedItems.set(item, result); return result;
   }
   /** Reuses the previous row object when nothing in it changed, so the bridge can send only changed rows. */
+  private sharedTranscript(threadId: string | undefined, build: () => HostStateSnapshot["transcript"]): HostStateSnapshot["transcript"] {
+    if (!this.emitTranscripts || !threadId) return build();
+    const cached = this.emitTranscripts.get(threadId);
+    if (cached) return cached;
+    const built = build(); this.emitTranscripts.set(threadId, built); return built;
+  }
   private stableRow(row: TranscriptItem): TranscriptItem {
     const previous = this.transcriptRows.get(row.item);
     if (previous && (Object.keys(row) as Array<keyof TranscriptItem>).every((key) => previous[key] === row[key]) && Object.keys(previous).length === Object.keys(row).length) return previous;
@@ -3085,7 +3097,7 @@ export class HostState {
       // building and pushing it there costs a full row mapping and the largest field in the
       // payload for nothing. Its activeThreadId still stands, which is what the usage meter and
       // the selected-row highlight need.
-      transcript: projection && !sessionsOnly ? this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => {
+      transcript: projection && !sessionsOnly ? this.sharedTranscript(activeThreadId, () => this.projectQuestionHistory(projection).filter((row) => !turnItemIsWorkspacePreparation(row.item)).map((row) => {
         const source = this.threads.get(row.sourceThreadId)?.projection ?? projection;
         const status = row.item.type === "checkpoint" && row.item.runId ? indexBy(source.runs, "id", (run) => run.id as string).get(row.item.runId)?.status : undefined;
         const agent = row.item.type === "subagent" ? source.subagents.find(agent => agent.id === (row.item as Extract<OrchestrationV2TurnItem, { type: "subagent" }>).subagentId) : undefined;
@@ -3094,7 +3106,7 @@ export class HostState {
           ...(status ? { checkpointRunStatus: status } : {}),
           ...this.transcriptRevertFields(projection, row, activeThreadId, threadById),
         });
-      }) : [],
+      })) : [],
       pending: projection ? { ...derivePendingThreadRequests(projection), secrets: derivePendingSecretRequests(projection.visibleTurnItems) } : { approvals: [], userInputs: [], secrets: [] },
       ...(() => { const rows = this.childApprovalRows(activeThreadId); return rows.length ? { childRequests: rows } : {}; })(),
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
@@ -3243,10 +3255,10 @@ export class HostState {
   private emit(): void {
     if (this.disposed) return;
     this.revision += 1;
-    const outer = this.emitting, outerThreads = this.emitThreads;
-    this.emitting = new Map(); this.emitThreads = null;
+    const outer = this.emitting, outerThreads = this.emitThreads, outerTranscripts = this.emitTranscripts;
+    this.emitting = new Map(); this.emitThreads = null; this.emitTranscripts = new Map();
     try { for (const [listener, viewId] of this.listeners) listener(this.snapshot(viewId)); }
-    finally { this.emitting = outer; this.emitThreads = outerThreads; }
+    finally { this.emitting = outer; this.emitThreads = outerThreads; this.emitTranscripts = outerTranscripts; }
     this.scheduleSnoozeWake(); this.updateVisits();
   }
   async dispose(): Promise<void> {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { TranscriptItem, WireTurnItem } from "./bridge.js";
-import { transcriptRows, responseBoundaries, workElapsed, isWorkItem } from "./transcriptRows.js";
+import { transcriptRows, responseBoundaries, workElapsed, isWorkItem, foldSettledRounds } from "./transcriptRows.js";
 const row = (key: string, type: string, extra: Record<string, unknown> = {}): TranscriptItem => ({ key, sourceThreadId: "thread", toolLabel: null, output: null, needsDetail: false,
   item: { id: key, type, runId: "run", status: "completed", text: key, attachments: [], startedAt: "2026-10-07T12:00:00Z", completedAt: "2026-10-07T12:00:32Z", ...extra } as unknown as WireTurnItem });
 test("Partial answers and steers always separate activity, with one author boundary per run", () => {
@@ -31,4 +31,31 @@ test("MCP app results occupy their own timeline row using upstream source valida
   for (const [toolName, output] of [["other.plot", { t3McpApp: app }], ["charts.plot", { t3McpApp: { ...app, resourceUri: "https://bad" } }], ["charts.plot", { t3McpApp: { ...app, attachmentId: "" } }], ["charts.plot", {}]] as const) {
     assert.equal(isWorkItem(row("plain", "dynamic_tool", { toolName, output })), true);
   }
+});
+
+const shape = (rows: ReturnType<typeof foldSettledRounds>) => rows.map((group) => group.fold ? { fold: group.fold.map((inner) => inner.rows.map((item) => item.key).join("+")) } : group.rows.map((item) => item.key).join("+"));
+
+test("A settled round folds its working steps and keeps the prompt, the steer reply and the answer", () => {
+  const items = [row("question", "user_message"), row("thought", "reasoning"), row("command", "command_execution"), row("progress", "assistant_message"), row("viewed", "dynamic_tool", { viewedImagePath: "shot.png" }),
+    row("reply", "assistant_message"), row("steer", "user_message", { inputIntent: "steer" }), row("more", "reasoning"), row("note", "assistant_message"), row("tool", "file_change"), row("answer", "assistant_message")];
+  assert.deepEqual(shape(foldSettledRounds(transcriptRows(items), null)), [
+    "question", { fold: ["thought+command", "progress", "viewed"] }, "reply",
+    "steer", { fold: ["more", "note", "tool"] }, "answer",
+  ], "The reply to the steer and the final answer must stay visible; the folds keep their nested work groups");
+});
+
+test("The live run, an unfinished step, and a lone step are never folded", () => {
+  const items = [row("question", "user_message"), row("thought", "reasoning"), row("progress", "assistant_message"), row("answer", "assistant_message")];
+  const rows = transcriptRows(items);
+  assert.deepEqual(shape(foldSettledRounds(rows, "run")), ["question", "thought", "progress", "answer"]);
+  const running = transcriptRows(items.map((item) => item.key === "thought" ? { ...item, item: { ...item.item, status: "running" as const } } : item));
+  assert.deepEqual(shape(foldSettledRounds(running, null)), ["question", "thought", "progress", "answer"]);
+  assert.deepEqual(shape(foldSettledRounds(transcriptRows([row("q", "user_message"), row("t", "reasoning"), row("a", "assistant_message")]), null)), ["q", "t", "a"]);
+  assert.deepEqual(shape(foldSettledRounds(transcriptRows([row("q", "user_message"), row("t", "reasoning"), row("c", "command_execution", { runId: "other" })]), null)), ["q", "t", "c"], "No answer, nothing to fold toward");
+});
+
+test("Requests and visuals stay in place and split a fold around them", () => {
+  const items = [row("q", "user_message"), row("t1", "reasoning"), row("p1", "assistant_message"), row("approval", "approval_request"), row("t2", "reasoning"), row("p2", "assistant_message"),
+    row("html", "dynamic_tool", { toolName: "mcp.html_render" }), row("answer", "assistant_message")];
+  assert.deepEqual(shape(foldSettledRounds(transcriptRows(items), null)), ["q", { fold: ["t1", "p1"] }, "approval", { fold: ["t2", "p2"] }, "html", "answer"]);
 });

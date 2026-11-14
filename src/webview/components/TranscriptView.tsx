@@ -22,7 +22,7 @@ import { findAssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 import { TurnChanges } from "./TurnChanges";
 import { MessageNavigator, type RailFrame } from "./MessageNavigator";
 import { messageExchanges } from "../../shared/messageNavigation";
-import { finalResponseCheckpoints, transcriptRows, workSummary, workElapsed, responseBoundaries, isWorkItem, type DisplayRow } from "../../shared/transcriptRows";
+import { finalResponseCheckpoints, foldSettledRounds, transcriptRows, workSummary, workElapsed, responseBoundaries, isWorkItem, type DisplayRow } from "../../shared/transcriptRows";
 import { renderedMessageText, stripRenderedAssistantQuotes } from "../../shared/assistantQuoteText";
 import { splitMessageReferences } from "../../shared/messageReferences";
 import { MessageReferences } from "./MessageReferences";
@@ -30,7 +30,7 @@ import { htmlVisual } from "../../shared/chatVisuals";
 import { HtmlVisual } from "./HtmlVisual";
 import { ChatMedia } from "./ChatMedia";
 import { SubagentCard, SubagentState } from "./SubagentCard";
-import { useContext } from "react";
+import { createContext, useContext } from "react";
 import { SearchTargetContext, type SearchTarget } from "./SessionFind";
 import { MessageTimestamp } from "./MessageTimestamp";
 import type { SessionSearchOptions } from "../../shared/sessionSearch";
@@ -107,6 +107,9 @@ function FileChange({ item, threadId }: { item: Extract<WireTurnItem, { type: "f
     {item.diffStr ? <Diff text={item.diffStr} /> : item.oldStr !== undefined || item.newStr !== undefined ? <Diff text={[...(item.oldStr?.split("\n").map((line) => `-${line}`) ?? []), ...(item.newStr?.split("\n").map((line) => `+${line}`) ?? [])].join("\n")} /> : <p className="subtle">File change recorded.</p>}
   </div>;
 }
+/** The file name alone; a mid-run image chip names what was read, not where it lives. */
+const imageChipLabel = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
 function DynamicTool({ row, threadId }: { row: TranscriptItem; threadId: string }) {
   const run = useActions(); const [busy, setBusy] = useState(false); const [failed, setFailed] = useState(false);
   const load = useCallback(() => {
@@ -119,14 +122,16 @@ function DynamicTool({ row, threadId }: { row: TranscriptItem; threadId: string 
   const visual = htmlVisual(row.item);
   if (visual) return <HtmlVisual visual={visual} threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} />;
   if (knownVisual && row.needsDetail) return <div className="visual-loading" role="status">{busy ? "Loading visualization…" : "Visualization is unavailable."}{!busy ? <button className="text-button" onClick={load}>{failed ? "Retry" : "Load visualization"}</button> : null}</div>;
-  if (row.item.viewedImagePath) return <ChatMedia src={row.item.viewedImagePath} alt="Viewed image" threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} />;
+  // An image the agent read is a step, not an answer: it shows as a chip naming the file and opens
+  // in the overlay, rather than taking a full-width preview in the middle of the round.
+  if (row.item.viewedImagePath) return <ChatMedia display="chip" src={row.item.viewedImagePath} alt={imageChipLabel(row.item.viewedImagePath)} threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} />;
   // MCP and OpenCode tools return image blocks in their own output (T3 0.1.8). They lead the
   // details, ahead of the inputs, because a screenshot says more than the arguments that made it.
   // The host resolves each image by position; the renderer only needs to know how many there are.
   // An item whose output was trimmed from the wire has none until its detail is loaded.
   const outputImages = row.item.outputOmitted === true ? [] : toolOutputImages(row.item.output);
   const source = { sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id };
-  const fallback = <Disclosure label={row.toolLabel ?? row.item.title ?? row.item.toolName ?? "Tool"} icon={<WrenchIcon size={14} />} row={row} threadId={threadId}>{outputImages.length ? <div className="tool-output-images">{outputImages.map((_, index) => <ChatMedia key={index} src={`tool-output-${index}`} alt={outputImages.length > 1 ? `Tool output image ${index + 1}` : "Tool output image"} kind="image" threadId={threadId} source={source} reference={{ kind: "tool-output-image", index }} />)}</div> : null}<pre className="command-input">{typeof row.item.input === "string" ? row.item.input : JSON.stringify(row.item.input, null, 2)}</pre>{row.output ? <pre className="tool-output">{row.output}</pre> : <span className="subtle">{row.needsDetail ? "Expand again to retry loading output." : outputImages.length ? "No text output." : "No output."}</span>}</Disclosure>;
+  const fallback = <Disclosure label={row.toolLabel ?? row.item.title ?? row.item.toolName ?? "Tool"} icon={<WrenchIcon size={14} />} row={row} threadId={threadId}>{outputImages.length ? <div className="tool-output-images">{outputImages.map((_, index) => <ChatMedia display="chip" key={index} src={`tool-output-${index}`} alt={outputImages.length > 1 ? `Image ${index + 1}` : "Image"} kind="image" threadId={threadId} source={source} reference={{ kind: "tool-output-image", index }} />)}</div> : null}<pre className="command-input">{typeof row.item.input === "string" ? row.item.input : JSON.stringify(row.item.input, null, 2)}</pre>{row.output ? <pre className="tool-output">{row.output}</pre> : <span className="subtle">{row.needsDetail ? "Expand again to retry loading output." : outputImages.length ? "No text output." : "No output."}</span>}</Disclosure>;
   const app = mcpAppFromToolItem(row.item);
   return app ? <McpAppFrame key={app.attachmentId} app={app} threadId={threadId} source={{ sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }} revision={row.item.updatedAt} fallback={fallback} /> : fallback;
 }
@@ -140,6 +145,24 @@ const WorkGroup = memo(function WorkGroup({ rows, threadId, environmentId }: { r
   const failures = rows.filter((row) => row.item.status === "failed").length;
   return <section className="work-group"><button className="work-group-toggle" aria-label={`${label} · ${description}`} title={description} aria-expanded={open} onClick={() => setOpen(!open)}><ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /><span>{label}</span>{running ? <span className="work-running">{running} running</span> : null}{failures ? <span className="work-group-failures">{failures} failed</span> : null}</button>
     {open ? <div className="work-group-items">{rows.map((row) => <TurnItem key={row.key} row={row} threadId={threadId} environmentId={environmentId} />)}</div> : null}
+  </section>;
+});
+/** Whether a fold holds the row a search or a quote is opening, so it opens to show it. */
+const RevealContext = createContext<(rows: ReadonlyArray<TranscriptItem>) => boolean>(() => false);
+/**
+ * A settled round's working steps behind one toggle in the existing work-group style. Opening it shows
+ * the steps exactly as they render unfolded, with their own work groups still collapsed, so nothing is
+ * lost: text inside can be selected and quoted once it is open.
+ */
+const RoundFold = memo(function RoundFold({ steps, rows, threadId, environmentId }: { steps: ReadonlyArray<DisplayRow>; rows: ReadonlyArray<TranscriptItem>; threadId: string; environmentId: string }) {
+  const [open, setOpen] = useState(false);
+  const reveal = useContext(RevealContext);
+  useEffect(() => { if (reveal(rows)) setOpen(true); }, [reveal, rows]);
+  const label = workElapsed(rows), count = `${steps.length} steps`;
+  return <section className="work-group round-fold"><button className="work-group-toggle" aria-label={`${label} · ${count}`} aria-expanded={open} onClick={() => setOpen(!open)}><ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /><span>{label}</span><span className="work-group-meta">{count}</span></button>
+    {open ? <div className="work-group-items">{steps.map((step) => isWorkItem(step.rows[0]!)
+      ? <WorkGroup key={step.key} rows={step.rows} threadId={threadId} environmentId={environmentId} />
+      : <TurnItem key={step.key} row={step.rows[0]!} threadId={threadId} environmentId={environmentId} />)}</div> : null}
   </section>;
 });
 const TurnItem = memo(function TurnItem(props: { row: TranscriptItem; threadId: string; environmentId: string }) {
@@ -239,7 +262,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   const list = useRef<LegendListRef>(null);
   const transcript = useMemo(() => finalResponseCheckpoints(state.transcript), [state.transcript]);
   const displayCache = useRef(new Map<string, DisplayRow>());
-  const rows = useMemo(() => {
+  const baseRows = useMemo(() => {
     const next = new Map<string, DisplayRow>();
     const result = transcriptRows(transcript).map(row => {
       const previous = displayCache.current.get(row.key);
@@ -260,6 +283,19 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   const activeRun = thread?.activeRunId ?? state.queue?.activeRunId ?? (state.acknowledgedWorking ? state.transcript.find(row => row.item.type === "user_message" && row.item.messageId === state.acknowledgedWorking?.messageId)?.item.runId : null);
   const working = !!(activeRun || state.acknowledgedWorking);
   const activeHeader = activeRun ? boundaries.get(`${id}:${activeRun}`)?.first : undefined;
+  // Settled rounds fold their working steps; a fold keeps its identity while its steps are unchanged
+  // so the virtual list does not remeasure it on every snapshot.
+  const foldCache = useRef(new Map<string, DisplayRow>());
+  const rows = useMemo(() => {
+    const next = new Map<string, DisplayRow>();
+    const result = foldSettledRounds(baseRows, activeRun).map((row) => {
+      if (!row.fold) return row;
+      const previous = foldCache.current.get(row.key);
+      const stable = previous?.fold && previous.fold.length === row.fold.length && previous.fold.every((step, index) => step === row.fold![index]) ? previous : row;
+      next.set(row.key, stable); return stable;
+    });
+    foldCache.current = next; return result;
+  }, [baseRows, activeRun]);
   const container = useRef<HTMLDivElement | null>(null), firstVisible = useRef(0);
   const [sticky, setSticky] = useState(false);
   const updateSticky = useCallback(() => {
@@ -366,6 +402,10 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     frame = requestAnimationFrame(show);
     return () => { stopped = true; cancelAnimationFrame(frame); CSS.highlights?.delete("t3-assistant-citation"); };
   }, [citationTarget, id, sourceIndex, state.threadLoading, state.history.hasMore, state.history.loading, state.transcript.length, run]);
+  // A search result or quoted source inside a fold opens it, as a work group already does for search.
+  const reveal = useCallback((items: ReadonlyArray<TranscriptItem>) => items.some((row) =>
+    (!!searchTarget && searchTarget.threadId === id && row.key === searchTarget.rowKey)
+    || (!!citationTarget && row.sourceThreadId === citationTarget.threadId && (row.item.type === "assistant_message" || row.item.type === "user_message") && row.item.messageId === citationTarget.messageId)), [searchTarget, citationTarget, id]);
   const viewportRef = useCallback((element: HTMLDivElement | null) => { container.current = element; setViewport(element); onViewport?.(element); }, [onViewport]);
   const placement = state.messageNavigation ?? "left";
   const [railFrame, setRailFrame] = useState<RailFrame | null>(null);
@@ -393,7 +433,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     const finalAnswer = boundary?.last === last.key && boundary.answer?.canFork ? boundary.answer : undefined;
     return <div data-message-key={item.key} className={`timeline-row${first.item.type === "checkpoint" ? " checkpoint-row" : ""}`}>
       {boundary?.first === first.key ? <AssistantHeader working={working && first.item.runId === activeRun} headerKey={first.key} /> : null}
-      {isWorkItem(first) ? <WorkGroup rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : <TurnItem row={first} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} />}
+      {item.fold ? <RoundFold steps={item.fold} rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : isWorkItem(first) ? <WorkGroup rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : <TurnItem row={first} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} />}
       {finalAnswer?.item.type === "assistant_message" ? <div className="response-actions response-end"><CopyButton text={finalAnswer.item.text} /><ForkButton row={finalAnswer} threadId={id ?? ""} /><MessageTimestamp value={finalAnswer.item.startedAt} /></div> : null}
     </div>;
   }, [id, state.environment?.environmentId, boundaries, working, activeRun]);
@@ -401,7 +441,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source message…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading && !working)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length && !working) return <div className="chat-empty"><p>Loading conversation…</p></div>;
-  return <ModelNamesContext.Provider value={modelNames}><SearchTargetContext.Provider value={searchTarget ?? null}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><SubagentState value={subagentState}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation"
+  return <ModelNamesContext.Provider value={modelNames}><SearchTargetContext.Provider value={searchTarget ?? null}><RevealContext.Provider value={reveal}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><SubagentState value={subagentState}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation"
     onPointerDown={startReading} onKeyDown={startReading} onTouchStart={startReading} onWheel={(event) => { startReading(); if (event.deltaY < 0) loadEarlierAtTop(); }}>
     {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
     {navigationNotice ? <div className="citation-source-notice" role="status">{navigationNotice}</div> : null}
@@ -420,5 +460,5 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
         {id && state.restoreResult ? <RestoreResultRow threadId={id} result={state.restoreResult} /> : null}
       </div>}
     />
-  </div></SubagentState></RemoteSessionContext.Provider></SearchTargetContext.Provider></ModelNamesContext.Provider>;
+  </div></SubagentState></RemoteSessionContext.Provider></RevealContext.Provider></SearchTargetContext.Provider></ModelNamesContext.Provider>;
 }

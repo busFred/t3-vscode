@@ -268,6 +268,11 @@ select, input { color: inherit; background: var(--card); }
 .model-picker { position: fixed; display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--input); border-radius: 12px; box-shadow: 0 10px 35px #0005; z-index: 50; padding: 6px; overflow: hidden; }.model-picker > input { flex-shrink: 0; border: 0; border-bottom: 1px solid var(--border); padding: 9px 7px; outline: none; font-size: 0.75rem; }
 .model-picker-body { display: flex; min-height: 0; overflow: hidden; }.model-providers { display: flex; flex-direction: column; flex: 0 0 110px; border-right: 1px solid var(--border); overflow-y: auto; padding: 5px 5px 5px 0; gap: 3px; }.model-providers button { display: flex; align-items: center; gap: 5px; padding: 7px 5px; border-radius: 6px; font-size: 0.6875rem; text-align: left; }.model-providers button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.model-providers button small { margin-left: auto; font-size: 0.5625rem; color: var(--muted-foreground); }.model-providers button[aria-pressed="true"], .model-providers button:hover { background: var(--muted); }.model-providers button[aria-pressed="true"] { color: var(--primary); }
 .model-options { overflow-y: auto; min-width: 0; flex: 1; padding: 5px 0 0 5px; }.model-options header { padding: 8px 7px 4px; font-size: 0.625rem; font-weight: 600; color: var(--muted-foreground); }.model-row { display: flex; align-items: center; border-radius: 6px; }.model-row:has(.model-choice[aria-pressed="true"]) { background: var(--muted); }.model-choice { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 5px; text-align: left; padding: 8px 7px; border-radius: 6px; font-size: 0.75rem; }.model-choice > span { overflow-wrap: anywhere; }.model-choice > span small { display: block; }.model-choice:hover { background: var(--muted); }.model-choice[aria-pressed="true"] { color: var(--primary); }.model-favorite { flex-shrink: 0; margin-right: 3px; }.model-favorite[aria-pressed="true"] { color: var(--primary); }.model-options small { font-size: 0.5625rem; color: var(--muted-foreground); }
+.model-reasoning { flex: 0 0 108px; border-left: 1px solid var(--border); }
+.model-picker-narrow .model-picker-body { flex-wrap: wrap; }
+.model-picker-narrow .model-reasoning { flex: 0 0 100%; border-left: 0; border-top: 1px solid var(--border); overflow: visible; }
+.model-picker-narrow .model-reasoning [role="group"] { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.model-picker-footer label { display: flex; align-items: center; gap: 4px; }
 .model-picker-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); margin-top: 5px; padding: 7px 5px 2px; font-size: 0.625rem; flex-shrink: 0; }.model-picker-footer > button:first-of-type { margin-left: auto; }.model-legacy { display: flex; align-items: center; gap: 6px; }.model-legacy input, .model-manage-controls input { accent-color: var(--primary); }
 .model-manage-name { flex: 1; min-width: 0; padding: 8px 7px; font-size: 0.75rem; overflow-wrap: anywhere; }.model-manage-name small { display: block; }.model-manage-controls { display: flex; align-items: center; gap: 3px; flex-shrink: 0; padding-right: 5px; }.model-hidden .model-manage-name { color: var(--muted-foreground); }.model-preferences-note { font-size: 0.625rem; color: var(--muted-foreground); padding: 5px; margin: 0; flex-shrink: 0; }
 .composer-send-controls { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }.send-button, .stop-button { height: 27px; width: 27px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; }.send-button { background: var(--foreground); color: var(--background); }.stop-button { color: var(--foreground); background: var(--muted); border: 1px solid var(--input); }
@@ -500,8 +505,9 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .account-limit-bar i { display: block; height: 100%; background: var(--vscode-progressBar-background, var(--primary)); }
 .account-limit small { color: var(--muted-foreground); font-size: .5625rem; white-space: nowrap; }
 /* Shares the provider row at that select's height, keeping its own width and font. */
-.usage-account-choice .usage-model-choice,
-.usage-account-choice .usage-display-choice { flex: none; align-self: stretch; max-width: 92px; background: var(--vscode-dropdown-background, var(--card)); color: var(--vscode-dropdown-foreground, var(--foreground)); border: 1px solid var(--vscode-dropdown-border, var(--input)); border-radius: 3px; padding: 0 2px; font-size: .625rem; }
+/* Sizes to its two options so the account select keeps the slack; everything else is inherited from
+   the rule above, so both dropdowns in the row read at the same size. */
+.usage-account-choice .usage-display-choice { flex: none; align-self: stretch; border-radius: 3px; }
 .account-limit-accounts { margin: 2px 0 0 8px; }
 /* A fixed value column keeps every account's bar the same length within and across windows. */
 .account-limit-account { display: grid; grid-template-columns: minmax(0, 1fr) 72px; gap: 6px; align-items: center; font-size: .625rem; margin: 2px 0; }
@@ -596,6 +602,9 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .work-group-toggle { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; color: inherit; border: 0; background: transparent; padding: 7px 0; }
 .work-group-toggle > span:first-of-type { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .work-group-failures { color: var(--destructive); font-size: 10px; flex-shrink: 0; }
+.work-group-meta { color: var(--muted-foreground); font-size: .6875rem; }
+/* A fold holds whole messages, not just tool rows, so it is not capped to a scrolling box. */
+.round-fold > .work-group-items { max-height: none; overflow: visible; }
 .work-group-items { max-height: 360px; overflow: auto; padding-left: 15px; border-left: 1px solid var(--border); }
 .chat-heading strong, .message-author, .composer-models, .thread-row-title, .work-entry, .work-group { color: var(--foreground); }
 .chat-image { display: inline-block; position: relative; max-width: 100%; }
@@ -629,6 +638,7 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .selection-context-menu small { display: block; padding: 1px 8px 3px; color: var(--muted-foreground); }
 .math-context-menu { position: fixed; z-index: 120; width: min(230px, calc(100vw - 10px)); padding: 4px; border: 1px solid var(--vscode-menu-border, var(--border)); background: var(--vscode-menu-background, var(--card)); color: var(--vscode-menu-foreground, var(--foreground)); box-shadow: 0 3px 10px #0003; border-radius: 3px; }
 .math-context-menu button { display: block; width: 100%; padding: 5px 8px; border: 0; background: transparent; color: inherit; text-align: left; }
+.image-context-menu p { margin: 4px 8px; }
 .math-context-menu button:hover, .math-context-menu button:focus { background: var(--vscode-menu-selectionBackground, var(--sidebar-row-active)); color: var(--vscode-menu-selectionForeground, var(--foreground)); }
 .visual-expanded-content { width: min(900px, 100%); }
 .visual-expanded-content.image-viewer { display: flex; flex-direction: column; width: min(1200px, 100%); height: min(90vh, 100%); padding: 0; overflow: hidden; }
@@ -744,6 +754,9 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .find-pagination { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .6875rem; padding: 5px; flex: none; }
 .find-resize { display: flex; justify-content: center; align-items: center; gap: 8px; height: 14px; flex: none; cursor: row-resize; touch-action: none; user-select: none; border-top: 1px solid var(--border); color: var(--muted-foreground); background: var(--background); font-size: .5625rem; }
 .find-resize:hover, .find-resize:focus-visible { color: var(--foreground); background: var(--muted); outline: 1px solid var(--ring); outline-offset: -1px; }
+/* The composer's top-edge grip: the machine list's separator without its rule, inside the box's own border. */
+.composer-resize { display: flex; justify-content: center; align-items: center; height: 7px; margin: -6px -8px 2px; cursor: row-resize; touch-action: none; user-select: none; color: transparent; border-radius: 3px 3px 0 0; }
+.composer-resize:hover, .composer-resize:focus-visible, .composer-resize[data-dragging] { color: var(--muted-foreground); background: var(--muted); outline: 1px solid var(--ring); outline-offset: -1px; }
 .find-grip { width: 26px; height: 4px; border-top: 1px solid currentColor; border-bottom: 1px solid currentColor; }
 .find-context-popover { position: fixed; width: min(280px, calc(100vw - 8px)); max-height: calc(100vh - 8px); overflow: auto; z-index: 70; padding: 10px; border: 1px solid var(--input); border-radius: 4px; background: var(--vscode-editorWidget-background, var(--card)); color: var(--foreground); box-shadow: 0 5px 18px #0003; font-size: .75rem; }
 .find-context-popover fieldset { margin: 0 0 8px; padding: 0 0 8px; border-bottom: 1px solid var(--border); }.find-context-popover legend { font-weight: 600; margin-bottom: 5px; }
@@ -822,7 +835,6 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .model-switch-arrow { opacity: .7; }
 /* Images a tool returned in its own output, shown above the call's inputs. */
 .tool-output-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.tool-output-images .chat-image img { max-height: 320px; }
 /* Background roster: what still holds a Waiting conversation's completion. */
 .background-list { list-style: none; margin: 0; padding: 2px 0 0; display: flex; flex-direction: column; gap: 2px; }
 .background-list li { display: flex; align-items: center; gap: 5px; font-size: .6875rem; color: var(--muted-foreground); }

@@ -16,6 +16,7 @@ import type { DraftTransfer } from "../shared/viewDraft";
 import { SidebarView } from "./components/SidebarView";
 import { ServerSetup } from "./components/ServerSetup";
 import { MathContextMenu } from "./components/MathContextMenu";
+import { ImageContextMenu } from "./components/ImageContextMenu";
 import { EquationPreview } from "./components/EquationPreview";
 import { VisualDialog } from "./components/ChatMedia";
 import { settleDraftAttachments } from "./composerAttachments";
@@ -87,6 +88,6 @@ export function App() {
   }
   return <DateFormatContext.Provider value={state?.dateFormat ?? "yyyy-MM-dd"}><TimeFormatContext.Provider value={state?.timeFormat ?? "automatic"}><Actions value={run}><LinkRequestPeers value={state?.linkRequestPeers}><div className="app">
     {error ? <div className="error-banner" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError(null)}><XIcon size={14} /></button></div> : null}
-    {content}<MathContextMenu /><VisualDialog /><EquationPreview />
+    {content}<MathContextMenu /><ImageContextMenu /><VisualDialog /><EquationPreview />
   </div></LinkRequestPeers></Actions></TimeFormatContext.Provider></DateFormatContext.Provider>;
 }

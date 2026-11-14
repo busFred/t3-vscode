@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CheckIcon, CopyIcon, Maximize2Icon, ScanIcon, XIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, ImageIcon, Maximize2Icon, ScanIcon, XIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react";
 import { classifyMarkdownImageSource } from "@t3tools/client-runtime/markdown-images";
 import { mediaKindFromPath } from "@t3tools/shared/filePreview";
 import type { ChatAsset, ChatAssetReference, ChatAssetSource } from "../../shared/chatVisuals";
@@ -107,10 +107,16 @@ export function VisualDialog() {
   return visual ? <ExpandedVisual title={visual.title} className={visual.src ? "image-viewer" : ""} onClose={() => setVisual(null)}>{visual.src ? <ImageViewer key={visual.src} title={visual.title} src={visual.src} /> : <div className="mermaid-svg" dangerouslySetInnerHTML={{ __html: visual.svg ?? "" }} />}</ExpandedVisual> : null;
 }
 
-export function ChatMedia({ src, alt = "Image", threadId, source, attachmentId, kind: requestedKind, reference: explicitReference }: {
+export function ChatMedia({ src, alt = "Image", threadId, source, attachmentId, kind: requestedKind, reference: explicitReference, display = "inline" }: {
   src: string; alt?: string; threadId: string; source?: ChatAssetSource | undefined; attachmentId?: string; kind?: "image" | "video" | "audio";
   /** Names the asset directly where `src` is not a path or attachment id, such as a tool output image. */
   reference?: ChatAssetReference;
+  /**
+   * `chip` renders the asset as a one-line chip that opens the overlay, in the same language as an
+   * inline attachment. An image the agent read or produced partway through a round is evidence of a
+   * step rather than part of the answer, so it does not earn a full-width preview in the transcript.
+   */
+  display?: "inline" | "chip";
 }) {
   const run = useActions(); const [failed, setFailed] = useState(false);
   const classified = classifyMarkdownImageSource(src, "/");
@@ -119,11 +125,22 @@ export function ChatMedia({ src, alt = "Image", threadId, source, attachmentId, 
   const { asset, error, retry } = useChatAsset(threadId, source, direct ? null : reference);
   const url = direct ?? asset?.url;
   const kind = requestedKind ?? mediaKindFromPath(src) ?? "image";
+  // Read by the image context menu: the label names a saved file, and a workspace path can be opened as itself.
+  const menuData = { "data-image-name": alt, "data-image-path": reference?.kind === "media" ? reference.path : undefined };
   useEffect(() => setFailed(false), [url]);
   if (!direct && !reference) return <span className="attachment-label">{alt}</span>;
+  if (display === "chip") {
+    // The chip carries its own loading and failure states so a pending asset does not push a line
+    // of status text into a row that is meant to stay one line tall.
+    const broken = error ?? (failed ? "Media could not be loaded." : null);
+    return <button className="inline-attachment" {...menuData} data-image-src={url} aria-label={`Preview image ${alt}`} title={broken ?? alt} disabled={!url && !broken} onClick={() => {
+      if (broken) { setFailed(false); retry(); return; }
+      if (url) openVisual({ title: alt, src: url });
+    }}><ImageIcon size={12} />{alt}{broken ? " \u00b7 Retry" : ""}</button>;
+  }
   if (error || failed) return <span className="visual-failure" role="status">{alt}: {error ?? "Media could not be loaded."}<button className="text-button" onClick={() => { setFailed(false); retry(); }}>Retry</button><button className="text-button" onClick={() => { void run("openLink", { href: src, threadId }); }}>Open</button></span>;
   if (!url) return <span className="visual-loading" role="status">Loading {alt}…</span>;
   if (kind === "video") return <video className="chat-media" controls preload="metadata" src={url} aria-label={alt} onError={() => setFailed(true)} />;
   if (kind === "audio") return <audio className="chat-media" controls preload="metadata" src={url} aria-label={alt} onError={() => setFailed(true)} />;
-  return <span className="chat-image"><button className="image-preview-button" aria-label={`Preview ${alt}`} onClick={() => openVisual({ title: alt, src: url })}><img className="chat-media" src={url} alt={alt} loading="lazy" onError={() => setFailed(true)} /></button><button className="icon-button expand-visual" title="Expand image" aria-label={`Expand ${alt}`} onClick={() => openVisual({ title: alt, src: url })}><Maximize2Icon size={13} /></button></span>;
+  return <span className="chat-image"><button className="image-preview-button" aria-label={`Preview ${alt}`} onClick={() => openVisual({ title: alt, src: url })}><img className="chat-media" {...menuData} src={url} alt={alt} loading="lazy" onError={() => setFailed(true)} /></button><button className="icon-button expand-visual" title="Expand image" aria-label={`Expand ${alt}`} onClick={() => openVisual({ title: alt, src: url })}><Maximize2Icon size={13} /></button></span>;
 }

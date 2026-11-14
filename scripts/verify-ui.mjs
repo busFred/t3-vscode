@@ -34,6 +34,21 @@ const initial = {
   draft: { projectId: "project-one", workspaceRoot: "/tmp/t3-vscode", supportsNoProject: true, modelSelection: selection, runtimeMode: "auto", interactionMode: "default" },
   reader: { mode: "off", sensitivity: 5 }, activeThreadId: "thread-one", transcript: [user, assistant, command, diff], pending: { approvals: [], userInputs: [], secrets: [] }, history: { hasMore: false, loading: false, error: null }, threadLoading: false, sending: false,
 };
+
+/** Effort now lives in the model picker's Reasoning column; open it, choose, and close it again. */
+async function chooseEffort(page, value) {
+  if (!(await page.locator(".model-picker").count())) await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  await page.locator(`[aria-label="Effort level"] .model-choice[data-value="${value}"]`).click();
+  // Ultrathink edits the prompt and closes the picker itself; any other level leaves it open.
+  if (await page.locator(".model-picker").count()) {
+    await page.locator(`[aria-label="Effort level"] .model-choice[data-value="${value}"][aria-pressed="true"]:not(:disabled)`).waitFor();
+    await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  }
+  await page.waitForFunction(() => !document.querySelector(".model-picker"));
+}
+/** The effort the composer shows, read from its model trigger. */
+const effortValue = (page) => page.locator(".model-trigger").getAttribute("data-effort");
+
 function mockBridge() {
   window.__requests = []; window.__drafts = {};
   window.__initialForWide = window.__state;
@@ -143,8 +158,8 @@ try {
   await page.getByRole("button", { name: "Kimi for Coding", exact: true }).click();
   await page.getByRole("button", { name: "Choose model", exact: true }).filter({ hasText: "Kimi for Coding" }).waitFor();
   assert.equal(await page.getByRole("combobox", { name: "Interaction mode" }).count(), 0);
-  await page.getByRole("combobox", { name: "Effort level" }).selectOption("low");
-  assert.equal(await page.getByRole("combobox", { name: "Effort level" }).inputValue(), "low");
+  await chooseEffort(page, "low");
+  assert.equal(await effortValue(page), "low");
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("Browser fixture message");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await page.getByText("UI verification reply", { exact: true }).waitFor();
@@ -256,8 +271,15 @@ try {
   if (!(await screenshotRow.count())) await page.locator('.work-group-toggle').first().click();
   await screenshotRow.first().waitFor();
   await screenshotRow.first().click();
-  await page.locator('.tool-output-images img').first().waitFor();
-  assert.equal(await page.locator('.tool-output-images img').count(), 1, 'The image block renders; the text block is not an image');
+  // A mid-run image is a chip that opens the overlay, not a full-width preview.
+  await page.locator('.tool-output-images .inline-attachment[data-image-src]').first().waitFor();
+  assert.equal(await page.locator('.tool-output-images .inline-attachment').count(), 1, 'The image block renders; the text block is not an image');
+  assert.equal(await page.locator('.tool-output-images img').count(), 0, 'Mid-run images do not take a full-width preview');
+  // Right-click offers the image's own actions; with no file behind it there is no path to copy.
+  await page.locator('.tool-output-images .inline-attachment').first().click({ button: 'right' });
+  assert.deepEqual(await page.getByRole('menu', { name: 'Image' }).getByRole('menuitem').allTextContents(), ['Copy image', 'Save image as…', 'Open in editor']);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.image-context-menu'));
   assert.equal(await page.evaluate(() => window.__requests.some(request => request.method === 'chatAsset' && request.params.reference.kind === 'tool-output-image' && request.params.reference.index === 0)), true, 'The image is requested by its position in the output');
   assert.equal(await page.evaluate(() => {
     const images = document.querySelector('.tool-output-images'); const input = document.querySelector('.command-input');
@@ -487,16 +509,11 @@ try {
   await page.screenshot({ path: `${evidence}/usage-folded.png` });
   await sessionGroup.locator('summary').click();
   assert.equal(await sessionGroup.evaluate(element => element.open), true);
-  // T3 0.1.7 filters usage by provider and model. Only model-specific quotas are offered.
-  const modelChoice = page.getByLabel('Usage model');
-  await modelChoice.waitFor();
-  assert.deepEqual(await modelChoice.locator('option').allTextContents(), ['All models', 'Fable'], 'The general session/weekly allowances are not models');
-  await modelChoice.selectOption('Fable');
-  await page.waitForFunction(() => !document.querySelector('.account-limit-group summary')?.textContent?.includes('Session'));
-  assert.equal(await page.locator('.account-limit-group').filter({ hasText: 'Fable' }).count(), 1, 'The chosen model stays');
-  assert.equal(await page.locator('.account-limit-group').filter({ hasText: 'Session' }).count(), 0, 'Other windows are filtered out');
-  await modelChoice.selectOption('');
-  await page.locator('.account-limit-group').filter({ hasText: 'Session' }).first().waitFor();
+  // The per-model filter was removed: there was no room for a third control, and the panel already lists each quota.
+  assert.equal(await page.getByLabel('Usage model').count(), 0, 'No model filter in the usage header');
+  // Both header dropdowns share one type size and padding; "Pooled" only sizes to its content.
+  const sizes = await page.evaluate(() => [...document.querySelectorAll('.usage-account-choice select')].map((node) => { const style = getComputedStyle(node); return `${style.fontSize} ${style.padding}`; }));
+  assert.equal(sizes.length, 2); assert.equal(sizes[0], sizes[1], `Account and Pooled dropdowns must match: ${sizes.join(' vs ')}`);
   // Pooled windows are one line each and never fold; a provider with a single kind of limit never folds either.
   await page.getByLabel('Multiple accounts').selectOption('pooled');
   await page.waitForFunction(() => document.querySelectorAll('.account-limit-group').length === 0 && document.querySelectorAll('.account-limit-bar').length === 3, null, { timeout: 5000 });
@@ -855,7 +872,8 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   await page.getByRole("button", { name: "Choose model", exact: true }).click();
   await page.getByRole("textbox", { name: "Search models" }).fill("kimi");
   await page.getByRole("button", { name: "Kimi for Coding", exact: true }).click();
-  await page.getByRole("combobox", { name: "Effort level" }).selectOption("max");
+  await page.getByRole("button", { name: "Choose model", exact: true }).filter({ hasText: "Kimi for Coding" }).waitFor();
+  await chooseEffort(page, "max");
   await page.getByRole("combobox", { name: "Permission mode" }).selectOption("full-access");
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("First message without a project");
   await page.screenshot({ path: `${evidence}/empty-sidebar.png` });

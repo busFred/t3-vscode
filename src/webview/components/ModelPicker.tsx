@@ -1,5 +1,5 @@
 import { isManagedDriverAllowed, managedPolicyDeniedMessage } from "@t3tools/contracts";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GripVerticalIcon, CheckIcon, StarIcon } from "lucide-react";
 import type { HostStateSnapshot, ModelSelection } from "../../shared/bridge";
@@ -9,12 +9,23 @@ import { useActions } from "../actions";
 import { scoreModelPickerSearch } from "./t3/modelPickerSearch";
 import { getProviderModelPreference, orderedProviderModels, visibleProviderModels } from "../../shared/modelPreferences";
 
-export function ModelPicker({ state, selection, anchor, onClose, onSelect }: {
+// A Reasoning column beside the providers and models needs the extra room; at 480px three columns
+// left model names wrapping. Still clamped to the window, so a narrow editor is unaffected.
+const PICKER_WIDTH = 560;
+// Below this a third column leaves no room for model names, so Reasoning wraps under the list as a row.
+const NARROW_PICKER = 420;
+
+export function ModelPicker({ state, selection, anchor, onClose, onSelect, extras }: {
   readonly state: HostStateSnapshot;
   readonly selection: ModelSelection | null | undefined;
   readonly anchor: HTMLButtonElement;
   readonly onClose: () => void;
   readonly onSelect?: (selection: ModelSelection) => void;
+  /**
+   * The chosen model's own options, supplied by the composer that owns them: a Reasoning column
+   * beside the models and controls for the footer. Other callers pick a model only.
+   */
+  readonly extras?: { readonly reasoning?: ReactNode; readonly footer?: ReactNode };
 }) {
   const run = useActions();
   const favorites = state.favoriteModels ?? [];
@@ -24,7 +35,7 @@ export function ModelPicker({ state, selection, anchor, onClose, onSelect }: {
   const [managing, setManaging] = useState(false);
   const [pendingVisibility, setPendingVisibility] = useState<{ instanceId: string; model: string; visible: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [position, setPosition] = useState<CSSProperties>({ left: 8, bottom: 8, width: 480, maxHeight: 400 });
+  const [position, setPosition] = useState<CSSProperties>({ left: 8, bottom: 8, width: PICKER_WIDTH, maxHeight: 400 });
   const popup = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const providers = state.providers.filter((provider) => provider.enabled);
@@ -56,7 +67,7 @@ export function ModelPicker({ state, selection, anchor, onClose, onSelect }: {
     .sort((left, right) => (left.score ?? 0) - (right.score ?? 0)), [state.providers, favorites, preferences, search, providerId, showLegacy, managing]);
   useLayoutEffect(() => {
     const place = () => {
-      const bounds = anchor.getBoundingClientRect(); const width = Math.min(480, window.innerWidth - 16);
+      const bounds = anchor.getBoundingClientRect(); const width = Math.min(PICKER_WIDTH, window.innerWidth - 16);
       const above = bounds.top - 14, below = window.innerHeight - bounds.bottom - 14;
       const placement = above >= below ? { bottom: Math.max(8, window.innerHeight - bounds.top + 6) } : { top: Math.max(8, bounds.bottom + 6) };
       setPosition({ left: Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8)), ...placement, width, maxHeight: Math.max(120, Math.max(above, below)) });
@@ -80,7 +91,7 @@ export function ModelPicker({ state, selection, anchor, onClose, onSelect }: {
       : event.key === "ArrowDown" ? Math.min(index + 1, buttons.length - 1) : index <= 0 ? -1 : index - 1;
     event.preventDefault(); if (next < 0) input.current?.focus(); else buttons[next]?.focus();
   };
-  return createPortal(<div ref={popup} className="model-picker" role="dialog" aria-label="Choose model" style={position} onKeyDown={rowKey}>
+  return createPortal(<div ref={popup} className={`model-picker${typeof position.width === "number" && position.width < NARROW_PICKER ? " model-picker-narrow" : ""}`} role="dialog" aria-label="Choose model" style={position} onKeyDown={rowKey}>
     <input ref={input} aria-label="Search models" placeholder="Search all models…" value={search} onChange={(event) => setSearch(event.target.value)} />
     <div className="model-picker-body"><nav className="model-providers" aria-label="Model providers" onKeyDown={(event) => {
       if (event.key === "ArrowRight") { event.preventDefault(); input.current?.focus(); }
@@ -133,8 +144,9 @@ export function ModelPicker({ state, selection, anchor, onClose, onSelect }: {
           </div> : null}
         </div>; })}
       </section>;
-    })}{!entries.length ? <div className="model-empty">{search.trim() ? "No matching models." : providerId === "favorites" ? "Star a visible model to add it to Favorites." : providers.some((provider) => provider.models.length) ? "No visible models. Use Manage models to show them." : "No models available. Configure a provider in T3 Code."}</div> : null}</div></div>
+    })}{!entries.length ? <div className="model-empty">{search.trim() ? "No matching models." : providerId === "favorites" ? "Star a visible model to add it to Favorites." : providers.some((provider) => provider.models.length) ? "No visible models. Use Manage models to show them." : "No models available. Configure a provider in T3 Code."}</div> : null}</div>{extras?.reasoning && !managing ? <div className="model-options model-reasoning">{extras.reasoning}</div> : null}</div>
     <div className="model-picker-footer">
+      {managing ? null : extras?.footer}
       {!managing && providers.some((provider) => !getProviderModelPreference(preferences, provider.instanceId) && provider.models.some((model) => model.isLegacy)) ? <label className="model-legacy"><input type="checkbox" checked={showLegacy} onChange={(event) => setShowLegacy(event.target.checked)} />Show legacy models</label> : null}
       <button className="text-button" aria-pressed={managing} onClick={() => {
         if (!managing) { setSearch(""); if (providerId === "favorites") setProviderId(selection?.instanceId ?? "all"); }

@@ -10,7 +10,11 @@ export function finalResponseCheckpoints(items: ReadonlyArray<TranscriptItem>): 
   return items.filter(row => row.item.type !== "checkpoint" || !row.item.runId || latest.get(key(row)) === row);
 }
 
-export interface DisplayRow { readonly key: string; readonly rows: ReadonlyArray<TranscriptItem>; readonly firstIndex: number }
+export interface DisplayRow {
+  readonly key: string; readonly rows: ReadonlyArray<TranscriptItem>; readonly firstIndex: number;
+  /** Set on a round fold: the display rows it hides, rendered as they would be unfolded once opened. */
+  readonly fold?: ReadonlyArray<DisplayRow>;
+}
 export function isWorkItem(row: TranscriptItem): boolean {
   switch (row.item.type) {
     case "reasoning": case "command_execution": case "file_change": case "file_search": case "web_search": return true;
@@ -30,6 +34,63 @@ export function transcriptRows(items: ReadonlyArray<TranscriptItem>): DisplayRow
   }
   return rows;
 }
+/** What a settled round may hide: work, the agent's running commentary, and images it read on the way. */
+function foldable(row: DisplayRow): boolean {
+  const first = row.rows[0]!;
+  return isWorkItem(first) || first.item.type === "assistant_message" || (first.item.type === "dynamic_tool" && !!first.item.viewedImagePath);
+}
+const runKey = (row: TranscriptItem) => row.item.runId ? `${row.sourceThreadId}:${row.item.runId}` : null;
+const unsettled = (row: TranscriptItem) => row.item.status === "running" || row.item.status === "pending";
+
+/**
+ * Folds a settled round the way T3 Code does: once a response has ended, everything the agent did on
+ * the way to its answer collapses behind one "Worked for …" row, leaving the prompt and the answer.
+ *
+ * - A round is split at every user message, so a steer starts its own segment and the reply to that
+ *   steer is the last assistant message of its segment. Each segment's last assistant message stays
+ *   visible; only what came before it folds.
+ * - The run in progress never folds, nor does any segment with a running or pending item.
+ * - Requests, visuals, MCP apps, checkpoints and anything else that is not foldable stay in place and
+ *   split the fold around them.
+ * - A lone foldable row is left alone; it already has its own collapsed form.
+ *
+ * Folded rows keep their own display rows, so opening a fold shows the existing work groups, still
+ * collapsed — the fold nests rather than replaces them.
+ */
+export function foldSettledRounds(rows: ReadonlyArray<DisplayRow>, activeRunId: string | null | undefined): DisplayRow[] {
+  const out: DisplayRow[] = [];
+  let segment: DisplayRow[] = [];
+  const emit = (stretch: DisplayRow[]) => {
+    if (stretch.length < 2) { out.push(...stretch); return; }
+    out.push({ key: `fold:${stretch[0]!.key}`, rows: stretch.flatMap((row) => row.rows), firstIndex: stretch[0]!.firstIndex, fold: stretch });
+  };
+  const flush = () => {
+    const current = segment; segment = [];
+    if (!current.length) return;
+    const first = current[0]!.rows[0]!;
+    const live = (activeRunId && first.item.runId === activeRunId) || current.some((row) => row.rows.some(unsettled));
+    const answer = live ? -1 : current.findLastIndex((row) => row.rows[0]!.item.type === "assistant_message");
+    if (answer <= 0) { out.push(...current); return; }
+    let stretch: DisplayRow[] = [];
+    for (const row of current.slice(0, answer)) {
+      if (foldable(row)) { stretch.push(row); continue; }
+      emit(stretch); stretch = []; out.push(row);
+    }
+    emit(stretch);
+    out.push(...current.slice(answer));
+  };
+  let segmentRun: string | null = null;
+  for (const row of rows) {
+    const first = row.rows[0]!;
+    const key = runKey(first);
+    if (first.item.type === "user_message" || key === null) { flush(); segmentRun = null; out.push(row); continue; }
+    if (key !== segmentRun) { flush(); segmentRun = key; }
+    segment.push(row);
+  }
+  flush();
+  return out;
+}
+
 export function workSummary(items: ReadonlyArray<TranscriptItem>): string {
   const commands = items.filter((row) => row.item.type === "command_execution").length;
   const thoughts = items.some((row) => row.item.type === "reasoning");

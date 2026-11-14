@@ -101,6 +101,21 @@ const server = createServer(async (request, response) => {
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 const errors: string[] = [];
 let debugPages: Page[] = [];
+
+/** Effort now lives in the model picker's Reasoning column; open it, choose, and close it again. */
+async function chooseEffort(page: Page, value: string) {
+  if (!(await page.locator(".model-picker").count())) await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  await page.locator(`[aria-label="Effort level"] .model-choice[data-value="${value}"]`).click();
+  // Ultrathink edits the prompt and closes the picker itself; any other level leaves it open.
+  if (await page.locator(".model-picker").count()) {
+    await page.locator(`[aria-label="Effort level"] .model-choice[data-value="${value}"][aria-pressed="true"]:not(:disabled)`).waitFor();
+    await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  }
+  await page.waitForFunction(() => !document.querySelector(".model-picker"));
+}
+/** The effort the composer shows, read from its model trigger. */
+const effortValue = (page: Page) => page.locator(".model-trigger").getAttribute("data-effort");
+
 async function expectFonts(page: Page, expected: AppearanceSettings) {
   await page.waitForFunction((value) => {
     const prompt = document.querySelector("textarea");
@@ -341,15 +356,15 @@ try {
   assert.equal(await narrowChat.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
   preferences = DEFAULT_APPEARANCE; host.refreshAppearance();
   await Promise.all([...pages, narrowChat].map((page) => expectFonts(page, preferences)));
-  assert.equal(await narrowChat.locator(".composer-box .composer-controls select, .composer-box .composer-controls .model-trigger").count(), 3, "Model, effort and mode belong inside the composer");
+  assert.equal(await narrowChat.locator(".composer-box .composer-controls select, .composer-box .composer-controls .model-trigger").count(), 2, "Model and permission mode belong inside the composer; effort moved into the model picker");
   assert.equal(await narrowChat.locator(".composer-box").evaluate((node) => getComputedStyle(node).borderRadius), "3px");
   assert.equal(await narrowChat.locator(".model-trigger svg").count(), 1, "Model only needs its dropdown arrow");
   await narrowChat.setViewportSize({ width: 170, height: 820 });
-  await narrowChat.getByLabel("Effort and permissions", { exact: true }).click();
-  await narrowChat.getByRole("combobox", { name: "Effort level" }).selectOption("high");
+  await chooseEffort(narrowChat, "high");
+  await narrowChat.getByLabel("Permissions and worktree", { exact: true }).click();
   await narrowChat.getByRole("combobox", { name: "Permission mode" }).selectOption("auto");
-  await narrowChat.waitForFunction(() => (document.querySelector('select[aria-label="Effort level"]') as HTMLSelectElement).value === "high");
-  assert.equal(await third.getByRole("combobox", { name: "Effort level" }).inputValue(), "max");
+  await narrowChat.waitForFunction(() => (document.querySelector('.model-trigger') as HTMLElement).dataset.effort === "high");
+  assert.equal(await effortValue(third), "max");
   await narrowChat.locator(".assistant-message p").first().click();
   assert.equal(await narrowChat.locator("details[open]").count(), 0);
   assert.equal(await narrowChat.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -363,8 +378,8 @@ try {
   await narrowChat.screenshot({ path: `${evidence}/composer-170-dark.png` });
   await narrowChat.setViewportSize({ width: 360, height: 820 });
   await narrowChat.waitForFunction(() => !document.querySelector(".composer-options-overflow"));
-  assert.equal(await narrowChat.getByRole("combobox", { name: "Effort level" }).inputValue(), "high");
-  console.log("PASS: footer selectors remain inside the compact input, narrow overflow retains model/effort/permission settings and closes outside; light and dark layouts fit.");
+  assert.equal(await effortValue(narrowChat), "high");
+  console.log("PASS: footer selectors remain inside the compact input, narrow overflow retains permission settings, effort is kept from the picker and closes outside; light and dark layouts fit.");
   await narrowChat.close();
   // The quote spans bold and plain DOM nodes; native mouse selection captures rendered positions.
   const quoteInput = second.getByRole("textbox", { name: "Message", exact: true });
@@ -468,10 +483,10 @@ try {
   await second.getByRole("textbox", { name: "Search models" }).press("ArrowDown");
   await second.keyboard.press("Enter");
   await second.getByRole("button", { name: "Choose model", exact: true }).filter({ hasText: "GPT-6 Astra" }).waitFor();
-  await second.getByRole("combobox", { name: "Effort level" }).selectOption("high");
-  await second.waitForFunction(() => (document.querySelector('select[aria-label="Effort level"]') as HTMLSelectElement).value === "high");
+  await chooseEffort(second, "high");
+  await second.waitForFunction(() => (document.querySelector('.model-trigger') as HTMLElement).dataset.effort === "high");
   assert.deepEqual(host.snapshot("tab-two").threads.find((thread) => thread.id === "second")?.modelSelection, { instanceId: "codex-personal", model: "gpt-6-astra", options: [{ id: "reasoningEffort", value: "high" }] });
-  assert.equal(await third.getByRole("combobox", { name: "Effort level" }).inputValue(), "max");
+  assert.equal(await effortValue(third), "max");
   assert.equal(await second.getByRole("combobox", { name: "Interaction mode" }).count(), 0);
   await third.getByRole("button", { name: "Choose model", exact: true }).click();
   await third.locator('.model-providers button[aria-pressed="true"]').filter({ hasText: "Favorites" }).waitFor();
@@ -494,29 +509,30 @@ try {
   await third.getByRole("button", { name: "Legacy Kimi", exact: true }).waitFor();
   assert.equal(await third.locator('.model-choice').filter({ hasText: /^Kimi$/ }).count(), 0);
   await third.getByRole("textbox", { name: "Search models" }).fill("kimi-for-coding");
-  assert.equal(await third.locator('.model-options .model-choice').count(), 1, "Hidden default-instance models stay hidden in search; unavailable instances remain disabled");
+  assert.equal(await third.locator('.model-options:not(.model-reasoning) .model-choice').count(), 1, "Hidden default-instance models stay hidden in search; unavailable instances remain disabled");
   await third.getByRole("button", { name: "Manage models", exact: true }).click();
   assert.equal(await third.getByRole("button", { name: "Import from T3 Web", exact: true }).count(), 0);
   await third.getByRole("checkbox", { name: "Show Kimi", exact: true }).check();
   await third.getByRole("button", { name: "Done", exact: true }).click();
   await third.locator('.model-providers button').filter({ hasText: "Kimi" }).click();
-  assert.deepEqual(await third.locator('.model-options .model-choice').allTextContents(), ["Legacy Kimi", "Kimi"]);
+  assert.deepEqual(await third.locator('.model-options:not(.model-reasoning) .model-choice').allTextContents(), ["Legacy Kimi", "Kimi"]);
   assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in third tab");
   await second.getByRole("button", { name: "Choose model", exact: true }).click();
   await second.locator('.model-providers button').filter({ hasText: "Kimi" }).click();
-  assert.deepEqual(await second.locator('.model-options .model-choice').allTextContents(), ["Legacy Kimi", "Kimi"], "Local preferences broadcast to other chats");
+  assert.deepEqual(await second.locator('.model-options:not(.model-reasoning) .model-choice').allTextContents(), ["Legacy Kimi", "Kimi"], "Local preferences broadcast to other chats");
   await second.keyboard.press("Escape");
   await third.keyboard.press("Escape");
   assert.equal(await third.getByRole("dialog").count(), 0);
   await third.getByRole("button", { name: "Choose model", exact: true }).click();
   await third.getByRole("textbox", { name: "Search models" }).fill("claude");
   await third.getByRole("button", { name: "Claude Sonnet", exact: true }).click();
-  await third.getByRole("combobox", { name: "Effort level" }).selectOption("ultrathink");
+  await third.getByRole("button", { name: "Choose model", exact: true }).filter({ hasText: "Claude Sonnet" }).waitFor();
+  await chooseEffort(third, "ultrathink");
   assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Ultrathink:\nDraft in third tab");
-  assert.equal(await third.getByRole("combobox", { name: "Effort level" }).inputValue(), "ultrathink");
+  assert.equal(await effortValue(third), "ultrathink");
   assert.ok(!client.commands.some((command) => command.type === "thread.model-selection.set" && command.modelSelection.options?.some((option) => option.value === "ultrathink")));
-  await third.getByRole("combobox", { name: "Effort level" }).selectOption("high");
-  await third.waitForFunction(() => (document.querySelector('select[aria-label="Effort level"]') as HTMLSelectElement).value === "high");
+  await chooseEffort(third, "high");
+  await third.waitForFunction(() => (document.querySelector('.model-trigger') as HTMLElement).dataset.effort === "high");
   assert.equal(await third.getByRole("textbox", { name: "Message", exact: true }).inputValue(), "Draft in third tab");
   publishText(client, "third", `Saved source: ${serializeAssistantCitation(citation)}`, 2);
   await third.locator(".citation-card").waitFor();

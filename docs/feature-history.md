@@ -32,7 +32,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.3.2 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.3.8 |
 | [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.3.2 |
-| [Collapsed activity](#collapsed-activity) | Timed thought/tool groups separated by visible assistant messages and steers. | v0.0.1 | v0.1.13 |
+| [Collapsed activity](#collapsed-activity) | Timed thought/tool groups; settled rounds fold behind one toggle, keeping steer replies and answers visible. | v0.0.1 | v0.1.13 |
 | [MCP Apps](#mcp-apps) | Interactive MCP tool apps in the transcript. | v0.3.7 | v0.3.7 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
 | [Mermaid diagrams](#mermaid-diagrams) | Renders diagrams with native theme colors and an expanded preview. | v0.0.8 | v0.0.8 |
@@ -40,7 +40,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Math rendering and copying](#math-rendering-and-copying) | Renders KaTeX with scrolling, floating previews and copy actions. | v0.0.8 | v0.0.9 |
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
 | [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
-| [Effort and permission controls](#effort-and-permission-controls) | Advertised model options, a Speed (service tier / fast mode) control and runtime modes inside the composer. | v0.0.1 | v0.3.7 |
+| [Effort and permission controls](#effort-and-permission-controls) | Reasoning, Speed and Ultracode in the model picker; all four runtime modes in the composer. | v0.0.1 | v0.3.7 |
 | [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.9 |
 | [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.7 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
@@ -284,8 +284,19 @@ Task entries open independent editor tabs with the same preview/keep behavior. E
   is a different signal from the composer seeing a running turn. Neither fully stabilises it.
 - Unit tests and `scripts/verify-ui.mjs` are stable and green throughout. This check needs a
   deliberate look at how the fixture drives queue state; it should not be read as passing.
+- A later review suspected the host's unsequenced snapshot apply (`handleThread` applies any
+  `snapshot` item without comparing its sequence) as a production ordering hazard. Upstream T3 does
+  the same (`client-runtime/src/state/threads.ts`, the `item.kind === "snapshot"` branch resets the
+  sequence): the server sends a snapshot only when a subscription starts. So the host keeps upstream's
+  behaviour; the instability belongs to how the fake transport orders queue state.
 
 #### Unreleased — build each push once, and not at all for the sidebar
+
+- The transcript is also mapped once per push for each conversation shown, not once per view: the
+  mapping depends on the thread and never on the view. With two tabs on one 4,000-item conversation
+  plus the sidebar, snapshot building fell from 26–28ms to 13ms per push. Like the thread list, the
+  result lives for one push only. Caching across pushes would not help while streaming, because every
+  token replaces the projection.
 
 - The thread list is derived once per push instead of once per open view. Nothing in it depends on
   which view is being built, but the per-view derivation cache is reset for every snapshot, so a
@@ -720,6 +731,13 @@ Session resources retain the current History selection for restoration. Opening 
 ## Composer and attachments
 
 ### Compact composer
+
+#### Unreleased — resizable message box
+
+- A grip on the composer's top edge sets a fixed message-box height, kept per view. It uses the same
+  separator as the machine list: drag, arrow keys or Home/End. Double-click returns it to growing
+  with the text up to 220px. The height is capped at 70% of the panel.
+- The grip only sets a size, so typing, paste and native undo are untouched.
 
 #### v0.3.10
 
@@ -1169,6 +1187,16 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Markdown and media
 
+#### Unreleased — image context menu
+
+- Right-clicking a transcript image or image chip offers Copy image, Save image as…, Open in editor
+  and, for a workspace file, Copy path. It reuses the equation menu's look.
+- The webview re-encodes the image as PNG; the host owns the save dialog and the write. It accepts
+  only bounded PNG bytes and builds the file name from the label with separators stripped. An image
+  with no file behind it opens from a private temp copy (`0700` folder, `0600` file).
+- Validation: 2 unit tests in `src/host/imageFiles.test.ts`; `scripts/verify-ui.mjs` asserts the
+  menu's items on a tool-output image chip.
+
 #### v0.0.1
 
 - Render Markdown, code, tables, tool output and file changes with T3-derived components.
@@ -1204,6 +1232,20 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - The image preview (composer attachments, sent attachments and agent images) adds zoom in/out with a percentage, fit, keys `+`/`-`/`0`, Ctrl/Cmd+wheel zoom around the cursor and drag-to-pan beyond fit. Copy image (button, or Ctrl/Cmd+C with no text selected) writes `image/png` through the webview clipboard API, which VS Code's webview frame permits; other formats are converted through a canvas. Images from hosts without CORS still display but cannot be copied. Mermaid and equation previews are unchanged.
 
 ### Collapsed activity
+
+#### Unreleased — settled rounds fold; mid-run images as chips
+
+- Once a response has ended, the agent's working steps (thought/tool groups, running commentary and
+  images it read) fold behind one `Worked for …` toggle with a step count, as in T3 Code.
+- A round is split at every user message, so the reply to a steer is never folded; each segment's
+  last assistant message stays visible. The live run, any segment with a running or pending step,
+  and a lone step never fold. Requests, visuals, MCP apps and checkpoints stay in place.
+- Folds nest: opening one shows the existing work groups, still collapsed. Open content can be
+  selected and quoted; a search result or quoted source inside a fold opens it.
+- Images read or returned mid-run render as attachment-style chips that open the image overlay,
+  instead of full-width previews.
+- Validation: 3 new unit tests in `src/shared/transcriptRows.test.ts`; `scripts/verify-ui.mjs`
+  asserts tool-output images render as one chip with no inline preview.
 
 #### Unreleased — images from MCP and OpenCode tool output
 
@@ -1432,6 +1474,20 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Effort and permission controls
 
+#### Unreleased — options in the model picker; all four permission levels
+
+- Reasoning effort moves from the composer row into a Reasoning column in the model picker. Speed and
+  Ultracode join the picker footer. The trigger shows `Model · Effort`, plus the premium-speed icon.
+- Choosing Ultrathink still edits the prompt through the same handler as before, so the composer's
+  native undo is unchanged.
+- Ultracode, now a boolean option upstream, is offered where the model advertises it.
+- The picker's width limit grows from 480px to 560px. Below 420px the Reasoning column wraps under
+  the model list. The narrow overflow menu is now "Permissions and worktree".
+- The permission list falls back to every contract mode, including Auto-accept edits, when a
+  provider does not report its modes. This matches the host's fallback.
+- Validation: `scripts/verify-ui.mjs`, `scripts/verify-views.ts` and the native-undo gate in
+  `scripts/verify-edh.mjs` now choose effort through the picker (same assertions).
+
 #### v0.3.7
 
 - Detect advertised effort selectors by their reasoning role as well as recognized option IDs.
@@ -1477,18 +1533,14 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Account usage
 
-#### Unreleased — filter usage by model
+#### Unreleased — model filter removed; header dropdowns match
 
-- Add a model filter beside the existing provider selector, completing T3 Code 0.1.7's "filter Usage
-  totals by provider and model". Choosing a model narrows the panel to that quota.
-- Only model-specific quotas are offered, such as Claude Opus or Fable. The general session, weekly
-  and monthly allowances are not model-scoped, and an unreported placeholder window is not a model.
-- The filter appears only where the selected account reports a model quota, and clears itself when a
-  provider switch leaves the chosen model unreported, rather than showing an empty panel.
-- Applies to both the pooled and per-account layouts.
-- Validation: 6 unit tests in `src/shared/usageModelFilter.test.ts`; `scripts/verify-ui.mjs` asserts
-  the offered options, that choosing one hides the other windows, and that clearing restores them.
-
+- Remove the per-model usage filter added earlier in this cycle. The header had no room for a third
+  control, and it squeezed the account select; the panel already lists each model quota.
+- Drop the `.usage-display-choice` size override (`.625rem`, `padding: 0 2px`, from `053d19f`) so
+  "Pooled" matches the account select. It still sizes to its content.
+- Validation: `scripts/verify-ui.mjs` asserts the filter is gone and both dropdowns compute the same
+  font size and padding.
 
 #### v0.3.7
 
