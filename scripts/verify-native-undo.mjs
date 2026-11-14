@@ -178,14 +178,19 @@ async function verifyUndo({ home, workbench, sidebar, findWebview, runCommand })
     await workbench.keyboard.press('Control+z'); await expected(view, baseline);
     await workbench.keyboard.press('Control+y'); await expected(view, inserted);
     const title = await view.evaluate('document.querySelector(".chat-heading strong").textContent');
+    // Tag the textarea: a failure below then says whether it was remounted (lost history) or only unfocused.
+    await view.evaluate(`document.querySelector('${message}').dataset.roundTrip = '1'`);
     // Hide the webview behind a real editor, then reveal it (including the host's latest state push).
     await openReferenceFile();
     await workbench.locator('.tab').filter({ has: workbench.locator('.label-name').filter({ hasText: title }) }).first().click();
     // A real sidebar click leaves the editor webview; returning must preserve its history.
     await click(sidebar, 'input[aria-label="Search threads"]');
+    // Let VS Code finish moving focus to the sidebar first; clicking back while it is still in flight
+    // can leave neither webview focused (seen once in ten runs, with history intact).
+    await sidebar.wait(`document.activeElement === document.querySelector('input[aria-label="Search threads"]') && document.hasFocus()`, 5_000);
     await click(view, message);
     try { await view.wait(`document.activeElement === document.querySelector('${message}') && document.hasFocus()`, 5_000); }
-    catch { throw new Error(`${label}: composer focus after sidebar: ${await view.evaluate(`JSON.stringify({active:document.activeElement?.outerHTML.slice(0,300),focus:document.hasFocus(),log:window.__undoLog?.slice(-15)})`)}`); }
+    catch { throw new Error(`${label}: composer focus after sidebar: ${await view.evaluate(`JSON.stringify({active:document.activeElement?.outerHTML.slice(0,300),focus:document.hasFocus(),sameTextarea:document.querySelector('${message}')?.dataset.roundTrip === '1',log:window.__undoLog?.slice(-15)})`)}`); }
     for (const redo of ['Control+y', 'Control+Shift+z']) {
       await workbench.keyboard.press('Control+z');
       try { await expected(view, baseline); }

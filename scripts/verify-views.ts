@@ -912,10 +912,13 @@ try {
   // Since v0.2.4 the control is offered only for an idle or steerable turn, so an unsteerable
   // active turn removes it rather than showing it disabled.
   await second.waitForFunction(() => !document.querySelector('[aria-label="Send queued message now"]'));
-  // The dispatch mode below depends on the composer seeing a running turn, which is a different
-  // signal from that control disappearing; waiting on the control alone raced the state push and
-  // queued against an idle composer, which starts immediately instead.
-  await second.waitForFunction(() => (document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.placeholder === "Send a follow-up…");
+  // Both waits above and the running placeholder were already true before this push (the turn was
+  // running and the queue empty), so they proved nothing: Ctrl+Enter could land while the composer
+  // still offered steering and correctly steered. The shortcut hint is the signal that changes: a
+  // running, unsteerable turn offers "Enter to queue" with no steer shortcut. The queued fixture
+  // messages reappearing confirms the push itself arrived.
+  await second.waitForFunction(() => document.querySelectorAll('.queued-message').length === 2
+    && document.querySelector('textarea[aria-label="Message"]')?.getAttribute("title")?.startsWith("Enter to queue · Shift+Enter") === true);
   await submitFollowUp(second, "Unsupported steering safely queues", "Control+Enter", "queue");
   assert.equal((await input.getAttribute("title"))?.includes("to steer"), false);
   publishTurn(client, "second");

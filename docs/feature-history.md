@@ -271,7 +271,15 @@ Task entries open independent editor tabs with the same preview/keep behavior. E
 
 ### Independent chat views
 
-#### Unreleased — `verify-views.ts` queue section is unstable
+#### Unreleased — `verify-views.ts` queue section is unstable (resolved)
+
+- Root cause: a test race, not a product defect. Before "Unsupported steering safely queues" the
+  check waited for the "Send now" control to vanish and for the running placeholder, but both were
+  already true before the unsteerable-turn push (the turn was running and the queue empty), so the
+  waits passed at once. Ctrl+Enter could then land while the composer still offered steering, and it
+  correctly sent a steer. Instrumentation confirmed it: the placeholder never changed after the push.
+  The check now waits for the shortcut hint to drop "to steer" and for the fixture's queued messages
+  to reappear. Three consecutive full runs passed, where it had failed up to half the time.
 
 - The queue section of `scripts/verify-views.ts` fails intermittently on the "Unsupported steering
   safely queues" step, where the dispatch resolves to `start_immediately` against an expected
