@@ -41,7 +41,10 @@ export function App() {
   const run = useCallback(async (method: RpcMethod, params?: unknown) => {
     try {
       setError(null);
-      receive(await bridge.request<HostStateSnapshot>(method, params));
+      // Most actions reply with the view's state. One that replies with a value instead (a link, a
+      // dialog outcome) must not replace the state, or the whole view unmounts until the next push.
+      const reply = await bridge.request<unknown>(method, params);
+      if (reply && typeof reply === "object" && typeof (reply as HostStateSnapshot).revision === "number") receive(reply as HostStateSnapshot);
       return true;
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return false; }
   }, [receive]);

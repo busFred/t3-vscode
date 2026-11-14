@@ -133,10 +133,13 @@ export function ChatMedia({ src, alt = "Image", threadId, source, attachmentId, 
     // The chip carries its own loading and failure states so a pending asset does not push a line
     // of status text into a row that is meant to stay one line tall.
     const broken = error ?? (failed ? "Media could not be loaded." : null);
-    return <button className="inline-attachment" {...menuData} data-image-src={url} aria-label={`Preview image ${alt}`} title={broken ?? alt} disabled={!url && !broken} onClick={() => {
+    const chip = <button className="inline-attachment" {...menuData} data-image-src={url} aria-label={`Preview image ${alt}`} title={broken ?? alt} disabled={!url && !broken} onClick={() => {
       if (broken) { setFailed(false); retry(); return; }
       if (url) openVisual({ title: alt, src: url });
     }}><ImageIcon size={12} />{alt}{broken ? " \u00b7 Retry" : ""}</button>;
+    // As the inline preview's failure state did, a file the agent read can still be opened as itself.
+    if (broken && reference?.kind === "media") return <span className="visual-failure" role="status">{chip}<button className="text-button" onClick={() => { void run("openLink", { href: src, threadId }); }}>Open</button></span>;
+    return chip;
   }
   if (error || failed) return <span className="visual-failure" role="status">{alt}: {error ?? "Media could not be loaded."}<button className="text-button" onClick={() => { setFailed(false); retry(); }}>Retry</button><button className="text-button" onClick={() => { void run("openLink", { href: src, threadId }); }}>Open</button></span>;
   if (!url) return <span className="visual-loading" role="status">Loading {alt}…</span>;

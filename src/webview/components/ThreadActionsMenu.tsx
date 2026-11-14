@@ -7,6 +7,7 @@ import { AlarmClockIcon, ArchiveIcon, CheckIcon, ChevronRightIcon, CopyIcon, Cop
 import { resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
 import type { ThreadSummary } from "../../shared/bridge";
 import { useActions } from "../actions";
+import { bridge } from "../bridge-client";
 import { useTimeFormat } from "../timeFormat";
 
 type MenuItem =
@@ -76,7 +77,7 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     { kind: "action", key: "id", label: "Thread ID", run: () => copy(thread.id) },
     // T3 0.1.7: a link that opens the conversation from outside T3 Code. The host resolves the
     // environment, which a local conversation's summary does not carry.
-    { kind: "action", key: "link", label: "Link", run: () => { onClose(); void run("threadLink", { threadId: thread.id }).then((link) => { if (typeof link === "string") void run("copyText", { text: link }); }); } },
+    { kind: "action", key: "link", label: "Link", run: () => { onClose(); void bridge.request<unknown>("threadLink", { threadId: thread.id }).then((link) => { if (typeof link === "string") void run("copyText", { text: link }); }, () => undefined); } },
   ];
   const items: MenuItem[] = [
     { kind: "action", key: "pin", label: `${thread.pinned ? "Unpin" : "Pin"} thread`, icon: <PinIcon size={ICON} />, run: () => choose(thread.pinned ? "unpin" : "pin") },

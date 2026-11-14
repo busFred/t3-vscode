@@ -9,6 +9,8 @@ export interface TranscriptPatch {
   readonly keys?: ReadonlyArray<string>;
   /** Row count, sent with an omitted order so a webview that is not in step can tell. */
   readonly length?: number;
+  /** Revision of the state that last carried the row order an omitted order refers to. */
+  readonly orderRevision?: number;
   readonly rows: ReadonlyArray<TranscriptItem>;
 }
 type ThreadSummary = HostStateSnapshot["threads"][number];
@@ -23,6 +25,9 @@ export type WireState = Omit<HostStateSnapshot, "transcript" | "threads">
   & ({ readonly threads: HostStateSnapshot["threads"] } | { readonly threadsPatch: ThreadsPatch });
 
 /**
+ * Summaries must be immutable once the host hands them out: a nested value changed in place would
+ * still compare equal to its canonical copy and the change would never be sent.
+ *
  * The host derives fresh summary objects every push. Each is compared once with the last equal one
  * for its id, and every view's encoder then compares identities only: all views of one push receive
  * the same objects, so the deep comparison is not repeated per view.
@@ -48,22 +53,26 @@ export function isWireState(value: unknown): value is WireState {
 export class TranscriptEncoder {
   private sent: ReadonlyArray<TranscriptItem> | null = null;
   private sentThreads: ReadonlyMap<string, ThreadSummary> | null = null;
+  private orderRevision = 0;
   /** The next state is sent whole, e.g. for a webview that has just (re)loaded. */
   reset(): void { this.sent = null; this.sentThreads = null; }
   encode(state: HostStateSnapshot): WireState {
     const sent = this.sent, sentThreads = this.sentThreads, transcript = state.transcript;
     this.sent = transcript;
     const threads = state.threads.map(canonicalThread);
+    // Deleted conversations drop out of the cache once it holds clearly more than the current list.
+    if (canonicalById.size > threads.length + 64) { const live = new Set(threads.map((thread) => thread.id)); for (const id of canonicalById.keys()) if (!live.has(id)) canonicalById.delete(id); }
     this.sentThreads = new Map(threads.map((thread) => [thread.id, thread]));
-    if (!sent || !sentThreads) return state;
+    if (!sent || !sentThreads) { this.orderRevision = state.revision; return state; }
     // While a reply streams the order is unchanged, so rows compare by position with no index built.
     const sameOrder = transcript.length === sent.length && transcript.every((row, index) => row.key === sent[index]!.key);
     let rows: ReadonlyArray<TranscriptItem>;
     if (sameOrder) rows = transcript.filter((row, index) => row !== sent[index]);
     else { const byKey = new Map(sent.map((row) => [row.key, row])); rows = transcript.filter((row) => byKey.get(row.key) !== row); }
+    if (!sameOrder) this.orderRevision = state.revision;
     const { transcript: _transcript, threads: _threads, ...rest } = state;
     return { ...rest,
-      transcriptPatch: { ...(sameOrder ? { length: transcript.length } : { keys: transcript.map((row) => row.key) }), rows },
+      transcriptPatch: { ...(sameOrder ? { length: transcript.length, orderRevision: this.orderRevision } : { keys: transcript.map((row) => row.key) }), rows },
       threadsPatch: { ids: threads.map((thread) => thread.id), rows: threads.filter((thread) => sentThreads.get(thread.id) !== thread) } };
   }
 }
@@ -100,6 +109,8 @@ export class TranscriptDecoder {
   private threads: ReadonlyMap<string, HostStateSnapshot["threads"][number]> = new Map();
   private previousThreads: HostStateSnapshot["threads"] = [];
   private previousTranscript: HostStateSnapshot["transcript"] = [];
+  /** Revision whose row order `previousTranscript` holds. */
+  private orderRevision: number | null = null;
   private previousProviders: HostStateSnapshot["providers"] | undefined;
   /** `complete` is false when a patch names a row this webview never received; request a whole state then. */
   decode(state: WireState): { state: HostStateSnapshot; complete: boolean } {
@@ -141,7 +152,7 @@ export class TranscriptDecoder {
     const { threads: _threads, threadsPatch: _patch, ...state } = wire as WireState & { threads?: unknown; threadsPatch?: unknown };
     if (!("transcriptPatch" in state)) {
       this.rows = new Map(state.transcript.map((row) => [row.key, row]));
-      this.previousTranscript = state.transcript;
+      this.previousTranscript = state.transcript; this.orderRevision = state.revision;
       return { state, complete: true };
     }
     const { transcriptPatch, ...rest } = state;
@@ -149,7 +160,7 @@ export class TranscriptDecoder {
     if (!transcriptPatch.keys) {
       // Same order as last time: swap in the changed rows and leave the rest alone. A webview that
       // does not hold that order (it reloaded, or missed a push) cannot rebuild it and says so.
-      const inStep = previous.length === transcriptPatch.length && transcriptPatch.rows.every((row) => this.rows.has(row.key));
+      const inStep = previous.length === transcriptPatch.length && this.orderRevision === transcriptPatch.orderRevision && transcriptPatch.rows.every((row) => this.rows.has(row.key));
       if (!inStep) return { state: { ...rest, transcript: previous }, complete: false };
       if (!transcriptPatch.rows.length) return { state: { ...rest, transcript: previous }, complete: true };
       const changed = new Map(transcriptPatch.rows.map((row) => [row.key, row]));
@@ -164,7 +175,8 @@ export class TranscriptDecoder {
     // the transcript and keys its memos on that identity, so a fresh copy redoes all of them.
     const transcript = built.length === previous.length && built.every((row, index) => row === previous[index]) ? previous : built;
     this.rows = new Map(transcript.map((row) => [row.key, row]));
-    this.previousTranscript = transcript;
+    // An incomplete rebuild does not hold the host's order, so no later order-less patch may apply to it.
+    this.previousTranscript = transcript; this.orderRevision = transcript.length === transcriptPatch.keys.length ? state.revision : null;
     return { state: { ...rest, transcript }, complete: transcript.length === transcriptPatch.keys.length };
   }
 }

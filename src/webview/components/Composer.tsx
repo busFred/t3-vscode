@@ -411,6 +411,9 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const optionsDisabled = busy || thread?.providerNativeSubagent || !selection;
   const chooseEffort = (value: string) => {
     if (!effort) return;
+    // Re-applying Ultrathink while the prompt already carries it would rewrite the text and add an undo
+    // step. Any other level may be re-sent: choosing the model's shown default pins it explicitly.
+    if (promptEffort && value === "ultrathink") return;
     if (effort.promptInjectedValues?.includes(value)) {
       closeModels();
       setText(text.trim() ? applyClaudePromptEffortPrefix(text, "ultrathink") : "Ultrathink:\n", "take-focus"); return;

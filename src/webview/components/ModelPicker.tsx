@@ -83,6 +83,8 @@ export function ModelPicker({ state, selection, anchor, onClose, onSelect, extra
   const rowKey = (event: React.KeyboardEvent) => {
     if (event.key === "Escape") { event.preventDefault(); close(); return; }
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    // The footer's Speed and Ultracode selects change value with these keys; they are not list moves.
+    if (event.target instanceof HTMLSelectElement) return;
     if ((event.key === "Home" || event.key === "End") && event.target === input.current) return;
     const buttons = [...(popup.current?.querySelectorAll<HTMLButtonElement>(".model-choice:not(:disabled)") ?? [])];
     if (!buttons.length) return;

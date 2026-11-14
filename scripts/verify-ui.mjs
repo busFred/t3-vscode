@@ -57,6 +57,8 @@ function mockBridge() {
     window.__requests.push(request);
     const params = request.params ?? {};
     if (request.method === "restoreComposerDraft") { window.postMessage({ id: request.id, result: { draft: window.__drafts[params.draftKey]?.draft ?? { text: "", contexts: [] }, selection: window.__drafts[params.draftKey]?.selection } }, '*'); return; }
+    // Replies with a value rather than a state, as a dialog outcome would; the view must keep its state.
+    if (request.method === "saveImage") { window.postMessage({ id: request.id, result: true }, '*'); return; }
     if (request.method === "saveComposerDraft") { window.__drafts[params.draftKey] = params; window.postMessage({ id: request.id, result: true }, '*'); return; }
     if (request.method === "uploadAttachment") { const image = { key: 'pasted-upload', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length, previewUrl: `data:${params.mimeType};base64,${params.base64}`, environmentId: 'fixture', attachment: { type: 'image', id: 'pending-pasted', name: params.name, mimeType: params.mimeType, sizeBytes: atob(params.base64).length } }; setTimeout(() => window.postMessage({ id: request.id, result: image }, '*'), window.__uploadDelayMs ?? 50); return; }
     if (request.method === "pickAttachments") { const file = { key: 'picked-upload', name: 'outside-workspace.txt', mimeType: 'text/plain', sizeBytes: 3, environmentId: 'fixture', attachment: { type: 'file', id: 'pending-picked', name: 'outside-workspace.txt', mimeType: 'text/plain', sizeBytes: 3 } }; window.postMessage({ id: request.id, result: { attachments: [file], errors: [] } }, '*'); return; }
@@ -280,6 +282,12 @@ try {
   assert.deepEqual(await page.getByRole('menu', { name: 'Image' }).getByRole('menuitem').allTextContents(), ['Copy image', 'Save image as…', 'Open in editor']);
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.image-context-menu'));
+  // Saving sends PNG bytes, and a reply that is not a state must not unmount the conversation.
+  await page.locator('.tool-output-images .inline-attachment').first().click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Save image as…' }).click();
+  await page.waitForFunction(() => !document.querySelector('.image-context-menu'));
+  assert.equal(await page.evaluate(() => window.__requests.some((request) => request.method === 'saveImage' && typeof request.params.data === 'string' && atob(request.params.data.slice(0, 8)).startsWith('\x89PNG'))), true, 'Save sends PNG bytes');
+  assert.equal(await page.locator('.tool-output-images .inline-attachment').count(), 1, 'The conversation stays rendered after a non-state reply');
   assert.equal(await page.evaluate(() => window.__requests.some(request => request.method === 'chatAsset' && request.params.reference.kind === 'tool-output-image' && request.params.reference.index === 0)), true, 'The image is requested by its position in the output');
   assert.equal(await page.evaluate(() => {
     const images = document.querySelector('.tool-output-images'); const input = document.querySelector('.command-input');

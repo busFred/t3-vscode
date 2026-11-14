@@ -97,7 +97,7 @@ test("A streaming push with the same row order sends no keys, and only an in-ste
   const grown = row("b", "partial and more");
   const patch = encoder.encode(state(2, [a, grown]));
   assert.ok("transcriptPatch" in patch);
-  assert.deepEqual(patch.transcriptPatch, { length: 2, rows: [grown] }, "no key list while only a row's content changes");
+  assert.deepEqual(patch.transcriptPatch, { length: 2, orderRevision: 1, rows: [grown] }, "no key list while only a row's content changes");
   const decoded = decoder.decode(patch);
   assert.equal(decoded.complete, true);
   assert.deepEqual(decoded.state.transcript, [a, grown]);

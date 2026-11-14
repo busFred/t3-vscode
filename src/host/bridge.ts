@@ -14,7 +14,7 @@ import type { ReviewDiffFileContentsResult } from "@t3tools/contracts";
 import { parseDraftTransfer, type DraftTransfer } from "../shared/viewDraft.js";
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { imageFileName, parseImageBytes } from "./imageFiles.js";
 import { PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
 import { searchPreferencePatch } from "../shared/sessionSearchPresentation.js";
@@ -82,6 +82,9 @@ async function promptSnoozeUntil(): Promise<string | undefined> {
 }
 
 export class BridgeHandler {
+  /** One private (0700, unpredictable) folder per session for images opened without a file of their own. */
+  private imageFolder: Promise<string> | undefined;
+  private imageCount = 0;
   private readonly hostState: HostState;
   private readonly registry: WebviewRegistry;
   private readonly showSettings: () => PromiseLike<unknown>;
@@ -471,9 +474,10 @@ export class BridgeHandler {
           // The webview re-encodes the displayed image as PNG; the host only owns the file dialog and the write.
           const vscode = await import("vscode");
           const bytes = parseImageBytes(params.data);
-          const destination = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(imageFileName(params.name)), filters: { Images: ["png"] }, title: "Save image" });
+          // A bare file name resolves to the filesystem root; start the dialog in the home folder.
+          const destination = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(join(homedir(), imageFileName(params.name))), filters: { Images: ["png"] }, title: "Save image" });
           if (destination) await vscode.workspace.fs.writeFile(destination, bytes);
-          return { id: message.id, result: !!destination };
+          break;
         }
         case "openImage": {
           const vscode = await import("vscode");
@@ -488,7 +492,8 @@ export class BridgeHandler {
           const bytes = parseImageBytes(params.data);
           // A fresh, unpredictable 0700 folder directly under the temp dir: a fixed shared parent could
           // be created first by another user on a shared machine.
-          const file = join(await mkdtemp(join(tmpdir(), "t3-vscode-image-")), imageFileName(params.name));
+          this.imageFolder ??= mkdtemp(join(tmpdir(), "t3-vscode-image-")).catch((cause: unknown) => { this.imageFolder = undefined; throw cause; });
+          const file = join(await this.imageFolder, `${++this.imageCount}-${imageFileName(params.name)}`);
           await writeFile(file, bytes, { mode: 0o600 });
           await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(file));
           break;
