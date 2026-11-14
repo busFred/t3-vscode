@@ -292,6 +292,15 @@ Task entries open independent editor tabs with the same preview/keep behavior. E
 
 #### Unreleased — build each push once, and not at all for the sidebar
 
+- The session list travels as a patch, like the transcript: summaries a webview already holds go as
+  ids only. Each summary is compared once per push with the last equal one for its id, so every
+  view's encoder then compares identities. While a reply streams, the transcript patch also omits the
+  row order when it is unchanged and carries the row count instead, so a webview that reloaded or
+  missed a push reports itself incomplete and is sent a whole state. The encoder compares rows by
+  position when the order is unchanged. On the 300-conversation, 4,000-item benchmark (three
+  views): bytes per push 885 KB → 22 KB; webview decoding ~20ms → ~2ms; whole push ~43ms → ~22ms.
+  Validation: 2 new tests in `src/shared/transcriptWire.test.ts`.
+
 - The transcript is also mapped once per push for each conversation shown, not once per view: the
   mapping depends on the thread and never on the view. With two tabs on one 4,000-item conversation
   plus the sidebar, snapshot building fell from 26–28ms to 13ms per push. Like the thread list, the

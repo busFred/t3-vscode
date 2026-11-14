@@ -4,7 +4,7 @@ import type { HostStateSnapshot, TranscriptItem } from "./bridge.js";
 import { isWireState, TranscriptDecoder, TranscriptEncoder } from "./transcriptWire.js";
 
 const row = (key: string, text = key) => ({ key, sourceThreadId: "thread", item: { type: "assistant_message", text }, toolLabel: null, output: null, needsDetail: false }) as unknown as TranscriptItem;
-const state = (revision: number, transcript: TranscriptItem[]) => ({ revision, phase: "ready", transcript }) as unknown as HostStateSnapshot;
+const state = (revision: number, transcript: TranscriptItem[]) => ({ revision, phase: "ready", transcript, threads: [] }) as unknown as HostStateSnapshot;
 
 test("Delivered transcript rows travel as keys and decode to the host's transcript", () => {
   const encoder = new TranscriptEncoder(), decoder = new TranscriptDecoder();
@@ -64,4 +64,48 @@ test("A push that changes no row hands back the same transcript and providers", 
   const third = decoder.decode(wire({ transcriptPatch: { keys: ["a", "b"], rows: [row("b", "changed")] } }));
   assert.notEqual(third.state.transcript, second.state.transcript, "a changed row produces a new array");
   assert.equal(third.state.transcript[0], second.state.transcript[0], "while the untouched row keeps its identity");
+});
+
+test("Unchanged session summaries travel as ids, and a fresh host object with equal content counts as unchanged", () => {
+  const encoder = new TranscriptEncoder(), other = new TranscriptEncoder(), decoder = new TranscriptDecoder();
+  const summary = (id: string, title: string) => ({ id, title, tags: ["a"], modelSelection: { instanceId: "codex", model: "m" } });
+  const push = (revision: number, threads: unknown[]) => ({ ...state(revision, []), threads }) as unknown as HostStateSnapshot;
+  const first = encoder.encode(push(1, [summary("wire-x", "X"), summary("wire-y", "Y")]));
+  assert.ok("threads" in first);
+  const held = decoder.decode(first).state.threads;
+  // The host derives new objects every push; equal content must still go as an id only.
+  const second = encoder.encode(push(2, [summary("wire-x", "X"), summary("wire-y", "Y renamed"), summary("wire-z", "Z")]));
+  assert.ok("threadsPatch" in second && isWireState(second));
+  assert.deepEqual(second.threadsPatch.ids, ["wire-x", "wire-y", "wire-z"]);
+  assert.deepEqual(second.threadsPatch.rows.map((thread) => thread.id), ["wire-y", "wire-z"]);
+  const decoded = decoder.decode(second);
+  assert.equal(decoded.complete, true);
+  assert.equal(decoded.state.threads[0], held[0], "an unchanged summary is the very object held before");
+  assert.equal(decoded.state.threads[1]!.title, "Y renamed");
+  assert.equal(decoded.state.threads[1]!.tags, held[1]!.tags, "unchanged nested values keep identity");
+  // Another view's encoder tracks what *it* sent: its first state is whole.
+  assert.ok("threads" in other.encode(push(3, [summary("wire-x", "X")])));
+  // A webview that never received a summary reports itself incomplete so the host resends whole.
+  const reloaded = new TranscriptDecoder();
+  assert.equal(reloaded.decode(encoder.encode(push(4, [summary("wire-x", "X"), summary("wire-y", "Y renamed"), summary("wire-z", "Z")]))).complete, false);
+});
+
+test("A streaming push with the same row order sends no keys, and only an in-step webview accepts it", () => {
+  const encoder = new TranscriptEncoder(), decoder = new TranscriptDecoder();
+  const a = row("a"), b = row("b", "partial");
+  decoder.decode(encoder.encode(state(1, [a, b])));
+  const grown = row("b", "partial and more");
+  const patch = encoder.encode(state(2, [a, grown]));
+  assert.ok("transcriptPatch" in patch);
+  assert.deepEqual(patch.transcriptPatch, { length: 2, rows: [grown] }, "no key list while only a row's content changes");
+  const decoded = decoder.decode(patch);
+  assert.equal(decoded.complete, true);
+  assert.deepEqual(decoded.state.transcript, [a, grown]);
+  // A webview that reloaded holds no order to apply it to, so it asks for a whole state.
+  assert.equal(new TranscriptDecoder().decode(encoder.encode(state(3, [a, grown]))).complete, false);
+  // A new row changes the order, so the keys travel again.
+  const third = encoder.encode(state(4, [a, grown, row("c")]));
+  assert.ok("transcriptPatch" in third && third.transcriptPatch.keys?.length === 3);
+  // This decoder missed that push; the next key-less one must not be applied to its stale order.
+  assert.equal(decoder.decode(encoder.encode(state(5, [a, grown, row("c")]))).complete, false, "a decoder that missed a push asks for a whole state");
 });
