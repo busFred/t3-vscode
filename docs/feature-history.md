@@ -960,7 +960,12 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 #### Unreleased — VSIX rebuilt at 0.3.11 (UI round and performance)
 
 - `target-installer/t3-vscode-0.3.11.vsix`, 45 files, 3.71 MB, sha256
-  `937b0e718d1f54274e9ab9225409760eff0e63ba4911685821503b6b897cb215`, built from `88cf0be`. Built, **not published**; the manifest stays at 0.3.11 at the
+  `c51079c4514ddb11201d93991c64e3186b2ac6c122c98cdc8656192e1e5f48b9`, packaged at `dbd4e29`. The
+  extension source is unchanged from `88cf0be` (an earlier archive of it had sha256 `937b0e71…`);
+  `dbd4e29` fixed only test scripts. A fresh review of those test changes found nothing weakened,
+  and the native-undo gate with the updated script passed 12/12 in two further runs. The
+  `verify-views.ts` queue race and the `verify-worktrees.mjs` drift are fixed: both suites now run
+  to completion and pass. Built, **not published**; the manifest stays at 0.3.11 at the
   owner's direction. The earlier unpublished build is kept as `t3-vscode-0.3.11-bff66da.vsix`.
 - Fresh-context regression review of `bff66da..b32bac9`: one blocking finding (a value reply through
   the shared action runner replaced the view's state, blanking it after Save image and Copy link)
