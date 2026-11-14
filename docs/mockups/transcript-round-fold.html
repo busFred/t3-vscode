@@ -53,6 +53,22 @@ h2.section span { font-weight: 400; opacity: .65; }
 .pane .usage-account-choice select { flex: 1; min-width: 0; max-width: 100%; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border); padding: 3px; font-size: .75rem; }
 .pane .usage-account-choice .usage-display-choice { flex: none; align-self: stretch; max-width: 92px; border-radius: 3px; padding: 0 2px; font-size: .625rem; }
 
+.pane .model-picker { display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--input); border-radius: 12px; padding: 6px; }
+.pane .model-picker > input { border: 0; border-bottom: 1px solid var(--border); padding: 9px 7px; font-size: .75rem; background: transparent; color: var(--muted-foreground); font-family: inherit; }
+.pane .model-picker-body { display: flex; min-height: 0; overflow: hidden; }
+.pane .model-providers { display: flex; flex-direction: column; flex: 0 0 96px; border-right: 1px solid var(--border); overflow-y: auto; padding: 5px 5px 5px 0; gap: 3px; }
+.pane .model-providers button { display: flex; justify-content: space-between; border: 0; background: transparent; color: inherit; font: inherit; font-size: .75rem; padding: 5px 7px; border-radius: 6px; text-align: left; }
+.pane .model-providers button[aria-pressed="true"] { background: var(--muted); }
+.pane .model-options { overflow-y: auto; min-width: 0; flex: 1; padding: 5px 0 0 5px; }
+.pane .model-options header { padding: 8px 7px 4px; font-size: .625rem; font-weight: 600; color: var(--muted-foreground); }
+.pane .model-row { display: flex; align-items: center; border-radius: 6px; }
+.pane .model-choice { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 5px; text-align: left; padding: 8px 7px; border-radius: 6px; font-size: .75rem; border: 0; background: transparent; color: inherit; font-family: inherit; }
+.pane .model-row:has(.model-choice[aria-pressed="true"]) { background: var(--muted); }
+.pane .model-picker-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); margin-top: 5px; padding: 7px 5px 2px; font-size: .625rem; flex-shrink: 0; }
+.pane .model-picker-footer select { border: 0; background: transparent; color: var(--foreground); font: inherit; padding: 2px; border-radius: 3px; }
+.pane .text-button { border: 0; background: transparent; color: var(--primary); font: inherit; padding: 0; }
+.pane .attachment-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; font-size: .6875rem; color: var(--muted-foreground); margin: 4px 0; }
+
 /* ===== Transcript rows, matching the shipped chat ===== */
 .pane .message { margin: 0 0 10px; font-size: .8125rem; }
 .pane .user-bubble { background: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; margin-left: 56px; }
@@ -165,32 +181,80 @@ usage header keeps its bordered dropdowns. Styles between the marked rules are c
     </div></div></div>
 </div>
 
-<h2 class="section">3. Composer controls <span>— Ultracode, and the fourth permission level</span></h2>
+<h2 class="section">3. Model picker <span>— move the per-model options into the floating window</span></h2>
 <div class="grid">
-  <div class="case"><h3>Before · today</h3><p>Speed offers Standard/Fast only. Permissions fall back to three,
-    dropping <em>Auto-accept edits</em>.</p>
+  <div class="case"><h3>After · picker gains Reasoning and a footer</h3>
+    <p>A Reasoning column beside the model list, using the same row style the models use; Speed and Ultracode
+    join “Manage models” in the footer that already exists. No new control type.</p>
+    <div class="pane" style="width:348px;border:0;padding:0">
+      <div class="model-picker">
+        <input value="Search all models…" readonly>
+        <div class="model-picker-body">
+          <nav class="model-providers">
+            <button>Favorites</button><button>All providers</button>
+            <button>Codex <span>4</span></button><button aria-pressed="true">Claude <span>4</span></button>
+            <button>Muse Code <span>7</span></button>
+          </nav>
+          <div class="model-options">
+            <header>CLAUDE</header>
+            <div class="model-row"><button class="model-choice">Claude Haiku 5.5</button></div>
+            <div class="model-row"><button class="model-choice">Claude Sonnet 5</button></div>
+            <div class="model-row"><button class="model-choice" aria-pressed="true">Claude Opus 5 <span>✓</span></button></div>
+          </div>
+          <div class="model-options" style="flex:0 0 108px;border-left:1px solid var(--border)">
+            <header>REASONING</header>
+            <div class="model-row"><button class="model-choice">Low</button></div>
+            <div class="model-row"><button class="model-choice">Medium</button></div>
+            <div class="model-row"><button class="model-choice" aria-pressed="true">High <span>✓</span></button></div>
+            <div class="model-row"><button class="model-choice">Extra High</button></div>
+            <div class="model-row"><button class="model-choice">Max</button></div>
+          </div>
+        </div>
+        <div class="model-picker-footer">
+          <label>Speed <select><option>Standard</option></select></label>
+          <label>Ultracode <select><option>Off</option></select></label>
+          <button class="text-button" style="margin-left:auto">Manage models</button>
+        </div>
+      </div>
+    </div></div>
+
+  <div class="case"><h3>Composer row · before and after</h3>
+    <p>Five controls become three. The trigger carries the effort, so it stays readable without opening the
+    picker. Permissions stay in the row: it is a safety control worth seeing at a glance, and it now lists all
+    four contract levels.</p>
     <div class="pane"><div class="composer-box">
       <textarea rows="2" placeholder="Ask anything, or describe a task…"></textarea>
       <div class="composer-controls">
         <button class="model-trigger"><span>Claude Opus 5</span><span class="chev">⌄</span></button>
-        <select><option>High (Default)</option></select>
-        <select><option>Normal</option></select>
-        <select><option>Auto</option></select>
-        <select><option>Root</option></select>
-      </div>
-    </div></div></div>
-  <div class="case"><h3>After</h3><p>Ultracode becomes one more borderless select beside Speed, and the
-    permission select lists all four contract levels. No new control type.</p>
-    <div class="pane"><div class="composer-box">
+        <select><option>High (Default)</option></select><select><option>Normal</option></select>
+        <select><option>Auto</option></select><select><option>Root</option></select>
+      </div></div>
+      <div style="height:10px"></div>
+      <div class="composer-box">
       <textarea rows="2" placeholder="Ask anything, or describe a task…"></textarea>
       <div class="composer-controls">
-        <button class="model-trigger"><span>Claude Opus 5</span><span class="chev">⌄</span></button>
-        <select><option>High (Default)</option></select>
-        <select><option>Normal</option></select>
-        <select><option>Ultracode: Off</option></select>
-        <select><option>Auto-accept edits</option></select>
-      </div>
-    </div></div></div>
+        <button class="model-trigger"><span>Claude Opus 5 · High</span><span class="chev">⌄</span></button>
+        <select><option>Auto-accept edits</option></select><select><option>Root</option></select>
+      </div></div>
+    </div></div>
+</div>
+
+<h2 class="section">3b. Images read mid-run <span>— a chip, not a preview</span></h2>
+<div class="grid">
+  <div class="case"><h3>Before · today</h3><p>Every screenshot read mid-run takes a full-width preview.</p>
+    <div class="pane">
+      <div class="message">The screenshot shows the real cause:<span class="chat-media">edh-failure.png</span></div>
+      <div class="message">The keyring dialog blocks the webview.<span class="chat-media">edh-failure.png</span></div>
+    </div></div>
+  <div class="case"><h3>After</h3><p>A chip in the same style as the composer’s attachment rows, clicking opens
+    the viewer that already exists. Inside a folded round it costs one line.</p>
+    <div class="pane">
+      <div class="message">The screenshot shows the real cause:
+        <span class="attachment-chip">🖼 edh-failure.png · 203 KB</span></div>
+      <div class="message">The keyring dialog blocks the webview.
+        <span class="attachment-chip">🖼 edh-failure.png · 198 KB</span></div>
+      <button class="work-group-toggle"><span class="chev">›</span><span>Worked for 18m 39s</span><span class="work-running">7 steps · 2 images</span></button>
+    </div></div>
 </div>
 
 <h2 class="section">4. Resizable composer <span>— drag the top edge</span></h2>
