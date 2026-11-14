@@ -920,6 +920,27 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 
 ### Attachment presentation
 
+#### Unreleased — review fixes before packaging
+
+- The real-VS-Code undo script now covers the send path, which `AGENTS.md` requires whenever an
+  insertion path changes. It asserts the textarea's `disabled` attribute is never set across a send,
+  that Ctrl+Z still reaches the webview afterwards, and that undo cannot resurrect a sent message.
+  The browser harnesses already covered the failure path; only real VS Code shows key routing.
+- **Data loss fixed:** the send captured the message text and its references *before* the upload
+  wait, which this branch widened from one round trip to 30 seconds. An editor reference added from
+  outside the composer during that window was written to the draft, left out of the sent message,
+  and then wiped by the draft clear. The whole draft is re-read after the wait.
+- A reference chip can no longer be removed mid-send, which would have sent a message still carrying
+  its marker.
+- A streaming reply no longer flashes the previous paragraph when a long tail block splits: the
+  throttled text resets when throttling begins rather than carrying the old block forward.
+- Loopback detection accepts IPv4-mapped IPv6 spellings (`::ffff:127.0.0.1`).
+- The packaging gate now hashes `vendor/` as well as `src/`. The composer's insertion paths run
+  through vendored modules, so a resync could previously move undo behaviour without invalidating
+  the stamp — a live blind spot on this branch, which is a vendor resync.
+- Gate result: `verify-edh.mjs --undo-only` passes all eleven scenarios in real VS Code on an
+  invisible Xvfb display, and records the stamp.
+
 #### Unreleased — a send no longer costs the composer's undo history
 
 - A message in flight now holds the composer **read-only** instead of disabled. Toggling a

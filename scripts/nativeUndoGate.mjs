@@ -11,9 +11,15 @@ import { join } from "node:path";
 
 const STAMP = "target-installer/native-undo-verified.json";
 
-/** Hash of every tracked or untracked (not ignored) file under src/, plus package.json: what the extension is built from. */
+/**
+ * Hash of every tracked or untracked (not ignored) file under src/ and vendor/, plus package.json:
+ * what the extension is built from. `vendor/` counts because the composer's insertion paths run
+ * through vendored code (`@t3tools/shared/composerTrigger`, `composerContextReferences`,
+ * `client-runtime/state/composer-dispatch`), so a resync can move undo behaviour without touching
+ * a single file under src/.
+ */
 export async function computeSourceStamp(root) {
-  const files = execFileSync("git", ["ls-files", "-co", "--exclude-standard", "-z", "--", "src", "package.json"], { cwd: root, encoding: "utf8" })
+  const files = execFileSync("git", ["ls-files", "-co", "--exclude-standard", "-z", "--", "src", "vendor", "package.json"], { cwd: root, encoding: "utf8" })
     .split("\0").filter(Boolean).sort();
   const hash = createHash("sha256");
   for (const file of files) {

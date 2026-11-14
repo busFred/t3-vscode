@@ -96,8 +96,12 @@ const TAIL_THROTTLE_BYTES = 2048;
 function useThrottledTail(text: string, throttle: boolean): string {
   const [shown, setShown] = useState(text);
   const lastAt = useRef(0);
+  const throttling = useRef(false);
   useEffect(() => {
-    if (!throttle) return;
+    // A tail that splits into a new paragraph drops under the threshold and stops being throttled.
+    // Without resetting, the next tail to cross it would briefly render the previous block's text.
+    if (!throttle) { throttling.current = false; return; }
+    if (!throttling.current) { throttling.current = true; lastAt.current = Date.now(); setShown(text); return; }
     const wait = TAIL_THROTTLE_MS - (Date.now() - lastAt.current);
     if (wait <= 0) { lastAt.current = Date.now(); setShown(text); return; }
     const timer = setTimeout(() => { lastAt.current = Date.now(); setShown(text); }, wait);

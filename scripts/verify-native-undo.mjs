@@ -86,6 +86,53 @@ async function verifyUndo({ home, workbench, sidebar, findWebview, runCommand })
     await view.wait(`document.querySelector('${message}').value === ${JSON.stringify(`${before} plain words`)}`, 5_000);
   };
 
+  /**
+   * A send must never toggle the textarea's `disabled` attribute: that clears the element's native
+   * undo stack, so a send that then failed cost the user every step behind their text. The composer
+   * holds the field `readOnly` instead.
+   *
+   * The browser harness covers the failure path directly. What only real VS Code can show is that
+   * the field is never disabled while VS Code owns focus and key routing, and that Ctrl+Z still
+   * reaches the webview afterwards. One trivial turn on the fixture's cheap model, stopped as soon
+   * as it starts.
+   */
+  const sendKeepsUndo = async (view, label) => {
+    await instrument(view);
+    await click(view, message);
+    await view.wait(`document.activeElement === document.querySelector('${message}')`);
+    await view.evaluate(`(() => { const input = document.querySelector('${message}');
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, '');
+      input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await workbench.keyboard.type('ok', { delay: 30 });
+    await view.wait(`document.querySelector('${message}').value === 'ok'`);
+    // Watch the attribute itself, not only the resulting behaviour.
+    await view.evaluate(`(() => { const input = document.querySelector('${message}');
+      window.__disabledSeen = false;
+      new MutationObserver(() => { if (input.disabled) window.__disabledSeen = true; })
+        .observe(input, { attributes: true, attributeFilter: ['disabled'] }); return true; })()`);
+    await click(view, 'button[aria-label="Send message"]');
+    await view.wait(`document.querySelector('${message}').value === '' && !document.querySelector('${message}').readOnly`, 40_000);
+    assert.equal(await view.evaluate('window.__disabledSeen'), false,
+      `${label}: a send must not toggle the textarea's disabled attribute, which clears its undo stack`);
+    // End the turn immediately; this scenario is about the composer, not the reply.
+    const stop = await view.evaluate(`!!document.querySelector('button[aria-label="Stop generation"]')`);
+    if (stop) await click(view, 'button[aria-label="Stop generation"]');
+    // Keys still route to the webview, and undo cannot resurrect the sent message.
+    await click(view, message);
+    await workbench.keyboard.type('after the send', { delay: 30 });
+    await view.wait(`document.querySelector('${message}').value === 'after the send'`);
+    await workbench.keyboard.press('Control+z');
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const undone = await view.evaluate(`document.querySelector('${message}').value`);
+    assert.ok(undone.length < 'after the send'.length && 'after the send'.startsWith(undone),
+      `${label}: Ctrl+Z must undo typing done after a send, not ${JSON.stringify(undone)}`);
+    assert.ok(!undone.includes('ok'), `${label}: undo must not resurrect the sent message`);
+    console.log(`PASS: ${label}: a send never disables the field, and undo still works afterwards`);
+    await view.evaluate(`(() => { const input = document.querySelector('${message}');
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, '');
+      input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  };
+
   const fixture = JSON.parse(await readFile(join(home, 'rich-chat-fixture.json'), 'utf8'));
   const items = JSON.parse(await readFile(join(home, 'rich-chat-items.json'), 'utf8'));
   const source = items.find(item => item.type === 'assistant_message' && item.text === 'Verification response 24');
@@ -211,6 +258,7 @@ async function verifyUndo({ home, workbench, sidebar, findWebview, runCommand })
   const fresh = await findWebview('panel');
   await fresh.wait(`document.querySelector('${message}')`);
   await typeAndUndo(fresh, 'new chat tab');
+  await sendKeepsUndo(fresh, 'new chat panel');
   await insertions(fresh, 'new chat panel');
 
   // Close the plain panel so Sessions opens a distinct custom editor for the same fixture.

@@ -84,7 +84,10 @@ export const isLoopbackOrigin = (origin: string): boolean => {
   try { url = new URL(origin); } catch { return false; }
   if (url.protocol !== "http:" && url.protocol !== "https:") return false;
   const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  return host === "localhost" || host === "::1" || host === "0:0:0:0:0:0:0:1" || /^127\.\d+\.\d+\.\d+$/.test(host);
+  // IPv4-mapped spellings (::ffff:127.0.0.1) name the same loopback interface.
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(host)?.[1];
+  return host === "localhost" || host === "::1" || host === "0:0:0:0:0:0:0:1"
+    || /^127\.\d+\.\d+\.\d+$/.test(host) || (mapped !== undefined && /^127\.\d+\.\d+\.\d+$/.test(mapped));
 };
 
 export const readRuntimeState = (home: string): { state: ServerRuntimeState; path: string } | null => {

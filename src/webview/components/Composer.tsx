@@ -311,8 +311,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const promptSuggestion = suggested && !text.trim() && !attachments.length && !disabled && !setupBlocked
     && suggested.runId !== dismissedSuggestionRun && suggested.text.trim() ? suggested : null;
   const send = async (steer = false) => {
-    const value = formatComposerMessage(text, contexts);
-    if ((!value && !attachments.length) || disabled || setupBlocked || !selection || picking || placingPicked) return;
+    if ((!formatComposerMessage(text, contexts) && !attachments.length) || disabled || setupBlocked || !selection || picking || placingPicked) return;
     setBusy(true);
     // T3 0.1.9 sends while attachments upload. The server still needs every attachment id, so the
     // send waits out the in-flight uploads instead of the button refusing the click. The draft and
@@ -326,8 +325,13 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         setBusy(false); textarea.current?.focus(); return;
       }
     }
-    // Re-read after settling: an upload may have resolved, failed, or been removed while waiting.
-    const settled = readDraft(draftKey).attachments ?? [];
+    // Re-read the whole draft after settling, not just its attachments. An editor reference can be
+    // added from outside the composer while the send waits (`addEditorReference` is not gated on
+    // composer state), and the wait is now up to 30s rather than one round trip. Sending the text
+    // captured before the wait and then clearing the draft would discard that reference silently.
+    const draft = readDraft(draftKey);
+    const settled = draft.attachments ?? [];
+    const value = formatComposerMessage(draft.text, draft.contexts ?? contexts);
     const unusable = settled.filter((file) => file.pending || !file.attachment);
     if (unusable.length) {
       // Never send a message that silently drops the files it refers to.
@@ -441,7 +445,9 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
             if (context.type === "assistant") onEditCitation(context.citation, index);
             else void openFileReference(context);
           }}>{context.type === "file" ? `@${fileReferenceLabel(context)}` : assistantQuoteLabel(context.citation, quoteNumbers[index] ?? index + 1)}</button>
-          <button className="icon-button" aria-label={`Remove reference ${index + 1}`} onClick={() => updateDraft(draftKey, (draft) => ({ ...draft, text: removeContextReference(draft.text, context), contexts: draft.contexts.filter((_, position) => position !== index) }), "keep-focus")}><XIcon size={12} /></button>
+          {/* Disabled while a send owns the draft, like the attachment control: removing a chip mid-send
+              would drop it from the draft while the message still carries its marker. */}
+          <button className="icon-button" aria-label={`Remove reference ${index + 1}`} disabled={busy} onClick={() => updateDraft(draftKey, (draft) => ({ ...draft, text: removeContextReference(draft.text, context), contexts: draft.contexts.filter((_, position) => position !== index) }), "keep-focus")}><XIcon size={12} /></button>
         </div>)}
       </div> : null}
       {attachmentError ? <div className="composer-attachment-error" role="alert">{attachmentError}</div> : null}
