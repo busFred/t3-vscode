@@ -15,7 +15,7 @@ test("Delivered transcript rows travel as keys and decode to the host's transcri
   const finished = row("c", "final"), older = row("older");
   const second = encoder.encode(state(2, [older, a, b, finished]));
   assert.ok("transcriptPatch" in second && isWireState(second));
-  assert.deepEqual(second.transcriptPatch, { keys: ["older", "a", "b", "c"], rows: [older, finished] });
+  assert.deepEqual(second.transcriptPatch, { keys: ["older", "a", "b", "c"], order: 1, rows: [older, finished] });
   assert.deepEqual(decoder.decode(second), { state: state(2, [older, a, b, finished]), complete: true });
 });
 
@@ -94,18 +94,30 @@ test("A streaming push with the same row order sends no keys, and only an in-ste
   const encoder = new TranscriptEncoder(), decoder = new TranscriptDecoder();
   const a = row("a"), b = row("b", "partial");
   decoder.decode(encoder.encode(state(1, [a, b])));
+  // A whole state names no order, so the first patch after it carries its keys.
+  const keyed = encoder.encode(state(2, [a, row("b", "partial and")]));
+  assert.ok("transcriptPatch" in keyed && keyed.transcriptPatch.keys?.length === 2);
+  assert.equal(decoder.decode(keyed).complete, true);
   const grown = row("b", "partial and more");
-  const patch = encoder.encode(state(2, [a, grown]));
+  const patch = encoder.encode(state(3, [a, grown]));
   assert.ok("transcriptPatch" in patch);
-  assert.deepEqual(patch.transcriptPatch, { length: 2, orderRevision: 1, rows: [grown] }, "no key list while only a row's content changes");
+  assert.deepEqual(patch.transcriptPatch, { length: 2, order: keyed.transcriptPatch.order, rows: [grown] }, "no key list while only a row's content changes");
   const decoded = decoder.decode(patch);
   assert.equal(decoded.complete, true);
   assert.deepEqual(decoded.state.transcript, [a, grown]);
   // A webview that reloaded holds no order to apply it to, so it asks for a whole state.
-  assert.equal(new TranscriptDecoder().decode(encoder.encode(state(3, [a, grown]))).complete, false);
-  // A new row changes the order, so the keys travel again.
-  const third = encoder.encode(state(4, [a, grown, row("c")]));
-  assert.ok("transcriptPatch" in third && third.transcriptPatch.keys?.length === 3);
-  // This decoder missed that push; the next key-less one must not be applied to its stale order.
-  assert.equal(decoder.decode(encoder.encode(state(5, [a, grown, row("c")]))).complete, false, "a decoder that missed a push asks for a whole state");
+  assert.equal(new TranscriptDecoder().decode(encoder.encode(state(4, [a, grown]))).complete, false);
+});
+
+test("A webview that missed a reorder with the same row count and revision asks for a whole state", () => {
+  // A request reply and a push can share a revision, so the order id must not be the revision.
+  const encoder = new TranscriptEncoder(), decoder = new TranscriptDecoder();
+  const a = row("a"), b = row("b");
+  decoder.decode(encoder.encode(state(5, [a, b])));
+  assert.equal(decoder.decode(encoder.encode(state(5, [a, b]))).complete, true);
+  encoder.encode(state(5, [b, a])); // the reorder this webview never receives
+  const next = encoder.encode(state(5, [b, row("a", "edited")]));
+  assert.ok("transcriptPatch" in next && !next.transcriptPatch.keys, "the following push omits the order");
+  const result = decoder.decode(next);
+  assert.equal(result.complete, false, "a stale order must not be patched");
 });
