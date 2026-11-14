@@ -920,6 +920,22 @@ The archived [read-only file-reference investigation](archive/file-reference-inv
 
 ### Attachment presentation
 
+#### Unreleased — VSIX built at 0.3.11
+
+- `target-installer/t3-vscode-0.3.11.vsix`, 45 files, 3.71 MB,
+  sha256 `06143a972553feec38be92bc7639a57a1dd0257b30854c4a1575fc55ed1551a1`.
+  Built, **not published**; the owner kept the manifest version at 0.3.11, so this file differs from
+  the published 0.3.11 and must not be released under that version without a bump.
+- Packaging first failed on third-party notices: `isarray@1.0.0` ships no license file. Its declared
+  MIT text is taken from its README, pinned to that name, version and license, exactly as the
+  existing `fastdom`/`strictdom` entries are.
+- Gates cleared: the fresh-context regression review (BLOCK resolved, see above) and
+  `verify-edh.mjs --undo-only` passing all eleven scenarios in real VS Code, whose stamp matched the
+  packaged source.
+- Validation at the packaged commit: typecheck clean; 792/792 unit tests; `pnpm run build` clean;
+  `scripts/verify-ui.mjs` clean; `scripts/verify-views.ts` passes except its known unstable queue
+  step, which predates this branch.
+
 #### Unreleased — review fixes before packaging
 
 - The real-VS-Code undo script now covers the send path, which `AGENTS.md` requires whenever an
