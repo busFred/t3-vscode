@@ -17,7 +17,7 @@
 - A Waiting conversation shows which background work is holding it.
 - Approve or decline a child conversation's approval from its parent, after an explicit "Show request" step.
 - Allow an MCP app for the whole session, not only once.
-- Screen readers announce when a turn starts and finishes.
+- Screen readers announce what the agent is doing (running a command, editing files, thinking) and when it needs your input.
 - A pull-request link opens at the comment, diff line or checks tab it points to.
 - Images returned by MCP and OpenCode tools are shown.
 - The context meter uses T3 Code's own context-window calculation.
