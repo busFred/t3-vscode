@@ -56,7 +56,7 @@ function mockBridge() {
   window.acquireVsCodeApi = () => ({ getState: () => null, setState: () => {}, postMessage: (request) => {
     window.__requests.push(request);
     const params = request.params ?? {};
-    if (request.method === "restoreComposerDraft") { window.postMessage({ id: request.id, result: { draft: window.__drafts[params.draftKey]?.draft ?? { text: "", contexts: [] }, selection: window.__drafts[params.draftKey]?.selection } }, '*'); return; }
+    if (request.method === "restoreComposerDraft") { setTimeout(() => window.postMessage({ id: request.id, result: { draft: window.__drafts[params.draftKey]?.draft ?? { text: "", contexts: [] }, selection: window.__drafts[params.draftKey]?.selection } }, '*'), window.__restoreDelay ?? 0); return; }
     // Replies with a value rather than a state, as a dialog outcome would; the view must keep its state.
     if (request.method === "saveImage") { window.postMessage({ id: request.id, result: true }, '*'); return; }
     if (request.method === "saveComposerDraft") { window.__drafts[params.draftKey] = params; window.postMessage({ id: request.id, result: true }, '*'); return; }
@@ -1064,6 +1064,30 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   assert.equal(await originalTextarea.evaluate(element => element === document.querySelector('textarea[aria-label="Message"]')), true);
   assert.equal(await page.locator('.reader-flow, .reader-toggle, .composer-layout-control').count(), 0);
   console.log('PASS: virtualized single-column chat in wide/narrow editors, draft retention on resize, wide equation scrolling, preview and delimiter-aware copying');
+  // Protected native undo: a draft key this view has never shown starts out restoring. That is every
+  // first send from a new chat, where the key moves from "new" to the thread's id. Restoring must
+  // hold the field read-only; toggling `disabled` clears the textarea's undo stack. The restore is
+  // delayed so the restoring state is certain, and observing read-only proves the path ran.
+  await page.evaluate(() => {
+    window.__restoreDelay = 400;
+    // The composer remounts per conversation, so watch every message box on the page, including the
+    // one about to mount: a box born while restoring reveals itself when that attribute is removed.
+    window.__restoreSeen = { disabled: false, readOnly: false };
+    window.__restoreObserver = new MutationObserver((records) => { for (const record of records) {
+      if (!(record.target instanceof HTMLTextAreaElement) || record.target.getAttribute('aria-label') !== 'Message') continue;
+      if (record.attributeName === 'disabled') window.__restoreSeen.disabled = true;
+      if (record.attributeName === 'readonly') window.__restoreSeen.readOnly = true;
+    } });
+    window.__restoreObserver.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['disabled', 'readonly'] });
+    window.__replace({ activeThreadId: 'thread-first-send', threads: [...window.__state.threads, { ...window.__state.threads[0], id: 'thread-first-send', title: 'First send' }] });
+  });
+  await page.waitForFunction(() => window.__requests.some((request) => request.method === 'restoreComposerDraft' && request.params.draftKey === 'thread-first-send'));
+  await page.waitForTimeout(600); // past the 400ms restore delay
+  await page.waitForFunction(() => { const input = document.querySelector('textarea[aria-label="Message"]'); return !input.disabled && !input.readOnly; }, null, { timeout: 5000 });
+  const restoreSeen = await page.evaluate(() => { window.__restoreObserver.disconnect(); window.__restoreDelay = 0; return window.__restoreSeen; });
+  assert.equal(restoreSeen.disabled, false, "Restoring a draft key (a new chat's first send) must hold the field read-only, never toggle `disabled`, which clears a live textarea's undo stack");
+  assert.equal(restoreSeen.readOnly, true, 'The restoring state must actually occur, or this check proves nothing');
+  console.log('PASS: restoring a never-seen draft key holds the composer read-only and never disables it (protected native undo)');
   assert.deepEqual(errors, []);
   console.log("PASS: configurable instant message rail, pagination, virtualized jumps, streaming read position, nested subagents/live hover cards/parent return, native frame bridge, interactive HTML, images, Mermaid, KaTeX and equation copying; markdown, collapsed work groups, tool details, diff, model catalog, modes, send, approvals, questions, narrow navigation, themes, virtualization, projectless first message, draft controls, folder selection, empty model catalog");
   console.log(`Screenshots: ${evidence}`);

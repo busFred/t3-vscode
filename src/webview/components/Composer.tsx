@@ -154,7 +154,12 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
    * still prevents typing during the send, so a successful clear cannot discard text typed meanwhile.
    */
   const inFlight = busy || state.sending;
-  const inputDisabled = !recovery.ready || thread?.archived === true || thread?.providerNativeSubagent === true;
+  // Restoring a draft holds the field read-only for the same reason. The first send in a new chat
+  // moves the draft key from "new" to the thread's id, and the new key starts out restoring; as a
+  // `disabled` toggle that wiped the undo stack on every first send. Insertions still refuse while
+  // restoring: paste and files check `disabled`, and programmatic edits bail on `readOnly`.
+  const restoring = !recovery.ready;
+  const inputDisabled = thread?.archived === true || thread?.providerNativeSubagent === true;
   const inputSelection = (): TextSelection => ({ start: textarea.current?.selectionStart ?? text.length, end: textarea.current?.selectionEnd ?? text.length });
   const editing = useRef(false);
   const numberingUndo = useRef<{ before: string; after: string; selection: TextSelection } | null>(null);
@@ -484,7 +489,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
         </div>)}
       </div> : null}
       {attachmentError ? <div className="composer-attachment-error" role="alert">{attachmentError}</div> : null}
-      <textarea ref={textarea} data-opening={opening || undefined} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description={`${openModifier}+click a file reference to open its source, an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor. A plain click only moves the caret, so a reference can be edited by hand.`} disabled={inputDisabled || picking} readOnly={inFlight} rows={2}
+      <textarea ref={textarea} data-opening={opening || undefined} value={text} placeholder={running ? "Send a follow-up…" : "Ask anything, or describe a task…"} aria-label="Message" title={shortcutHint} aria-description={`${openModifier}+click a file reference to open its source, an image reference to preview it or a quote reference to edit its comment; Alt+Enter opens the reference at the cursor. A plain click only moves the caret, so a reference can be edited by hand.`} disabled={inputDisabled || picking} readOnly={inFlight || restoring} rows={2}
         onBlur={(event) => onSelectionChange({ start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })}
         onClick={(event) => {
           // Opening a reference moves the focus away, so the caret it was opened from is remembered here rather than on blur.
