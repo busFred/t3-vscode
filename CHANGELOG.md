@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.12 — Release
+
+- Synced the bundled T3 Code packages with the latest upstream release (v0.1.9). The server floor is unchanged.
+- A finished round folds its working steps (thoughts, tool calls, running commentary and images read on the way) behind one "Worked for …" row, as in T3 Code. Replies to a steer and the final answer stay visible; opening a fold shows the usual work groups, still collapsed, and a search hit or quoted source inside a fold opens it.
+- Images the agent reads or returns mid-run show as small chips that open the image, instead of full-width previews.
+- Right-click an image for Copy image, Save image as…, Open in editor and, for a workspace file, Copy path.
+- Reasoning effort is a column in the model picker, with Speed and Ultracode in its footer; the picker is wider (560px) and the model button shows `Model · Effort`.
+- The message box can be resized by dragging its top edge; the height is kept per tab, and double-click resets it.
+- The permission menu offers all four levels, including Auto-accept edits.
+- Account & Usage: the per-model filter is gone and the Pooled dropdown matches the account dropdown.
+- Faster with many conversations: unchanged sessions and transcript order are no longer resent on every update (885 KB → 22 KB per streaming update on a 300-conversation test), and the sidebar no longer builds a transcript.
+- Security hardening from a fresh audit: stored credentials bind to the exact server origin, child approvals are checked against the request, and process checks reject invalid ids.
+- Fix "Copy link" in the session menu, which never copied.
+- Validation: typecheck clean; 793/793 unit tests; `verify-ui.mjs`, `verify-views.ts` and `verify-worktrees.mjs` pass end to end; real VS Code `verify-edh.mjs --undo-only` 12/12 on the exact source, no waiver. Fresh-context Opus regression reviews: one blocking finding (a value reply blanked the view after Save image or Copy link) and eight smaller ones, all fixed and re-reviewed; a further review cleared the test-script fixes.
+
 ## 0.3.11 — Release
 
 - Fix finished tasks delegated to another machine appearing as top-level sessions once their (long) parent conversation was opened; they stay under the parent's Subagents.
