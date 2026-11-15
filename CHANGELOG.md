@@ -8,10 +8,20 @@
 - Right-click an image for Copy image, Save image as…, Open in editor and, for a workspace file, Copy path.
 - Reasoning effort is a column in the model picker, with Speed and Ultracode in its footer; the picker is wider (560px) and the model button shows `Model · Effort`.
 - The message box can be resized by dragging its top edge; the height is kept per tab, and double-click resets it.
-- The permission menu offers all four levels, including Auto-accept edits.
-- Account & Usage: the per-model filter is gone and the Pooled dropdown matches the account dropdown.
+- When a provider does not report its permission levels, the menu now offers all four, including Auto-accept edits.
+- Account & Usage: the Pooled dropdown is the same size as the account dropdown.
 - Faster with many conversations: unchanged sessions and transcript order are no longer resent on every update (885 KB → 22 KB per streaming update on a 300-conversation test), and the sidebar no longer builds a transcript.
-- Security hardening from a fresh audit: stored credentials bind to the exact server origin, child approvals are checked against the request, and process checks reject invalid ids.
+- Send while attachments are still uploading; the message waits for them (up to 30 seconds) and keeps undo intact.
+- The server's suggested next prompt appears above an empty composer.
+- The transcript shows where the model or reasoning effort changed.
+- A Waiting conversation shows which background work is holding it.
+- Approve or decline a child conversation's approval from its parent, after an explicit "Show request" step.
+- Allow an MCP app for the whole session, not only once.
+- Screen readers announce when a turn starts and finishes.
+- A pull-request link opens at the comment, diff line or checks tab it points to.
+- Images returned by MCP and OpenCode tools are shown.
+- The context meter uses T3 Code's own context-window calculation.
+- Security hardening from a fresh audit: stored credentials bind to the exact server origin, an approval answered from a parent conversation must belong to one of its child conversations and can only accept or decline, and process checks reject invalid ids.
 - Fix "Copy link" in the session menu, which never copied.
 - Validation: typecheck clean; 793/793 unit tests; `verify-ui.mjs`, `verify-views.ts` and `verify-worktrees.mjs` pass end to end; real VS Code `verify-edh.mjs --undo-only` 12/12 on the exact source, no waiver. Fresh-context Opus regression reviews: one blocking finding (a value reply blanked the view after Save image or Copy link) and eight smaller ones, all fixed and re-reviewed; a further review cleared the test-script fixes.
 
