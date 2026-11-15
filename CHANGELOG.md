@@ -23,7 +23,8 @@
 - The context meter uses T3 Code's own context-window calculation.
 - Security hardening from a fresh audit: stored credentials bind to the exact server origin, an approval answered from a parent conversation must belong to one of its child conversations and can only accept or decline, and process checks reject invalid ids.
 - Fix "Copy link" in the session menu, which never copied.
-- Validation: typecheck clean; 793/793 unit tests; `verify-ui.mjs`, `verify-views.ts` and `verify-worktrees.mjs` pass end to end; real VS Code `verify-edh.mjs --undo-only` 12/12 on the exact source, no waiver. Fresh-context Opus regression reviews: one blocking finding (a value reply blanked the view after Save image or Copy link) and eight smaller ones, all fixed and re-reviewed; a further review cleared the test-script fixes.
+- Keep the message box's undo history while a draft is loading: it is now held read-only instead of disabled, which had cleared the history (for example when a background draft reload failed).
+- Validation: typecheck clean; 793/793 unit tests; `verify-ui.mjs`, `verify-views.ts` and `verify-worktrees.mjs` pass end to end; real VS Code `verify-edh.mjs --undo-only` 12/12 on the exact source in both a freshly seeded and a long-used isolated home, no waiver. Fresh-context Opus regression reviews: one blocking finding (a value reply blanked the view after Save image or Copy link) and eight smaller ones, all fixed and re-reviewed; a further review cleared the test-script fixes; a final review cleared the read-only restore fix. Known minor issues: clicking the message box while a draft is still loading can drop its saved caret position (the text is kept); choosing Ultrathink while a draft is still loading can replace that draft (also in 0.3.11).
 
 ## 0.3.11 — Release
 

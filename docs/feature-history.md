@@ -751,6 +751,21 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Compact composer
 
+#### Unreleased — read-only while a draft restores
+
+- The message box is held read-only, not disabled, while its draft restores. Toggling `disabled`
+  clears a live textarea's native undo stack; a failed periodic restore on a draft in use did that.
+  Found when the 0.3.12 release gate failed 3/3 on a second machine ("a send must not toggle the
+  textarea's disabled attribute") on a new chat's first send. That failure did not reproduce here,
+  even in a fresh home on the earlier source, so its exact trigger is unconfirmed; the gate now logs
+  each `disabled` change with whether the box was still mounted.
+- Paste, files and drop still refuse while restoring (they check the composer's `disabled` state),
+  and programmatic edits bail on `readOnly`, as during a send.
+- Validation: a page-wide `verify-ui.mjs` check with a delayed restore fails on the earlier source
+  and passes with this change; native-undo gate 12/12 in a freshly seeded and a long-used home.
+  Fresh-context Opus review: OK to package. Known minor issues it noted: a click while restoring can
+  drop the saved caret; choosing Ultrathink while restoring can replace the restored draft (pre-existing).
+
 #### Unreleased — resizable message box
 
 - A grip on the composer's top edge sets a fixed message-box height, kept per view. It uses the same

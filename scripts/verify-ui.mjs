@@ -1064,10 +1064,11 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   assert.equal(await originalTextarea.evaluate(element => element === document.querySelector('textarea[aria-label="Message"]')), true);
   assert.equal(await page.locator('.reader-flow, .reader-toggle, .composer-layout-control').count(), 0);
   console.log('PASS: virtualized single-column chat in wide/narrow editors, draft retention on resize, wide equation scrolling, preview and delimiter-aware copying');
-  // Protected native undo: a draft key this view has never shown starts out restoring. That is every
-  // first send from a new chat, where the key moves from "new" to the thread's id. Restoring must
-  // hold the field read-only; toggling `disabled` clears the textarea's undo stack. The restore is
-  // delayed so the restoring state is certain, and observing read-only proves the path ran.
+  // Protected native undo, enforced as a rule: while a draft restores, the message box is held
+  // read-only and never disabled, because toggling `disabled` clears a live textarea's undo stack
+  // (as when a periodic restore fails on a draft already in use). This mounts a box for a key the
+  // view has never shown, with the restore delayed so the restoring state is certain; observing
+  // read-only proves the path ran. The new box has no history yet, so this checks the rule, not a loss.
   await page.evaluate(() => {
     window.__restoreDelay = 400;
     // The composer remounts per conversation, so watch every message box on the page, including the

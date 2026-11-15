@@ -107,13 +107,15 @@ async function verifyUndo({ home, workbench, sidebar, findWebview, runCommand })
     await view.wait(`document.querySelector('${message}').value === 'ok'`);
     // Watch the attribute itself, not only the resulting behaviour.
     await view.evaluate(`(() => { const input = document.querySelector('${message}');
-      window.__disabledSeen = false;
-      new MutationObserver(() => { if (input.disabled) window.__disabledSeen = true; })
+      window.__disabledSeen = false; window.__disabledLog = []; const t0 = performance.now();
+      // Each change records whether this box was still mounted, so a failure says which box and when.
+      new MutationObserver(() => { window.__disabledLog.push({ ms: Math.round(performance.now() - t0), disabled: input.disabled, readOnly: input.readOnly, connected: input.isConnected });
+        if (input.disabled) window.__disabledSeen = true; })
         .observe(input, { attributes: true, attributeFilter: ['disabled'] }); return true; })()`);
     await click(view, 'button[aria-label="Send message"]');
     await view.wait(`document.querySelector('${message}').value === '' && !document.querySelector('${message}').readOnly`, 40_000);
     assert.equal(await view.evaluate('window.__disabledSeen'), false,
-      `${label}: a send must not toggle the textarea's disabled attribute, which clears its undo stack`);
+      `${label}: a send must not toggle the textarea's disabled attribute, which clears its undo stack: ${await view.evaluate('JSON.stringify(window.__disabledLog)')}`);
     // End the turn immediately; this scenario is about the composer, not the reply.
     const stop = await view.evaluate(`!!document.querySelector('button[aria-label="Stop generation"]')`);
     if (stop) await click(view, 'button[aria-label="Stop generation"]');
