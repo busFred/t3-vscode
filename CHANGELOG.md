@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.13 — Release
+
+- Quoting or copying a selection that spans a table no longer shows long blank gaps: the comment popup's quote preview and the selection menu's "Copy as text" collapse each run of blank lines to one, as quote cards already did. "Copy as Markdown" and the saved quote are unchanged.
+- Validation: typecheck clean; 793/793 unit tests; real VS Code `verify-edh.mjs --undo-only` 12/12 on two consecutive runs on the exact source, no waiver. The gate now retries its sidebar setup click (up to 3 times, each logged) because VS Code on an isolated display sometimes drops the first click after revealing an editor; this also failed on unchanged 0.3.12 code, and the undo, redo and composer-return checks are unchanged. Fresh-context Sonnet reviews of the fix and of the gate change: both APPROVE WITH NITS.
+
 ## 0.3.12 — Release
 
 - Synced the bundled T3 Code packages with the latest upstream release (v0.1.9). The server floor is unchanged.

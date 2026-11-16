@@ -185,11 +185,23 @@ async function verifyUndo({ home, workbench, sidebar, findWebview, runCommand })
     // Hide the webview behind a real editor, then reveal it (including the host's latest state push).
     await openReferenceFile();
     await workbench.locator('.tab').filter({ has: workbench.locator('.label-name').filter({ hasText: title }) }).first().click();
-    // A real sidebar click leaves the editor webview; returning must preserve its history.
-    await click(sidebar, 'input[aria-label="Search threads"]');
-    // Let VS Code finish moving focus to the sidebar first; clicking back while it is still in flight
-    // can leave neither webview focused (seen once in ten runs, with history intact).
-    await sidebar.wait(`document.activeElement === document.querySelector('input[aria-label="Search threads"]') && document.hasFocus()`, 5_000);
+    // Establish the sidebar-focus precondition with real clicks. Right after revealing an editor,
+    // Electron can lose the first click's focus handoff: the workbench stays focused while both
+    // webview documents are blurred. A paint wait alone does not prevent this on isolated Xvfb.
+    // Retry only this setup click, never the insertion-focus checks above or the composer return
+    // below: those handoffs and every undo/redo assertion must still succeed without intervention.
+    for (let attempt = 1; ; attempt += 1) {
+      await click(sidebar, 'input[aria-label="Search threads"]');
+      try {
+        await sidebar.wait(`document.activeElement === document.querySelector('input[aria-label="Search threads"]') && document.hasFocus()`, 5_000);
+        break;
+      } catch (error) {
+        if (attempt === 3) throw error;
+        const state = 'JSON.stringify({active:document.activeElement?.tagName,focus:document.hasFocus()})';
+        // Both sides, so Electron dropping the handoff (both blurred) reads apart from the composer grabbing focus.
+        console.log(`${label}: retry sidebar setup click ${attempt}: sidebar ${await sidebar.evaluate(state)} composer ${await view.evaluate(state)}`);
+      }
+    }
     await click(view, message);
     try { await view.wait(`document.activeElement === document.querySelector('${message}') && document.hasFocus()`, 5_000); }
     catch { throw new Error(`${label}: composer focus after sidebar: ${await view.evaluate(`JSON.stringify({active:document.activeElement?.outerHTML.slice(0,300),focus:document.hasFocus(),sameTextarea:document.querySelector('${message}')?.dataset.roundTrip === '1',log:window.__undoLog?.slice(-15)})`)}`); }

@@ -46,7 +46,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
 | [Editor references](#editor-references) | Inserts file ranges with checkout-aware labels and preserved source URIs. | v0.0.4 | v0.2.0 |
-| [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.2.2 |
+| [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.3.13 |
 | [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.22 |
 | [Saved turn diffs](#saved-turn-diffs) | Shows agent-only response files, counts, the current checkpoint checkout branch and files merged in from a subagent checkout. | v0.0.6 | v0.3.0 |
 | [Revert and restore](#revert-and-restore) | "Edit from here" rewinds the conversation only; "Restore files to this point" is a separate, guarded extension-owned Git restore that keeps your edits where it can. | v0.2.2 | v0.3.0 |
@@ -1797,9 +1797,11 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Assistant citations
 
-#### Unreleased — no blank-line gaps around quoted tables
+#### v0.3.13 — no blank-line gaps around quoted tables
 
 - The comment popup preview and the selection menu's "Copy as text" collapse the runs of blank lines a selection picks up across tables and other blocks, as quote cards already did. "Copy as Markdown" and the saved quote text are unchanged.
+- Review and validation: fresh-context Sonnet regression review of `v0.3.12..653e4e6` APPROVE WITH NITS (no regressions; native undo untouched; nits accepted: copied code blocks also lose repeated blank lines, call sites lack a dedicated test). Typecheck clean, 793/793 unit tests.
+- Native-undo gate: failed deterministically on this machine at the sidebar setup click after revealing an editor (both webviews blurred, workbench focused), also on unchanged v0.3.12 code. `verify-native-undo.mjs` now retries only that setup click up to 3 times and logs sidebar and composer focus on each retry; the composer-return click, insertion focus and all undo/redo assertions are unchanged. Diagnosed by Codex GPT-6.1 Sol (medium); fresh-context Sonnet review APPROVE WITH NITS. Real VS Code `verify-edh.mjs --undo-only` passed 12/12 twice on the exact source, no waiver.
 
 #### v0.1.23 — same-version rebuild
 
