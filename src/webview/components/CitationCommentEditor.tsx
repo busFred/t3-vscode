@@ -1,11 +1,14 @@
 import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { ASSISTANT_CITATION_MAX_COMMENT_LENGTH } from "@t3tools/contracts";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
+import { quoteDisplayText } from "../../shared/assistantQuoteText";
 
 export function CitationCommentEditor({ citation, anchor, onSave, onClose }: { readonly citation: AssistantCitation; readonly anchor?: AssistantCitationSourceAnchor | undefined; readonly onSave: (comment: string) => void; readonly onClose: () => void }) {
   const [comment, setComment] = useState(citation.comment ?? ""); const popup = useRef<HTMLDivElement>(null); const input = useRef<HTMLTextAreaElement>(null);
   const tooLong = comment.length > ASSISTANT_CITATION_MAX_COMMENT_LENGTH;
+  // Typing the comment re-renders the popup; the quote does not change with it.
+  const quote = useMemo(() => quoteDisplayText(citation.text, true), [citation.text]);
   const save = () => { if (!tooLong) onSave(comment); };
   useLayoutEffect(() => {
     const element = popup.current!; const bounds = anchor?.range.getBoundingClientRect();
@@ -26,7 +29,7 @@ export function CitationCommentEditor({ citation, anchor, onSave, onClose }: { r
     if (event.key === "Escape") { event.preventDefault(); onClose(); }
     if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); save(); }
   }}>
-    <blockquote className="citation-comment-quote">{citation.text}</blockquote>
+    <blockquote className="citation-comment-quote">{quote}</blockquote>
     <textarea ref={input} aria-label="Comment on selected text" placeholder="Add an optional comment…" value={comment} rows={3} onChange={(event) => setComment(event.target.value)} />
     {tooLong ? <p className="turn-error" role="alert">Comments can contain up to {ASSISTANT_CITATION_MAX_COMMENT_LENGTH.toLocaleString()} characters.</p> : null}
     <div className="citation-comment-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={tooLong} onClick={save}>Save</button></div>

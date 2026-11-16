@@ -1797,6 +1797,10 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Assistant citations
 
+#### Unreleased — no blank-line gaps around quoted tables
+
+- The comment popup preview and the selection menu's "Copy as text" collapse the runs of blank lines a selection picks up across tables and other blocks, as quote cards already did. "Copy as Markdown" and the saved quote text are unchanged.
+
 #### v0.1.23 — same-version rebuild
 
 The selected-text context menu fits its labels instead of reserving a 190px minimum. Enabled text uses the editor foreground; native menu selection, border and background colors remain themed.

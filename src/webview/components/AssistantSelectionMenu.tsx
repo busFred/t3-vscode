@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useActions } from "../actions";
 import { assistantQuoteMenuItems, clampMenuPosition, QUOTE_TOO_LONG_LABEL, type AssistantQuoteMenuAction } from "../../shared/assistantQuoteMenu";
 import { selectionMarkdown } from "../selectionMarkdown";
+import { quoteDisplayText } from "../../shared/assistantQuoteText";
 import { findAssistantCitationSourceAnchor, captureAssistantTextSelection, type AssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
 
 /** Capture a selected passage from a user or assistant message. */
@@ -105,7 +106,7 @@ export function AssistantSelectionMenu({ viewport, onQuote }: { readonly viewpor
   if (!target) return null;
   const items = assistantQuoteMenuItems(target.citation.text.length);
   const choose = (action: AssistantQuoteMenuAction) => {
-    if (action === "copy") void run("copyText", { text: target.citation.text });
+    if (action === "copy") void run("copyText", { text: quoteDisplayText(target.citation.text, true) });
     else if (action === "markdown") void run("copyText", { text: target.markdown });
     else onQuote(target.citation, target.anchor);
     setTarget(null);
