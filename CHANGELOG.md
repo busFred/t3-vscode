@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.14 — Release
+
+- Synced the bundled T3 Code packages with the latest upstream release (v0.1.10). The server floor is unchanged (0.1.5).
+- Reply to an assistant response: a Reply button beside Copy puts a "Replying to" chip in the message box, and the message tells the agent which earlier response it answers. Sent replies show "Replying to …" from any client. Offered only when the conversation's machine runs T3 Code 0.1.10 or later, because older servers silently drop the reply link.
+- Stop shows "Stopping…" and ignores repeat clicks until the run stops (or 10 seconds pass).
+- While a run only waits on subagents it started, it says "Waiting on a subagent" instead of "Working", on screen and for screen readers.
+- Text typed into a question card is no longer lost when Stop or a timeout closes the question: it moves to the message box.
+- A stopped run no longer shows the green Done badge in Sessions; a one-hour snooze reads "wakes in 1h" instead of "60m".
+- A long jump from the message rail no longer stops short of the chosen message (an existing rare issue, about 1 in 100 long jumps).
+- Slash commands follow T3 Code 0.1.10: typing `/model something` no longer keeps the menu open, and Windows-style paths stay out of the menu.
+- Validation (final source): typecheck clean; 826/826 unit tests; `pnpm run build`; `verify-views.ts` 16/16; `verify-ui.mjs` 5/5; real VS Code `verify-edh.mjs --undo-only` 14/14 on the exact source against an isolated T3 Code 0.1.10 server, including Reply in a new chat panel and a session tab, no waiver; real VS Code `verify-edh.mjs --requests-only` 2/2 with a live GPT-6 Luna Low question, including Stop carrying a typed answer with one-step undo; live `verify-host.ts` against isolated 0.1.10 and 0.1.9 servers; message-rail jump stress loop 0/360 under 2x CPU throttling; host benchmark (300 conversations, 4,000 items, three views) unchanged vs 0.3.13 (median ~48.5 vs ~50 ms per update, same snapshot size) (2/360 before the fix on 0.3.13 code). Reviews: fresh-context regression review APPROVE WITH NITS; Fable performance/security review OK to ship (fixes applied); re-reviews of the fixes BLOCK (fixed) then APPROVE WITH NITS; rail-jump fix reviewed twice, APPROVE WITH NITS, all should-fix items applied.
+
 ## 0.3.13 — Release
 
 - Quoting or copying a selection that spans a table no longer shows long blank gaps: the comment popup's quote preview and the selection menu's "Copy as text" collapse each run of blank lines to one, as quote cards already did. "Copy as Markdown" and the saved quote are unchanged.
