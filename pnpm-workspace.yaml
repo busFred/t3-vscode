@@ -1,7 +1,7 @@
 packages:
   - vendor/*
 overrides:
-  effect: 4.1.2
+  effect: 4.1.3
 allowBuilds:
   esbuild: true
   '@tailwindcss/oxide': true
@@ -10,4 +10,4 @@ allowBuilds:
 patchedDependencies:
   '@legendapp/list@3.3.5': patches/@legendapp__list@3.3.5.patch
 minimumReleaseAgeExclude:
-  - effect@4.1.2
+  - effect@4.1.3

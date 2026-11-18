@@ -3,8 +3,8 @@
 Source copied (src only) from the T3 Code repo:
 
 - **Upstream:** <https://github.com/pingdotgg/t3code>
-- **Git sha:** `24e77473ec` (tag `v0.1.9`, 2026-11-11, upstream version 0.1.9)
-- **Previous pin:** `61c3794c32b0eeebfac09add43e403618c65d2d7` (2026-11-02, 0.1.6)
+- **Git sha:** `7d32075e37` (tag `v0.1.10`, 2026-11-16, upstream version 0.1.10)
+- **Previous pin:** `24e77473ecf41bc1f7142529c7911c1c1aae1d76` (tag `v0.1.9`, 2026-11-11, 0.1.9)
 
 ## What is here
 
@@ -28,6 +28,10 @@ Only the client-side modules it reaches are vendored: the files reachable from
 `source-control-definitions/registry`) and `secret-provider-definitions` with its
 `secret-provider-core` and `secret-provider-onepassword` definitions (reached from
 `client-runtime/src/secretRequest.ts`).
+0.1.10 added no closure packages or entries. It added runtime dependencies
+`remark-gfm`, `remark-parse` and `unified` to `client-runtime` and
+`get-east-asian-width` and `micromark-util-decode-string` to `shared`, and moved
+`@pierre/diffs` to 1.7.0-beta.4.
 `scripts/vendor-closure.mjs` computes that file set; its only external
 dependency is Effect. Their package.json files are trimmed to `name`, `version`,
 `type`, the reached `exports` and the dependencies those files import.
@@ -68,7 +72,7 @@ The vendored manifests declare their runtime dependencies and keep
 `workspace:*` references to each other. The workspace override pins one Effect
 version; the root also declares Effect because the host adapter imports it.
 
-- `effect` **4.1.2** (upstream catalog) — exactly one copy; duplicates break
+- `effect` **4.1.3** (upstream catalog) — exactly one copy; duplicates break
   schema decoding. Effect 4.1 moved `effect/unstable/http` and
   `effect/unstable/socket` to `effect/http` and `effect/socket`.
 - The remaining versions come from the upstream `pnpm-workspace.yaml` catalog;
@@ -105,7 +109,8 @@ closure command. Then re-apply by hand (not scripted):
    set the same Effect version in the root package.json and the workspace
    override.
 3. In `shared`: delete `src/managedPolicyFile.ts`, its export and the `ffi-rs`
-   dependency; drop `./testing/*` exports.
+   dependency; drop `./testing/*` exports. The rsync above copies
+   `managedPolicyFile.ts` back each time, so delete it after every sync.
 4. In `client-runtime`: add the extension adapter subpath exports if upstream
    lacks them: `./rpc/session`, `./rpc/http`, `./connection/model`,
    `./state/server-config-projection`, `./state/thread-tag-filter`. Upstream has

@@ -11,6 +11,6 @@
   "dependencies": {
     "@t3tools/contracts": "workspace:*",
     "@t3tools/source-control-core": "workspace:*",
-    "effect": "4.1.2"
+    "effect": "4.1.3"
   }
 }

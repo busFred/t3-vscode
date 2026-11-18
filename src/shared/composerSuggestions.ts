@@ -2,14 +2,13 @@
 import type { ServerProvider } from "@t3tools/contracts";
 import { getProviderSkillsForSlashMenu, getProviderSlashCommandsForSlashMenu, resolveProviderSkillsForCwd, resolveProviderSlashCommandsForCwd } from "@t3tools/client-runtime/providerSkills";
 import { normalizeSearchQuery, scoreQueryMatch } from "@t3tools/shared/searchRanking";
-import { detectComposerTrigger as detectTrigger, type ComposerTrigger } from "@t3tools/shared/composerTrigger";
 import type { ComposerSuggestion, ThreadSummary } from "./bridge.js";
 
-export function detectComposerTrigger(text: string, cursor: number): ComposerTrigger | null {
-  const trigger = detectTrigger(text, cursor);
-  // Web offers /model as a local action in the same command list.
-  return trigger?.kind === "slash-model" ? { ...trigger, kind: "slash-command", query: "model" } : trigger;
-}
+/**
+ * Since T3 Code 0.1.10 `/model` is an ordinary slash-command trigger (query "model"), matched against
+ * the local /model action in the same list, so the shared detector is used unchanged.
+ */
+export { detectComposerTrigger } from "@t3tools/shared/composerTrigger";
 export function slashSuggestions(provider: ServerProvider | undefined, cwd: string | null, query: string, atPromptStart: boolean): ComposerSuggestion[] {
   const skills = provider ? getProviderSkillsForSlashMenu(resolveProviderSkillsForCwd(provider, cwd), true) : [];
   const commands = provider ? getProviderSlashCommandsForSlashMenu(resolveProviderSlashCommandsForCwd(provider, cwd), skills) : [];

@@ -642,7 +642,8 @@ try {
   await manager.getByRole("navigation", { name: "Active conversations" }).getByRole("button", { name: "Renamed through history", exact: true }).waitFor({ state: "detached" });
   const snoozedShelf = manager.locator(".history-shelf", { hasText: "Snoozed" });
   await snoozedShelf.locator("summary").click();
-  await snoozedShelf.locator('[data-thread-id="third"] .thread-snoozed').filter({ hasText: /wakes in \d+m/ }).waitFor();
+  // The first preset is one hour; T3 Code 0.1.10 counts clock minutes, so it reads "1h" (or "59m" once a minute turns).
+  await snoozedShelf.locator('[data-thread-id="third"] .thread-snoozed').filter({ hasText: /wakes in (1h|59m)$/ }).waitFor();
   await manager.screenshot({ path: `${evidence}/sessions-unread-snoozed.png` });
   await snoozedShelf.getByRole("button", { name: "Renamed through history", exact: true }).click({ button: "right" });
   await manager.getByRole("menuitem", { name: "Wake thread", exact: true }).click();
