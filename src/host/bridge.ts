@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { PeerLinkRequestAnswerInput } from "@t3tools/contracts";
+import { PeerLinkRequestAnswerInput, ResponseContextRecord } from "@t3tools/contracts";
 import { parseWorktreeChoice } from "./worktrees.js";
 import { runWorktreeNativeAction, type WorktreeNativePort } from "./worktreeNativeActions.js";
 import type { ScheduledTaskEditorRequest } from "../shared/scheduledTasks.js";
@@ -342,7 +342,10 @@ export class BridgeHandler {
           if (params.attachmentIds !== undefined && (!Array.isArray(params.attachmentIds) || params.attachmentIds.length > 100 || !params.attachmentIds.every((id) => typeof id === "string"))) throw new Error("Invalid message attachments.");
           const references = params.attachmentReferences;
           if (references !== undefined && (!Array.isArray(references) || references.length > 100 || !references.every((entry) => isObject(entry) && typeof entry.contextId === "string" && typeof entry.attachmentId === "string"))) throw new Error("Invalid inline attachments.");
-          await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id(), viewId, params.mode === undefined ? "auto" : stringParam(params, "mode"), params.attachmentIds as string[] | undefined, references as Array<{ contextId: string; attachmentId: string }> | undefined); break;
+          // Decoded here, so a reply reaches the server only in the shape its contract accepts. One per message in T3; a few allow pasted copies.
+          if (params.responseRecords !== undefined && (!Array.isArray(params.responseRecords) || params.responseRecords.length > 20)) throw new Error("Invalid reply.");
+          const replies = (params.responseRecords as unknown[] | undefined)?.map((record) => Schema.decodeUnknownSync(ResponseContextRecord)(record));
+          await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id(), viewId, params.mode === undefined ? "auto" : stringParam(params, "mode"), params.attachmentIds as string[] | undefined, references as Array<{ contextId: string; attachmentId: string }> | undefined, replies); break;
         }
         case "stopSubagent": await this.hostState.stopSubagent(id(), stringParam(params, "subagentId")); break;
         case "reorderPins": {

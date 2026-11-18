@@ -4,7 +4,7 @@ import { McpAppFrame } from "./McpAppFrame";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList, type LegendListRef, type OnViewableItemsChangedInfo } from "@legendapp/list/react";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
-import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, PencilIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, Undo2Icon, WrenchIcon, ArrowRightLeftIcon, KeyRoundIcon, MinusIcon, XIcon } from "lucide-react";
+import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, PencilIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, Undo2Icon, WrenchIcon, ArrowRightLeftIcon, KeyRoundIcon, MinusIcon, XIcon, ReplyIcon } from "lucide-react";
 import type { HostStateSnapshot, TranscriptItem, WireTurnItem } from "../../shared/bridge";
 import { RestorePreview } from "./RestorePreview";
 import { RemoteSessionContext, useRemoteSession } from "../remoteSession";
@@ -18,10 +18,15 @@ import { WorkLogBlock, WorkLogButton, WorkLogDetails } from "./t3/WorkLog";
 import { TimelineSystemDivider } from "./t3/TimelineSystemDivider";
 import { T3Wordmark } from "./t3/T3Wordmark";
 import { T3VSCodeIcon } from "./T3VSCodeIcon";
-import { findAssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
+import { captureAssistantMessageOpening, findAssistantCitationSourceAnchor } from "./t3/assistantTextSelection";
+import { responseContextRecord } from "../../shared/composerContext";
+import { responseSubagents } from "../../shared/responseSubagents";
+import { responseRepliesSupported } from "../../shared/serverVersion";
+import { addResponseReply } from "../composerDrafts";
 import { TurnChanges } from "./TurnChanges";
 import { MessageNavigator, type RailFrame } from "./MessageNavigator";
 import { messageExchanges } from "../../shared/messageNavigation";
+import { runStatusLabel } from "../../shared/waitingOnSubagents";
 import { finalResponseCheckpoints, foldSettledRounds, transcriptRows, workSummary, workElapsed, responseBoundaries, isWorkItem, type DisplayRow } from "../../shared/transcriptRows";
 import { renderedMessageText, stripRenderedAssistantQuotes } from "../../shared/assistantQuoteText";
 import { splitMessageReferences } from "../../shared/messageReferences";
@@ -46,6 +51,14 @@ function ForkButton({ row, threadId }: { row: TranscriptItem; threadId: string }
   return <button className="icon-button fork-button" title="Fork from this response" aria-label="Fork from this response" disabled={busy} onClick={() => {
     setBusy(true); void run("forkFromResponse", { threadId, sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId ?? row.item.id }).finally(() => setBusy(false));
   }}><GitForkIcon size={13} /></button>;
+}
+/** Set when the conversation's machine keeps reply records (T3 Code 0.1.10 or later); absent hides Reply. */
+const ReplyContext = createContext<((row: TranscriptItem) => void) | null>(null);
+/** Ported from T3 Code 0.1.10 `AssistantReplyButton`: attaches this response to the composer as what the next message replies to. */
+function ReplyButton({ row }: { row: TranscriptItem }) {
+  const reply = useContext(ReplyContext);
+  if (!reply || row.item.type !== "assistant_message" || row.item.streaming || !row.item.text.trim()) return null;
+  return <button className="icon-button reply-button" title="Reply to this response" aria-label="Reply to this response" onClick={() => reply(row)}><ReplyIcon size={13} /></button>;
 }
 /** "Edit from here" (conversation-only rewind) and "Restore files to this point" (extension-owned git restore) on a user message. */
 function RevertActions({ row, threadId, timestamp, copyText }: { row: TranscriptItem; threadId: string; timestamp: string | null; copyText: string }) {
@@ -195,7 +208,7 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
     case "assistant_message": return <article className="message assistant-message" data-item-type={item.type}>
       {!item.runId ? <AssistantHeader /> : null}
       <ChatMarkdown text={item.text} threadId={threadId} source={{ environmentId, threadId: row.sourceThreadId, messageId: item.messageId }} assetSource={assetSource} streaming={item.streaming} />
-      {!row.canFork || !item.runId ? <div className="response-actions message-footer"><CopyButton text={item.text} /><MessageTimestamp value={item.startedAt} /></div> : null}
+      {!row.canFork || !item.runId ? <div className="response-actions message-footer"><CopyButton text={item.text} /><ReplyButton row={row} /><MessageTimestamp value={item.startedAt} /></div> : null}
     </article>;
     case "reasoning": return <Disclosure label={item.streaming ? "Thinking…" : "Thought process"} icon={<BrainIcon size={14} />} row={row} threadId={threadId}>{markdown(item.text)}</Disclosure>;
     case "proposed_plan": return <section className="plan-card"><header><span className="plan-badge">Plan</span><strong>Proposed plan</strong><CopyButton text={item.markdown} /></header>{markdown(item.markdown)}</section>;
@@ -225,8 +238,8 @@ const TurnContent = memo(function TurnContent({ row, threadId, environmentId }: 
   }
 });
 
-function AssistantHeader({ working = false, headerKey }: { working?: boolean; headerKey?: string }) {
-  return <div className="message-author response-header" data-run-header={headerKey}><T3Wordmark className="size-5" /><span>Assistant</span>{working ? <span className="working-label" role="status">· Working</span> : null}</div>;
+function AssistantHeader({ working = false, headerKey, status = "Working" }: { working?: boolean; headerKey?: string; status?: string }) {
+  return <div className="message-author response-header" data-run-header={headerKey}><T3Wordmark className="size-5" /><span>Assistant</span>{working ? <span className="working-label" role="status">· {status}</span> : null}</div>;
 }
 /** The dimmed marker left behind by "Edit from here"; its own "Restore files" link targets the remembered checkpoint directly, since the original message row is gone. */
 function RewindMarkerRow({ threadId, marker }: { threadId: string; marker: NonNullable<HostStateSnapshot["rewindMarker"]> }) {
@@ -282,6 +295,29 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   const thread = state.threads.find(thread => thread.id === id);
   const activeRun = thread?.activeRunId ?? state.queue?.activeRunId ?? (state.acknowledgedWorking ? state.transcript.find(row => row.item.type === "user_message" && row.item.messageId === state.acknowledgedWorking?.messageId)?.item.runId : null);
   const working = !!(activeRun || state.acknowledgedWorking);
+  // Reply attaches a record an older server would drop silently, so it shows only for a machine known to keep it.
+  const environmentId = state.environment?.environmentId;
+  // The conversation's own machine decides, as the host does on send: a paired remote one may run a different version.
+  const canReply = !!id && !!environmentId && responseRepliesSupported(state.conversationServerVersion) && !thread?.providerNativeSubagent;
+  const replySources = useRef({ transcript: state.transcript, threads: state.threads });
+  replySources.current = { transcript: state.transcript, threads: state.threads };
+  const reply = useMemo(() => !canReply || !id || !environmentId ? null : (row: TranscriptItem) => {
+    const { item } = row; if (item.type !== "assistant_message") return;
+    // The footer can outlive its message's rendered text in the virtualized list, so the raw text is the fallback.
+    const source = [...document.querySelectorAll<HTMLElement>("[data-assistant-citation-source]")].find((element) => element.dataset.assistantCitationSource === item.messageId
+      && element.dataset.assistantCitationThread === row.sourceThreadId && element.dataset.assistantCitationEnvironment === environmentId);
+    const opening = captureAssistantMessageOpening(source ?? null, item.text); if (!opening) return;
+    const { transcript: rows, threads } = replySources.current;
+    let record;
+    try {
+      record = responseContextRecord({ citation: { environmentId, threadId: row.sourceThreadId, messageId: item.messageId, ...opening }, itemId: row.sourceItemId ?? item.id,
+        subagents: responseSubagents(rows, row.key, (threadId) => threads.find((entry) => entry.id === threadId)?.title) });
+    } catch (cause) { console.warn("Could not reply to this response.", cause); return; }
+    const cursor = addResponseReply(id, record);
+    window.dispatchEvent(new CustomEvent("t3-focus-composer", { detail: { draftKey: id, cursor } }));
+  }, [canReply, id, environmentId]);
+  // "Waiting on a subagent" while the run has only launched children that still run (T3 0.1.10).
+  const runStatus = runStatusLabel(state.transcript, activeRun);
   const activeHeader = activeRun ? boundaries.get(`${id}:${activeRun}`)?.first : undefined;
   // Settled rounds fold their working steps; a fold keeps its identity while its steps are unchanged
   // so the virtual list does not remeasure it on every snapshot.
@@ -315,12 +351,39 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     requestAnimationFrame(updateSticky);
   }, [rows, updateSticky]);
   useEffect(() => { setViewedKey(null); setAtEnd(true); setFollowEnd(true); setNavigationNotice(null); }, [id]);
+  // Each navigation (rail jump, Latest, search or citation reveal, wheel or touch scroll) supersedes a jump still re-aiming.
+  const navigation = useRef(0);
+  // The rail jumps on pointerdown; its own touch (fired after) or wheel bubbling here must not cancel that jump.
+  const onRail = (target: EventTarget) => target instanceof Element && !!target.closest(".message-navigator");
+  const currentRows = useRef(rows); currentRows.current = rows;
   const jump = useCallback((key: string) => {
     const index = rows.findIndex((row) => row.key === key); if (index < 0) return;
     onNavigate?.(); setFollowEnd(false); setNavigationNotice(null); setViewedKey(key);
-    void list.current?.scrollToIndex({ index, animated: false, viewPosition: 0.08 }).catch(() => setNavigationNotice("Could not jump to this message. Try again."));
+    const current = list.current, seq = ++navigation.current;
+    void current?.scrollToIndex({ index, animated: false, viewPosition: 0.08 }).then(() => {
+      // Rows between the old position and the target are still estimated sizes when the list picks its offset, so a long
+      // jump can stop short once they measure. Re-aim until the target row is rendered inside the viewport.
+      let attempts = 0, steady = 0;
+      const verify = () => {
+        if (current !== list.current || seq !== navigation.current) return;
+        const node: unknown = current.getScrollableNode();
+        if (!(node instanceof HTMLElement)) return;
+        const target = [...node.querySelectorAll<HTMLElement>("[data-message-key]")].find((element) => element.dataset.messageKey === key);
+        const frame = node.getBoundingClientRect(), box = target?.getBoundingClientRect();
+        if (box && box.bottom > frame.top && box.top < frame.bottom) { if (++steady >= 3) return; }
+        else if (++attempts > 6) return;
+        else {
+          // Earlier history can load while re-aiming, which shifts every index: look the row up again.
+          const at = currentRows.current.findIndex((row) => row.key === key); if (at < 0) return;
+          steady = 0; void current.scrollToIndex({ index: at, animated: false, viewPosition: 0.08 }).catch(() => {});
+        }
+        requestAnimationFrame(verify);
+      };
+      requestAnimationFrame(verify);
+    }).catch(() => setNavigationNotice("Could not jump to this message. Try again."));
   }, [rows, onNavigate]);
   const latest = () => {
+    navigation.current += 1;
     onNavigate?.(); setFollowEnd(true); setNavigationNotice(null);
     const current = list.current;
     void current?.scrollToEnd({ animated: false }).then(() => {
@@ -353,6 +416,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     CSS.highlights?.delete("t3-session-match");
     if (!searchTarget || searchTarget.threadId !== id || matchIndex < 0) return;
     setFollowEnd(false); setNavigationNotice(null); setViewedKey(rows[matchIndex]!.key);
+    navigation.current += 1;
     let stopped = false, frame = 0, attempts = 0;
     void list.current?.scrollToIndex({ index: matchIndex, animated: false, viewPosition: 0.3 }).catch(() => { if (!stopped) setNavigationNotice("Could not open the search result. Select it again to retry."); });
     const show = () => {
@@ -385,6 +449,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
       return;
     }
     setCitationNotice(null);
+    navigation.current += 1;
     let stopped = false; let frame = 0;
     // A new list's initial scroll can supersede scrollToIndex's completion.
     // Source matching uses its rendered DOM instead of waiting on that promise.
@@ -432,20 +497,20 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     const boundary = first.item.runId ? boundaries.get(`${first.sourceThreadId}:${first.item.runId}`) : undefined;
     const finalAnswer = boundary?.last === last.key && boundary.answer?.canFork ? boundary.answer : undefined;
     return <div data-message-key={item.key} className={`timeline-row${first.item.type === "checkpoint" ? " checkpoint-row" : ""}`}>
-      {boundary?.first === first.key ? <AssistantHeader working={working && first.item.runId === activeRun} headerKey={first.key} /> : null}
+      {boundary?.first === first.key ? <AssistantHeader working={working && first.item.runId === activeRun} headerKey={first.key} status={runStatus} /> : null}
       {item.fold ? <RoundFold steps={item.fold} rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : isWorkItem(first) ? <WorkGroup rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : <TurnItem row={first} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} />}
-      {finalAnswer?.item.type === "assistant_message" ? <div className="response-actions response-end"><CopyButton text={finalAnswer.item.text} /><ForkButton row={finalAnswer} threadId={id ?? ""} /><MessageTimestamp value={finalAnswer.item.startedAt} /></div> : null}
+      {finalAnswer?.item.type === "assistant_message" ? <div className="response-actions response-end"><CopyButton text={finalAnswer.item.text} /><ForkButton row={finalAnswer} threadId={id ?? ""} /><ReplyButton row={finalAnswer} /><MessageTimestamp value={finalAnswer.item.startedAt} /></div> : null}
     </div>;
-  }, [id, state.environment?.environmentId, boundaries, working, activeRun]);
+  }, [id, state.environment?.environmentId, boundaries, working, activeRun, runStatus]);
   const header = <div className="timeline-header">{state.history.hasMore || state.history.error ? <button className="btn" disabled={state.history.loading} onClick={() => { void run("loadHistory", { threadId: id }); }}>{state.history.loading ? "Loading…" : state.history.error ? "Retry loading earlier messages" : "Load earlier messages"}</button> : null}{state.history.error ? <p className="turn-error">{state.history.error}</p> : null}</div>;
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source message…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading && !working)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
   if (state.threadLoading && !state.transcript.length && !working) return <div className="chat-empty"><p>Loading conversation…</p></div>;
-  return <ModelNamesContext.Provider value={modelNames}><SearchTargetContext.Provider value={searchTarget ?? null}><RevealContext.Provider value={reveal}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><SubagentState value={subagentState}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation"
-    onPointerDown={startReading} onKeyDown={startReading} onTouchStart={startReading} onWheel={(event) => { startReading(); if (event.deltaY < 0) loadEarlierAtTop(); }}>
+  return <ModelNamesContext.Provider value={modelNames}><SearchTargetContext.Provider value={searchTarget ?? null}><RevealContext.Provider value={reveal}><RemoteSessionContext.Provider value={state.remoteSession?.label ?? null}><ReplyContext.Provider value={reply}><SubagentState value={subagentState}><div ref={viewportRef} className="transcript-container" data-message-navigation={exchanges.length >= 2 ? state.messageNavigation ?? "left" : "off"} data-assistant-citation-viewport="" aria-label="Conversation"
+    onPointerDown={startReading} onKeyDown={startReading} onTouchStart={(event) => { if (!onRail(event.target)) navigation.current += 1; startReading(); }} onWheel={(event) => { if (!onRail(event.target)) navigation.current += 1; startReading(); if (event.deltaY < 0) loadEarlierAtTop(); }}>
     {citationTarget && citationTarget.threadId === id && citationNotice ? <div className="citation-source-notice" role="status">{citationNotice}</div> : null}
     {navigationNotice ? <div className="citation-source-notice" role="status">{navigationNotice}</div> : null}
-    {sticky && working ? <div className="sticky-working"><AssistantHeader working /></div> : null}
+    {sticky && working ? <div className="sticky-working"><AssistantHeader working status={runStatus} /></div> : null}
     <MessageNavigator key={`nav:${id}`} exchanges={exchanges} currentRow={rows.find((row) => row.key === viewedKey)?.firstIndex ?? state.transcript.length - 1} placement={placement} frame={railFrame} atEnd={atEnd} history={state.history} onJump={jump} onLatest={latest} onEarlier={() => { void run("loadHistory", { threadId: id }); }} />
     <LegendList ref={list} key={id} data={rows} keyExtractor={(row) => row.key} renderItem={renderItem} estimatedItemSize={100}
       {...(sourceIndex >= 0 || matchIndex >= 0 ? { alwaysRender: { keys: [...new Set([sourceIndex, matchIndex].filter((index) => index >= 0).map((index) => rows[index]!.key))] } } : {})}
@@ -454,11 +519,11 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
       onScroll={(event) => { updateSticky(); const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent; const node: unknown = list.current?.getScrollableNode(); const distance = node instanceof HTMLElement ? node.scrollHeight - node.scrollTop - node.clientHeight : contentSize.height - contentOffset.y - layoutMeasurement.height; const end = distance < 40; setAtEnd(end); if (end) setFollowEnd(true); loadEarlierAtTop(); }}
       ListHeaderComponent={header}
       ListFooterComponent={<div className="timeline-footer">
-        {working && !activeHeader ? <div className="timeline-row"><AssistantHeader working /></div> : null}
+        {working && !activeHeader ? <div className="timeline-row"><AssistantHeader working status={runStatus} /></div> : null}
         {id && state.rollbackFailure ? <p className="turn-error" role="status">{state.rollbackFailure}</p> : null}
         {id && state.rewindMarker ? <RewindMarkerRow threadId={id} marker={state.rewindMarker} /> : null}
         {id && state.restoreResult ? <RestoreResultRow threadId={id} result={state.restoreResult} /> : null}
       </div>}
     />
-  </div></SubagentState></RemoteSessionContext.Provider></RevealContext.Provider></SearchTargetContext.Provider></ModelNamesContext.Provider>;
+  </div></SubagentState></ReplyContext.Provider></RemoteSessionContext.Provider></RevealContext.Provider></SearchTargetContext.Provider></ModelNamesContext.Provider>;
 }

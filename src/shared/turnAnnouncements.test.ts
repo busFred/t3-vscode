@@ -54,3 +54,12 @@ test("Only the newest item is announced", () => {
   const items = [{ type: "command_execution", label: "old", status: "completed" }, { type: "assistant_message", streaming: false }];
   assert.equal(turnAnnouncement(state({ items })), "Assistant replied");
 });
+
+test("A run that only waits on subagents says so instead of delegating or working", () => {
+  const delegating = { running: true, items: [{ type: "subagent", status: "running" }] };
+  assert.equal(turnAnnouncement(state(delegating)), "Delegating to a subagent");
+  assert.equal(turnAnnouncement(state({ ...delegating, waitingOnSubagents: 1 })), "Waiting on a subagent");
+  assert.equal(turnAnnouncement(state({ ...delegating, waitingOnSubagents: 2 })), "Waiting on 2 subagents");
+  assert.equal(turnAnnouncement(state({ ...delegating, waitingOnSubagents: 2, pendingQuestions: 1 })), "A question is waiting", "a request for the person still wins");
+  assert.equal(turnAnnouncement(state({ items: delegating.items, waitingOnSubagents: 1 })), "Delegating to a subagent", "a stopped run is not waiting");
+});

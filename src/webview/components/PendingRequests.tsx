@@ -9,6 +9,7 @@ import type { ChildRequestSummary, HostStateSnapshot, PendingSecretRequest } fro
 import { useActions } from "../actions";
 import { useBridgeQuery } from "../useBridgeQuery";
 import { ComposerPendingApprovalPanel } from "./t3/ComposerPendingApprovalPanel";
+import { carryUnsentAnswersToDraft, forgetQuestionAnswers, noteUnansweredQuestions, pruneQuestionAnswers, recalledQuestionAnswers, rememberQuestionAnswers, restoreUnsentAnswers } from "../questionAnswers";
 
 /** Grows with the answer like the composer, then scrolls; Enter submits and Shift+Enter inserts a newline. */
 function CustomAnswer(props: ComponentProps<"textarea">) {
@@ -61,14 +62,19 @@ function UserInput({ prompt, threadId, open, onToggle }: { prompt: ThreadPending
   const run = useActions();
   const card = useRef<HTMLFormElement>(null);
   const wasOpen = useRef(open);
-  const [drafts, setDrafts] = useState<Record<string, PendingUserInputDraftAnswer>>(() => seedUserInputDraftAnswers(prompt.questions, {}));
+  const [drafts, setDrafts] = useState<Record<string, PendingUserInputDraftAnswer>>(() => recalledQuestionAnswers(threadId, prompt.requestId) ?? seedUserInputDraftAnswers(prompt.questions, {}));
+  // Mirrored outside the card: if Stop or a provider timeout closes the question, the typed text goes to the composer.
+  useEffect(() => { rememberQuestionAnswers(threadId, prompt.requestId, drafts); }, [threadId, prompt.requestId, drafts]);
   const [busy, setBusy] = useState(false);
   const disabled = busy || prompt.responseCapability === "not_resumable";
   const valid = prompt.questions.every(question => question.required === false || resolvePendingUserInputAnswer(question, drafts[question.id]) !== null);
   const submit = () => {
     if (!valid || disabled) return;
     setBusy(true);
-    void run("respondToRequest", { threadId, requestId: prompt.requestId, answers: Object.fromEntries(prompt.questions.map(question => [question.id, resolvePendingUserInputAnswer(question, drafts[question.id]) ?? ""])) }).finally(() => setBusy(false));
+    // Forgotten before sending, so a Stop that lands while the answer is in flight cannot also copy it into the composer;
+    // remembered again if the send fails, since the answer is then still the person's only copy.
+    forgetQuestionAnswers(threadId, prompt.requestId);
+    void run("respondToRequest", { threadId, requestId: prompt.requestId, answers: Object.fromEntries(prompt.questions.map(question => [question.id, resolvePendingUserInputAnswer(question, drafts[question.id]) ?? ""])) }).then((ok) => { if (!ok) restoreUnsentAnswers(threadId, prompt.requestId, drafts); }).finally(() => setBusy(false));
   };
   useLayoutEffect(() => {
     // Only re-expanding moves focus into the card; the first render keeps focus where it was.
@@ -205,6 +211,17 @@ export function PendingRequests({ state }: { state: HostStateSnapshot }) {
   // Keyed by requestId so each request keeps its own collapsed state; unseen requests start expanded.
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const threadId = state.activeThreadId;
+  // A question that closed unanswered (Stop, provider timeout) returns what was typed in it to this conversation's draft.
+  const unanswered = state.pending.unansweredUserInputIds?.join("\n") ?? "";
+  useEffect(() => {
+    if (!threadId) return;
+    noteUnansweredQuestions(threadId, unanswered ? unanswered.split("\n") : []);
+    if (unanswered) carryUnsentAnswersToDraft(threadId, unanswered.split("\n"));
+  }, [threadId, unanswered]);
+  const openQuestions = state.pending.userInputs.map((input) => input.requestId).join("\n");
+  useEffect(() => {
+    if (threadId) pruneQuestionAnswers(threadId, new Set([...openQuestions.split("\n"), ...unanswered.split("\n")].filter(Boolean)));
+  }, [threadId, openQuestions, unanswered]);
   if (!threadId) return null;
   const approval = state.pending.approvals[0];
   const prompt = state.pending.userInputs[0];

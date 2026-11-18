@@ -22,7 +22,11 @@ export interface AnnouncementState {
   readonly pendingApprovals?: number;
   readonly pendingQuestions?: number;
   readonly pendingSecrets?: number;
+  /** Live subagents at the run's tail with nothing else done since (see `runningSubagentsAtRunTail`). */
+  readonly waitingOnSubagents?: number;
 }
+
+import { waitingOnSubagentsLabel } from "./waitingOnSubagents.js";
 
 const WORKING = new Set(["running", "pending"]);
 
@@ -54,6 +58,9 @@ export function turnAnnouncement(state: AnnouncementState): string | null {
   if (secrets > 0) return "A secret is requested";
   if (approvals > 0) return approvals === 1 ? "Approval needed" : `${approvals} approvals needed`;
   if (questions > 0) return questions === 1 ? "A question is waiting" : `${questions} questions are waiting`;
+
+  const waitingOn = state.waitingOnSubagents ?? 0;
+  if (state.running && waitingOn > 0) return waitingOnSubagentsLabel(waitingOn);
 
   const last = state.items.at(-1);
   if (!last) return state.running ? "Working" : null;

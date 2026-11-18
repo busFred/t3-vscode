@@ -8,7 +8,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 
 | Feature name | Description | Introduced in | Last changed in |
 | --- | --- | --- | --- |
-| [Sessions sidebar](#sessions-sidebar) | Session manager with tags, pinned ordering, a Snoozed shelf and chat in editor tabs. | v0.0.7 | v0.3.10 |
+| [Sessions sidebar](#sessions-sidebar) | Session manager with tags, pinned ordering, a Snoozed shelf and chat in editor tabs. | v0.0.7 | v0.3.14 |
 | [Scheduled task management](#scheduled-task-management) | Machine-grouped project/session task lists, once and webhook schedules, and independent editor tabs. | v0.1.16 | v0.3.10 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
@@ -18,14 +18,14 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.3.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
 | [Find in session](#find-in-session) | Progressive message-text and full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.3.7 |
-| [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.3.7 |
+| [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.3.14 |
 | [Link requests](#link-requests) | Review or decline requests to link environments. | v0.3.7 | v0.3.7 |
-| [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation, centred in the whole conversation; earlier pages load at the top. | v0.0.8 | v0.3.4 |
+| [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation, centred in the whole conversation; earlier pages load at the top. | v0.0.8 | v0.3.14 |
 | [Subagent conversations](#subagent-conversations) | Nested local and remote child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.11 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
-| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.3.10 |
+| [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.3.14 |
 | [Context window meter](#context-window-meter) | Ring + percent in the composer toolbar showing live provider usage against the model's context window. | v0.2.2 | v0.2.2 |
-| [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.3.7 |
+| [Slash commands and file suggestions](#slash-commands-and-file-suggestions) | Offers provider commands, skills and files with explicit source checkout paths. | v0.0.6 | v0.3.14 |
 | [Queue and steer](#queue-and-steer) | Enter queues follow-ups; Ctrl/Cmd+Enter steers supported active runs. | v0.0.6 | v0.0.8 |
 | [Queue controls and task progress](#queue-controls-and-task-progress) | Edits, reorders and sends queued follow-ups; shows current tasks. | v0.0.6 | v0.3.7 |
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.23 |
@@ -46,7 +46,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
 | [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
 | [Editor references](#editor-references) | Inserts file ranges with checkout-aware labels and preserved source URIs. | v0.0.4 | v0.2.0 |
-| [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.3.13 |
+| [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.3.14 |
 | [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.22 |
 | [Saved turn diffs](#saved-turn-diffs) | Shows agent-only response files, counts, the current checkpoint checkout branch and files merged in from a subagent checkout. | v0.0.6 | v0.3.0 |
 | [Revert and restore](#revert-and-restore) | "Edit from here" rewinds the conversation only; "Restore files to this point" is a separate, guarded extension-owned Git restore that keeps your edits where it can. | v0.2.2 | v0.3.0 |
@@ -59,7 +59,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, scannable README listing and a separate user guide for reference detail. | v0.0.7 | v0.1.19 |
-| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.1.15 |
+| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.3.14 |
 | [Release versioning](#release-versioning) | Keeps the owner-selected version, publishes only a specifically authorized version/channel, and tags each published version with a GitHub release. | v0.1.10 | v0.3.7 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.22 |
@@ -97,6 +97,13 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 - Preserve existing tabs, drafts, attachment ownership and current-conversation links while removing untouched new chats when closed.
 
 ### Sessions sidebar
+
+#### v0.3.14 — stopped runs and snooze wording
+
+- A conversation whose latest run was stopped or cancelled no longer shows the Done badge
+  (T3 Code 0.1.10, `40dcbc5f6a`).
+- Snooze wake times count clock minutes (`04572419e4`): a fresh one-hour snooze reads "wakes in 1h"
+  instead of "60m".
 
 #### v0.3.7
 
@@ -554,6 +561,15 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Conversation status and notifications
 
+#### v0.3.14 — Stopping state and waiting on subagents
+
+- Stop shows "Stopping…" and ignores repeat clicks for that run (T3 Code 0.1.10, `cbc68c9dc1`),
+  re-enabling after 10 seconds if the stop never lands, or at once if the interrupt could not be
+  sent. Force stop is unchanged.
+- While a run has only launched subagents that are still running, the response header, its sticky
+  copy and the screen-reader announcement say "Waiting on a subagent" / "Waiting on N subagents"
+  instead of "Working" (`c8db8be305`).
+
 #### Unreleased — screen reader turn announcements
 
 - Narrate a turn's progress to assistive technology, matching T3 Code 0.1.9, so a screen-reader user
@@ -619,6 +635,19 @@ Session resources retain the current History selection for restoration. Opening 
 - Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 ### Message navigation rail
+
+#### v0.3.14 — long jumps land on their message
+
+- A jump from the rail re-aims for a few frames until the chosen message is on screen. Rows between
+  the old position and the target still had estimated heights when the list chose its offset, so a
+  long jump (for example Home, then End, right after earlier pages load) could stop short and leave
+  the target unrendered. Found as an intermittent `verify-ui.mjs` failure that also occurs on v0.3.13
+  (`main` 2/360 in a stress loop of that step); with the fix 0/720. "Jump to latest" already
+  corrected for this by snapping to the real bottom.
+- A newer navigation (another rail jump, Latest, a search or source reveal, wheel or touch scrolling
+  outside the rail) cancels an older jump's re-aiming, and each retry looks its row up again so
+  history loading mid-jump cannot send it to the wrong message. Stress loop after these changes:
+  0/360 under 2x CPU throttling. Two fresh reviews approved with nits; all should-fix items applied.
 
 #### v0.0.8
 
@@ -751,6 +780,25 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Compact composer
 
+#### v0.3.14 — unsent question answers are kept
+
+- Text typed into a question card is appended to that conversation's draft, after a blank line, when
+  Stop or a provider timeout closes the question unanswered (T3 Code 0.1.10, `94f7984d2c`). With the
+  panel focused it lands as one native edit (one Ctrl+Z removes it; earlier typing stays undoable)
+  and focus returns to where it was. When the panel is not focused it is a plain draft write, so the
+  panel never takes keyboard focus from the editor; the text still lands, but that message box's
+  undo history (including earlier typing) starts over from it.
+- If sending an answer fails just as Stop closes its question, the answer is carried into the
+  message box instead of being lost.
+- An answer being sent is no longer copied as well if Stop lands mid-send; answers for questions
+  answered elsewhere are dropped; the host reports at most the 20 most recent unanswered questions.
+- Covered by `scripts/verify-composer-undo.ts`, and in real VS Code by `verify-edh.mjs
+  --requests-only`: a live model (GPT-6 Luna Low) asks a two-option question, the test types a draft
+  and a custom answer, clicks Stop, and checks the carried text, one-step undo/redo and earlier typing.
+  It passed against an isolated T3 Code 0.1.10 server. It is not part of the packaging undo gate,
+  which stays deterministic (no provider question). The test clears VS Code's "needs your input"
+  notification first, because that toast covers the composer corner where Stop sits.
+
 #### Unreleased — read-only while a draft restores
 
 - The message box is held read-only, not disabled, while its draft restores. Toggling `disabled`
@@ -873,6 +921,12 @@ Typed composer text uses the editor foreground for stronger contrast, while plac
 - An independent regression-review agent checked the implementation and found one bug: rounding to the nearest thousand could itself reach `1000k` (e.g. 999,999 tokens) instead of rolling into the millions format; fixed by checking the rounded thousands value before choosing the `k`/`M` branch, with added test coverage around the 999.5k–999.999k boundary. No other issues were found in the band thresholds, percent rounding/clamping, tie-break ordering, prop wiring from `hostState.ts` through to `ContextMeter.tsx`, or the CSS layout/coloring.
 
 ### Slash commands and file suggestions
+
+#### v0.3.14 — upstream slash detection
+
+- Slash detection is T3 Code 0.1.10's (`16ff4b45ee`, `f41e8b3c10`): `/model` is an ordinary command
+  match for the local /model action, `/model <text>` no longer keeps the menu open (Enter sends the
+  text), and Windows-style paths stay out of the menu.
 
 #### Unreleased — suggested next prompt
 
@@ -1797,6 +1851,23 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Assistant citations
 
+#### v0.3.14 — reply to a response
+
+- Reply to an assistant response (T3 Code 0.1.10, pingdotgg/t3code `c0f85e7f79`): a Reply button
+  beside Copy (and Fork on a run's final answer) puts a reply token at the start of the composer
+  with a "Replying to" chip; replying to another response replaces it, replying to the same one
+  changes nothing. Insertion is one native undo step, like quotes.
+- The message carries T3's `response` context record: the response's identity, its opening (at most
+  300 characters), its item id and the subagents it reported on, so the agent rereads the rest itself.
+  Sent messages from any client show "Replying to …", which opens the response.
+- Offered only when the conversation's own machine (local or paired remote) runs T3 Code 0.1.10 or
+  later; previews count, unknown versions hide it. A 0.1.9 server silently drops a record it cannot
+  decode (`ForwardCompatibleArray`), so the message would lose its link. The host refuses a reply to
+  an older server, to a response this conversation does not show (a fork may reply to responses it
+  carried over from its source), to another machine, or with a longer opening than the composer
+  captures.
+- Drafts keep a reply across reload; copy/paste keeps it only with the session clipboard nonce.
+
 #### v0.3.13 — no blank-line gaps around quoted tables
 
 - The comment popup preview and the selection menu's "Copy as text" collapse the runs of blank lines a selection picks up across tables and other blocks, as quote cards already did. "Copy as Markdown" and the saved quote text are unchanged.
@@ -2246,6 +2317,51 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
   was not run here: it needs real VS Code. The separate native-undo gate
   (`scripts/verify-native-undo.mjs`, via `verify-edh.mjs --undo-only`) still must be run in real
   VS Code before any VSIX.
+
+#### v0.3.14 — vendored T3 Code pinned to 0.1.10
+
+- Move the vendored protocol and client-runtime packages from tag `v0.1.9` (`24e77473ec`) to tag
+  `v0.1.10` (`7d32075e37`, 2026-11-16), covering 1,924 upstream commits. No closure packages or
+  closure entries were added; every vendored source file matches upstream except the seven
+  documented local patches, which all still apply unchanged.
+- Effect moves to 4.1.3. `client-runtime` gains `remark-gfm`, `remark-parse` and `unified`;
+  `shared` gains `get-east-asian-width` and `micromark-util-decode-string`; `@pierre/diffs` moves to
+  1.7.0-beta.4.
+- No RPC was removed or renamed, so the minimum supported server stays 0.1.5. New RPCs
+  (`server.checkSecretSource`, `pullRequests.subscribeLinkedThreadRefreshes`) are not used yet.
+- Upstream dropped the separate `slash-model` trigger: `/model` is now an ordinary slash-command
+  trigger whose query matches the local /model action, so the extension's rewrite was removed
+  (pingdotgg/t3code `16ff4b45ee`). As a result `/model <text>` no longer keeps the menu open, so
+  Enter sends that text as a prompt instead of opening the model picker. Windows-style paths now stay
+  out of the menu (`f41e8b3c10`). A `/word` later in the prompt opened the menu before this sync too.
+  `src/shared/composerSuggestions.test.ts` pins this.
+- A conversation whose latest run was stopped or cancelled no longer shows the Done badge,
+  matching T3 Code 0.1.10 (`40dcbc5f6a`).
+- Snoozed conversations count wake time in clock minutes (upstream `04572419e4`): a fresh one-hour
+  snooze reads "wakes in 1h" instead of "60m". `scripts/verify-views.ts` now expects that label.
+- Validation (covers this entry and the other v0.3.14 entries): typecheck clean; 826/826 unit tests
+  (`src/host/worktrees.test.ts` is intermittently flaky on `main` too); `pnpm run build`, bundles
+  +2.1% host and +1.3% webview. `verify-views.ts` 16/16 and `verify-ui.mjs` 5/5 on the final source.
+  On this heavily loaded machine (load average ~90–140) `verify-ui.mjs` sometimes timed out at the
+  "Search threads" step, which also happens on untouched `main`, and occasionally at the
+  interactive-graphic step after a rail jump. The latter was traced to a rail-jump race that exists on
+  v0.3.13 too (see [Message navigation rail](#message-navigation-rail)) and is fixed in v0.3.14.
+- Performance: `_tools/hostbench.mts` (300 conversations, 4,000-item transcript, three views; its
+  sample items needed the full assistant-message field list to decode), alternating 4 runs each:
+  build per update median ~50 ms on `main` vs ~48.5 ms on this branch, snapshot 2,041.4 KB vs
+  2,041.4–2,042.3 KB per view, i.e. no measurable change. Bundles +2.1% host, +1.3% webview.
+- Real VS Code `verify-edh.mjs --undo-only` 14/14 on the exact source against an isolated T3 Code
+  **0.1.10** server (scratch runtime and base directory under `/tmp`, OS-assigned port), including the
+  new reply case in a new chat panel and a session tab; no waiver. The run needs `CHROMIUM_PATH` when
+  `/usr/bin/chromium` is absent, and the rich fixture (`prepare-rich-fixture.ts`, both stages) for
+  `clipboard-fixture.png`. Live `verify-host.ts` passed against isolated 0.1.10 and 0.1.9 servers
+  (GPT-6 Luna Low).
+- Reviews: a fresh-context regression review (Claude Opus) approved with nits; a Fable performance
+  and security review found no high-severity issue (fixed: background carry no longer takes focus,
+  host checks a reply's conversation, machine and opening length, unanswered-question list capped,
+  stale typed answers dropped). A fresh re-review blocked on replies in forked conversations (fixed:
+  a response the conversation shows is accepted) and a lost answer when a send fails after Stop
+  (fixed); a final re-review approved with nits. Reply records keep the local machine id, as quotes do.
 
 #### Unreleased — vendored T3 Code pinned to 0.1.9
 

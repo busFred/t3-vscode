@@ -2,12 +2,12 @@ import { RuntimeMode, isManagedDriverAllowed, managedPolicyDeniedMessage, manage
 import { ImageCaptionEditor } from "./ImageCaptionEditor";
 import { bridge } from "../bridge-client";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon, WandSparklesIcon, ZapIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon, WandSparklesIcon, ZapIcon, ReplyIcon } from "lucide-react";
 import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
 import { clearDraft, readDraft, readDraftSelection, registerDraftTextEditor, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useDraftRecovery, useComposerDraft, type DraftTextEdit } from "../composerDrafts";
-import { assistantQuoteLabel, assistantQuoteNumbers, contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, insertFileReference, removeContextReference, syncAssistantQuoteLabels, type FileReference } from "../../shared/composerContext";
+import { assistantQuoteLabel, assistantQuoteNumbers, contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, insertFileReference, removeContextReference, responseRecordsForMessage, syncAssistantQuoteLabels, type FileReference } from "../../shared/composerContext";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
 import { effortDescriptor, effortOptionLabel, isPremiumSpeed, speedChoiceLabel, speedControl, ultracodeOption } from "../../shared/modelOptions";
@@ -18,6 +18,7 @@ import { replaceTextRange } from "@t3tools/shared/composerTrigger";
 import { useBridgeQuery } from "../useBridgeQuery";
 import { ComposerSuggestions } from "./ComposerSuggestions";
 import { ConversationActivity } from "./ConversationActivity";
+import { idleStop, isStopDisabled, reconcileStop, STOP_PENDING_MAX_MS, stopClicked, stopKey, stopLabel, stopTimedOut } from "../../shared/stopPending";
 import { resolveComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 import { addDraftAttachments, hasPendingAttachmentWork, pasteAttachments, pasteComposerClipboard, removeDraftAttachment, settleDraftAttachmentsWithin, trackAttachmentWork } from "../composerAttachments";
 import { buildComposerClipboard, parseComposerClipboardHtml, type ComposerClipboardPayload } from "../../shared/composerClipboard";
@@ -185,14 +186,20 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const editText = useCallback((previous: string, next: string, mode: DraftTextEdit) => {
     const input = textarea.current;
     if (!input || input.disabled || input.readOnly || !input.isConnected || input.value !== previous) return;
+    // "borrow-focus" edits an unfocused field natively too, then hands focus back to whatever held it.
+    const borrowing = mode === "borrow-focus" && document.activeElement !== input;
+    const giveBackTo = borrowing && document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     if (document.activeElement !== input) {
-      if (mode !== "take-focus") return;
-      input.focus(); if (document.activeElement !== input) return;
+      // Focusing an input in a webview the person is not using could pull keystrokes away from their editor, so a
+      // background carry-over is then a plain draft write: the text still lands, without a native undo step.
+      if (mode === "keep-focus" || (mode === "borrow-focus" && !document.hasFocus())) return;
+      input.focus({ preventScroll: mode === "borrow-focus" }); if (document.activeElement !== input) return;
     }
     const edit = textReplacement(previous, next);
     editing.current = true;
     insertNatively(input, edit.start, edit.end, edit.text);
     editing.current = false;
+    if (giveBackTo?.isConnected) giveBackTo.focus({ preventScroll: true }); else if (borrowing) input.blur();
   }, []);
   useEffect(() => registerDraftTextEditor(draftKey, editText), [draftKey, editText]);
   const applyFormat = (format: MarkdownFormat) => {
@@ -322,6 +329,17 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   }, [triggerLabel, speedLabel, runtimeMode, worktreeLabel, Boolean(state.worktrees), state.draft.projectId, thread?.projectId, state.appearance.fontSizeInterface]);
   const running = Boolean(thread?.activeRunId || state.queue?.activeRunId || state.acknowledgedWorking);
   const canStop = running || Boolean(thread?.waitingOnSubagents || thread?.backgroundWork);
+  // Stop shows "Stopping…" and ignores repeat clicks until the run stops, the run changes, or 10 s pass.
+  const currentStopKey = stopKey(thread?.id, thread?.activeRunId ?? state.queue?.activeRunId);
+  const [storedStop, setStoredStop] = useState(() => idleStop(currentStopKey));
+  const stop = reconcileStop(storedStop, currentStopKey, canStop);
+  if (stop !== storedStop) setStoredStop(stop);
+  useEffect(() => {
+    if (stop.phase !== "pending") return;
+    const timer = setTimeout(() => setStoredStop((current) => stopTimedOut(current, currentStopKey)), STOP_PENDING_MAX_MS);
+    return () => clearTimeout(timer);
+  }, [stop.phase, currentStopKey]);
+  const stopping = isStopDisabled(stop);
   const shortcutHint = `${running ? `Enter to queue${state.queue?.canSteer ? ` · ${steerShortcut} to steer` : ""}` : "Enter to send"} · Shift+Enter for a new line`;
   // Never over a draft the user is writing, never while sending, and not once dismissed.
   const suggested = state.promptSuggestion;
@@ -357,7 +375,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       setBusy(false); textarea.current?.focus(); return;
     }
     const mode = resolveComposerDispatchMode({ running, activeTurnDefault: "queue", alternateModifier: steer && state.queue?.canSteer === true });
-    const sent = await run("sendMessage", { text: value, mode, attachmentIds: settled.map((file) => file.attachment!.id), attachmentReferences: settled.flatMap((file) => file.contextId ? [{ contextId: file.contextId, attachmentId: file.attachment!.id }] : []), ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
+    const sent = await run("sendMessage", { text: value, mode, attachmentIds: settled.map((file) => file.attachment!.id), attachmentReferences: settled.flatMap((file) => file.contextId ? [{ contextId: file.contextId, attachmentId: file.attachment!.id }] : []), responseRecords: responseRecordsForMessage(value, draft.contexts ?? contexts), ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
     if (sent) clearDraft(draftKey);
     setBusy(false); textarea.current?.focus();
   };
@@ -401,6 +419,10 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     const fileContext = fileReferenceOccurrences(text, contexts).find(ref => ref.start <= position && position < ref.end)?.context;
     if (fileContext) { void openFileReference(fileContext); return true; }
     const reference = collectComposerContextReferences(text).find((ref) => ref.start <= position && position < ref.end);
+    if (reference?.kind === "response") {
+      const context = contexts.find((context) => context.type === "response" && context.record.contextId === reference.contextId);
+      if (context?.type === "response") { window.dispatchEvent(new CustomEvent("t3-open-citation", { detail: context.record.citation })); return true; }
+    }
     if (reference?.kind === "assistant-quote") {
       const index = contexts.findIndex((context) => context.type === "assistant" && context.contextId === reference.contextId);
       const context = contexts[index];
@@ -478,7 +500,11 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
             <button className="icon-button remove-attachment" aria-label={`Remove ${file.name}`} disabled={busy} onClick={() => { void removeDraftAttachment(draftKey, file.key).catch((cause) => setAttachmentError(String(cause))); }}><XIcon size={12} /></button>
           </div>;
         })}
-        {visibleContexts.map(({ context, index }) => <div className="composer-chip context-chip" key={index}>
+        {visibleContexts.map(({ context, index }) => context.type === "response" ? <div className="composer-chip context-chip reply-chip" key={index}>
+          {/* Opens the response it replies to, like the source button on a quote. */}
+          <button className="context-label" title={context.record.citation.text} onClick={() => window.dispatchEvent(new CustomEvent("t3-open-citation", { detail: context.record.citation }))}><ReplyIcon size={12} aria-hidden="true" /> {context.record.subagents?.length ? `Replying to ${context.record.subagents.map((subagent) => subagent.title).join(", ")}: ` : "Replying to: "}{context.record.label}</button>
+          <button className="icon-button" aria-label="Cancel reply" disabled={busy} onClick={() => updateDraft(draftKey, (draft) => ({ ...draft, text: removeContextReference(draft.text, context), contexts: draft.contexts.filter((_, position) => position !== index) }), "keep-focus")}><XIcon size={12} /></button>
+        </div> : <div className="composer-chip context-chip" key={index}>
           <button className="context-label" data-quoted={context.type === "assistant" && context.citation.comment === undefined} title={context.type === "file" ? context.text || context.path : `${context.citation.text}${context.citation.comment ? `\nComment: ${context.citation.comment}` : ""}`} onClick={() => {
             if (context.type === "assistant") onEditCitation(context.citation, index);
             else void openFileReference(context);
@@ -556,7 +582,12 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
           {sendBlock ? <span className="composer-shortcuts" role="status"><span>{sendBlock === "Send when it reconnects" ? "Your draft is kept" : sendBlock}</span><span>{sendBlock === "Send when it reconnects" ? sendBlock : "Your draft is kept"}</span></span>
             : <span className="composer-shortcuts" aria-hidden="true"><span>{running ? "Enter to queue" : "Enter to send"}</span><span>{running && state.queue?.canSteer ? `${steerShortcut} to steer` : "Shift+Enter for a new line"}</span></span>}
           {thread?.forceStopRunId ? <button className="stop-button" title="Agent not responding to Stop" onClick={() => { void run("forceStop", { threadId: thread.id, runId: thread.forceStopRunId }); }}>Force stop</button> : null}
-          {canStop && thread ? <button className="stop-button" aria-label="Stop generation" title="Stop generation" onClick={() => { void run("interrupt", { threadId: thread.id }); }}><SquareIcon size={12} fill="currentColor" /></button> : null}
+          {canStop && thread ? <button className={stopping ? "stop-button stopping" : "stop-button"} aria-label={stopLabel(stop)} title={stopping ? "Stopping…" : "Stop generation"} disabled={stopping} onClick={() => {
+            if (stopping) return;
+            setStoredStop(stopClicked(currentStopKey));
+            // A stop the host could not send leaves nothing to wait for, so allow another try.
+            void run("interrupt", { threadId: thread.id }).then((ok) => { if (!ok) setStoredStop((current) => current.key === currentStopKey ? idleStop(currentStopKey) : current); });
+          }}><SquareIcon size={12} fill="currentColor" />{stopping ? <span>Stopping…</span> : null}</button> : null}
           <button className="send-button" aria-label="Send message" title={policyBlock ?? shortcutHint} disabled={disabled || setupBlocked || picking || placingPicked || !selection || attachments.some((file) => !file.pending && !file.attachment) || (!text.trim() && !visibleContexts.length && !attachments.length)} onClick={(event) => { void send(event.ctrlKey || event.metaKey); }}><ArrowUpIcon size={17} /></button>
         </div>
       </div>

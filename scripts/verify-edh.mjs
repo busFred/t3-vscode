@@ -273,6 +273,68 @@ try {
     await inputPanel.wait(`[...document.querySelectorAll('.assistant-message')].some(node => node.textContent.includes('NOTIFICATION-ANSWERED') && !node.querySelector('.streaming-label'))`, 90_000);
     await workbench.screenshot({ path: join(evidence, 'edh-input-answered.png') });
     console.log('PASS: workspace Input badge and native notification; Open session reveals the existing conversation tab without duplication; answering clears the badge and resumes the provider');
+
+    // Typed answers survive Stop (T3 Code 0.1.10): what was typed into an open question card moves to the composer
+    // when Stop cancels the question, as one native edit after the draft, and the earlier typing stays undoable.
+    // Real clicks and keystrokes only: the carry runs through VS Code's focus and key routing, which harnesses miss.
+    const realClick = async (view, selector) => {
+      await workbench.bringToFront();
+      await view.evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'nearest',inline:'nearest'})`);
+      await view.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const inner = await view.evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: innerWidth, h: innerHeight }; })()`);
+      const frames = await workbench.locator('iframe.webview').evaluateAll((elements) => elements.filter(element => {
+        const box = element.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden'
+          && document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === element;
+      }).map(element => { const box = element.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height }; }));
+      const frame = frames.find((box) => Math.abs(box.width - inner.w) < 2 && Math.abs(box.height - inner.h) < 2); assert.ok(frame, `webview frame for ${selector}`);
+      await workbench.mouse.click(frame.x + inner.x, frame.y + inner.y);
+    };
+    const composer = 'textarea[aria-label="Message"]';
+    const composerValue = () => inputPanel.evaluate(`document.querySelector('${composer}').value`);
+    await realClick(inputPanel, composer);
+    await inputPanel.wait(`document.activeElement === document.querySelector('${composer}') && document.hasFocus()`, 10_000);
+    await workbench.keyboard.insertText('This is a UI verification. Use your request_user_input tool to ask exactly one question: what is your favourite colour? Give two options, Red and Blue. Wait for my answer and do no other work.');
+    await workbench.keyboard.press('Enter');
+    await inputPanel.wait('document.querySelector(".question-card textarea")', 120_000);
+    const draft = 'Draft before stop.';
+    await realClick(inputPanel, composer);
+    await inputPanel.wait(`document.activeElement === document.querySelector('${composer}')`, 10_000);
+    await workbench.keyboard.type(draft, { delay: 20 });
+    await inputPanel.wait(`document.querySelector('${composer}').value === ${JSON.stringify(draft)}`, 10_000);
+    const answer = 'Carried answer text';
+    await realClick(inputPanel, '.question-card textarea');
+    await inputPanel.wait(`document.activeElement === document.querySelector('.question-card textarea')`, 10_000);
+    await workbench.keyboard.type(answer, { delay: 20 });
+    await inputPanel.wait(`document.querySelector('.question-card textarea').value === ${JSON.stringify(answer)}`, 10_000);
+    // The question's "needs your input" notification covers the composer's corner where Stop sits; a real click
+    // would land on the toast, so clear notifications first.
+    await workbench.keyboard.press('F1');
+    await workbench.locator('.quick-input-widget input').filter({ visible: true }).fill('>Notifications: Clear All Notifications');
+    await workbench.locator('.quick-input-list .monaco-list-row').filter({ hasText: 'Notifications: Clear All Notifications' }).waitFor();
+    await workbench.keyboard.press('Enter');
+    await workbench.locator('.notification-list-item').filter({ visible: true }).first().waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+    try { await inputPanel.wait(`document.querySelector('button.stop-button[aria-label="Stop generation"]')`, 30_000); }
+    catch { throw new Error(`Stop must be offered while the question is open; send controls: ${await inputPanel.evaluate(`document.querySelector('.composer-send-controls')?.outerHTML.slice(0, 1500)`)}`); }
+    await realClick(inputPanel, 'button.stop-button[aria-label="Stop generation"]');
+    const carried = `${draft}\n\n${answer}`;
+    try { await inputPanel.wait(`!document.querySelector('.question-card') && document.querySelector('${composer}').value === ${JSON.stringify(carried)}`, 60_000); }
+    catch { throw new Error(`Stop must carry the typed answer into the composer; composer ${JSON.stringify(await composerValue())}, card ${await inputPanel.evaluate('!!document.querySelector(".question-card")')}`); }
+    await workbench.screenshot({ path: join(evidence, 'edh-answer-carried.png') });
+    await realClick(inputPanel, composer);
+    await inputPanel.wait(`document.activeElement === document.querySelector('${composer}') && document.hasFocus()`, 10_000);
+    await workbench.keyboard.press('Control+z');
+    try { await inputPanel.wait(`document.querySelector('${composer}').value === ${JSON.stringify(draft)}`, 5_000); }
+    catch { throw new Error(`One Ctrl+Z must remove only the carried answer; got ${JSON.stringify(await composerValue())}`); }
+    await workbench.keyboard.press('Control+Shift+z');
+    await inputPanel.wait(`document.querySelector('${composer}').value === ${JSON.stringify(carried)}`, 5_000);
+    await workbench.keyboard.press('Control+z'); await workbench.keyboard.press('Control+y');
+    await inputPanel.wait(`document.querySelector('${composer}').value === ${JSON.stringify(carried)}`, 5_000);
+    // Earlier typing is still undoable behind the carried answer.
+    await workbench.keyboard.press('Control+z'); await workbench.keyboard.press('Control+z');
+    try { await inputPanel.wait(`document.querySelector('${composer}').value.length < ${draft.length}`, 5_000); }
+    catch { throw new Error(`Typing before the carry must stay undoable; got ${JSON.stringify(await composerValue())}`); }
+    console.log('PASS: Stop moves an unsent typed question answer into the composer after the draft; one Ctrl+Z removes it, redo restores it, and earlier typing stays undoable');
   } else if (screenshotsOnly) {
     const { captureReadme } = await import('./capture-readme.mjs');
     await captureReadme({ home, workbench, sidebar, findWebview, runCommand });

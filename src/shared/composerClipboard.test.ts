@@ -48,7 +48,7 @@ test("Quotes and @ file references travel in the payload with only what the sele
   const other = { ...quote, contextId: "quote_b" };
   const clip = copy(`See [❝1 Hello](t3-context://v1/assistant-quote/quote_a) and @a.ts`, [], [quote, other, file])!;
   const payload = parseComposerClipboardHtml(clip.html, NONCE)!;
-  assert.deepEqual(payload.contexts.map((context) => context.type === "assistant" ? context.contextId : context.inlineText), ["quote_a", "@a.ts"]);
+  assert.deepEqual(payload.contexts.map((context) => context.type === "assistant" ? context.contextId : context.type === "file" ? context.inlineText : context.type), ["quote_a", "@a.ts"]);
   assert.equal(clip.plain, "See ❝1 Hello and @a.ts");
 });
 test("Hostile or malformed clipboard HTML is ignored or rejected", () => {
@@ -91,7 +91,7 @@ test("Copy then paste in the same draft mints a second attachment; cut then past
 test("Quotes keep their id in a new draft, get a fresh one when it is in use, and file tokens never hijack another file", () => {
   const payload = parseComposerClipboardHtml(copy("[❝1 Hello](t3-context://v1/assistant-quote/quote_a) @a.ts", [], [quote, file])!.html, NONCE)!;
   const empty = planComposerPaste(payload, { text: "", contexts: [], attachments: [] }, { start: 0, end: 0 }, counter());
-  assert.deepEqual(empty.contexts.map((context) => context.type === "assistant" ? context.contextId : context.inlineText), ["quote_a", "@a.ts"]);
+  assert.deepEqual(empty.contexts.map((context) => context.type === "assistant" ? context.contextId : context.type === "file" ? context.inlineText : context.type), ["quote_a", "@a.ts"]);
   assert.equal(empty.text, payload.text);
   const both = planComposerPaste(payload, { text: empty.text, contexts: empty.contexts, attachments: [] }, { start: empty.text.length, end: empty.text.length }, counter());
   const ids = collectComposerContextReferences(both.text).map((reference) => reference.contextId);

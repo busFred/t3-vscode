@@ -1,11 +1,14 @@
 /** Regression guard for the composer's native undo stack: plain typing, a picked-file reference (the
  * file-picker dialog disables the textarea while open, the gap this script was written to cover), a
- * quoted citation, and an unrelated host-state snapshot (contextUsage) arriving mid-typing. */
+ * quoted citation, a reply to a response, a question answer carried over when Stop cancels its question, and an unrelated
+ * host-state snapshot (contextUsage) arriving mid-typing. */
 import assert from "node:assert/strict";
 import type { Page } from "playwright-core";
 import type { HostState } from "../src/host/hostState.js";
 import { publishText, type FakeTransport } from "../src/host/testing/fakeTransport.js";
-import { RunId } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+import { OrchestrationV2RuntimeRequest, OrchestrationV2TurnItem, RunId } from "@t3tools/contracts";
+import { v2Now } from "../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 
 export async function verifyComposerUndo(page: Page, host: HostState, client: FakeTransport, viewId: string, selectAssistantText: (page: Page, text: string) => Promise<unknown>) {
   const message = page.getByRole("textbox", { name: "Message", exact: true });
@@ -194,6 +197,109 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
   await page.getByRole("button", { name: "Remove reference 1", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector(".composer-chip"));
 
+  // Reply to a response (T3 0.1.10) is offered only by a server known to keep its record: hidden for an unknown
+  // version and for 0.1.9, shown for a 0.1.10 preview. Inserting it is one native edit, like a quote.
+  const replyButton = page.getByRole("button", { name: "Reply to this response", exact: true });
+  const fixtureText = `Live **reply** in ${threadId} conversation\n\nInline \`value\`.\n\n\`\`\`ts\nconst value = 42;\n\`\`\``;
+  const descriptor = (host as unknown as { server: { descriptor: { serverVersion?: string } } | null }).server?.descriptor;
+  assert.ok(descriptor, "the fixture host must have a server descriptor");
+  const fixtureVersion = descriptor.serverVersion;
+  const fixtureEnvironment = (client.config as { environment?: unknown }).environment;
+  const serveVersion = async (version: string | undefined, sequence: number) => {
+    if (version === undefined) delete descriptor.serverVersion; else descriptor.serverVersion = version;
+    // Reply follows the conversation's own machine (its server config), as a real server reports it, not the local descriptor.
+    const config = client.config as { environment?: Record<string, unknown> };
+    const { serverVersion: _previous, ...environment } = config.environment ?? { environmentId: (descriptor as { environmentId?: string }).environmentId ?? "audit", label: "Audit", capabilities: {} };
+    config.environment = version === undefined ? environment : { ...environment, serverVersion: version };
+    publishText(client, threadId, fixtureText, sequence);
+    await page.waitForFunction(() => document.body.textContent?.includes("Live reply in"));
+    await page.waitForTimeout(150);
+  };
+  await serveVersion(undefined, 80);
+  assert.equal(await replyButton.count(), 0, "Reply must be hidden when the server version is unknown");
+  await serveVersion("0.1.9", 81);
+  assert.equal(await replyButton.count(), 0, "Reply must be hidden for a 0.1.9 server, which drops the reply's record");
+  await serveVersion("0.1.10-nightly.20261112.1", 82);
+  await replyButton.first().waitFor();
+  const replyToken = /^\[Live reply in [^\]]*\]\(t3-context:\/\/v1\/response\/response_message\) /;
+  // First reply, into an empty composer: one undo step empties it again.
+  await reset(""); await message.focus();
+  await replyButton.first().click();
+  await page.waitForFunction(() => /^\[Live reply in /.test((document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.value ?? ""));
+  const firstReply = await message.inputValue();
+  assert.match(firstReply, replyToken); assert.equal(firstReply.replace(replyToken, ""), "");
+  assert.equal(await page.locator(".reply-chip").count(), 1, "a reply shows as a removable chip");
+  await page.getByRole("button", { name: "Cancel reply", exact: true }).waitFor();
+  await focused();
+  await message.press("Control+z"); await expected("");
+  await message.press("Control+y"); await expected(firstReply);
+  // A reply after typing leads the message, undoes in one step and leaves the typing undoable.
+  await reset(""); await message.focus();
+  await message.pressSequentially("Before reply.");
+  await expected("Before reply.");
+  await replyButton.first().click();
+  await page.waitForFunction(() => /^\[Live reply in /.test((document.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement)?.value ?? ""));
+  const typedReply = await message.inputValue();
+  assert.match(typedReply, replyToken); assert.equal(typedReply.replace(replyToken, ""), "Before reply.");
+  await focused();
+  // Replying again to the same response changes nothing, so it adds no undo step.
+  await replyButton.first().click(); await focused();
+  assert.equal(await message.inputValue(), typedReply);
+  await message.press("Control+z"); await expected("Before reply.");
+  await message.press("Control+z");
+  const afterReplyUndo = await message.inputValue();
+  assert.ok(afterReplyUndo.length < "Before reply.".length && "Before reply.".startsWith(afterReplyUndo), `undo must continue into the typing before a reply, not ${JSON.stringify(afterReplyUndo)}`);
+  await message.press("Control+y"); await expected("Before reply.");
+  await message.press("Control+y"); await expected(typedReply);
+  await page.getByRole("button", { name: "Cancel reply", exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector(".composer-chip"));
+  await expected("Before reply.");
+  await serveVersion(fixtureVersion, 83);
+  const restoredConfig = client.config as { environment?: unknown };
+  if (fixtureEnvironment === undefined) delete restoredConfig.environment; else restoredConfig.environment = fixtureEnvironment;
+  await page.waitForFunction(() => !document.querySelector(".reply-button"));
+
+  // A question that closes without an answer (Stop cancels it, or the provider times it out) returns its typed
+  // text to the composer. That insertion is one native edit, so it undoes in one step, leaves the typing before it
+  // undoable, hands focus back, and is not repeated by later snapshots that still list the closed question.
+  const question = Schema.decodeUnknownSync(OrchestrationV2TurnItem)({ id: "undo-question", threadId, type: "user_input_request", requestId: "undo-question-request",
+    questions: [{ id: "q", header: "Carry", question: "Which database?", options: [] }], runId: null, nodeId: null, providerThreadId: null, providerTurnId: null,
+    nativeItemRef: null, parentItemId: null, ordinal: 0, status: "pending", title: null, startedAt: v2Now, completedAt: null, updatedAt: v2Now });
+  let questionSequence = 90;
+  const publishQuestion = (status: "pending" | "cancelled" | "expired") => publishText(client, threadId, "unused", ++questionSequence, {}, {
+    turnItems: [question], visibleTurnItems: [{ item: question, position: 0, sourceItemId: question.id, sourceThreadId: question.threadId, visibility: "local" }],
+    runtimeRequests: [Schema.decodeUnknownSync(OrchestrationV2RuntimeRequest)({ id: "undo-question-request", nodeId: "node", providerTurnId: null, nativeRequestRef: null, kind: "user_input", status,
+      responseCapability: { type: "live", providerSessionId: "session" }, createdAt: v2Now, resolvedAt: status === "pending" ? null : v2Now })] } as never);
+  const answerField = page.getByRole("textbox", { name: "Answer: Carry", exact: true });
+  const typeAnswer = async (text: string) => { publishQuestion("pending"); await answerField.waitFor(); await answerField.pressSequentially(text); };
+  const closed = async (status: "cancelled" | "expired") => { publishQuestion(status); await page.waitForFunction(() => !document.querySelector(".question-card")); };
+  await reset(""); await message.focus();
+  await message.pressSequentially("Before stop.");
+  await expected("Before stop.");
+  await typeAnswer("use staging");
+  await closed("cancelled");
+  await expected("Before stop.\n\nuse staging");
+  assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('textarea[aria-label="Message"]')), false, "the carried answer must not keep the focus it borrowed");
+  await message.focus();
+  await message.press("Control+z"); await expected("Before stop.");
+  await message.press("Control+z");
+  const afterCarryUndo = await message.inputValue();
+  assert.ok(afterCarryUndo.length < "Before stop.".length && "Before stop.".startsWith(afterCarryUndo), `undo must continue into the typing before a carried answer, not ${JSON.stringify(afterCarryUndo)}`);
+  await message.press("Control+y"); await expected("Before stop.");
+  await message.press("Control+y"); await expected("Before stop.\n\nuse staging");
+  // The same closed question stays in later snapshots; it must not be carried a second time.
+  publishQuestion("cancelled"); publishQuestion("expired");
+  await page.waitForTimeout(150);
+  assert.equal(await message.inputValue(), "Before stop.\n\nuse staging", "a closed question must be carried only once");
+  // Into an empty composer, from a provider timeout: one undo step empties it again.
+  await reset("");
+  await typeAnswer("second answer");
+  await closed("expired");
+  await expected("second answer");
+  await message.focus();
+  await message.press("Control+z"); await expected("");
+  await message.press("Control+y"); await expected("second answer");
+
   // An unrelated host-state snapshot (a live turn's token usage, surfaced as the composer's context meter) must
   // not disturb the undo stack of text the user is typing at the same time.
   await reset(""); await message.focus();
@@ -214,5 +320,5 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
   // "Live reply in" is already on screen, so wait for the streamed chunks to go: a late snapshot would otherwise re-render later checks mid-step.
   await page.waitForFunction(() => document.body.textContent?.includes("Live reply in") && !document.body.textContent.includes("streamed chunk"));
   await reset(original);
-  console.log("PASS: native undo for typing, picked files, nested native paste, first/repeated quotes, a mid-typing host snapshot, a suggested prompt and a failed send.");
+  console.log("PASS: native undo for typing, picked files, nested native paste, first/repeated quotes, a first reply and a reply after typing, a carried question answer, a mid-typing host snapshot, a suggested prompt and a failed send.");
 }

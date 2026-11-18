@@ -14,7 +14,9 @@ import { WorktreeCoordinator, parseWorktreeChoice, type WorktreeTransport, type 
 import { repositoryIdentity, repositoryRemoteKeys, worktreeChanges, applyWorktreeFiles, currentBranch } from "./worktreeGit.js";
 import type { WorktreeChoice, WorktreeSummary } from "../shared/worktrees.js";
 import { DEFAULT_REFRESH_INTERVAL_MINUTES, refreshIntervalMs } from "../shared/refreshSettings.js";
-import type { FileReference } from "../shared/composerContext.js";
+import { messageContextWithReplies, RESPONSE_OPENING_MAX_CHARS, type FileReference } from "../shared/composerContext.js";
+import { RESPONSE_REPLY_MINIMUM_SERVER_VERSION, responseRepliesSupported } from "../shared/serverVersion.js";
+import type { ResponseContextRecord } from "@t3tools/contracts";
 import { resolveDateFormat, resolveTimeFormat, type DateFormat, type TimeFormat } from "../shared/timeFormat.js";
 import { ComposerDraftStore, type StoredComposerDraft } from "./composerDraftStore.js";
 import type { ViewDraft } from "../shared/viewDraft.js";
@@ -41,6 +43,7 @@ import { execFile } from "node:child_process";
 import { lstat, open as openFile } from "node:fs/promises";
 import { applyOrchestrationV2ProjectionEvent } from "@t3tools/client-runtime/state/orchestration-v2-projection";
 import { derivePendingSecretRequests } from "./pendingSecrets.js";
+import { unansweredUserInputIds } from "./unansweredRequests.js";
 import { derivePendingThreadRequests, createQuestionHistoryProjector } from "@t3tools/client-runtime/state/thread-requests";
 import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/turn-item-presentation";
 import { canForkProjectedAssistantItem, deriveThreadQueueWorkflowState } from "@t3tools/client-runtime/state/thread-workflows";
@@ -1605,7 +1608,7 @@ export class HostState {
     if (!this.views.has(viewId)) await this.cleanupEmptyThread(id);
     return id;
   }
-  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID, mode = "auto", attachmentIds: ReadonlyArray<string> = [], attachmentReferences: ReadonlyArray<AttachmentReference> = []): Promise<void> {
+  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID, mode = "auto", attachmentIds: ReadonlyArray<string> = [], attachmentReferences: ReadonlyArray<AttachmentReference> = [], responseRecords: ReadonlyArray<ResponseContextRecord> = []): Promise<void> {
     return this.enqueue(async () => {
       this.requireView(viewId);
       if (!["auto", "queue", "steer"].includes(mode)) throw new Error("Unknown message delivery mode.");
@@ -1616,7 +1619,9 @@ export class HostState {
         return upload.attachment;
       });
       const limitError = getProviderAttachmentLimitError(attachments); if (limitError) throw new Error(limitError);
-      const context = attachmentMessageContext(text, attachments, attachmentReferences);
+      const context = messageContextWithReplies(attachmentMessageContext(text, attachments, attachmentReferences), text, responseRecords);
+      const replying = !!context?.records.some((record) => record.kind === "response");
+      if (replying && !targetThreadId) throw new Error("A reply can only be sent in the conversation it replies to.");
       if (!text.trim() && !attachments.length) throw new Error("Enter a message or attach a file.");
       const machine = targetThreadId ? undefined : this.draftMachine(this.requireView(viewId));
       if (machine) { await this.launchOnMachine(machine, text, attachments, context, viewId, attachmentIds); return; }
@@ -1625,6 +1630,23 @@ export class HostState {
       let thread = this.requireThread(id);
       if (thread.archivedAt) throw new Error("Restore this thread before sending a message.");
       const config = this.configForThread(id);
+      // An older server drops the reply's record without an error, so the message would lose what it replies to.
+      if (replying && !responseRepliesSupported(config?.environment?.serverVersion)) throw new Error(`Replying to a response needs T3 Code ${RESPONSE_REPLY_MINIMUM_SERVER_VERSION} or later on this machine. Remove the reply, or update T3 Code.`);
+      // A reply names a response in this conversation only, with no more of it than the composer captures: the record
+      // tells the agent to read that response, so it must not point elsewhere or smuggle in extra hidden text.
+      const ownEnvironments = new Set([this.server?.descriptor?.environmentId, config?.environment?.environmentId].filter(Boolean));
+      const sentReplies = new Set(context?.records.flatMap((record) => record.kind === "response" ? [record.contextId as string] : []));
+      // A fork or copy shows its source's earlier responses under the source's thread id, so a response counts as this
+      // conversation's when its own transcript holds it, not only when the ids match.
+      const rows = this.threads.get(id)?.projection?.visibleTurnItems ?? [];
+      const inConversation = (record: ResponseContextRecord) => record.citation.threadId === id
+        || rows.some((row) => row.sourceThreadId === record.citation.threadId && row.item.type === "assistant_message" && row.item.messageId === record.citation.messageId);
+      const refused = responseRecords.find((record) => sentReplies.has(record.contextId) && (!inConversation(record) || !ownEnvironments.has(record.citation.environmentId) || record.citation.text.length > RESPONSE_OPENING_MAX_CHARS));
+      if (refused) {
+        // A saved draft can reply to a carried-over response on a history page that is not loaded since a reload.
+        const unloaded = ownEnvironments.has(refused.citation.environmentId) && refused.citation.text.length <= RESPONSE_OPENING_MAX_CHARS && this.threads.get(id)?.history.hasMoreHistory === true;
+        throw new Error(unloaded ? "A reply can only be sent in the conversation it replies to. If its response is further up, load earlier messages, then send again." : "A reply can only be sent in the conversation it replies to.");
+      }
       const modeDenial = managedRuntimeModeDenial(config?.managedPolicy, thread.runtimeMode);
       if (modeDenial) throw new Error(modeDenial);
       const currentProvider = config?.providers.find((provider) => provider.instanceId === thread.modelSelection.instanceId);
@@ -3071,6 +3093,8 @@ export class HostState {
       ...((activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))?.managedPolicy ? { managedPolicy: (activeThreadId ? this.configForThread(activeThreadId) : this.draftConfig(view))!.managedPolicy } : {}),
       ...(this.client.config?.managedPolicy ? { localManagedPolicy: this.client.config.managedPolicy } : {}),
       ...(descriptor ? { environment: { environmentId: descriptor.environmentId, label: descriptor.label, serverVersion: descriptor.serverVersion } } : {}),
+      // The active conversation's own machine, which may be a paired remote one: features its server must support check this.
+      ...(() => { const own = activeThreadId ? this.configForThread(activeThreadId)?.environment : undefined; return own ? { conversationServerVersion: own.serverVersion } : {}; })(),
       scheduledTasks: { loading: this.scheduledTasksLoading, ...(this.scheduledTaskError ? { error: this.scheduledTaskError } : {}), tasks: (() => { const origins = this.options.taskOrigins?.(); return this.scheduledTasks.filter((task) => this.visibleProjects().some((project) => project.id === task.projectId)).map((task) => {
         const association = origins?.find((origin) => origin.environmentId === descriptor?.environmentId && origin.projectId === task.projectId && origin.taskId === task.id);
         const serverOrigin = typeof task.originThreadId === "string" && this.findThread(task.originThreadId)?.projectId === task.projectId ? task.originThreadId : null;
@@ -3107,7 +3131,7 @@ export class HostState {
           ...this.transcriptRevertFields(projection, row, activeThreadId, threadById),
         });
       })) : [],
-      pending: projection ? { ...derivePendingThreadRequests(projection), secrets: derivePendingSecretRequests(projection.visibleTurnItems) } : { approvals: [], userInputs: [], secrets: [] },
+      pending: projection ? { ...derivePendingThreadRequests(projection), secrets: derivePendingSecretRequests(projection.visibleTurnItems), ...unansweredUserInputIds(projection) } : { approvals: [], userInputs: [], secrets: [] },
       ...(() => { const rows = this.childApprovalRows(activeThreadId); return rows.length ? { childRequests: rows } : {}; })(),
       history: { hasMore: state?.history.hasMoreHistory ?? false, loading: state?.history.loading ?? false, error: state?.history.error ?? null },
       threadLoading: state?.loading ?? false, sending: view.sending,

@@ -4,7 +4,8 @@ import { useEffect, useSyncExternalStore } from "react";
 import { bridge } from "./bridge-client";
 import type { ComposerContext } from "../shared/composerContext";
 import type { ViewDraft } from "../shared/viewDraft";
-import { insertFileReference, type FileReference } from "../shared/composerContext";
+import { insertFileReference, insertResponseReply, type FileReference } from "../shared/composerContext";
+import type { ResponseContextRecord } from "@t3tools/contracts";
 import type { TextSelection } from "../shared/composerAttachments";
 
 export interface ComposerDraft extends ViewDraft { readonly text: string; readonly contexts: ReadonlyArray<ComposerContext> }
@@ -28,12 +29,23 @@ export function addEditorReference(key: string, reference: FileReference): numbe
   }, "take-focus");
   return cursor;
 }
+/** Leads the draft with a reply to a response. The Reply button moves focus into the composer, so the insertion takes it and stays one undo step. */
+export function addResponseReply(key: string, record: ResponseContextRecord): number {
+  let cursor = 0;
+  updateDraft(key, draft => {
+    const inserted = insertResponseReply(draft.text, draft.contexts, record);
+    cursor = inserted.cursor; rememberDraftSelection(key, { start: cursor, end: cursor });
+    return { ...draft, text: inserted.text, contexts: inserted.contexts };
+  }, "take-focus");
+  return cursor;
+}
 /**
  * How a programmatic text change reaches the live input, which owns its own undo stack: `keep-focus` edits it only
- * while it already has focus, `take-focus` also for an action that moves focus into it anyway. Without a mode React
- * assigns the new value, which discards the input's undo and redo history.
+ * while it already has focus, `take-focus` also for an action that moves focus into it anyway, and `borrow-focus` for
+ * a change nobody asked for in the moment (a carried-over answer): the input takes focus for the edit and gives it
+ * straight back. Without a mode React assigns the new value, which discards the input's undo and redo history.
  */
-export type DraftTextEdit = "keep-focus" | "take-focus";
+export type DraftTextEdit = "keep-focus" | "take-focus" | "borrow-focus";
 export type DraftTextEditor = (previous: string, next: string, mode: DraftTextEdit) => void;
 const editors = new Map<string, DraftTextEditor>();
 export function registerDraftTextEditor(key: string, editor: DraftTextEditor): () => void {

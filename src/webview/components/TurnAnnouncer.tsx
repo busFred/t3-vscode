@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { turnAnnouncement } from "../../shared/turnAnnouncements";
+import { runningSubagentsAtRunTail } from "../../shared/waitingOnSubagents";
 
 /**
  * A polite live region narrating a turn's progress (T3 0.1.9), so a screen-reader user can follow
@@ -28,6 +29,7 @@ export function TurnAnnouncer({ state }: { readonly state: HostStateSnapshot }) 
     pendingApprovals: state.pending.approvals.length,
     pendingQuestions: state.pending.userInputs.length,
     pendingSecrets: state.pending.secrets.length,
+    waitingOnSubagents: runningSubagentsAtRunTail(state.transcript, thread?.activeRunId ?? state.queue?.activeRunId),
   });
 
   const [announced, setAnnounced] = useState("");

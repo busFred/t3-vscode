@@ -1,7 +1,8 @@
 import type { AssistantCitation } from "./messageCitations.js";
-import { ComposerContextId } from "@t3tools/contracts";
+import { ComposerContextId, ResponseContextRecord, type OrchestrationMessageContext } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { collectAssistantCitations, serializeAssistantCitation } from "./messageCitations.js";
-import { collectComposerContextReferences, formatComposerContextReference, replaceComposerContextReferences, sanitizeComposerContextLabel } from "@t3tools/shared/composerContextReferences";
+import { collectComposerContextReferences, formatComposerContextReference, replaceComposerContextReferences, sanitizeComposerContextLabel, toKindScopedComposerContextId } from "@t3tools/shared/composerContextReferences";
 import { insertComposerReferenceText, type TextSelection } from "./composerAttachments.js";
 import { renderAssistantQuoteBlock } from "./assistantQuoteText.js";
 
@@ -17,7 +18,9 @@ export interface FileReference {
   readonly inlineText?: string;
 }
 export interface AssistantQuoteContext { readonly type: "assistant"; readonly citation: AssistantCitation; readonly contextId?: string }
-export type ComposerContext = FileReference | AssistantQuoteContext;
+/** A reply to an earlier assistant response (T3 0.1.10). Its draft token is already the wire form, so sending only attaches `record`. */
+export interface ResponseReplyContext { readonly type: "response"; readonly record: ResponseContextRecord }
+export type ComposerContext = FileReference | AssistantQuoteContext | ResponseReplyContext;
 export interface InsertReferenceEvent { readonly draftKey: string; readonly reference: FileReference }
 
 /** Draft-only quote references keep their payload out of the input; sending expands them to T3's portable citation format. `contexts` lets the new quote count the ones already in the draft; unknown tokens in `text` count as distinct. */
@@ -26,6 +29,66 @@ export function insertAssistantQuote(text: string, context: AssistantQuoteContex
   // Only the new token's own label depends on its number, so the second pass cannot move anything the first measured.
   const number = assistantQuoteNumbers(insert(1).text, [...contexts, context]).at(-1) ?? 1;
   return insert(number);
+}
+/** How many subagents a reply may name, as the contract allows. */
+const RESPONSE_SUBAGENT_LIMIT = 20;
+const RESPONSE_LABEL_MAX_CHARS = 64;
+/** A reply carries the response's opening, which the webview caps at 300 characters (`captureAssistantMessageOpening`). */
+export const RESPONSE_OPENING_MAX_CHARS = 300;
+/**
+ * Ported from T3 Code `responseContextRecord` (apps/web/src/lib/composerContextRecords.ts, 0.1.10): one record per response, so
+ * replying to it again reuses the same reference. Decoded, so a record that would exceed the contract's limits throws here, not at send.
+ */
+export function responseContextRecord(input: {
+  readonly citation: { readonly environmentId: string; readonly threadId: string; readonly messageId: string; readonly text: string; readonly start: number; readonly end: number; readonly prefix: string; readonly suffix: string };
+  readonly itemId: string;
+  readonly subagents: ReadonlyArray<{ readonly threadId: string; readonly title: string; readonly environmentId?: string }>;
+}): ResponseContextRecord {
+  const { environmentId, threadId, messageId, text, start, end, prefix, suffix } = input.citation;
+  // As T3 Code 0.1.10's apps/web/src/lib/composerContextRecords.ts: never end the label inside a surrogate pair.
+  function responseLabel(value: string): string {
+    const last = value.charCodeAt(RESPONSE_LABEL_MAX_CHARS - 1);
+    return sanitizeComposerContextLabel(value.slice(0, last >= 0xd800 && last <= 0xdbff ? RESPONSE_LABEL_MAX_CHARS - 1 : RESPONSE_LABEL_MAX_CHARS), "response");
+  }
+  return Schema.decodeUnknownSync(ResponseContextRecord)({
+    version: 1, kind: "response",
+    contextId: toKindScopedComposerContextId("response", messageId),
+    label: responseLabel(text),
+    citation: { version: 1, environmentId, threadId, messageId, text, start, end, prefix, suffix },
+    itemId: input.itemId,
+    ...(input.subagents.length > 0 ? { subagents: input.subagents.slice(0, RESPONSE_SUBAGENT_LIMIT).map(({ title, ...subagent }) => ({ ...subagent, title: sanitizeComposerContextLabel(title, "response") })) } : {}),
+  });
+}
+/**
+ * Leads the draft with a reply to `record`, as T3 sends it: the reference comes first, so its card sits above the text it is about.
+ * One reply per message, as in T3: an earlier reply's token is replaced. Replying again to the same response changes nothing.
+ * The result differs from `text` in one contiguous range, so the composer applies it as a single native edit.
+ */
+export function insertResponseReply(text: string, contexts: ReadonlyArray<ComposerContext>, record: ResponseContextRecord) {
+  const nextContexts: ComposerContext[] = [...contexts.filter((context) => context.type !== "response"), { type: "response", record }];
+  const replies = collectComposerContextReferences(text).filter((reference) => reference.kind === "response");
+  const only = replies.length === 1 ? replies[0]! : undefined;
+  if (only && only.contextId === record.contextId && only.start === 0) return { text, contexts: nextContexts, cursor: text.length };
+  let rest = "", at = 0;
+  // Each earlier token goes with the one space that separated it from the text after it.
+  for (const reply of replies) { rest += text.slice(at, reply.start); at = reply.end + (text[reply.end] === " " ? 1 : 0); }
+  rest += text.slice(at);
+  const token = formatComposerContextReference({ kind: "response", contextId: record.contextId, label: record.label });
+  const next = `${token}${/^\s/.test(rest) ? "" : " "}${rest}`;
+  return { text: next, contexts: nextContexts, cursor: next.length };
+}
+/** The reply records the sent text still references, once each. */
+export function responseRecordsForMessage(text: string, contexts: ReadonlyArray<ComposerContext>): ReadonlyArray<ResponseContextRecord> {
+  const ids = new Set<string>(collectComposerContextReferences(text).flatMap((reference) => reference.kind === "response" ? [reference.contextId] : []));
+  const records = new Map<string, ResponseContextRecord>();
+  for (const context of contexts) if (context.type === "response" && ids.has(context.record.contextId)) records.set(context.record.contextId, context.record);
+  return [...records.values()];
+}
+/** Adds the replies `text` references to a message's context, after its attachment records; an id already taken is not overwritten. */
+export function messageContextWithReplies(context: OrchestrationMessageContext | undefined, text: string, records: ReadonlyArray<ResponseContextRecord>): OrchestrationMessageContext | undefined {
+  const taken = new Set<string>(context?.records.map((record) => record.contextId));
+  const replies = responseRecordsForMessage(text, records.map((record) => ({ type: "response" as const, record }))).filter((record) => !taken.has(record.contextId));
+  return replies.length ? { ...(context ?? { version: 1 as const }), records: [...(context?.records ?? []), ...replies] } : context;
 }
 const QUOTE_PREVIEW_CHARS = 42;
 /** Bounded before collapsing, so a quote of many thousands of characters costs no more than a short one. */
@@ -96,12 +159,19 @@ export function syncAssistantQuoteLabels(text: string, contexts: ReadonlyArray<C
   } };
 }
 export function contextIsReferenced(text: string, context: ComposerContext): boolean {
+  if (context.type === "response") return collectComposerContextReferences(text).some((reference) => reference.kind === "response" && reference.contextId === context.record.contextId);
   if (context.type === "file") return !context.inlineText || fileReferenceOccurrences(text, [context]).length > 0;
   return context.type !== "assistant" || !context.contextId || collectComposerContextReferences(text).some((reference) => reference.kind === "assistant-quote" && reference.contextId === context.contextId);
 }
 export function removeContextReference(text: string, context: ComposerContext): string {
   if (context.type === "file" && context.inlineText) {
     for (const match of fileReferenceOccurrences(text, [context]).reverse()) text = text.slice(0, match.start) + text.slice(match.end);
+    return text;
+  }
+  if (context.type === "response") {
+    // The space the reply was inserted with goes too, so the message does not start with one.
+    const tokens = collectComposerContextReferences(text).filter((reference) => reference.kind === "response" && reference.contextId === context.record.contextId);
+    for (const token of tokens.reverse()) text = text.slice(0, token.start) + text.slice(token.end + (text[token.end] === " " ? 1 : 0));
     return text;
   }
   return context.type === "assistant" && context.contextId ? replaceComposerContextReferences(text, (reference) => reference.kind === "assistant-quote" && reference.contextId === context.contextId ? "" : reference.source) : text;
@@ -162,6 +232,8 @@ export function formatComposerMessage(text: string, contexts: ReadonlyArray<Comp
     return serializeAssistantCitation(context.citation);
   });
   return [inlineText.trim(), ...contexts.map((context) => {
+    // A reply's token is already its wire form; its record travels as message context.
+    if (context.type === "response") return "";
     if (context.type === "assistant") {
       if (context.contextId && !used.has(context.contextId)) return "";
       // Retain T3's clickable source for chip-only legacy quotes, and the readable quote/comment for every provider/server version.

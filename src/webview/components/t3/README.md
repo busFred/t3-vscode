@@ -14,6 +14,8 @@ Portable helpers from the same revision also retain the upstream algorithms:
   normalized positions and source matching for assistant citations.
 - `selectionActions.ts` from `apps/web/src/lib/`: mouse and keyboard selection
   gestures, dismissal and toolbar positioning.
+  `captureAssistantMessageOpening` was added from T3 Code 0.1.10 (`c0f85e7f79`)
+  for replies to a response.
 - `modelPickerSearch.ts` from `apps/web/src/components/chat/`: fuzzy model search
   by provider instance, driver and model name, with favorite ranking.
 

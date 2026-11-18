@@ -15,7 +15,8 @@ import { MermaidVisual } from "./MermaidVisual";
 import { CodeBlock } from "./CodeBlock";
 import { codeBlockLanguage } from "../../shared/codeBlock";
 import type { ChatAssetSource } from "../../shared/chatVisuals";
-import { OrchestrationMessageContext, type ChatAttachment } from "@t3tools/contracts";
+import { OrchestrationMessageContext, type ChatAttachment, type ResponseContextRecord } from "@t3tools/contracts";
+import { ReplyIcon } from "lucide-react";
 import { parseComposerContextHref } from "@t3tools/shared/composerContextReferences";
 import * as Schema from "effect/Schema";
 import { InlineAttachment } from "./InlineAttachment";
@@ -71,6 +72,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source,
     const reference = href ? parseComposerContextHref(href) : null;
     const record = reference ? parsedContext?.records.find((record) => record.contextId === reference.contextId && record.kind === reference.kind) : undefined;
     const attachment = record && "attachmentId" in record && typeof record.attachmentId === "string" ? attachments.find((attachment) => attachment.id === record.attachmentId) : undefined;
+    if (record?.kind === "response" && "citation" in record) return <ResponseReplyReference record={record as ResponseContextRecord} />;
     return attachment ? <InlineAttachment attachment={attachment} threadId={threadId} source={assetSource} /> : null;
   }, [parsedContext, attachments, threadId, assetSource]);
   const scope = useMemo(() => ({ threadId, assetSource, streaming, inlineAttachment }), [threadId, assetSource, streaming, inlineAttachment]);
@@ -79,6 +81,16 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source,
   const shownTail = useThrottledTail(liveTail, streaming === true && liveTail.length > TAIL_THROTTLE_BYTES);
   return <MarkdownScopeContext.Provider value={scope}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}>{blocks.map((block, index) => <Fragment key={index}>{index ? "\n" : null}<MarkdownBlock text={index === blocks.length - 1 ? shownTail : block} /></Fragment>)}</div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
 });
+
+/** The response a sent message replies to (T3 0.1.10), whichever client sent it; opens that response like a quote's source. */
+function ResponseReplyReference({ record }: { readonly record: ResponseContextRecord }) {
+  const who = record.subagents?.length ? `Replying to ${record.subagents.map((subagent) => subagent.title).join(", ")}` : "Replying to";
+  const opening = record.citation.text.replace(/\s+/g, " ").trim();
+  return <button type="button" className="reply-reference" title={`${record.citation.text}\n\nOpen the response this replies to`} aria-label={`${who}: ${opening}. Open the response`}
+    onClick={() => window.dispatchEvent(new CustomEvent("t3-open-citation", { detail: record.citation }))}>
+    <ReplyIcon size={12} aria-hidden="true" /><span className="reply-reference-who">{who}</span><span className="reply-reference-text">{opening}</span>
+  </button>;
+}
 
 /**
  * Hold a streaming reply's trailing block back to a fixed cadence once it is long.

@@ -300,6 +300,8 @@ export interface HostStateSnapshot {
   readonly managedPolicy?: import("@t3tools/contracts").ManagedPolicySummary | undefined;
   readonly localManagedPolicy?: import("@t3tools/contracts").ManagedPolicySummary;
   readonly environment?: { readonly environmentId: string; readonly label: string; readonly serverVersion?: string };
+  /** Server version of the machine the active conversation runs on (local or paired remote), for features that machine's server must support. */
+  readonly conversationServerVersion?: string;
   /** Set when the active session runs on a paired remote machine: checkout actions, saved-turn diffs and file restores are unavailable. */
   readonly remoteSession?: { readonly environmentId: string; readonly label: string };
   /** The sidebar's Environments section: this computer, paired machines and the collapsed status dot. */
@@ -325,7 +327,11 @@ export interface HostStateSnapshot {
   /** Server-reported failure of the active thread's latest rollback request (#checkpoint.rollback.fail). */
   readonly rollbackFailure?: string | null;
   readonly transcript: ReadonlyArray<TranscriptItem>;
-  readonly pending: PendingThreadRequests & { readonly secrets: ReadonlyArray<PendingSecretRequest> };
+  readonly pending: PendingThreadRequests & {
+    readonly secrets: ReadonlyArray<PendingSecretRequest>;
+    /** Questions that closed without an answer (Stop cancelled them, or the provider timed them out); their typed text was never sent. */
+    readonly unansweredUserInputIds?: ReadonlyArray<string>;
+  };
   /**
    * Approvals waiting on a visible descendant conversation, answerable from here (T3 0.1.7) so the
    * reader does not have to open the child's own tab to unblock it.

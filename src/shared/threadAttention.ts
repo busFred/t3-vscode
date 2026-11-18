@@ -12,6 +12,8 @@ export function unseenRun(run: AttentionRun | null, lastVisitedAt: string | null
   if (!run) return null;
   const completedAt = Date.parse(run.completedAt ?? ""), visitedAt = Date.parse(lastVisitedAt ?? "");
   if (run.status === "failed") return !lastVisitedAt || Number.isNaN(completedAt) || Number.isNaN(visitedAt) || completedAt > visitedAt ? "failed" : null;
+  // A run someone stopped did not finish: no Done badge (T3 Code 0.1.10, pingdotgg/t3code#37475).
+  if (run.status === "interrupted" || run.status === "cancelled") return null;
   if (!run.completedAt || Number.isNaN(completedAt) || !lastVisitedAt) return null;
   return Number.isNaN(visitedAt) || completedAt > visitedAt ? "done" : null;
 }

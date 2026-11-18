@@ -260,6 +260,16 @@ async function verifyUndo({ home, workbench, sidebar, findWebview, runCommand })
     };
     const quoted = await scenario(view, `${label}: assistant quote`, quote);
     if (quoted) await scenario(view, `${label}: repeated assistant quote`, quote, quoted);
+    // Reply to a response (T3 0.1.10): the button inserts the reply's reference ahead of the typing, as one native edit.
+    // Offered only when the server reports 0.1.10 or later; its absence is a failure here, never a skip.
+    const replyButton = `.timeline-row:has(${quoteSelector}) button[aria-label="Reply to this response"]`;
+    await scenario(view, `${label}: reply to a response`, async () => {
+      await view.evaluate(`document.querySelector(${JSON.stringify(quoteSelector)}).scrollIntoView({block:'center'})`);
+      try { await view.wait(`document.querySelector(${JSON.stringify(replyButton)})`, 10_000); }
+      catch { throw new Error(`${label}: Reply is not offered on "${source.text}". It needs a T3 Code server reporting 0.1.10 or later; this check must run against one.`); }
+      await click(view, replyButton);
+      await view.wait(`/^\\[[^\\]]*\\]\\(t3-context:\\/\\/v1\\/response\\/[^)]+\\) /.test(document.querySelector('${message}').value) && document.querySelector('.reply-chip')`);
+    });
     await scenario(view, `${label}: editor reference / hidden tab`, async () => {
       await writeFile(join(home, 'workspace/undo-reference.ts'), 'const undoReference = 1;\n');
       await openReferenceFile();

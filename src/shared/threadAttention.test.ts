@@ -15,6 +15,7 @@ test("A finished run is unread only after a visit; a failure needs someone even 
   assert.equal(unseenRun(failed, "2026-10-24T11:59:00.000Z"), "failed");
   assert.equal(unseenRun(failed, "2026-10-24T12:01:00.000Z"), null);
   assert.equal(unseenRun(null, null), null);
+  for (const status of ["interrupted", "cancelled"]) assert.equal(unseenRun({ status, completedAt: "2026-10-24T12:00:00.000Z" }, "2026-10-24T11:00:00.000Z"), null, status);
 });
 
 test("Custom snooze accepts durations, a date and time, or a time of day", () => {

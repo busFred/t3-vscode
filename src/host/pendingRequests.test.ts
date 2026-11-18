@@ -36,6 +36,22 @@ test("Host derivation retains approval metadata, question previews/defaults and 
   assert.equal(pending.secrets[0]?.delivery, "file");
 });
 
+test("A question that Stop cancelled or the provider expired is reported as unanswered, an answered one is not", async t => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose()); await host.selectThread("first");
+  const question = { id: "q", header: "Edit", question: "Use this text?", options: [] };
+  const asked = item({ id: "q", type: "user_input_request", requestId: "questions", questions: [question] });
+  publish(client, [asked], [request({ id: "questions", kind: "user_input" })]);
+  assert.equal(host.snapshot().pending.userInputs.length, 1);
+  assert.equal(host.snapshot().pending.unansweredUserInputIds, undefined, "a pending question is not unanswered");
+  for (const status of ["cancelled", "expired"] as const) {
+    publish(client, [asked], [request({ id: "questions", kind: "user_input", status, resolvedAt: v2Now })]);
+    assert.equal(host.snapshot().pending.userInputs.length, 0);
+    assert.deepEqual(host.snapshot().pending.unansweredUserInputIds, ["questions"], status);
+  }
+  publish(client, [asked], [request({ id: "questions", kind: "user_input", status: "resolved", resolvedAt: v2Now, answers: { q: { answers: ["yes"] } } })]);
+  assert.equal(host.snapshot().pending.unansweredUserInputIds, undefined, "an answered question keeps its text out of the composer");
+});
+
 test("Decline feedback crosses the bridge only for a live approval advertising support", async t => {
   const { host, client } = await viewsHarness(); t.after(() => host.dispose()); await host.selectThread("first");
   const registry = new WebviewRegistry(), bridge = new BridgeHandler(host, registry), view = new FakeWebview(); registry.add(SIDEBAR_VIEW_ID, view.webview); bridge.attach(view.webview, SIDEBAR_VIEW_ID);

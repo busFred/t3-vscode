@@ -54,7 +54,7 @@ const wholeReferences = (text: string, selection: TextSelection): TextSelection 
 };
 
 /** Undefined when the selection holds no reference, so the browser's own copy stands. */
-/** `nonce` is the host's per-session clipboard secret; only a payload carrying it may restore file and quote contexts on paste. */
+/** `nonce` is the host's per-session clipboard secret; only a payload carrying it may restore file, quote and reply contexts on paste. */
 export function buildComposerClipboard(draft: ClipboardDraft, selection: TextSelection, nonce?: string): ComposerClipboard | undefined {
   if (selection.start >= selection.end) return undefined;
   const range = wholeReferences(draft.text, { start: Math.max(0, selection.start), end: Math.min(draft.text.length, selection.end) });
@@ -70,7 +70,7 @@ export function buildComposerClipboard(draft: ClipboardDraft, selection: TextSel
   html = (html + escapeHtml(text.slice(at))).replace(/\n/g, "<br>");
   const ids = new Set<string>(references.map((reference) => reference.contextId));
   const payload = { v: 1, ...(nonce ? { nonce } : {}), text,
-    contexts: [...draft.contexts.filter((context) => context.type === "assistant" && context.contextId && ids.has(context.contextId)), ...new Set(files.map((match) => match.context))],
+    contexts: [...draft.contexts.filter((context) => context.type === "assistant" ? !!context.contextId && ids.has(context.contextId) : context.type === "response" && ids.has(context.record.contextId)), ...new Set(files.map((match) => match.context))],
     attachments: [...ids].flatMap((id) => { const file = backed(id); return file ? [{ key: file.key, contextId: id, name: file.name, mimeType: file.mimeType, sizeBytes: file.sizeBytes }] : []; }) };
   const only = references.length === 1 && references[0]!.source === text.trim() ? backed(references[0]!.contextId) : undefined;
   return { range, plain: replaceComposerContextReferences(text, (reference) => reference.label),
@@ -80,7 +80,7 @@ export function buildComposerClipboard(draft: ClipboardDraft, selection: TextSel
 
 /**
  * Anything from outside is untrusted: it passes the same checks as a draft handed to another tab. Any web page can put this
- * HTML on the clipboard, and file and quote contexts reach the prompt while showing only as a chip, so they are kept only when
+ * HTML on the clipboard, and file, quote and reply contexts reach the prompt while showing only as a chip, so they are kept only when
  * the payload carries `trustedNonce`; otherwise just the visible text and images are pasted.
  */
 export function parseComposerClipboardHtml(html: string, trustedNonce?: string): ComposerClipboardPayload | undefined {
@@ -116,7 +116,14 @@ export function planComposerPaste(payload: ComposerClipboardPayload, draft: Clip
   const resolve = (reference: ReturnType<typeof collectComposerContextReferences>[number]): string | null => {
     const id = reference.contextId, known = resolved.get(id); if (known !== undefined) return known;
     let result: string | null = null;
-    if (reference.kind === "assistant-quote") {
+    if (reference.kind === "response") {
+      // A reply's id names its response, so a second copy shares the one record rather than taking a fresh id.
+      const context = payload.contexts.find((item) => item.type === "response" && item.record.contextId === id);
+      if (context?.type === "response") {
+        result = id;
+        if (!contexts.some((item) => item.type === "response" && item.record.contextId === id)) contexts.push(context);
+      }
+    } else if (reference.kind === "assistant-quote") {
       const context = payload.contexts.find((item) => item.type === "assistant" && item.contextId === id), existing = draft.contexts.some((item) => item.type === "assistant" && item.contextId === id);
       if (context?.type === "assistant") {
         result = existing && used.has(id) ? fresh("quote", 12) : id;
