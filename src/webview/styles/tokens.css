@@ -207,6 +207,7 @@ select, input { color: inherit; background: var(--card); }
 .thread-dot.woke, .thread-outcome.woke { color: var(--warning); }
 .thread-snoozed { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: .625rem; color: var(--primary); }
 .markdown { font-size: 0.875rem; overflow-wrap: anywhere; line-height: 1.65; }
+.markdown:focus { outline: none; }
 .markdown > :first-child { margin-top: 0; }
 .markdown > :last-child { margin-bottom: 0; }
 .markdown p { margin: 0 0 6px; white-space: pre-wrap; }

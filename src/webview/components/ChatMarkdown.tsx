@@ -80,7 +80,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source,
   const blocks = useMemo(() => splitMarkdownBlocks(normalizeMathMarkdown(text)), [text]);
   const liveTail = blocks[blocks.length - 1] ?? "";
   const shownTail = useThrottledTail(liveTail, streaming === true && liveTail.length > TAIL_THROTTLE_BYTES);
-  return <MarkdownScopeContext.Provider value={scope}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}>{blocks.map((block, index) => <Fragment key={index}>{index ? "\n" : null}<MarkdownBlock text={index === blocks.length - 1 ? shownTail : block} user={source?.author === "user"} /></Fragment>)}</div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
+  return <MarkdownScopeContext.Provider value={scope}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" tabIndex={source ? -1 : undefined} data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}>{blocks.map((block, index) => <Fragment key={index}>{index ? "\n" : null}<MarkdownBlock text={index === blocks.length - 1 ? shownTail : block} user={source?.author === "user"} /></Fragment>)}</div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
 });
 
 /** The response a sent message replies to (T3 0.1.10), whichever client sent it; opens that response like a quote's source. */

@@ -14,6 +14,7 @@ import { describeModelSwitch } from "../../shared/modelSwitch";
 import { toolOutputImages } from "@t3tools/shared/toolOutput";
 import { getQuestionAnswerText } from "@t3tools/client-runtime/work-log/user-input";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { shouldFocusCitedSource } from "../citationFocus";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails } from "./t3/WorkLog";
 import { TimelineSystemDivider } from "./t3/TimelineSystemDivider";
 import { T3Wordmark } from "./t3/T3Wordmark";
@@ -461,6 +462,8 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
       if (!anchor && ++checks < 20) { frame = requestAnimationFrame(show); return; }
       if (anchor) {
         anchor.range.startContainer.parentElement?.scrollIntoView({ block: "center" });
+        // Screen readers follow focus, not scroll; leave someone already typing alone (T3 0.1.11).
+        if (shouldFocusCitedSource(document.activeElement)) anchor.range.startContainer.parentElement?.closest<HTMLElement>("[data-assistant-citation-source]")?.focus({ preventScroll: true });
         if (typeof Highlight !== "undefined" && CSS.highlights) CSS.highlights.set("t3-assistant-citation", new Highlight(anchor.range));
       } else setCitationNotice("The quoted text has changed. Your saved quote is unchanged.");
     };
