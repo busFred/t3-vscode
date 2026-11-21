@@ -35,7 +35,8 @@ export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: Read
     // A side chat the server left active when its parent was archived (it has running work) is its own
     // active row rather than hidden or buried in Archive under that parent.
     if (parentNode) parentNode.children.push(node);
-    else if (thread.relationshipToParent !== "subagent") roots.push(node);
+    // Only an active side chat stands alone; an archived one without its parent stays out, as before.
+    else if (thread.relationshipToParent !== "subagent" && (thread.relationshipToParent !== "side-chat" || !thread.archived)) roots.push(node);
   }
   for (const node of nodes.values()) {
     node.children.sort((a, b) => Number(b.thread.relationshipToParent === "side-chat") - Number(a.thread.relationshipToParent === "side-chat"));

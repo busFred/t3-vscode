@@ -115,3 +115,14 @@ test("archiving the main chat keeps the draft and visibility of a side chat the 
   await host.threadAction("first", "unarchive");
   assert.equal((await host.restoreComposerDraft(idle)).draft.text, "", "the archived side chat's draft was discarded");
 });
+
+test("a whitespace-only side-chat draft also keeps the side chat on close, as draft recovery counts it", async t => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  await host.selectThread("first");
+  seedSideChatParent(client);
+  const empty = await host.startSideChat("first");
+  await host.selectThread(empty);
+  host.saveComposerDraft(empty, { text: "   ", contexts: [] }, undefined);
+  await host.discardUnusedSideChat(empty);
+  assert.ok(!client.commands.some(command => command.type === "thread.delete" && command.threadId === empty));
+});

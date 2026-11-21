@@ -162,7 +162,7 @@ export class MultiEnvironmentClient {
         if (remote.record.auth === "dpop") {
           const key = await recordKey(remote.record);
           // Without its key the session cannot sign anything, so it asks to be paired again instead of retrying.
-          if (!key) { await client.disconnect().catch(() => undefined); this.keyBoundEnded(remote); return; }
+          if (!key) { await client.disconnect().catch(() => undefined); if (current()) this.keyBoundEnded(remote); return; }
           await client.connect(remoteServer(remote.record), recordAuth(remote.record, key, () => this.currentToken(remote)));
         } else await client.connect(remoteServer(remote.record), remote.record.accessToken);
         if (!current()) { await client.disconnect(); return; }

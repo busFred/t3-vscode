@@ -8,7 +8,8 @@ export function filterThreadListTags(threads: ReadonlyArray<ThreadSummary>, tags
     if (thread.hiddenByTag) return false;
     if (seen.has(thread.id)) return false;
     seen.add(thread.id);
-    const parent = thread.relationshipToParent === "subagent" && thread.parentThreadId ? byId.get(thread.parentThreadId) : undefined;
+    // Subagents and side chats follow their parent's tags, as they sit beneath it.
+    const parent = (thread.relationshipToParent === "subagent" || thread.relationshipToParent === "side-chat") && thread.parentThreadId ? byId.get(thread.parentThreadId) : undefined;
     return parent ? visible(parent, seen) : selected.size === 0 || thread.tags?.some(tag => selected.has(tag)) === true;
   };
   return threads.filter(thread => visible(thread));

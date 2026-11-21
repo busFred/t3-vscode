@@ -198,3 +198,11 @@ test("Searching for a stranded side chat keeps no empty archived parent row", ()
   assert.deepEqual(ids(shelves.active), [["side", []]]);
   assert.deepEqual(ids(shelves.archived), []);
 });
+
+test("An archived side chat without its parent stays out of the list; side chats follow their parent's tag filter", async () => {
+  const { filterThreadListTags } = await import("./threadListTags.js");
+  assert.deepEqual(ids(sessionTree([thread("side", { relationshipToParent: "side-chat", archived: true, settled: true })])), []);
+  const parent = thread("parent", { tags: ["work"] }), side = thread("side", { parentThreadId: "parent", relationshipToParent: "side-chat", tags: ["other"] });
+  assert.deepEqual(filterThreadListTags([parent, side], ["work"]).map(entry => entry.id), ["parent", "side"]);
+  assert.deepEqual(filterThreadListTags([parent, side], ["other"]).map(entry => entry.id), []);
+});
