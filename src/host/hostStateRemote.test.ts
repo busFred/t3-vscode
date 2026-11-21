@@ -21,7 +21,7 @@ const remoteModel = { instanceId: provider.instanceId, model: "remote-model" };
 class RemoteTransport extends FakeTransport {
   threadOwners = new Map<string, { environmentId: string; label: string }>();
   projectOwners = new Map<string, { environmentId: string; label: string }>();
-  remoteProviders = { providers: [{ ...provider, displayName: "Remote Kimi" }] };
+  remoteProviders: NonNullable<HostTransport["config"]> = { providers: [{ ...provider, displayName: "Remote Kimi" }] };
   statuses: Array<{ environmentId: string; label: string; httpBaseUrl: string; enabled: boolean; state: RemoteConnectionState; error?: string; serverVersion?: string; expiresAt: number | null; ignoredStatus?: "reconnecting" | "expiring" | "expired" }> = [];
   remoteUploads: Array<{ name: string; environmentId: string | undefined }> = [];
   remoteDeletes: Array<{ id: string; environmentId: string | undefined }> = [];
@@ -31,6 +31,7 @@ class RemoteTransport extends FakeTransport {
   configForThread = (id: string | undefined) => id && this.threadOwners.has(id) ? this.remoteProviders as never : this.config as never;
   remoteStatuses = () => this.statuses;
   launches: Array<{ environmentId: string; input: Record<string, unknown> & { initialMessage?: { text: string; attachments: ReadonlyArray<{ id: string }> }; workspaceStrategy?: unknown } }> = [];
+  remoteCommands: Array<{ environmentId: string; command: unknown }> = [];
   remoteSearches: Array<{ environmentId: string; cwd: string; query: string }> = [];
   remoteRefs = [
     { name: "main", current: true, isDefault: true, worktreePath: "/home/dev/widget" },
@@ -43,6 +44,13 @@ class RemoteTransport extends FakeTransport {
     const status = this.statuses.find((entry) => entry.environmentId === environmentId);
     if (status?.state !== "connected") throw new Error(`${status?.label ?? environmentId} is disconnected. Wait for it to reconnect, then retry.`);
     return {
+      dispatch: async (raw: unknown) => {
+        const command = raw as { type: string; targetThreadId?: string };
+        this.remoteCommands.push({ environmentId, command });
+        if (command.type === "thread.fork" && command.targetThreadId)
+          this.threadOwners.set(command.targetThreadId, { environmentId, label: status.label });
+        await this.dispatch(raw);
+      },
       launchThread: async (input: { projectId: string; title: string; modelSelection: unknown }) => {
         this.launches.push({ environmentId, input: input as never });
         const threadId = ThreadId.make(`launched-${this.launches.length}`);
@@ -647,4 +655,23 @@ test("Refreshing the sidebar drops checkout listings of machines that are no lon
   (f.host as unknown as { remoteCheckouts: Map<string, unknown> }).remoteCheckouts.set("gone-machine\0p", { loading: false, items: [], branches: [] });
   await f.host.refreshSidebarRemoteCheckouts();
   assert.equal((f.host as unknown as { remoteCheckouts: Map<string, unknown> }).remoteCheckouts.has("gone-machine\0p"), false);
+});
+
+test("side chat capability and fork, first message, and reference use the parent's paired environment", async t => {
+  const { host, client, cleanup } = await fixture(); t.after(cleanup);
+  client.remoteProviders = { ...client.remoteProviders, environment: { capabilities: { repositoryIdentity: false, sideChats: true } } as NonNullable<NonNullable<HostTransport["config"]>["environment"]> };
+  client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1,
+    threads: client.shell.threads.map(thread => thread.id === "remote-thread" ? { ...thread, latestUserMessageAt: v2ThreadShell.updatedAt } : thread) };
+  client.shellHandler?.({ kind: "snapshot", snapshot: client.shell });
+  await host.selectThread("remote-thread");
+  assert.equal(host.snapshot().threads.find(thread => thread.id === "remote-thread")?.sideChatDisabledReason, null);
+  const id = await host.sendMessage("/side question on Studio", "remote-thread");
+  assert.ok(id);
+  assert.deepEqual(client.remoteCommands.map(({ environmentId, command }) => [environmentId, (command as { type: string }).type]),
+    [["studio", "thread.fork"], ["studio", "message.dispatch"]]);
+  assert.equal(host.snapshot().threads.find(thread => thread.id === id)?.parentThreadId, "remote-thread");
+  const mention = (await host.composerSuggestions("path", "side", false)).find(item => item.kind === "thread");
+  assert.equal(mention?.threadContext?.environmentId, "studio");
+  await host.selectThread(id);
+  assert.equal(host.sideChatContext(SIDEBAR_VIEW_ID, id).record.environmentId, "studio");
 });

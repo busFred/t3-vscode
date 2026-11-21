@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { PeerLinkRequestAnswerInput, ResponseContextRecord } from "@t3tools/contracts";
+import { PeerLinkRequestAnswerInput, ResponseContextRecord, ThreadContextRecord } from "@t3tools/contracts";
 import { parseWorktreeChoice } from "./worktrees.js";
 import { runWorktreeNativeAction, type WorktreeNativePort } from "./worktreeNativeActions.js";
 import type { ScheduledTaskEditorRequest } from "../shared/scheduledTasks.js";
@@ -42,6 +42,9 @@ export class WebviewRegistry {
   postWhenReady(id: string, event: BridgeEvent, data: unknown): void {
     if (this.ready.has(id)) { void this.webviews.get(id)?.postMessage({ event, data }); return; }
     const queue = this.pending.get(id) ?? []; queue.push({ event, data }); this.pending.set(id, queue);
+  }
+  discardSideChatDrafts(ids: string[]): void {
+    if (ids.length) for (const id of this.webviews.keys()) this.postWhenReady(id, Events.discardSideChatDrafts, ids);
   }
   markReady(id: string): void {
     const webview = this.webviews.get(id); if (!webview) return;
@@ -90,7 +93,7 @@ export class BridgeHandler {
   private readonly showSettings: () => PromiseLike<unknown>;
   private readonly prompts: { rename: (title: string) => PromiseLike<string | undefined>; confirmDelete: (title: string) => PromiseLike<boolean>; snoozeUntil?: () => PromiseLike<string | undefined> };
   private readonly openDiff: (diff: TurnDiff, load: (file: TurnDiffFile) => Promise<ReviewDiffFileContentsResult>, path?: string) => Promise<void>;
-  private readonly viewActions: { openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>; keepTab?: (viewId: string) => PromiseLike<unknown>; closeTaskTab?: (viewId: string) => void; editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown>; addMachine?: (input: unknown) => PromiseLike<unknown>; environmentAction?: (action: string, environmentId?: string) => PromiseLike<unknown> };
+  private readonly viewActions: { openSessionTab?: (threadId: string, preview: boolean, sourceViewId?: string) => PromiseLike<string | void>; keepTab?: (viewId: string) => PromiseLike<unknown>; closeTaskTab?: (viewId: string) => void; editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown; openInTab?: (viewId: string, transfer?: DraftTransfer) => PromiseLike<unknown> | unknown; newChatTab?: (viewId: string) => PromiseLike<unknown> | unknown; newWorktreeChat?: (viewId: string, projectId: string, choice: unknown) => PromiseLike<unknown> | unknown; showUsage?: (viewId: string, accountKey?: string) => PromiseLike<unknown> | unknown; configureUsage?: () => PromiseLike<unknown>; addMachine?: (input: unknown) => PromiseLike<unknown>; environmentAction?: (action: string, environmentId?: string) => PromiseLike<unknown> };
   constructor(hostState: HostState, registry: WebviewRegistry, showSettings: () => PromiseLike<unknown> = async () => (await import("vscode")).commands.executeCommand("workbench.action.openSettings", "@ext:hungtienhuang.t3-vscode"),
     prompts: BridgeHandler["prompts"] = {
       rename: async (title: string): Promise<string | undefined> => (await import("vscode")).window.showInputBox({ title: "Rename thread", value: title, validateInput: (value) => value.trim() ? null : "Enter a title." }),
@@ -98,7 +101,7 @@ export class BridgeHandler {
       snoozeUntil: promptSnoozeUntil,
     }, openDiff: BridgeHandler["openDiff"] = async () => { throw new Error("Native diff editor is unavailable."); },
     viewActions: {
-      openSessionTab?: (threadId: string, preview: boolean) => PromiseLike<unknown>;
+      openSessionTab?: (threadId: string, preview: boolean, sourceViewId?: string) => PromiseLike<string | void>;
       keepTab?: (viewId: string) => PromiseLike<unknown>;
       closeTaskTab?: (viewId: string) => void;
       editScheduledTask?: (request: ScheduledTaskEditorRequest, preview?: boolean) => PromiseLike<unknown> | unknown;
@@ -122,10 +125,12 @@ export class BridgeHandler {
     }
     // A native prompt may stay open after its originating chat tab has closed.
     this.hostState.assertView(viewId);
-    const created = await this.hostState.threadAction(id, action, title);
-    // A duplicate opens beside its source, like a new chat.
-    if (action === "duplicate" && created) {
-      if (this.viewActions.openSessionTab) await this.viewActions.openSessionTab(created, false);
+    const discarded = action === "archive" || action === "delete" ? this.hostState.snapshot(viewId).threads
+      .filter(entry => entry.relationshipToParent === "side-chat" && (entry.id === id || entry.parentThreadId === id)).map(entry => entry.id) : [];
+    const created = action === "start-side-chat" ? await this.hostState.startSideChat(id, viewId) : await this.hostState.threadAction(id, action, title);
+    this.registry.discardSideChatDrafts(discarded);
+    if ((action === "duplicate" || action === "start-side-chat") && created) {
+      if (this.viewActions.openSessionTab) await this.viewActions.openSessionTab(created, false, viewId);
       else await this.hostState.selectThread(created, viewId);
     }
   }
@@ -216,8 +221,20 @@ export class BridgeHandler {
         }
         case "openSessionTab": {
           const threadId = stringParam(params, "threadId");
-          if (this.viewActions.openSessionTab) await this.viewActions.openSessionTab(threadId, params.preview === true);
+          if (params.environmentId !== undefined) {
+            const environmentId = stringParam(params, "environmentId");
+            if (!this.hostState.snapshot(viewId).threads.some(thread => thread.id === threadId && thread.environmentId === environmentId))
+              throw new Error("This conversation is unavailable on that machine.");
+          }
+          if (this.viewActions.openSessionTab) await this.viewActions.openSessionTab(threadId, params.preview === true, viewId);
           else { await this.hostState.selectThread(threadId, viewId); await this.viewActions.openInTab?.(viewId); }
+          break;
+        }
+        case "addSideChatContext": {
+          const event = this.hostState.sideChatContext(viewId, id());
+          const target = await this.viewActions.openSessionTab?.(event.draftKey, false, viewId);
+          if (!target) throw new Error("Could not open the main chat.");
+          this.registry.postWhenReady(target, Events.insertSideChatContext, event);
           break;
         }
         case "openTaskManager": await (await import("vscode")).commands.executeCommand("t3.webview.focus"); this.registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showTaskManager, undefined); break;
@@ -345,7 +362,14 @@ export class BridgeHandler {
           // Decoded here, so a reply reaches the server only in the shape its contract accepts. One per message in T3; a few allow pasted copies.
           if (params.responseRecords !== undefined && (!Array.isArray(params.responseRecords) || params.responseRecords.length > 20)) throw new Error("Invalid reply.");
           const replies = (params.responseRecords as unknown[] | undefined)?.map((record) => Schema.decodeUnknownSync(ResponseContextRecord)(record));
-          await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id(), viewId, params.mode === undefined ? "auto" : stringParam(params, "mode"), params.attachmentIds as string[] | undefined, references as Array<{ contextId: string; attachmentId: string }> | undefined, replies); break;
+          if (params.threadRecords !== undefined && (!Array.isArray(params.threadRecords) || params.threadRecords.length > 20)) throw new Error("Invalid side chat reference.");
+          const threadRecords = (params.threadRecords as unknown[] | undefined)?.map(record => Schema.decodeUnknownSync(ThreadContextRecord)(record));
+          const sideChat = await this.hostState.sendMessage(stringParam(params, "text"), params.threadId === undefined ? undefined : id(), viewId, params.mode === undefined ? "auto" : stringParam(params, "mode"), params.attachmentIds as string[] | undefined, references as Array<{ contextId: string; attachmentId: string }> | undefined, replies, threadRecords, params.fromQuestion === true);
+          if (sideChat && this.viewActions.openSessionTab) {
+            try { await this.viewActions.openSessionTab(sideChat, false, viewId); }
+            catch (cause) { void (await import("vscode")).window.showErrorMessage(cause instanceof Error ? cause.message : "Could not open the side chat."); }
+          }
+          break;
         }
         case "stopSubagent": await this.hostState.stopSubagent(id(), stringParam(params, "subagentId")); break;
         case "reorderPins": {

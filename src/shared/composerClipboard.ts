@@ -70,7 +70,7 @@ export function buildComposerClipboard(draft: ClipboardDraft, selection: TextSel
   html = (html + escapeHtml(text.slice(at))).replace(/\n/g, "<br>");
   const ids = new Set<string>(references.map((reference) => reference.contextId));
   const payload = { v: 1, ...(nonce ? { nonce } : {}), text,
-    contexts: [...draft.contexts.filter((context) => context.type === "assistant" ? !!context.contextId && ids.has(context.contextId) : context.type === "response" && ids.has(context.record.contextId)), ...new Set(files.map((match) => match.context))],
+    contexts: [...draft.contexts.filter((context) => context.type === "assistant" ? !!context.contextId && ids.has(context.contextId) : (context.type === "response" || context.type === "thread") && ids.has(context.record.contextId)), ...new Set(files.map((match) => match.context))],
     attachments: [...ids].flatMap((id) => { const file = backed(id); return file ? [{ key: file.key, contextId: id, name: file.name, mimeType: file.mimeType, sizeBytes: file.sizeBytes }] : []; }) };
   const only = references.length === 1 && references[0]!.source === text.trim() ? backed(references[0]!.contextId) : undefined;
   return { range, plain: replaceComposerContextReferences(text, (reference) => reference.label),
@@ -116,12 +116,12 @@ export function planComposerPaste(payload: ComposerClipboardPayload, draft: Clip
   const resolve = (reference: ReturnType<typeof collectComposerContextReferences>[number]): string | null => {
     const id = reference.contextId, known = resolved.get(id); if (known !== undefined) return known;
     let result: string | null = null;
-    if (reference.kind === "response") {
+    if (reference.kind === "response" || reference.kind === "thread") {
       // A reply's id names its response, so a second copy shares the one record rather than taking a fresh id.
-      const context = payload.contexts.find((item) => item.type === "response" && item.record.contextId === id);
-      if (context?.type === "response") {
+      const context = payload.contexts.find((item) => (item.type === "response" || item.type === "thread") && item.type === reference.kind && item.record.contextId === id);
+      if (context?.type === "response" || context?.type === "thread") {
         result = id;
-        if (!contexts.some((item) => item.type === "response" && item.record.contextId === id)) contexts.push(context);
+        if (!contexts.some((item) => (item.type === "response" || item.type === "thread") && item.type === reference.kind && item.record.contextId === id)) contexts.push(context);
       }
     } else if (reference.kind === "assistant-quote") {
       const context = payload.contexts.find((item) => item.type === "assistant" && item.contextId === id), existing = draft.contexts.some((item) => item.type === "assistant" && item.contextId === id);

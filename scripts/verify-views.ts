@@ -6,7 +6,7 @@ import { chromium, type Page } from "playwright-core";
 import { BridgeHandler, WebviewRegistry } from "../src/host/bridge.js";
 import { SIDEBAR_VIEW_ID } from "../src/host/hostState.js";
 import { FakeWebview } from "../src/host/testing/fakeWebview.js";
-import { viewsHarness, publishText } from "../src/host/testing/fakeTransport.js";
+import { viewsHarness, publishText, seedSideChatParent } from "../src/host/testing/fakeTransport.js";
 import { Events, type RpcMessage } from "../src/shared/bridge.js";
 import { DEFAULT_APPEARANCE, type AppearanceSettings } from "../src/shared/appearance.js";
 import type { ModelPickerPreferences } from "../src/shared/modelPreferences.js";
@@ -50,9 +50,14 @@ let deleteConfirmed = false;
 const keptTabs: string[] = []; const closedTaskTabs: string[] = [];
 const openedSessions: Array<string | undefined> = [];
 const openedDiffs: Array<{ turn: number; path: string; old: string; current: string }> = [];
+let sideChatTestTabs: Map<string, string> | undefined;
 const registry = new WebviewRegistry(); const bridge = new BridgeHandler(host, registry, async () => { settingsOpened += 1; }, {
   rename: async () => { renamesRequested += 1; return "Renamed through history"; }, confirmDelete: async () => deleteConfirmed,
-}, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); }, { keepTab: async (id) => { keptTabs.push(id); }, closeTaskTab: id => { closedTaskTabs.push(id); }, openInTab: (id) => { openedSessions.push(host.snapshot(id).activeThreadId); }, showUsage: (_id, key) => { registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key); } });
+}, async (diff: TurnDiff, load, path) => { const file = diff.files.find((file) => path === undefined || file.newPath === path)!; const result = await load(file); openedDiffs.push({ turn: diff.turnNumber, path: file.newPath, old: result.oldContents, current: result.newContents }); }, { openSessionTab: async (threadId) => {
+  const target = sideChatTestTabs?.get(threadId);
+  if (target) { await host.selectThread(threadId, target); return target; }
+  openedSessions.push(threadId); await host.selectThread(threadId);
+}, keepTab: async (id) => { keptTabs.push(id); }, closeTaskTab: id => { closedTaskTabs.push(id); }, openInTab: (id) => { openedSessions.push(host.snapshot(id).activeThreadId); }, showUsage: (_id, key) => { registry.postWhenReady(SIDEBAR_VIEW_ID, Events.showUsage, key); } });
 const views = new Map<string, FakeWebview>(); const sinks = new Map<string, Set<ServerResponse>>();
 for (const id of [SIDEBAR_VIEW_ID, "tab-one", "tab-two", "tab-three", "tab-narrow", "task-tab-one", "task-tab-two"]) {
   if (id !== SIDEBAR_VIEW_ID) host.registerView(id);
@@ -238,7 +243,21 @@ try {
     return page;
   }));
   debugPages = pages;
-  if (process.argv.includes("--streaming-only")) {
+  const verifyUndo = async () => {
+    const first = pages[0]!, second = pages[1]!;
+    await host.selectThread("first", "tab-one");
+    seedSideChatParent(client);
+    publishText(client, "first", "Live **reply** in first conversation\n\nInline \`value\`.\n\n\`\`\`ts\nconst value = 42;\n\`\`\`");
+    const sideId = await host.sendMessage("/side fixture side question", "first", "tab-one");
+    assert.ok(sideId);
+    await host.selectThread(sideId, "tab-two");
+    sideChatTestTabs = new Map([["first", "tab-one"], [sideId, "tab-two"]]);
+    await verifyComposerUndo(first, host, client, "tab-one", selectAssistantText, second);
+  };
+  if (process.argv.includes("--composer-undo-only")) {
+    await verifyUndo();
+    assert.deepEqual(errors, []);
+  } else if (process.argv.includes("--streaming-only")) {
     await verifyStreamingLayout(pages[1]!, host, client, evidence);
   } else if (process.argv.includes("--responses-only")) {
     await verifyResponseLayout(pages[1]!, host, client, evidence);
@@ -962,8 +981,10 @@ try {
   console.log("PASS: task editor tab promotes on edit, preserves its draft across sidebar navigation/reload, and Cancel closes without saving.");
   }
   assert.deepEqual(errors, []);
-  if (!process.argv.includes("--responses-only") && !process.argv.includes("--streaming-only")) console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
-  console.log(`Screenshots: ${evidence}`);
+  if (!process.argv.includes("--composer-undo-only")) {
+    if (!process.argv.includes("--responses-only") && !process.argv.includes("--streaming-only")) console.log("PASS: independent conversations and drafts, workspace scope, streaming, reconnect and closing; native settings, shared live preferences, renderer reload, reset, external edits and narrow sidebar.");
+    console.log(`Screenshots: ${evidence}`);
+  }
 } catch (error) {
   console.error("Browser errors:", errors);
   console.error("Search state:", ["tab-two", "tab-three"].map(id => { const state = host.snapshot(id); return { id, thread: state.activeThreadId, query: state.sessionSearch?.query, total: state.sessionSearch?.total, scanning: state.sessionSearch?.scanning, error: state.sessionSearch?.error }; }));

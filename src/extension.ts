@@ -77,7 +77,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let provider: T3WebviewProvider;
   const meters = new UsageStatusBar(() => hostState!.snapshot(registry.focusedViewId), async (instanceId) => { await hostState?.refreshUsage(instanceId); }, () => hostState?.busy ?? false);
   const bridge = new BridgeHandler(hostState, registry, showSettings, undefined, registerNativeDiff(context), {
-    openSessionTab: (threadId, preview) => provider.openSession(threadId, preview),
+    openSessionTab: (threadId, preview, sourceViewId) => provider.openSession(threadId, preview, sourceViewId),
     keepTab: (id) => provider.keepTab(id),
     closeTaskTab: (id) => provider.closeTaskTab(id),
     openInTab: (id, draft) => provider.createPanel(id, draft),
@@ -153,6 +153,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         { label: "$(edit) Rename thread", action: "rename" },
         ...(thread.canRegenerateTitle ? [{ label: thread.titleRegenerating ? "$(sparkle) Stop regenerating title" : "$(sparkle) Regenerate title", action: thread.titleRegenerating ? "stop-title-regeneration" : "regenerate-title" }] : []),
         ...(!thread.providerNativeSubagent && !thread.activeRunId ? [{ label: "$(copy) Duplicate thread", action: "duplicate" }] : []),
+        ...(!thread.archived && thread.sideChatDisabledReason === null ? [{ label: "$(comment-discussion) Start side chat", action: "start-side-chat" }] : []),
         ...(thread.canMarkUnread ? [{ label: "$(mail) Mark unread", action: "mark-unread" }] : []),
         ...(thread.autoSettle !== undefined ? [{ label: thread.autoSettle ? "$(watch) Turn auto-settle off" : "$(watch) Turn auto-settle on", action: thread.autoSettle ? "auto-settle-off" : "auto-settle-on" }] : []),
         { label: "$(clippy) Copy…", action: "copy-menu" },

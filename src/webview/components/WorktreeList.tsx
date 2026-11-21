@@ -1,6 +1,6 @@
 import { projectOptionLabel } from "../projectLabels";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { GitBranchIcon, SearchIcon, XIcon, RefreshCwIcon, PlusIcon, SettingsIcon, MoreHorizontalIcon, MessageSquareIcon, CheckIcon, FolderIcon, ChevronRightIcon, BotIcon, ArchiveIcon } from "lucide-react";
+import { GitBranchIcon, SearchIcon, XIcon, RefreshCwIcon, PlusIcon, SettingsIcon, MoreHorizontalIcon, MessagesSquareIcon, MessageSquareIcon, CheckIcon, FolderIcon, ChevronRightIcon, BotIcon, ArchiveIcon } from "lucide-react";
 import type { HostStateSnapshot, ThreadSummary } from "../../shared/bridge";
 import type { WorktreeChoice } from "../../shared/worktrees";
 import { useActions } from "../actions";
@@ -18,7 +18,7 @@ import { WorktreeComparison, worktreeRunGroups } from "./WorktreeComparison";
 function CheckoutSessions({ state, sessions, query, path, remote = false }: { readonly state: HostStateSnapshot; readonly sessions: RepositoryCheckout["sessions"]; readonly query: string; readonly path: string; readonly remote?: boolean }) {
   const run = useActions();
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const [subagents, setSubagents] = useState<ReadonlySet<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
   const matching = query ? sessions.filter((thread) => thread.title.toLowerCase().includes(query)) : sessions;
   const shelves = sessionShelves(sessions, matching);
   const toggle = (id: string) => setExpanded((previous) => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -32,13 +32,31 @@ function CheckoutSessions({ state, sessions, query, path, remote = false }: { re
     const checkoutHint = effectivePath && checkoutPath(actualCheckout ?? effectivePath) !== checkoutPath(path) ? `Checkout: ${effectivePath}` : undefined;
     const isWorking = threadIsWorking(thread);
     const isWaiting = !isWorking && threadIsWaiting(thread);
-    return <button title={checkoutHint} aria-description={checkoutHint} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} data-thread-id={thread.id} aria-label={thread.title || "Untitled"} aria-current={thread.id === state.activeThreadId ? "page" : undefined} onClick={(event) => { void run("openSessionTab", { threadId: thread.id, preview: event.detail < 2 }); }} onDoubleClick={() => { void run("openSessionTab", { threadId: thread.id, preview: false }); }}><span className="thread-title-line"><span className="thread-title" title={checkoutHint ? `${thread.title || "Untitled"} · ${checkoutHint}` : thread.title || "Untitled"}>{thread.title || "Untitled"}</span></span><span className="thread-meta"><small className={isWaiting ? "thread-waiting" : undefined} title={isWaiting ? waitingSummary(thread) : undefined}>{thread.pendingRuntimeRequest ? "Input needed" : isWorking ? "Working" : isWaiting ? "Waiting" : thread.archived ? "Archived" : thread.settled ? "Settled" : "Session"}</small>{thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : thread.settled ? <CheckIcon size={12} /> : <MessageSquareIcon size={12} />}</span></button>;
+    return <button title={checkoutHint} aria-description={checkoutHint} className={`thread${thread.id === state.activeThreadId ? " active" : ""}`} data-thread-id={thread.id} aria-label={thread.title || "Untitled"} aria-current={thread.id === state.activeThreadId ? "page" : undefined} onClick={(event) => { void run("openSessionTab", { threadId: thread.id, preview: event.detail < 2 }); }} onDoubleClick={() => { void run("openSessionTab", { threadId: thread.id, preview: false }); }}><span className="thread-title-line"><span className="thread-title" title={checkoutHint ? `${thread.title || "Untitled"} · ${checkoutHint}` : thread.title || "Untitled"}>{thread.title || "Untitled"}</span></span><span className="thread-meta"><small className={isWaiting ? "thread-waiting" : undefined} title={isWaiting ? waitingSummary(thread) : undefined}>{thread.pendingRuntimeRequest ? "Input needed" : isWorking ? "Working" : isWaiting ? "Waiting" : thread.archived ? "Archived" : thread.settled ? "Settled" : "Session"}</small>{thread.relationshipToParent === "subagent" ? <BotIcon size={12} /> : thread.relationshipToParent === "side-chat" ? <MessagesSquareIcon size={12} /> : thread.settled ? <CheckIcon size={12} /> : <MessageSquareIcon size={12} />}</span></button>;
   };
   const tree = (node: SessionTreeNode, depth = 0): ReactNode => {
     const open = !!query || expanded.has(node.thread.id);
+    const group = (label: string, children: SessionTreeNode[]) => {
+      if (!children.length) return null;
+      const key = `${node.thread.id}:${label}`;
+      return <details className="session-task-group" open={!!query || expandedGroups.has(key)} onToggle={event => {
+        const isOpen = event.currentTarget.open;
+        setExpandedGroups(previous => {
+          if (previous.has(key) === isOpen) return previous;
+          const next = new Set(previous);
+          if (isOpen) next.add(key); else next.delete(key);
+          return next;
+        });
+      }}><summary>{label}<small>{children.length}</small></summary>
+        <div className="session-tree-children" aria-label={`${label} of ${node.thread.title || "Untitled"}`}>{children.map(child => tree(child, depth + 1))}</div>
+      </details>;
+    };
     return <div className="session-tree-node" key={node.thread.id} data-session-depth={depth}>
       <div className="session-tree-row">{node.children.length ? <button type="button" className="session-tree-toggle icon-button" aria-label={`${open ? "Collapse" : "Expand"} session of ${node.thread.title || "Untitled"}`} aria-expanded={open} onClick={() => toggle(node.thread.id)}><ChevronRightIcon size={12} className={open ? "rotate-90" : ""} /></button> : <span className="session-tree-spacer" />}{row(node.thread)}</div>
-      {open && node.children.length ? <div className="session-expanded-groups"><details className="session-task-group" open={!!query || subagents.has(node.thread.id)} onToggle={(event) => { const isOpen = event.currentTarget.open; setSubagents((previous) => { const next = new Set(previous); if (isOpen) next.add(node.thread.id); else next.delete(node.thread.id); return next; }); }}><summary>Subagents<small>{node.children.length}</small></summary><div className="session-tree-children" aria-label={`Subagents of ${node.thread.title || "Untitled"}`}>{node.children.map((child) => tree(child, depth + 1))}</div></details></div> : null}
+      {open && node.children.length ? <div className="session-expanded-groups">
+        {group("Side chats", node.children.filter(child => child.thread.relationshipToParent === "side-chat"))}
+        {group("Subagents", node.children.filter(child => child.thread.relationshipToParent !== "side-chat"))}
+      </div> : null}
     </div>;
   };
   // Snoozing hides a session from the Sessions inbox only; its checkout still lists it.

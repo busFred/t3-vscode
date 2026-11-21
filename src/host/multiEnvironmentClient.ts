@@ -27,7 +27,7 @@ type RemoteClient = Partial<Pick<T3Client, "mintPeerPairingCode" | "forceStopThr
   | "deleteAttachment" | "getTurnDiff" | "subscribeWorktreeSetup" | "cancelWorktreeSetup" | "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
   | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
 /** What starting and composing a conversation on a paired machine, or cloning this repository there, needs from that machine's own server. */
-export type EnvironmentCalls = Partial<Pick<T3Client, "updateSettings">> & Pick<T3Client, "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
+export type EnvironmentCalls = Partial<Pick<T3Client, "updateSettings" | "dispatch">> & Pick<T3Client, "launchThread" | "listRefs" | "searchPaths" | "refreshProviders"
   | "startProjectClone" | "cancelProjectClone" | "retryProjectClone" | "subscribeProjectClones" | "writeProjectFile" | "deleteProject">;
 /** Whether this client may clone a repository onto a paired machine, and why not. */
 export type CloneAccess = "ok" | "disconnected" | "unsupported" | "permission";

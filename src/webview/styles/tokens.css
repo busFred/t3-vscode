@@ -719,7 +719,7 @@ textarea[data-opening]:not(:disabled) { cursor: pointer; }
 .subagent-hover-card .provider-icon { width: 12px; height: 12px; }
 .subagent-hover-card strong, .subagent-hover-card small, .subagent-hover-card p { overflow: hidden; text-overflow: ellipsis; }
 .subagent-hover-card p { margin: 0; font-size: .78rem; max-height: 3.9em; line-height: 1.3; }
-.subagent-parent-bar { padding: 6px 12px; text-align: center; font-size: .8rem; border-bottom: 1px solid var(--border); }
+.subagent-parent-bar { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; padding: 6px 12px; text-align: center; font-size: .8rem; border-bottom: 1px solid var(--border); }
 .subagent-parent-link { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 5px 9px; border-radius: 14px; color: var(--foreground); background: transparent; border: 1px solid var(--border); cursor: pointer; }
 .subagent-parent-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subagent-readonly { margin: 8px 0; font-size: .85rem; }

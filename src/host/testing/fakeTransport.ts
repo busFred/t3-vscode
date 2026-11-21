@@ -209,9 +209,10 @@ export class FakeTransport implements HostTransport {
     }
     if (command.type === "thread.fork") {
       const source = [...this.shell.threads, ...this.archive.threads].find((thread) => thread.id === command.sourceThreadId)!;
-      const child = { ...source, id: command.targetThreadId, title: `Fork of ${source.title}`, archivedAt: null,
+      const child = { ...source, id: command.targetThreadId, title: command.sideChat ? command.title ?? "Side chat" : `Fork of ${source.title}`, archivedAt: null,
+        ...(command.sideChat ? { latestUserMessageAt: null, activeRunId: null, status: "idle" as const } : {}),
         forkedFrom: command.sourcePoint.type === "run" ? { type: "run" as const, threadId: source.id, runId: command.sourcePoint.runId } : null,
-        lineage: { rootThreadId: source.lineage.rootThreadId, parentThreadId: source.id, relationshipToParent: "fork" as const } };
+        lineage: { rootThreadId: source.lineage.rootThreadId, parentThreadId: source.id, relationshipToParent: "fork" as const, ...(command.sideChat ? { sideChat: true } : {}) } };
       this.shell = { ...this.shell, threads: [...this.shell.threads, child] };
       const projection = this.snapshots.get(source.id)?.projection;
       if (projection) this.snapshots.set(child.id, { kind: "snapshot", snapshotSequence: 0, projection: { ...projection,
@@ -271,4 +272,11 @@ export function publishText(client: FakeTransport, id: string, text: string, seq
   client.threadHandlers.get(id)!({ kind: "snapshot", snapshotSequence: sequence,
     projection: { ...v2Projection, thread: { ...v2Projection.thread, id: ThreadId.make(id) }, turnItems: [item],
       visibleTurnItems: [{ item, position: 0, sourceItemId: item.id, sourceThreadId: item.threadId, visibility: "local" }], ...projectionFields } });
+}
+
+export function seedSideChatParent(client: FakeTransport, id = "first"): void {
+  client.config = { ...client.config, environment: { ...client.config.environment, capabilities: { repositoryIdentity: false, sideChats: true } } as NonNullable<typeof client.config.environment> };
+  client.shell = { ...client.shell, snapshotSequence: client.shell.snapshotSequence + 1,
+    threads: client.shell.threads.map(thread => thread.id === id ? { ...thread, latestUserMessageAt: v2Now } : thread) };
+  client.shellHandler?.({ kind: "snapshot", snapshot: client.shell });
 }

@@ -4,8 +4,8 @@ import { useEffect, useSyncExternalStore } from "react";
 import { bridge } from "./bridge-client";
 import type { ComposerContext } from "../shared/composerContext";
 import type { ViewDraft } from "../shared/viewDraft";
-import { insertFileReference, insertResponseReply, type FileReference } from "../shared/composerContext";
-import type { ResponseContextRecord } from "@t3tools/contracts";
+import { insertFileReference, insertResponseReply, insertSideChatReference, type FileReference } from "../shared/composerContext";
+import type { ResponseContextRecord, ThreadContextRecord } from "@t3tools/contracts";
 import type { TextSelection } from "../shared/composerAttachments";
 
 export interface ComposerDraft extends ViewDraft { readonly text: string; readonly contexts: ReadonlyArray<ComposerContext> }
@@ -27,6 +27,28 @@ export function addEditorReference(key: string, reference: FileReference): numbe
     editorFocus.set(key, cursor);
     return { ...draft, text: inserted.text, contexts: inserted.contexts };
   }, "take-focus");
+  return cursor;
+}
+const sideChatInsertions = new Map<string, ThreadContextRecord[]>();
+export function queueSideChatReference(key: string, record: ThreadContextRecord): void {
+  const pending = sideChatInsertions.get(key) ?? [];
+  pending.push(record);
+  sideChatInsertions.set(key, pending);
+  window.dispatchEvent(new CustomEvent("t3-insert-side-chat", { detail: key }));
+}
+export function applySideChatReferences(key: string): number | undefined {
+  const pending = sideChatInsertions.get(key);
+  if (!pending?.length) return;
+  sideChatInsertions.delete(key);
+  let cursor: number | undefined;
+  for (const record of pending) {
+    updateDraft(key, draft => {
+      const inserted = insertSideChatReference(draft.text, draft.contexts, record, selections.get(key) ?? { start: draft.text.length, end: draft.text.length });
+      cursor = inserted.cursor;
+      selections.set(key, { start: cursor, end: cursor });
+      return { ...draft, text: inserted.text, contexts: inserted.contexts };
+    }, "take-focus");
+  }
   return cursor;
 }
 /** Leads the draft with a reply to a response. The Reply button moves focus into the composer, so the insertion takes it and stays one undo step. */
@@ -61,6 +83,12 @@ export function updateDraft(key: string, update: (draft: ComposerDraft) => Compo
 }
 export function addDraftContext(key: string, context: ComposerContext): void {
   updateDraft(key, (draft) => ({ ...draft, contexts: [...draft.contexts, context] }));
+}
+export function discardRendererSideChatDraft(key: string): void {
+  selections.delete(key); editorFocus.delete(key); sideChatInsertions.delete(key);
+  mutations.delete(key); failedSaves.delete(key); recovery.delete(key);
+  saveVersions.set(key, (saveVersions.get(key) ?? 0) + 1);
+  drafts.delete(key); notify(key);
 }
 export function clearDraft(key: string): void { selections.delete(key); editorFocus.delete(key); updateDraft(key, () => EMPTY); }
 interface DraftRecovery { readonly ready: boolean; readonly recovered: boolean; readonly error?: string }

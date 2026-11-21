@@ -94,6 +94,22 @@ export class ComposerDraftStore {
     this.save(record, record.draft, record.selection);
     return record;
   }
+  clearThread(scope: string, threadId: string): Array<{ id: string; attachmentIds: string[] }> {
+    this.load();
+    const cleared: Array<{ id: string; attachmentIds: string[] }> = [];
+    for (const record of this.records.values()) {
+      if (record.scope !== scope || record.threadId !== threadId) continue;
+      const mine = [...this.claims.values()].includes(record.id) || this.retained.has(record.id);
+      if (!mine && !this.lease(record.id)) continue;
+      try {
+        const attachmentIds = (record.draft.attachments ?? []).flatMap(file => file.attachment ? [file.attachment.id] : []);
+        this.save(record, { text: "", contexts: [] });
+        this.flush();
+        cleared.push({ id: record.id, attachmentIds });
+      } finally { if (!mine) this.releaseLease(record.id); }
+    }
+    return cleared;
+  }
   save(record: StoredComposerDraft, draft: ViewDraft, selection?: TextSelection): void {
     for (const file of record.draft.attachments ?? []) if (!(draft.attachments ?? []).some(next => next.key === file.key)) {
       const name = this.fileKey(record, file.key); this.memoryFiles.delete(name);

@@ -2,12 +2,12 @@ import { RuntimeMode, isManagedDriverAllowed, managedPolicyDeniedMessage, manage
 import { ImageCaptionEditor } from "./ImageCaptionEditor";
 import { bridge } from "../bridge-client";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpIcon, CheckIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon, WandSparklesIcon, ZapIcon, ReplyIcon } from "lucide-react";
+import { ArrowUpIcon, CheckIcon, SquareIcon, ChevronDownIcon, MoreHorizontalIcon, FolderIcon, XIcon, FileIcon, ImageIcon, WandSparklesIcon, ZapIcon, ReplyIcon, MessagesSquareIcon } from "lucide-react";
 import type { ComposerSuggestion, HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { PendingRequests } from "./PendingRequests";
-import { clearDraft, readDraft, readDraftSelection, registerDraftTextEditor, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useDraftRecovery, useComposerDraft, type DraftTextEdit } from "../composerDrafts";
-import { assistantQuoteLabel, assistantQuoteNumbers, contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, insertFileReference, removeContextReference, responseRecordsForMessage, syncAssistantQuoteLabels, type FileReference } from "../../shared/composerContext";
+import { applySideChatReferences, clearDraft, readDraft, readDraftSelection, registerDraftTextEditor, rememberDraftSelection, takeEditorReferenceFocus, updateDraft, useDraftRecovery, useComposerDraft, type DraftTextEdit } from "../composerDrafts";
+import { assistantQuoteLabel, assistantQuoteNumbers, contextIsReferenced, fileReferenceLabel, fileReferenceOccurrences, formatComposerMessage, insertFileReference, insertSideChatReference, removeContextReference, responseRecordsForMessage, sideChatRecordsForMessage, syncAssistantQuoteLabels, type FileReference } from "../../shared/composerContext";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeUltrathinkPrompt } from "@t3tools/shared/model";
 import { effortDescriptor, effortOptionLabel, isPremiumSpeed, speedChoiceLabel, speedControl, ultracodeOption } from "../../shared/modelOptions";
@@ -251,8 +251,26 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   }, [text, contexts, referenceCheckoutRoot, recovery.ready, draftKey, onSelectionChange]);
   const placeCursor = (position: number, focus = false) => { pendingCaret.current = { position, focus }; };
   const focusCursor = (position: number) => placeCursor(position, true);
+  useEffect(() => {
+    if (disabled) return;
+    const insert = () => {
+      const position = applySideChatReferences(draftKey);
+      if (position === undefined || !textarea.current) return;
+      textarea.current.setSelectionRange(position, position);
+      setCursor(position);
+    };
+    const receive = (event: Event) => { if ((event as CustomEvent<string>).detail === draftKey) insert(); };
+    window.addEventListener("t3-insert-side-chat", receive);
+    insert();
+    return () => window.removeEventListener("t3-insert-side-chat", receive);
+  }, [draftKey, disabled]);
   const chooseSuggestion = (item: ComposerSuggestion) => {
     if (!trigger) return;
+    if (item.kind === "thread" && item.threadContext) {
+      const inserted = insertSideChatReference(text, contexts, item.threadContext, { start: trigger.rangeStart, end: trigger.rangeEnd });
+      markTouched(); updateDraft(draftKey, (draft) => ({ ...draft, text: inserted.text, contexts: inserted.contexts }), "take-focus");
+      setCursor(inserted.cursor); setDismissedTrigger(triggerKey); focusCursor(inserted.cursor); return;
+    }
     if (item.kind === "file" || item.kind === "directory") {
       // The relative path is the label, so three different `index.ts` stay distinguishable in the chips.
       const reference: FileReference = { type: "file", uri: item.uri ?? item.value, path: item.value, label: item.value };
@@ -375,7 +393,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
       setBusy(false); textarea.current?.focus(); return;
     }
     const mode = resolveComposerDispatchMode({ running, activeTurnDefault: "queue", alternateModifier: steer && state.queue?.canSteer === true });
-    const sent = await run("sendMessage", { text: value, mode, attachmentIds: settled.map((file) => file.attachment!.id), attachmentReferences: settled.flatMap((file) => file.contextId ? [{ contextId: file.contextId, attachmentId: file.attachment!.id }] : []), responseRecords: responseRecordsForMessage(value, draft.contexts ?? contexts), ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
+    const sent = await run("sendMessage", { text: value, mode, attachmentIds: settled.map((file) => file.attachment!.id), attachmentReferences: settled.flatMap((file) => file.contextId ? [{ contextId: file.contextId, attachmentId: file.attachment!.id }] : []), responseRecords: responseRecordsForMessage(value, draft.contexts ?? contexts), threadRecords: sideChatRecordsForMessage(value, draft.contexts ?? contexts), ...(state.activeThreadId ? { threadId: state.activeThreadId } : {}) });
     if (sent) clearDraft(draftKey);
     setBusy(false); textarea.current?.focus();
   };
@@ -419,6 +437,10 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
     const fileContext = fileReferenceOccurrences(text, contexts).find(ref => ref.start <= position && position < ref.end)?.context;
     if (fileContext) { void openFileReference(fileContext); return true; }
     const reference = collectComposerContextReferences(text).find((ref) => ref.start <= position && position < ref.end);
+    if (reference?.kind === "thread") {
+      const context = contexts.find(context => context.type === "thread" && context.record.contextId === reference.contextId);
+      if (context?.type === "thread") { void run("openSessionTab", { threadId: context.record.threadId, environmentId: context.record.environmentId }); return true; }
+    }
     if (reference?.kind === "response") {
       const context = contexts.find((context) => context.type === "response" && context.record.contextId === reference.contextId);
       if (context?.type === "response") { window.dispatchEvent(new CustomEvent("t3-open-citation", { detail: context.record.citation })); return true; }
@@ -500,7 +522,10 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
             <button className="icon-button remove-attachment" aria-label={`Remove ${file.name}`} disabled={busy} onClick={() => { void removeDraftAttachment(draftKey, file.key).catch((cause) => setAttachmentError(String(cause))); }}><XIcon size={12} /></button>
           </div>;
         })}
-        {visibleContexts.map(({ context, index }) => context.type === "response" ? <div className="composer-chip context-chip reply-chip" key={index}>
+        {visibleContexts.map(({ context, index }) => context.type === "thread" ? <div className="composer-chip context-chip reply-chip" key={index}>
+          <button className="context-label" title={context.record.title} onClick={() => { void run("openSessionTab", { threadId: context.record.threadId, environmentId: context.record.environmentId }); }}><MessagesSquareIcon size={12} aria-hidden="true" /><span className="context-label-text">Side chat: {context.record.title}</span></button>
+          <button className="icon-button" aria-label="Remove side chat reference" disabled={busy} onClick={() => updateDraft(draftKey, draft => ({ ...draft, text: removeContextReference(draft.text, context) }), "take-focus")}><XIcon size={12} /></button>
+        </div> : context.type === "response" ? <div className="composer-chip context-chip reply-chip" key={index}>
           {/* Opens the response it replies to, like the source button on a quote. */}
           <button className="context-label" title={context.record.citation.text} onClick={() => window.dispatchEvent(new CustomEvent("t3-open-citation", { detail: context.record.citation }))}><ReplyIcon size={12} aria-hidden="true" /><span className="context-label-text">{context.record.subagents?.length ? `Replying to ${context.record.subagents.map((subagent) => subagent.title).join(", ")}: ` : "Replying to: "}{context.record.label}</span></button>
           <button className="icon-button" aria-label="Cancel reply" disabled={busy} onClick={() => updateDraft(draftKey, (draft) => ({ ...draft, text: removeContextReference(draft.text, context), contexts: draft.contexts.filter((_, position) => position !== index) }), "keep-focus")}><XIcon size={12} /></button>
