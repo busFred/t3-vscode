@@ -16,6 +16,8 @@ import { HostState, SIDEBAR_VIEW_ID } from "./host/hostState.js";
 import { resolveT3Home } from "./host/serverDiscovery.js";
 import { SecretCredentialStore } from "./host/sessionStore.js";
 import { T3Client } from "./host/t3Client.js";
+import { loadOrCreateDeviceKey, type DeviceKey } from "./host/deviceKey.js";
+import { renewDpopToken } from "./host/environmentAuth.js";
 import { MultiEnvironmentClient } from "./host/multiEnvironmentClient.js";
 import { EnvironmentCatalog } from "./host/environmentCatalog.js";
 import { registerEnvironmentCommands } from "./host/environmentCommands.js";
@@ -42,9 +44,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     : undefined;
 
   // Paired remote machines are shared by every profile through SecretStorage.
-  const client = environments = new MultiEnvironmentClient(new T3Client());
   const catalog = new EnvironmentCatalog(context.secrets);
-  const environmentControls = registerEnvironmentCommands({ catalog, client, localEnvironmentId: () => hostState?.snapshot().environment?.environmentId });
+  // One key signs for every key-bound pairing; it is loaded once, and a failed load is retried on next use.
+  let deviceKeyLoad: Promise<DeviceKey> | null = null;
+  const deviceKey = () => (deviceKeyLoad ??= loadOrCreateDeviceKey(context.secrets).catch((cause: unknown) => { deviceKeyLoad = null; throw cause; }));
+  const client = environments = new MultiEnvironmentClient(new T3Client(), {
+    deviceKey,
+    renewToken: async (record) => catalog.updateToken(record.environmentId, record.accessToken, await renewDpopToken(record, await deviceKey())),
+  });
+  const environmentControls = registerEnvironmentCommands({ catalog, client, deviceKey, localEnvironmentId: () => hostState?.snapshot().environment?.environmentId });
   const modelPreferences = new ModelPreferenceStore(context.globalState);
   const taskOrigins = new TaskOriginStore(context.globalState);
   hostState = new HostState({ draftStore: new ComposerDraftStore(resolve((context.storageUri ?? context.globalStorageUri).fsPath, "composer-drafts", createHash("sha256").update(home).digest("hex").slice(0, 24))), home, serverStartupHint, credentials: new SecretCredentialStore(context.secrets),

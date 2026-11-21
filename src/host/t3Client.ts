@@ -1,4 +1,5 @@
 import { mintPeerPairingCode } from "./peerPairingCode.js";
+import { authHeaders, bearerAuth, type ConnectionAuth } from "./connectionAuth.js";
 import { signInRequired, type PullRequestOperation, type PullRequestResponse } from "../shared/pullRequests.js";
 import { linkRequestFailureMessage } from "@t3tools/client-runtime/link-request";
 import { peerLinksDenial } from "../shared/peerLinks.js";
@@ -46,7 +47,7 @@ export class T3Client {
   private scope: Scope.Closeable | null = null;
   private session: Rpc.RpcSession | null = null;
   private server: DiscoveredServer | null = null;
-  private accessToken: string | null = null;
+  private auth: ConnectionAuth | null = null;
   private configState: Option.Option<ServerConfigProjection> = Option.none();
   private settingsSupport = { worktreesDirectory: false, cleanupRetention: false, runOnSettle: false };
   onClose: (() => void) | null = null;
@@ -55,22 +56,32 @@ export class T3Client {
   get config(): ServerConfig | null { return Option.getOrNull(this.configState)?.config ?? null; }
   get worktreeSettingsCapabilities() { return this.settingsSupport; }
 
-  async connect(server: DiscoveredServer, accessToken: string): Promise<void> {
+  /** `credential` is the local server's bearer token, or a paired machine's bearer or key-bound (DPoP) auth. */
+  async connect(server: DiscoveredServer, credential: string | ConnectionAuth): Promise<void> {
     await this.disconnect();
     const scope = await Effect.runPromise(Scope.make());
     this.scope = scope;
+    const auth = typeof credential === "string" ? bearerAuth(credential) : credential;
     try {
-      const socketUrl = new URL(await this.run(RemoteAuth.resolveRemoteWebSocketConnectionUrl({
-        httpBaseUrl: server.origin, wsBaseUrl: server.origin, bearerToken: accessToken,
-        clientMetadata: { label: "VS Code", deviceType: "desktop" },
-      })));
+      const access = await auth.current();
+      const clientMetadata = { label: "VS Code", deviceType: "desktop" } as const;
+      const proof = auth.proof;
+      // A key-bound ticket also needs a proof on the upgrade, which rides in the socket URL.
+      const socketUrl = new URL(await this.run(auth.scheme === "DPoP" && proof
+        ? RemoteAuth.resolveRemoteDpopWebSocketConnectionUrl({
+          httpBaseUrl: server.origin, wsBaseUrl: server.origin, accessToken: access.token, clientMetadata,
+          createProof: (input) => Effect.promise(() => proof(input.method, input.url, input.accessToken)),
+        })
+        : RemoteAuth.resolveRemoteWebSocketConnectionUrl({ httpBaseUrl: server.origin, wsBaseUrl: server.origin, bearerToken: access.token, clientMetadata })));
       socketUrl.searchParams.set("orchestrationProtocol", "2");
       const session = await this.run(Effect.gen(function* () {
         const factory = yield* Rpc.make({ usageLimitSources: true, usageLimitsCommand: true });
         return yield* factory.connect({
           environmentId: server.descriptor.environmentId, label: server.descriptor.label,
           httpBaseUrl: server.origin, socketUrl: socketUrl.toString(),
-          httpAuthorization: { _tag: "Bearer", token: accessToken },
+          httpAuthorization: auth.scheme === "DPoP"
+            ? { _tag: "Dpop", accessToken: access.token, expiresAtEpochMs: access.expiresAt ?? Date.now() }
+            : { _tag: "Bearer", token: access.token },
           target: new PrimaryConnectionTarget({ environmentId: server.descriptor.environmentId,
             label: server.descriptor.label, httpBaseUrl: server.origin, wsBaseUrl: server.origin }),
         });
@@ -80,7 +91,7 @@ export class T3Client {
       if (!serverVersionSupported(config.environment.serverVersion)) throw new Error(unsupportedServerMessage(config.environment.serverVersion));
       this.session = session;
       this.server = server;
-      this.accessToken = accessToken;
+      this.auth = auth;
       this.configState = applyServerConfigProjection(Option.none(), { version: 1, type: "snapshot", config });
       await this.subscribe(session.subscribeServerConfig({ usageLimitSources: true }), (event) => {
         this.configState = applyServerConfigProjection(this.configState, event);
@@ -98,7 +109,7 @@ export class T3Client {
   }
   async disconnect(): Promise<void> {
     const scope = this.scope;
-    this.scope = null; this.session = null; this.server = null; this.accessToken = null;
+    this.scope = null; this.session = null; this.server = null; this.auth = null;
     this.settingsSupport = { worktreesDirectory: false, cleanupRetention: false, runOnSettle: false };
     if (scope) await Effect.runPromise(Scope.close(scope, Exit.void));
   }
@@ -210,8 +221,8 @@ export class T3Client {
   /** Minted with the user's own session on the machine being linked to; only the linking (local) side gates on its link setting and policy. */
   async mintPeerPairingCode(access: import("@t3tools/contracts").AuthMcpClientAccess): Promise<string> {
     this.requireSession();
-    if (!this.server || !this.accessToken) throw new Error("That machine is disconnected.");
-    return mintPeerPairingCode(this.server.origin, this.accessToken, access);
+    if (!this.server || !this.auth) throw new Error("That machine is disconnected.");
+    return mintPeerPairingCode(this.server.origin, this.auth, access);
   }
   async unlinkPeer(input: unknown): Promise<void> {
     this.requirePeerLinks();
@@ -295,13 +306,15 @@ export class T3Client {
   }
   async getHistory(id: string, cursor: string) {
     const server = this.server;
-    const accessToken = this.accessToken;
-    if (!server || !accessToken) throw new Error("Not connected to T3.");
+    const auth = this.auth;
+    if (!server || !auth) throw new Error("Not connected to T3.");
+    // A DPoP proof names the request's path without its query, so the cursor need not be in it.
+    const headers = await authHeaders(auth, "GET", new URL(`/api/orchestration/threads/${encodeURIComponent(id)}/history`, server.origin).toString());
     return this.run(Effect.gen(function* () {
       const client = yield* makeEnvironmentHttpApiGroupClient(server.origin, "orchestration");
       return yield* client.threadHistoryPage({
         params: { threadId: threadId(id) }, query: { cursor },
-        headers: { authorization: `Bearer ${accessToken}`, [ORCHESTRATION_PROTOCOL_HEADER]: ORCHESTRATION_PROTOCOL_VERSION_TEXT },
+        headers: { ...headers, [ORCHESTRATION_PROTOCOL_HEADER]: ORCHESTRATION_PROTOCOL_VERSION_TEXT },
       });
     }).pipe(Effect.timeout("15 seconds")));
   }

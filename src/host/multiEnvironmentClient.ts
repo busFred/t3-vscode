@@ -14,6 +14,8 @@ import type { RemoteConnectionState } from "../shared/environmentStatus.js";
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/http";
+import { recordAuth } from "./environmentAuth.js";
+import type { DeviceKey } from "./deviceKey.js";
 
 export type { RemoteConnectionState };
 export interface RemoteEnvironmentStatus {
@@ -34,7 +36,19 @@ export type CloneAccess = "ok" | "disconnected" | "unsupported" | "permission";
 interface Remote {
   record: RemoteEnvironmentRecord; client: RemoteClient | null; shell: OrchestrationV2ShellSnapshot | null;
   subscription: Subscription | null; state: RemoteConnectionState; error?: string; retry: ReturnType<typeof setTimeout> | null; attempts: number; generation: number;
+  /** Key-bound sessions only: the next renewal, and the one in flight so concurrent callers share it. */
+  renewal?: ReturnType<typeof setTimeout> | null; renewing?: Promise<void> | null;
 }
+/** Renew a key-bound token this long before it expires, and retry a failed renewal this often. */
+const RENEW_BEFORE_MS = 5 * 60_000, RENEW_RETRY_MS = 60_000, TOKEN_SKEW_MS = 60_000;
+/** The T3 server's own typed refusal (a proxy's bare 401 has no tag), found anywhere in the cause chain. */
+const serverRefused = (cause: unknown): boolean => {
+  for (let value = cause, depth = 0; typeof value === "object" && value !== null && depth < 6; value = (value as { cause?: unknown }).cause, depth++) {
+    if ((value as { _tag?: unknown })._tag === "EnvironmentAuthInvalidError") return true;
+  }
+  return false;
+};
+const KEY_BOUND_ENDED = "This machine signed this computer out, or it went unused for 30 days. Pair it again with a new link.";
 // Connection errors can quote the socket URL; never surface its ticket or token.
 const describeError = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause)).replace(/([?&#](?:wsTicket|token|access_token)=)[^&#\s]+/gi, "$1…");
 const REMOTE_REFRESH_TIMEOUT_MS = 5000;
@@ -64,14 +78,22 @@ export class MultiEnvironmentClient {
   private readonly makeClient: () => RemoteClient;
   private readonly reconnectDelayMs: number;
   private readonly checkCredential: CredentialCheck;
+  private readonly deviceKey: (() => Promise<DeviceKey>) | undefined;
+  private readonly renewToken: ((record: RemoteEnvironmentRecord) => Promise<RemoteEnvironmentRecord | null>) | undefined;
   private disposed = false;
   readonly primary: T3Client;
   /** Fired when remote connection states change, for status UI. */
   onRemoteStatus: (() => void) | null = null;
   /** Fired when a remote rejects an unexpired credential: that machine revoked this client, so its entry should go. */
   onRemoteRevoked: ((record: RemoteEnvironmentRecord) => void) | null = null;
-  constructor(primary: T3Client, options: { makeClient?: () => RemoteClient; reconnectDelayMs?: number; checkCredential?: CredentialCheck } = {}) {
+  /**
+   * `deviceKey` and `renewToken` serve key-bound pairings (T3 Code 0.1.11): the key signs every request,
+   * and `renewToken` renews the token and stores it, returning the stored record (null when it was removed).
+   */
+  constructor(primary: T3Client, options: { makeClient?: () => RemoteClient; reconnectDelayMs?: number; checkCredential?: CredentialCheck;
+    deviceKey?: () => Promise<DeviceKey>; renewToken?: (record: RemoteEnvironmentRecord) => Promise<RemoteEnvironmentRecord | null> } = {}) {
     this.primary = primary; this.makeClient = options.makeClient ?? (() => new T3Client()); this.reconnectDelayMs = options.reconnectDelayMs ?? 2000;
+    this.deviceKey = options.deviceKey; this.renewToken = options.renewToken;
     this.checkCredential = options.checkCredential ?? checkCredential;
   }
   get connected(): boolean { return this.primary.connected; }
@@ -85,7 +107,8 @@ export class MultiEnvironmentClient {
   // ---- Remote environments ----
   remoteStatuses(): ReadonlyArray<RemoteEnvironmentStatus> {
     return [...this.remotes.values()].map(({ record, state, error }) => ({ environmentId: record.environmentId, label: record.label, httpBaseUrl: record.httpBaseUrl,
-      enabled: record.enabled, state, expiresAt: record.expiresAt, ...(error ? { error } : {}), ...(record.serverVersion ? { serverVersion: record.serverVersion } : {}),
+      // A key-bound session renews itself, so its short token life is no pairing deadline.
+      enabled: record.enabled, state, expiresAt: record.auth === "dpop" ? null : record.expiresAt, ...(error ? { error } : {}), ...(record.serverVersion ? { serverVersion: record.serverVersion } : {}),
       ...(record.ignoredStatus ? { ignoredStatus: record.ignoredStatus } : {}) }));
   }
   /** Reconciles live connections with the catalog: removed or disabled entries disconnect, new or re-paired ones connect. */
@@ -95,7 +118,10 @@ export class MultiEnvironmentClient {
     for (const [id, remote] of [...this.remotes]) {
       const record = next.get(id);
       if (!record) { this.remotes.delete(id); await this.stopRemote(remote); continue; }
-      const changed = record.accessToken !== remote.record.accessToken || record.httpBaseUrl !== remote.record.httpBaseUrl;
+      // A renewed key-bound token (from this or another window) is the same session, so live sockets stay;
+      // a new token after that session ended is a fresh pairing and reconnects.
+      const renewed = record.auth === "dpop" && remote.record.auth === "dpop" && remote.state !== "expired";
+      const changed = (record.accessToken !== remote.record.accessToken && !renewed) || record.httpBaseUrl !== remote.record.httpBaseUrl || record.auth !== remote.record.auth;
       remote.record = record;
       if (!record.enabled) { await this.stopRemote(remote); remote.state = "disabled"; delete remote.error; }
       else if (changed || remote.state === "disabled") { await this.stopRemote(remote); this.startRemote(remote); }
@@ -116,7 +142,11 @@ export class MultiEnvironmentClient {
       const client = this.makeClient();
       remote.client = client;
       try {
-        await client.connect(remoteServer(remote.record), remote.record.accessToken);
+        if (remote.record.auth === "dpop") {
+          const key = this.deviceKey ? await this.deviceKey() : null;
+          if (!key) throw new Error("This computer's sign-in key for paired machines is unavailable.");
+          await client.connect(remoteServer(remote.record), recordAuth(remote.record, key, () => this.currentToken(remote)));
+        } else await client.connect(remoteServer(remote.record), remote.record.accessToken);
         if (!current()) { await client.disconnect(); return; }
         const shell = await client.snapshotShell();
         if (!current()) { await client.disconnect(); return; }
@@ -132,6 +162,7 @@ export class MultiEnvironmentClient {
         });
         if (!current()) { await subscription(); await client.disconnect(); return; }
         remote.subscription = subscription; remote.state = "connected"; remote.attempts = 0;
+        if (remote.record.auth === "dpop") this.scheduleRenewal(remote, generation);
         client.onClose = () => { if (current()) void this.remoteClosed(remote, generation, "Connection lost."); };
         // A paired machine's settings (such as auto-settle) change what its sessions offer, so redraw like the local server does.
         client.onConfig = (config) => { if (current()) this.primary.onConfig?.(config); };
@@ -139,8 +170,14 @@ export class MultiEnvironmentClient {
       } catch (cause) {
         if (!current()) return;
         await client.disconnect().catch(() => undefined);
+        // A key-bound session answers for itself: renewing either works (retry the connection) or the server refuses it.
+        if (remote.record.auth === "dpop" && authFailure(cause)) {
+          const refused = await this.renew(remote).then(() => false, serverRefused);
+          if (!current()) return;
+          if (refused) { this.keyBoundEnded(remote); return; }
+        }
         // Only the T3 server's own "not signed in" ends a pairing; a bare 401 from a proxy keeps retrying.
-        if (authFailure(cause) && await this.checkCredential(remote.record).catch(() => null) === false) {
+        else if (authFailure(cause) && await this.checkCredential(remote.record).catch(() => null) === false) {
           if (!current()) return;
           // T3 pairings last a fixed term, so a rejection before it ends means that machine revoked this client.
           const expired = remote.record.expiresAt !== null && Date.now() >= remote.record.expiresAt - 60_000;
@@ -153,6 +190,53 @@ export class MultiEnvironmentClient {
         await this.remoteClosed(remote, generation, describeError(cause));
       }
     })();
+  }
+  /**
+   * A key-bound session that will not renew was revoked or went unused past its window; the two look
+   * the same from here, so the machine stays listed with "Pair again" instead of being removed.
+   */
+  private keyBoundEnded(remote: Remote): void {
+    if (remote.renewal) clearTimeout(remote.renewal);
+    remote.renewal = null;
+    remote.client = null; remote.shell = null; remote.state = "expired"; remote.error = KEY_BOUND_ENDED;
+    this.emitMerged(); this.onRemoteStatus?.();
+  }
+  /** The token to present now, renewed first when it is about to expire. */
+  private async currentToken(remote: Remote): Promise<{ token: string; expiresAt: number | null }> {
+    if (remote.record.expiresAt === null || remote.record.expiresAt - TOKEN_SKEW_MS <= Date.now()) await this.renew(remote);
+    return { token: remote.record.accessToken, expiresAt: remote.record.expiresAt };
+  }
+  /** One renewal at a time per machine; every caller waits for the same one. */
+  private renew(remote: Remote): Promise<void> {
+    const renewToken = this.renewToken;
+    if (!renewToken) return Promise.reject(new Error("This computer cannot renew its sign-in to paired machines."));
+    remote.renewing ??= (async () => {
+      const stored = await renewToken(remote.record);
+      if (!stored) throw new Error("This machine is no longer paired.");
+      remote.record = stored;
+    })().finally(() => { remote.renewing = null; });
+    return remote.renewing;
+  }
+  /** Keeps a connected key-bound session alive: the server only moves its 30-day window when the token renews. */
+  private scheduleRenewal(remote: Remote, generation: number, delayMs?: number): void {
+    if (remote.renewal) clearTimeout(remote.renewal);
+    const due = (remote.record.expiresAt ?? 0) - RENEW_BEFORE_MS - Date.now();
+    remote.renewal = setTimeout(() => {
+      remote.renewal = null;
+      if (this.disposed || remote.generation !== generation) return;
+      void this.renew(remote).then(() => {
+        if (remote.generation === generation && !this.disposed) this.scheduleRenewal(remote, generation);
+      }, async (cause: unknown) => {
+        if (remote.generation !== generation || this.disposed) return;
+        // Only the T3 server refusing the renewal ends the session; a network error or a proxy's 401 retries.
+        if (serverRefused(cause)) {
+          if (remote.generation === generation) { remote.generation += 1; await this.stopRemote(remote); this.keyBoundEnded(remote); }
+          return;
+        }
+        if (remote.generation === generation && !this.disposed) this.scheduleRenewal(remote, generation, RENEW_RETRY_MS);
+      });
+    }, Math.max(30_000, delayMs ?? due));
+    remote.renewal.unref?.();
   }
   private async remoteClosed(remote: Remote, generation: number, reason: string): Promise<void> {
     if (remote.generation !== generation) return;
@@ -169,7 +253,8 @@ export class MultiEnvironmentClient {
   private async stopRemote(remote: Remote): Promise<void> {
     remote.generation += 1;
     if (remote.retry) clearTimeout(remote.retry);
-    remote.retry = null;
+    if (remote.renewal) clearTimeout(remote.renewal);
+    remote.retry = null; remote.renewal = null;
     const { subscription, client } = remote;
     remote.subscription = null; remote.client = null; remote.shell = null;
     if (client) { client.onClose = null; client.onConfig = null; }

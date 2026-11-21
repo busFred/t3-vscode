@@ -17,7 +17,10 @@ export interface RemoteEnvironmentRecord {
   readonly httpBaseUrl: string;
   readonly wsBaseUrl: string;
   readonly accessToken: string;
+  /** When `accessToken` expires. For a key-bound session that is the token's short life, not the pairing's. */
   readonly expiresAt: number | null;
+  /** "dpop": the session is bound to this device's key and renews itself (T3 Code 0.1.11+). Absent: a fixed-term bearer pairing. */
+  readonly auth?: "dpop";
   readonly scopes: ReadonlyArray<string>;
   readonly enabled: boolean;
   readonly addedAt: string;
@@ -53,6 +56,7 @@ const parseRecord = (raw: unknown): RemoteEnvironmentRecord | null => {
     environmentId: r.environmentId, label: r.label, httpBaseUrl: r.httpBaseUrl, wsBaseUrl: r.wsBaseUrl,
     accessToken: r.accessToken, expiresAt: r.expiresAt as number | null, scopes: [...r.scopes as string[]],
     enabled: r.enabled, addedAt: r.addedAt,
+    ...(r.auth === "dpop" ? { auth: "dpop" as const } : {}),
     ...(isString(r.serverVersion) ? { serverVersion: r.serverVersion } : {}),
     ...(IGNORABLE.has(r.ignoredStatus) ? { ignoredStatus: r.ignoredStatus as IgnorableEnvironmentStatus } : {}),
   };
@@ -109,6 +113,21 @@ export class EnvironmentCatalog {
     return removed;
   }
 
+  /**
+   * Stores a renewed key-bound token. Another window may have renewed first; the later expiry wins,
+   * and a record that was re-paired or removed meanwhile is left alone.
+   */
+  async updateToken(environmentId: string, previousToken: string, next: { readonly accessToken: string; readonly expiresAt: number }): Promise<RemoteEnvironmentRecord | null> {
+    let stored: RemoteEnvironmentRecord | null = null;
+    await this.mutate((all) => all.map((e) => {
+      if (e.environmentId !== environmentId || e.auth !== "dpop") return e;
+      const newer = e.accessToken === previousToken || (e.expiresAt ?? 0) < next.expiresAt;
+      stored = newer ? { ...e, accessToken: next.accessToken, expiresAt: next.expiresAt } : e;
+      return stored;
+    }));
+    return stored;
+  }
+
   setEnabled(environmentId: string, enabled: boolean): Promise<void> {
     return this.mutate((all) => all.map((e) => (e.environmentId === environmentId ? { ...e, enabled } : e)));
   }
@@ -148,6 +167,8 @@ export interface RemoteDescriptor {
   readonly label: string;
   readonly serverVersion?: string;
   readonly orchestrationProtocolVersion?: number;
+  /** The machine renews key-bound sessions (`accessTokenRenewal`, T3 Code 0.1.11+). */
+  readonly accessTokenRenewal?: boolean;
 }
 
 export interface RemoteBearerSession {
@@ -159,6 +180,8 @@ export interface RemoteBearerSession {
 export interface EnvironmentPairingDeps {
   readonly fetchDescriptor: (httpBaseUrl: string) => Promise<RemoteDescriptor>;
   readonly bootstrap: (input: { httpBaseUrl: string; credential: string }) => Promise<RemoteBearerSession>;
+  /** Exchanges the link for a session bound to this device's key; absent where no key is available. */
+  readonly bootstrapDpop?: (input: { httpBaseUrl: string; credential: string }) => Promise<RemoteBearerSession>;
   readonly now: () => number;
 }
 
@@ -167,7 +190,12 @@ const runWithFetch = <A, E>(effect: Effect.Effect<A, E, never> | Effect.Effect<A
 
 const defaultDeps: EnvironmentPairingDeps = {
   fetchDescriptor: (httpBaseUrl) =>
-    runWithFetch(RemoteEnvironment.fetchRemoteEnvironmentDescriptor({ httpBaseUrl, timeoutMs: 10_000 })),
+    runWithFetch(RemoteEnvironment.fetchRemoteEnvironmentDescriptor({ httpBaseUrl, timeoutMs: 10_000 })).then((descriptor) => ({
+      environmentId: descriptor.environmentId, label: descriptor.label,
+      ...(descriptor.serverVersion ? { serverVersion: descriptor.serverVersion } : {}),
+      ...(descriptor.orchestrationProtocolVersion !== undefined ? { orchestrationProtocolVersion: descriptor.orchestrationProtocolVersion } : {}),
+      ...(descriptor.capabilities.accessTokenRenewal === true ? { accessTokenRenewal: true } : {}),
+    })),
   bootstrap: ({ httpBaseUrl, credential }) =>
     runWithFetch(RemoteAuth.bootstrapRemoteBearerSession({
       httpBaseUrl, credential, clientMetadata: { label: "VS Code", deviceType: "desktop" },
@@ -236,8 +264,11 @@ export async function pairRemoteEnvironment(
   }
 
   let session: RemoteBearerSession;
+  // A machine that renews sessions binds this one to the device key, so it never needs pairing
+  // again while it is used; an older machine keeps the fixed 30-day bearer session.
+  const keyBound = descriptor.accessTokenRenewal === true && deps.bootstrapDpop !== undefined;
   try {
-    session = await deps.bootstrap({ httpBaseUrl: target.httpBaseUrl, credential: target.credential });
+    session = await (keyBound ? deps.bootstrapDpop! : deps.bootstrap)({ httpBaseUrl: target.httpBaseUrl, credential: target.credential });
   } catch (cause) {
     const { status, tag } = classify(cause);
     if (status === 401 || status === 403 || (tag !== undefined && AUTH_TAGS.has(tag))) {
@@ -253,6 +284,7 @@ export async function pairRemoteEnvironment(
     wsBaseUrl: target.wsBaseUrl,
     accessToken: session.access_token,
     expiresAt: deps.now() + session.expires_in * 1000,
+    ...(keyBound ? { auth: "dpop" as const } : {}),
     scopes: session.scope?.split(" ").filter((s) => s.length > 0) ?? [],
     enabled: true,
     addedAt: new Date(deps.now()).toISOString(),

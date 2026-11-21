@@ -1,5 +1,7 @@
 import { peerLinksDenial, peerReachableUrls } from "../shared/peerLinks.js";
 import { mintPeerPairingCode } from "./peerPairingCode.js";
+import { bootstrapDpopSession, recordAuth } from "./environmentAuth.js";
+import type { DeviceKey } from "./deviceKey.js";
 import { AuthMcpClientAccess } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 /** Commands that pair, enable, disable and remove remote T3 environments. */
@@ -13,8 +15,12 @@ const stateLabel = { connecting: "Connecting…", connected: "Connected", error:
 
 export function registerEnvironmentCommands(input: {
   readonly catalog: EnvironmentCatalog; readonly client: MultiEnvironmentClient; readonly localEnvironmentId: () => string | undefined;
+  /** This computer's key for key-bound pairings (T3 Code 0.1.11+). */
+  readonly deviceKey: () => Promise<DeviceKey>;
 }): { readonly addMachine: (input: unknown) => Promise<void>; readonly environmentAction: (action: string, environmentId?: string) => Promise<void>; readonly clearRecoveredIgnores: () => void; readonly disposables: vscode.Disposable[] } {
   const { catalog, client } = input;
+  // Machines that renew sessions get one bound to this computer's key; older machines keep 30-day bearer pairings.
+  const pairingDeps = { bootstrapDpop: bootstrapDpopSession(input.deviceKey) };
   const addEnvironment = async () => {
     const link = await vscode.window.showInputBox({
       title: "Add T3 Environment",
@@ -24,7 +30,7 @@ export function registerEnvironmentCommands(input: {
     if (!link?.trim()) return;
     try {
       const record = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Pairing with T3 environment…" },
-        () => pairRemoteEnvironment(link.trim(), { ...(input.localEnvironmentId() ? { localEnvironmentId: input.localEnvironmentId()! } : {}) }));
+        () => pairRemoteEnvironment(link.trim(), { deps: pairingDeps, ...(input.localEnvironmentId() ? { localEnvironmentId: input.localEnvironmentId()! } : {}) }));
       await catalog.upsert(record);
       void vscode.window.showInformationMessage(`T3 VSCode: paired with ${record.label}. Its sessions for this repository appear in Sessions.`);
     } catch (cause) {
@@ -45,13 +51,13 @@ export function registerEnvironmentCommands(input: {
       if (request.conversations) {
         const pairingUrl = new URL("pair", `${address.href.replace(/\/$/, "")}/`);
         pairingUrl.hash = `token=${encodeURIComponent(request.code)}`;
-        const record = await pairRemoteEnvironment(pairingUrl.href, { ...(input.localEnvironmentId() ? { localEnvironmentId: input.localEnvironmentId()! } : {}), ...(request.environmentId ? { expectedEnvironmentId: request.environmentId } : {}) });
+        const record = await pairRemoteEnvironment(pairingUrl.href, { deps: pairingDeps, ...(input.localEnvironmentId() ? { localEnvironmentId: input.localEnvironmentId()! } : {}), ...(request.environmentId ? { expectedEnvironmentId: request.environmentId } : {}) });
         await catalog.upsert(record);
         if (request.agents) {
           // The local T3 server dials this address itself, so loopback or tunnel addresses are not usable for it.
           const urls = peerReachableUrls([...(client.configForEnvironment?.(record.environmentId)?.directEndpoints ?? []).map(endpoint => endpoint.httpBaseUrl), record.httpBaseUrl]);
           if (!urls[0]) throw new Error("No address the local server can reach");
-          const pairingCode = await mintPeerPairingCode(record.httpBaseUrl, record.accessToken, access);
+          const pairingCode = await mintPeerPairingCode(record.httpBaseUrl, recordAuth(record, record.auth === "dpop" ? await input.deviceKey() : null), access);
           await client.linkPeer({ url: urls[0], alternateUrls: urls.slice(1), expectedEnvironmentId: record.environmentId, expectedLabel: record.label, pairingCode, access });
         }
       } else await client.linkPeer({ url: address.href, pairingCode: request.code, access });
