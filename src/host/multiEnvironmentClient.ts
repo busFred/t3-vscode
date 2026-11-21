@@ -160,11 +160,13 @@ export class MultiEnvironmentClient {
     await subscription?.().catch(() => undefined);
     // Sessions stay listed while reconnecting; commands report the machine as disconnected.
     remote.client = null; remote.state = "error"; remote.error = reason;
-    this.emitMerged(); this.onRemoteStatus?.();
-    if (this.disposed || !remote.record.enabled) return;
-    const delay = Math.min(this.reconnectDelayMs * 2 ** remote.attempts, 60_000); remote.attempts += 1;
-    remote.retry = setTimeout(() => { remote.retry = null; if (remote.generation === generation && !this.disposed) this.startRemote(remote); }, delay);
-    remote.retry.unref?.();
+    // Schedule the retry before telling listeners: a listener that throws must not stop reconnects for good (T3 0.1.11).
+    if (!this.disposed && remote.record.enabled) {
+      const delay = Math.min(this.reconnectDelayMs * 2 ** remote.attempts, 60_000); remote.attempts += 1;
+      remote.retry = setTimeout(() => { remote.retry = null; if (remote.generation === generation && !this.disposed) this.startRemote(remote); }, delay);
+      remote.retry.unref?.();
+    }
+    try { this.emitMerged(); this.onRemoteStatus?.(); } catch { /* a failing listener is not a connection failure; callers run this unawaited */ }
   }
   private async stopRemote(remote: Remote): Promise<void> {
     remote.generation += 1;
