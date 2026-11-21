@@ -16,6 +16,7 @@
   - Message-rail previews show quoted text instead of raw markup.
   - A failed run shows Failed instead of Waiting.
   - Copying items from the middle of a numbered list keeps their numbers.
+- Validation (final source `377f746`): typecheck clean; 888/888 unit tests; `pnpm run build`; `verify-views.ts` 16/16; `verify-ui.mjs` 6 PASS lines; real VS Code `verify-edh.mjs --undo-only` 18/18 on the exact source against an isolated T3 Code 0.1.11 server, including both side-chat insertions in a new chat panel and a session tab, no waiver; live `verify-host.ts` 4/4 and `verify-edh.mjs --requests-only` 2/2 with GPT-6 Luna Low; key-bound pairing and renewal checked live against isolated T3 Code 0.1.11 servers. Reviews: fresh-context regression review APPROVE WITH NITS; Fable security and performance audit "ship after fixes" (fixed); five-round council (final scores Claude Opus 9.5, Gemini Neon 9.5, Muse Wonder Full 9.5, Codex Sol 7, whose remaining point is unchanged from 0.3.14 and was declined); final fresh-context regression review APPROVE WITH NITS (fixed).
 
 ## 0.3.14 — Release
 

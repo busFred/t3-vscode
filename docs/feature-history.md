@@ -60,7 +60,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
 | [Native themes and fonts](#native-themes-and-fonts) | Theme foregrounds and equal chat/search typography. | v0.0.1 | v0.1.13 |
 | [T3 VSCode branding](#t3-vscode-branding) | Extension identity, scannable README listing and a separate user guide for reference detail. | v0.0.7 | v0.1.19 |
-| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.3.14 |
+| [Isolated development and packaging](#isolated-development-and-packaging) | Tests in disposable profiles and produces channel-specific VSIX installers. | v0.0.1 | v0.3.15 |
 | [Release versioning](#release-versioning) | Keeps the owner-selected version, publishes only a specifically authorized version/channel, and tags each published version with a GitHub release. | v0.1.10 | v0.3.7 |
 | [Feature tracking and regression review](#feature-tracking-and-regression-review) | Maintains this history and requires an independent review before packaging. | v0.0.8 | v0.0.8 |
 | [Tab History](#tab-history) | Searchable conversation switching within each editor tab. | v0.1.13 | v0.1.22 |
@@ -2364,6 +2364,38 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
   was not run here: it needs real VS Code. The separate native-undo gate
   (`scripts/verify-native-undo.mjs`, via `verify-edh.mjs --undo-only`) still must be run in real
   VS Code before any VSIX.
+
+#### v0.3.15 — vendored T3 Code pinned to 0.1.11; release verification
+
+- Move the vendored packages from tag `v0.1.10` (`7d32075e37`) to tag `v0.1.11` (`59651c1761`,
+  2026-11-20), 643 upstream changes. One closure file is added (`issue-tracker-linear`
+  `shared/issueUrl.ts`) and `gt-i18n` 1.0.40 becomes a runtime dependency (English text needs no
+  setup). Every vendored file matches upstream except the documented patches. No RPC was removed, so
+  the minimum server stays 0.1.5. Usage text moved upstream from `usageLimits` to `usageLimitsCopy`.
+- Not ported (owner decision): the Issues page and linked issues, browser tunnels and port
+  forwarding, app translations, usage pace and title shimmer.
+- Validation on the final source (`377f746`): typecheck clean; 888/888 unit tests (with
+  `CHROMIUM_PATH`); `pnpm run build`; `verify-views.ts` 16/16; `verify-ui.mjs` 6 PASS lines;
+  `verify-composer-undo.ts` including both side-chat insertions, chip removal and reply cancel. Real
+  VS Code `verify-edh.mjs --undo-only` 18/18 on the exact source against an isolated T3 Code 0.1.11
+  server (scratch home under `/tmp`, OS-assigned port, rich fixture), including Add to main chat and
+  the side-chat `@` mention in a new chat panel and a session tab; no waiver. An earlier run failed
+  twice at the sidebar-to-composer focus step while another project held the machine at load ~25; it
+  passed first time once load fell. Live `verify-host.ts` 4/4 and `verify-edh.mjs --requests-only`
+  2/2 (second attempt; it needs `workspace/example.ts` in the isolated home) with GPT-6 Luna Low.
+  Key-bound pairing was checked live against isolated T3 Code 0.1.11 servers: pairing stores its key,
+  DPoP socket and HTTP requests, renewal (twice from one token), refusal for another key, a key-bound
+  token refused as bearer, and the real refusal shape (`EnvironmentAuthInvalidError`,
+  `invalid_credential`). The multi-view reorder check had waited on the wrong element (test fix only).
+- Reviews: fresh-context regression review (Claude Opus) APPROVE WITH NITS; Fable security and
+  performance audit "ship after fixes" (all should-fix items fixed: assistant leading-whitespace
+  markers, pairing-scoped renewals, proof-refusal handling, idle catalog writes, renewal loops); a
+  five-round council (Claude Opus 6.5→8→8.5→9→9.5, Codex Sol 5→6→7→7.5→7, Gemini Neon 7→8→9→9.5→9.5,
+  Muse Wonder Full 6→8.5→9→9→9.5; Muse and Gemini paired with a GPT-6 Luna helper from round 3/4),
+  whose findings were fixed except one declined point: two windows re-pairing two different
+  machines within the same moment can lose one catalog update, as in v0.3.14 (last write wins; VS
+  Code secret storage has no cross-window lock). A final fresh-context regression review (Claude
+  Opus) approved with nits (side-chat user guide, availability wording, a closed source tab), fixed.
 
 #### v0.3.14 — vendored T3 Code pinned to 0.1.10
 
