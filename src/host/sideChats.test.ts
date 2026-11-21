@@ -98,3 +98,20 @@ test("closing an unused side chat keeps it while its draft holds typed text", as
   await host.discardUnusedSideChat(empty);
   assert.ok(client.commands.some(command => command.type === "thread.delete" && command.threadId === empty && command.onlyIfUnused));
 });
+
+test("archiving the main chat keeps the draft and visibility of a side chat the server leaves active", async t => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  await host.selectThread("first");
+  seedSideChatParent(client);
+  const busy = await host.startSideChat("first");
+  const idle = await host.startSideChat("first");
+  for (const id of [busy, idle]) { await host.selectThread(id); host.saveComposerDraft(id, { text: `draft ${id}`, contexts: [] }, undefined); }
+  // A side chat still running work is not archived with its parent (T3 Code 0.1.11).
+  client.shell = { ...client.shell, threads: client.shell.threads.map(thread => thread.id === busy ? { ...thread, activeRunId: "run-busy" as never } : thread) };
+  await host.threadAction("first", "archive");
+  assert.ok(host.snapshot().threads.some(thread => thread.id === busy), "the active side chat stays reachable");
+  assert.equal((await host.restoreComposerDraft(busy)).draft.text, `draft ${busy}`);
+  assert.equal(host.sideChatClosed(idle), true);
+  await host.threadAction("first", "unarchive");
+  assert.equal((await host.restoreComposerDraft(idle)).draft.text, "", "the archived side chat's draft was discarded");
+});

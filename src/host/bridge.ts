@@ -128,7 +128,7 @@ export class BridgeHandler {
     const discarded = action === "archive" || action === "delete" ? this.hostState.snapshot(viewId).threads
       .filter(entry => entry.relationshipToParent === "side-chat" && (entry.id === id || entry.parentThreadId === id)).map(entry => entry.id) : [];
     const created = action === "start-side-chat" ? await this.hostState.startSideChat(id, viewId) : await this.hostState.threadAction(id, action, title);
-    this.registry.discardSideChatDrafts(discarded);
+    this.registry.discardSideChatDrafts(discarded.filter(entry => this.hostState.sideChatClosed(entry)));
     if ((action === "duplicate" || action === "start-side-chat") && created) {
       if (this.viewActions.openSessionTab) await this.viewActions.openSessionTab(created, false, viewId);
       else await this.hostState.selectThread(created, viewId);

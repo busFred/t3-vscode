@@ -1349,8 +1349,16 @@ export class HostState {
       if (!visible.has(thread.id)) return false;
       if (thread.lineage.sideChat !== true) return true;
       const parent = thread.lineage.parentThreadId && byId.get(thread.lineage.parentThreadId);
-      return !!parent && visible.has(parent.id) && !parent.archivedAt && environment(parent.id) === environment(thread.id);
+      // The server keeps a side chat with running work active when its parent is archived; it stays
+      // reachable even while the archived parent is not loaded. Archived side chats follow their parent.
+      if (!parent || !visible.has(parent.id)) return !thread.archivedAt;
+      return (!parent.archivedAt || !thread.archivedAt) && environment(parent.id) === environment(thread.id);
     });
+  }
+  /** A side chat that is gone or archived, so its draft has nothing left to belong to. */
+  sideChatClosed(id: string): boolean {
+    const thread = this.allThreads().find((entry) => entry.id === id);
+    return !thread || !!thread.archivedAt || !!thread.deletedAt;
   }
   private findThread(id: string | undefined): OrchestrationV2ThreadShell | undefined {
     if (!this.derived) return this.visibleThreads().find((thread) => thread.id === id);
@@ -2485,7 +2493,11 @@ export class HostState {
         const sideChatIds = closing ? this.sideChatsOf(id).map(child => child.id) : [];
         if (closing && this.requireThread(id).lineage.sideChat === true) sideChatIds.push(ThreadId.make(id));
         await this.client.dispatch({ type: `thread.${action}`, commandId: randomUUID(), threadId: id, ...(action === "unsettle" ? { reason: "user" } : {}) });
-        for (const childId of sideChatIds) await this.clearSideChatDraft(childId);
+        if (sideChatIds.length) {
+          // The server keeps a side chat with running work active; only drafts of side chats it closed go.
+          this.shell = await this.client.snapshotShell().catch(() => this.shell);
+          for (const childId of sideChatIds) if (this.sideChatClosed(childId)) await this.clearSideChatDraft(childId);
+        }
       } else if (action === "snooze" || action === "unsnooze") {
         if (!this.supports(id, "threadSnooze")) throw new Error("This T3 server cannot snooze threads. Update T3 Code, then retry.");
         if (action === "unsnooze") await this.client.dispatch({ type: "thread.unsnooze", commandId: randomUUID(), threadId: id, reason: "user" });

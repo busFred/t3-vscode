@@ -170,14 +170,20 @@ export class FakeTransport implements HostTransport {
       this.shellHandler?.({ kind: "snapshot", snapshot: this.shell });
     }
     if (command.type === "thread.archive") {
-      const thread = this.shell.threads.find((thread) => thread.id === command.threadId)!;
-      this.shell = { ...this.shell, threads: this.shell.threads.filter((thread) => thread.id !== command.threadId) };
-      this.archive = { ...this.archive, threads: [...this.archive.threads, { ...thread, archivedAt: v2Now }] };
+      // As T3 Code 0.1.11: archiving cascades to the thread's side chats, except one still running work.
+      const moving = new Set([command.threadId, ...this.shell.threads.filter((thread) => thread.lineage.sideChat === true
+        && thread.lineage.parentThreadId === command.threadId && !thread.activeRunId).map((thread) => thread.id)]);
+      const moved = this.shell.threads.filter((thread) => moving.has(thread.id));
+      this.shell = { ...this.shell, threads: this.shell.threads.filter((thread) => !moving.has(thread.id)) };
+      this.archive = { ...this.archive, threads: [...this.archive.threads, ...moved.map((thread) => ({ ...thread, archivedAt: v2Now }))] };
     }
     if (command.type === "thread.unarchive") {
-      const thread = this.archive.threads.find((thread) => thread.id === command.threadId)!;
-      this.archive = { ...this.archive, threads: this.archive.threads.filter((thread) => thread.id !== command.threadId) };
-      this.shell = { ...this.shell, threads: [...this.shell.threads, { ...thread, archivedAt: null }] };
+      // Unarchive restores the side chats the parent's archive took.
+      const moving = new Set([command.threadId, ...this.archive.threads.filter((thread) => thread.lineage.sideChat === true
+        && thread.lineage.parentThreadId === command.threadId).map((thread) => thread.id)]);
+      const moved = this.archive.threads.filter((thread) => moving.has(thread.id));
+      this.archive = { ...this.archive, threads: this.archive.threads.filter((thread) => !moving.has(thread.id)) };
+      this.shell = { ...this.shell, threads: [...this.shell.threads, ...moved.map((thread) => ({ ...thread, archivedAt: null }))] };
     }
     if (command.type === "thread.delete") {
       this.shell = { ...this.shell, threads: this.shell.threads.filter((thread) => thread.id !== command.threadId) };
