@@ -171,7 +171,10 @@ export class MultiEnvironmentClient {
           if (!key) { await client.disconnect().catch(() => undefined); if (current()) this.keyBoundEnded(remote, KEY_UNREADABLE); return; }
           await client.connect(remoteServer(record), recordAuth(record, key, async () => {
             if (!current()) throw new Error("This connection attempt was replaced.");
-            return this.currentToken(remote);
+            const token = await this.currentToken(remote);
+            // A re-pair during the renewal wait must not hand the new pairing's token to this attempt's key.
+            if (!current() || pairingId(remote.record) !== pairingId(record)) throw new Error("This connection attempt was replaced.");
+            return token;
           }));
         } else await client.connect(remoteServer(record), record.accessToken);
         if (!current()) { await client.disconnect(); return; }
@@ -300,6 +303,8 @@ export class MultiEnvironmentClient {
     if (remote.generation !== generation) return;
     const subscription = remote.subscription; remote.subscription = null;
     await subscription?.().catch(() => undefined);
+    // A replacement connection may have started (and even connected) while unsubscribing.
+    if (remote.generation !== generation) return;
     // Sessions stay listed while reconnecting; commands report the machine as disconnected.
     remote.client = null; remote.state = "error"; remote.error = reason;
     // Schedule the retry before telling listeners: a listener that throws must not stop reconnects for good (T3 0.1.11).

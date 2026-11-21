@@ -437,3 +437,25 @@ test("A key-bound record left in v1 by an earlier build moves to its own key on 
   assert.equal((await catalog.list())[0]?.enabled, false);
   assert.ok(secrets.values.get("t3-vscode.environments.keyBound.v1")!.includes("dpopKey"));
 });
+
+test("A closing connection that finishes unsubscribing after its replacement connected leaves the replacement alone", async () => {
+  let releaseUnsubscribe!: () => void;
+  const clients: Array<AuthRecordingClient & { unsubscribe?: () => Promise<void> }> = [];
+  class SlowUnsubscribeClient extends AuthRecordingClient {
+    override async subscribeShell() { return () => new Promise<void>((resolve) => { releaseUnsubscribe = resolve; }); }
+  }
+  const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
+    makeClient: () => { const client = clients.length === 0 ? new SlowUnsubscribeClient() : new AuthRecordingClient(); clients.push(client); return client as never; },
+    reconnectDelayMs: 1, renewToken: async (record) => record,
+  });
+  await multi.setRemoteEnvironments([keyBound()]);
+  await until(() => multi.remoteStatuses()[0]?.state === "connected");
+  clients[0]!.onClose?.(); // the first socket drops; unsubscribing hangs
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  multi.reconnectRemote("kb");
+  await until(() => clients.length === 2 && multi.remoteStatuses()[0]?.state === "connected");
+  releaseUnsubscribe();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(multi.remoteStatuses()[0]!.state, "connected");
+  await multi.dispose();
+});
