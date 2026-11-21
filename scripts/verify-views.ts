@@ -885,11 +885,15 @@ try {
   await queuedEditor.fill("Edited queued follow-up");
   await second.screenshot({ path: `${evidence}/queued-message-editor-font.png` });
   await second.getByRole("button", { name: "Save queued message" }).click();
-  await second.getByText("Edited queued follow-up", { exact: true }).waitFor();
+  // The textarea already contains the edited text while saving disables the reorder buttons.
+  await second.locator(".queued-preview").first().filter({ hasText: /^Edited queued follow-up$/ }).waitFor();
   assert.equal(await input.inputValue(), composerDraftBeforeQueueEdit);
   assert.equal(await second.locator('.queued-preview').first().evaluate((element) => getComputedStyle(element).fontSize), queuedPreviewFont);
   await second.getByRole("button", { name: "Reorder queued message" }).nth(1).press("ArrowUp");
-  await second.waitForFunction(() => document.querySelector('.queued-preview')?.textContent === "Queued follow-up 2");
+  await second.waitForFunction(() => {
+    const previews = document.querySelectorAll(".queued-preview");
+    return previews[0]?.textContent === "Queued follow-up 2" && previews[1]?.textContent === "Edited queued follow-up";
+  });
   assert.equal(await second.getByRole("combobox", { name: "Follow-up delivery" }).count(), 0);
   const submitFollowUp = async (page: Page, text: string, shortcut: string, mode: "auto" | "queue" | "steer") => {
     const message = page.getByRole("textbox", { name: "Message", exact: true });
