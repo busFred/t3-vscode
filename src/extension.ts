@@ -47,7 +47,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const catalog = new EnvironmentCatalog(context.secrets);
   // One key signs for every key-bound pairing; it is loaded once, and a failed load is retried on next use.
   let deviceKeyLoad: Promise<DeviceKey> | null = null;
-  const deviceKey = () => (deviceKeyLoad ??= loadOrCreateDeviceKey(context.secrets).catch((cause: unknown) => { deviceKeyLoad = null; throw cause; }));
+  // A key this window just created is not kept: the next use re-reads storage, so two windows creating
+  // one at the same moment settle on the one that was stored last.
+  const deviceKey = () => (deviceKeyLoad ??= loadOrCreateDeviceKey(context.secrets).then((key) => { if (key.created) deviceKeyLoad = null; return key; }, (cause: unknown) => { deviceKeyLoad = null; throw cause; }));
   const client = environments = new MultiEnvironmentClient(new T3Client(), {
     deviceKey,
     renewToken: async (record) => catalog.updateToken(record, await renewDpopToken(record, await deviceKey())),

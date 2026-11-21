@@ -18,6 +18,8 @@ export interface DeviceKey {
   readonly publicJwk: DevicePublicJwk;
   /** ES256 over the JWS signing input; WebCrypto returns the raw `r‖s` form a JWS needs. */
   readonly sign: (data: Uint8Array) => Promise<Uint8Array>;
+  /** Set on a key this call created, which another window creating one at the same moment may have replaced in storage. */
+  readonly created?: true;
 }
 
 const ALGORITHM = { name: "ECDSA", namedCurve: "P-256" } as const;
@@ -55,7 +57,7 @@ export async function loadOrCreateDeviceKey(secrets: Pick<SecretBackend, "get" |
   await secrets.store(DEVICE_KEY_STORAGE_KEY, JSON.stringify({ kty: created.kty, crv: created.crv, x: created.x, y: created.y, d: created.d }));
   const stored = parseStored(await secrets.get(DEVICE_KEY_STORAGE_KEY));
   if (!stored) throw new Error("Could not save this device's sign-in key.");
-  return importKey(stored);
+  return { ...await importKey(stored), created: true };
 }
 
 const base64Url = (bytes: Uint8Array | string): string => Buffer.from(bytes).toString("base64url");

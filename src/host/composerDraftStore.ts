@@ -94,6 +94,15 @@ export class ComposerDraftStore {
     this.save(record, record.draft, record.selection);
     return record;
   }
+  /** Whether any stored draft for `threadId` holds text, references or attachments. */
+  hasContent(scope: string, threadId: string): boolean {
+    this.load();
+    for (const record of this.records.values()) {
+      if (record.scope !== scope || record.threadId !== threadId) continue;
+      if (record.draft.text.trim() || record.draft.contexts.length || record.draft.attachments?.length) return true;
+    }
+    return false;
+  }
   clearThread(scope: string, threadId: string): Array<{ id: string; attachmentIds: string[] }> {
     this.load();
     const cleared: Array<{ id: string; attachmentIds: string[] }> = [];

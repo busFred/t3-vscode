@@ -84,3 +84,17 @@ test("a queued message cannot be edited into a side chat", async t => {
   await assert.rejects(host.queueAction("first", "edit", "queued-first-1", "/btw question", undefined), /A queued message can't move to a side chat/);
   assert.ok(!client.commands.some(command => command.type === "queued-run.edit" || command.type === "thread.fork"));
 });
+
+test("closing an unused side chat keeps it while its draft holds typed text", async t => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  await host.selectThread("first");
+  seedSideChatParent(client);
+  const empty = await host.startSideChat("first");
+  await host.selectThread(empty);
+  host.saveComposerDraft(empty, { text: "a question for later", contexts: [] }, undefined);
+  await host.discardUnusedSideChat(empty);
+  assert.ok(!client.commands.some(command => command.type === "thread.delete" && command.threadId === empty));
+  host.saveComposerDraft(empty, { text: "", contexts: [] }, undefined);
+  await host.discardUnusedSideChat(empty);
+  assert.ok(client.commands.some(command => command.type === "thread.delete" && command.threadId === empty && command.onlyIfUnused));
+});

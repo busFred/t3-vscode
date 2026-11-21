@@ -1870,6 +1870,9 @@ export class HostState {
     return this.enqueue(async () => {
       const thread = this.findThread(id);
       if (thread?.lineage.sideChat !== true || thread.archivedAt || this.hasUserMessage(thread)) return;
+      // As with other untouched chats, a typed but unsent draft keeps it (T3 deletes it with the draft);
+      // it stays under its conversation in Sessions to come back to.
+      if (this.composerDrafts.hasContent(this.draftScope(), id)) return;
       await this.client.dispatch({ type: "thread.delete", commandId: randomUUID(), threadId: id, onlyIfUnused: true });
       this.shell = await this.client.snapshotShell();
       if (!this.findThread(id)) await this.clearSideChatDraft(id);

@@ -112,7 +112,8 @@ export class MultiEnvironmentClient {
     deviceKey?: () => Promise<DeviceKey>; renewToken?: (record: RemoteEnvironmentRecord) => Promise<RemoteEnvironmentRecord | null> } = {}) {
     this.primary = primary; this.makeClient = options.makeClient ?? (() => new T3Client()); this.reconnectDelayMs = options.reconnectDelayMs ?? 2000;
     this.deviceKey = options.deviceKey; this.renewToken = options.renewToken;
-    this.checkCredential = options.checkCredential ?? checkCredential;
+    // The bearer session check must never see a key-bound token; such a record has no bearer answer.
+    this.checkCredential = options.checkCredential ?? (async (record) => record.auth === "dpop" ? null : checkCredential(record));
   }
   get connected(): boolean { return this.primary.connected; }
   get onClose(): (() => void) | null { return this.primary.onClose; }
