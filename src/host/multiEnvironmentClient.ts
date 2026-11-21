@@ -238,12 +238,16 @@ export class MultiEnvironmentClient {
   private renew(remote: Remote): Promise<void> {
     const renewToken = this.renewToken;
     if (!renewToken) return Promise.reject(new Error("This computer cannot renew its sign-in to paired machines."));
-    remote.renewing ??= (async () => {
+    // A renewal belongs to one pairing: one still running when the machine is paired again must not
+    // put the old session's token on the new pairing.
+    const pairing = remote.record.addedAt;
+    const renewing = remote.renewing ??= (async () => {
       const stored = await renewToken(remote.record);
+      if (remote.record.addedAt !== pairing) throw new Error("This machine was paired again.");
       if (!stored) throw new Error("This machine is no longer paired.");
       remote.record = stored; remote.renewedAt = Date.now();
-    })().finally(() => { remote.renewing = null; });
-    return remote.renewing;
+    })().finally(() => { if (remote.renewing === renewing) remote.renewing = null; });
+    return renewing;
   }
   /** Keeps a connected key-bound session alive: the server only moves its 30-day window when the token renews. */
   private scheduleRenewal(remote: Remote, generation: number, delayMs?: number): void {
@@ -292,7 +296,7 @@ export class MultiEnvironmentClient {
     remote.generation += 1;
     if (remote.retry) clearTimeout(remote.retry);
     if (remote.renewal) clearTimeout(remote.renewal);
-    remote.retry = null; remote.renewal = null; remote.renewedAt = undefined;
+    remote.retry = null; remote.renewal = null; remote.renewedAt = undefined; remote.renewing = null;
     const { subscription, client } = remote;
     remote.subscription = null; remote.client = null; remote.shell = null;
     if (client) { client.onClose = null; client.onConfig = null; }

@@ -138,7 +138,7 @@ test("A key-bound machine connects with DPoP, renews an expired token first, and
   const renewed: string[] = [];
   const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
     makeClient: () => { const client = new AuthRecordingClient(); clients.push(client); return client as never; },
-   
+
     renewToken: async (record) => { renewed.push(record.accessToken); return { ...record, accessToken: `${record.accessToken}+`, expiresAt: Date.now() + 3_600_000 }; },
   });
   await multi.setRemoteEnvironments([keyBound({ expiresAt: Date.now() - 1 })]);
@@ -162,7 +162,7 @@ test("A key-bound session the server refuses to renew stays listed as expired, n
   const refusal = { _tag: "EnvironmentAuthInvalidError", reason: "invalid_credential" };
   const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
     makeClient: () => { const client = new AuthRecordingClient(); client.connectError = refusal; return client as never; },
-   
+
     renewToken: async () => { throw refusal; },
   });
   multi.onRemoteRevoked = (record) => revoked.push(record.environmentId);
@@ -291,4 +291,35 @@ test("A key-bound pairing whose key is unreadable asks to be paired again and ne
   await until(() => multi.remoteStatuses()[0]?.state === "expired");
   assert.ok(clients.every((client) => client.auths.length === 0), "nothing was sent");
   await multi.dispose();
+});
+
+test("A renewal still running for the old pairing never lands on a fresh re-pairing", async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  const clients: AuthRecordingClient[] = [];
+  const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
+    makeClient: () => { const client = new AuthRecordingClient(); clients.push(client); return client as never; },
+    renewToken: async (record) => { if (record.accessToken === "old") { await pending; return { ...record, accessToken: "old-renewed", expiresAt: Date.now() + 3_600_000 }; } return record; },
+  });
+  void multi.setRemoteEnvironments([keyBound({ accessToken: "old", expiresAt: Date.now() - 1 })]); // renews inside connect, held
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await multi.setRemoteEnvironments([keyBound({ accessToken: "fresh", addedAt: "2026-04-01T00:00:00.000Z" })]);
+  await until(() => multi.remoteStatuses()[0]?.state === "connected");
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const latest = clients.at(-1)!.auths[0] as ConnectionAuth;
+  assert.equal((await latest.current()).token, "fresh");
+  await multi.dispose();
+});
+
+test("Renewed tokens never go back into the shared catalog", async () => {
+  const secrets = memorySecrets(), catalog = new EnvironmentCatalog(secrets);
+  const record = keyBound({ accessToken: "t1", expiresAt: 100 });
+  await catalog.upsert(record);
+  await catalog.updateToken(record, { accessToken: "t2", expiresAt: 200 });
+  await catalog.setEnabled(record.environmentId, false);
+  const stored = JSON.parse(secrets.values.get("t3-vscode.environments.v1")!) as { environments: Array<{ accessToken: string; enabled: boolean }> };
+  assert.equal(stored.environments[0]!.accessToken, "t1");
+  assert.equal(stored.environments[0]!.enabled, false);
+  assert.equal((await catalog.list())[0]!.accessToken, "t2");
 });

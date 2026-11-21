@@ -16,6 +16,7 @@ import { HostState, SIDEBAR_VIEW_ID } from "./host/hostState.js";
 import { resolveT3Home } from "./host/serverDiscovery.js";
 import { SecretCredentialStore } from "./host/sessionStore.js";
 import { T3Client } from "./host/t3Client.js";
+import { coalescedRun } from "./host/coalescedRun.js";
 import { recordKey, renewDpopToken } from "./host/environmentAuth.js";
 import { MultiEnvironmentClient } from "./host/multiEnvironmentClient.js";
 import { EnvironmentCatalog } from "./host/environmentCatalog.js";
@@ -199,7 +200,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
-  const syncEnvironments = () => catalog.list().then((records) => client.setRemoteEnvironments(records)).catch(() => undefined);
+  // One sync at a time: a removal arriving mid-read gets a fresh pass, so an older read never reconnects a removed machine.
+  const syncEnvironments = coalescedRun(async () => { await client.setRemoteEnvironments(await catalog.list()); });
   client.onRemoteStatus = () => { environmentControls.clearRecoveredIgnores(); hostState?.remoteEnvironmentsChanged(); };
   context.subscriptions.push(catalog.onDidChange(() => { void syncEnvironments(); }),
     ...environmentControls.disposables);

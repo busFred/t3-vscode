@@ -93,8 +93,17 @@ export class EnvironmentCatalog {
     this.secrets = secrets;
   }
 
-  /** Re-reads storage on every call; corrupt JSON or malformed entries are dropped. */
+  /** Re-reads storage on every call; corrupt JSON or malformed entries are dropped. Key-bound records carry their latest renewed token. */
   async list(): Promise<ReadonlyArray<RemoteEnvironmentRecord>> {
+    return Promise.all((await this.stored()).map(async (record) => {
+      if (record.auth !== "dpop") return record;
+      const token = parseToken(await this.secrets.get(tokenKey(record.environmentId)));
+      return token && samePairing(token, record) && token.expiresAt > (record.expiresAt ?? 0) ? { ...record, accessToken: token.accessToken, expiresAt: token.expiresAt } : record;
+    }));
+  }
+
+  /** The catalog as stored, without renewed tokens, which never go back into it. */
+  private async stored(): Promise<ReadonlyArray<RemoteEnvironmentRecord>> {
     const raw = await this.secrets.get(ENVIRONMENT_CATALOG_KEY);
     if (!raw) return [];
     try {
@@ -106,11 +115,7 @@ export class EnvironmentCatalog {
         const record = parseRecord(entry);
         if (record && !seen.has(record.environmentId)) { seen.add(record.environmentId); out.push(record); }
       }
-      return Promise.all(out.map(async (record) => {
-        if (record.auth !== "dpop") return record;
-        const token = parseToken(await this.secrets.get(tokenKey(record.environmentId)));
-        return token && samePairing(token, record) && token.expiresAt > (record.expiresAt ?? 0) ? { ...record, accessToken: token.accessToken, expiresAt: token.expiresAt } : record;
-      }));
+      return out;
     } catch {
       return [];
     }
@@ -181,7 +186,7 @@ export class EnvironmentCatalog {
   /** Serialized within the process; each run starts from a fresh read. */
   private mutate(change: (all: ReadonlyArray<RemoteEnvironmentRecord>) => ReadonlyArray<RemoteEnvironmentRecord>): Promise<void> {
     const run = this.queue.then(async () => {
-      const current = await this.list();
+      const current = await this.stored();
       const next = change(current);
       // Nothing changed (a renewal another window already stored, say): writing would only race other windows.
       if (JSON.stringify(next) === JSON.stringify(current)) return;

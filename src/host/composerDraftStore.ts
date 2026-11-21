@@ -99,7 +99,7 @@ export class ComposerDraftStore {
     this.load();
     for (const record of this.records.values()) {
       if (record.scope !== scope || record.threadId !== threadId) continue;
-      if (record.draft.text.trim() || record.draft.contexts.length || record.draft.attachments?.length) return true;
+      if (record.draft.text || record.draft.contexts.length || record.draft.attachments?.length) return true;
     }
     return false;
   }
