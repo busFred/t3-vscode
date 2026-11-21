@@ -37,28 +37,38 @@ interface Remote {
   record: RemoteEnvironmentRecord; client: RemoteClient | null; shell: OrchestrationV2ShellSnapshot | null;
   subscription: Subscription | null; state: RemoteConnectionState; error?: string; retry: ReturnType<typeof setTimeout> | null; attempts: number; generation: number;
   /** Key-bound sessions only: the next renewal, and the one in flight so concurrent callers share it. */
-  renewal?: ReturnType<typeof setTimeout> | null; renewing?: Promise<void> | null;
+  renewal?: ReturnType<typeof setTimeout> | null; renewing?: Promise<void> | null; renewedAt?: number;
 }
 /** Renew a key-bound token this long before it expires, and retry a failed renewal this often. */
-const RENEW_BEFORE_MS = 5 * 60_000, RENEW_RETRY_MS = 60_000, TOKEN_SKEW_MS = 60_000;
+const RENEW_BEFORE_MS = 5 * 60_000, RENEW_RETRY_MS = 60_000, TOKEN_SKEW_MS = 60_000, RENEW_JITTER_MS = 20_000;
 /**
  * How the T3 server refused a key-bound request, from its own typed error (a proxy's bare 401 has
  * none), found anywhere in the cause chain. As upstream (`mapRemoteDpopEnvironmentError`), only
  * `invalid_credential` ends the session; a proof outside its time window means this computer's
  * clock is off, which pairing again would not fix.
  */
-const refusal = (cause: unknown): "ended" | "clock" | null => {
+const refusal = (cause: unknown): "ended" | "clock" | "proxy" | "proof" | null => {
   for (let value = cause, depth = 0; typeof value === "object" && value !== null && depth < 6; value = (value as { cause?: unknown }).cause, depth++) {
     const error = value as { _tag?: unknown; reason?: unknown; dpopFailureReason?: unknown };
     if (error._tag !== "EnvironmentAuthInvalidError" || error.reason !== "invalid_credential") continue;
-    return error.dpopFailureReason === "time_window" ? "clock" : "ended";
+    // The proof itself was refused, not the session: pairing again would fail the same way, so keep retrying.
+    switch (error.dpopFailureReason) {
+      case "time_window": return "clock";
+      case "request_mismatch": return "proxy";
+      case "replay": case "invalid_proof": return "proof";
+      default: return "ended"; // key_mismatch, token_mismatch or no reason: the session is gone.
+    }
   }
   return null;
 };
-const CLOCK_SKEW = "This computer's clock is too far from that machine's. Correct the clock; it reconnects on its own.";
+const PROOF_REFUSED = {
+  clock: "This computer's clock is too far from that machine's. Correct the clock; it reconnects on its own.",
+  proxy: "Something in front of that machine changes the address of each request, so its sign-in check fails. Connect to it directly or fix the proxy.",
+  proof: "That machine refused this computer's sign-in proof. Retrying.",
+} as const;
 const KEY_BOUND_ENDED = "This machine signed this computer out, or it went unused for 30 days. Pair it again with a new link.";
 // Connection errors can quote the socket URL; never surface its ticket or token.
-const describeError = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause)).replace(/([?&#](?:wsTicket|token|access_token)=)[^&#\s]+/gi, "$1…");
+const describeError = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause)).replace(/([?&#](?:wsTicket|token|access_token|dpop)=)[^&#\s]+/gi, "$1…");
 const REMOTE_REFRESH_TIMEOUT_MS = 5000;
 const withTimeout = <A>(promise: Promise<A>, ms: number): Promise<A> => new Promise((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error("Timed out.")), ms); timer.unref?.();
@@ -179,11 +189,12 @@ export class MultiEnvironmentClient {
         if (!current()) return;
         await client.disconnect().catch(() => undefined);
         // A key-bound session answers for itself: renewing either works (retry the connection) or the server refuses it.
-        if (remote.record.auth === "dpop" && authFailure(cause)) {
+        // A token renewed moments ago is not the problem (a proxy guarding only the socket, say), so that is a plain retry.
+        if (remote.record.auth === "dpop" && authFailure(cause) && Date.now() - (remote.renewedAt ?? 0) > RENEW_BEFORE_MS) {
           const refused = await this.renew(remote).then(() => null, refusal);
           if (!current()) return;
           if (refused === "ended") { this.keyBoundEnded(remote); return; }
-          if (refused === "clock") { await this.remoteClosed(remote, generation, CLOCK_SKEW); return; }
+          if (refused) { await this.remoteClosed(remote, generation, PROOF_REFUSED[refused]); return; }
         }
         // Only the T3 server's own "not signed in" ends a pairing; a bare 401 from a proxy keeps retrying.
         else if (authFailure(cause) && await this.checkCredential(remote.record).catch(() => null) === false) {
@@ -222,24 +233,32 @@ export class MultiEnvironmentClient {
     remote.renewing ??= (async () => {
       const stored = await renewToken(remote.record);
       if (!stored) throw new Error("This machine is no longer paired.");
-      remote.record = stored;
+      remote.record = stored; remote.renewedAt = Date.now();
     })().finally(() => { remote.renewing = null; });
     return remote.renewing;
   }
   /** Keeps a connected key-bound session alive: the server only moves its 30-day window when the token renews. */
   private scheduleRenewal(remote: Remote, generation: number, delayMs?: number): void {
     if (remote.renewal) clearTimeout(remote.renewal);
-    const due = (remote.record.expiresAt ?? 0) - RENEW_BEFORE_MS - Date.now();
+    // Windows renewing the same pairing share an expiry; jitter spreads them so the first one's
+    // stored token lets the others skip.
+    const due = (remote.record.expiresAt ?? 0) - RENEW_BEFORE_MS - Date.now() + Math.random() * RENEW_JITTER_MS;
     remote.renewal = setTimeout(() => {
       remote.renewal = null;
       if (this.disposed || remote.generation !== generation) return;
+      // Another window already renewed (its token reached this one through the catalog).
+      if ((remote.record.expiresAt ?? 0) - RENEW_BEFORE_MS > Date.now()) { this.scheduleRenewal(remote, generation); return; }
       void this.renew(remote).then(() => {
         if (remote.generation === generation && !this.disposed) this.scheduleRenewal(remote, generation);
       }, async (cause: unknown) => {
         if (remote.generation !== generation || this.disposed) return;
         // Only the T3 server refusing the renewal ends the session; a network error, a proxy's 401 or a clock off retries.
         if (refusal(cause) === "ended") {
-          if (remote.generation === generation) { remote.generation += 1; await this.stopRemote(remote); this.keyBoundEnded(remote); }
+          if (remote.generation !== generation) return;
+          // stopRemote moves the generation at once; a catalog change that restarts the machine while it stops moves it again.
+          const stopping = this.stopRemote(remote), stopped = remote.generation;
+          await stopping;
+          if (remote.generation === stopped && !this.disposed) this.keyBoundEnded(remote);
           return;
         }
         if (remote.generation === generation && !this.disposed) this.scheduleRenewal(remote, generation, RENEW_RETRY_MS);

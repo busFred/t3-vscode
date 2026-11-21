@@ -70,19 +70,39 @@ test("Pairing binds the session to the device key only where the machine renews 
   assert.equal((await catalog.list())[0]!.auth, "dpop", "the binding survives storage");
 });
 
-test("A renewed token is stored unless another window stored a later one or the machine was re-paired", async () => {
+test("A renewed token is stored only for the same pairing, unless another window stored a later one", async () => {
   const secrets = memorySecrets(), catalog = new EnvironmentCatalog(secrets);
   const base: RemoteEnvironmentRecord = { environmentId: "e", label: "E", httpBaseUrl: "https://e.example/", wsBaseUrl: "wss://e.example/", accessToken: "t1", expiresAt: 100, auth: "dpop", scopes: [], enabled: true, addedAt: "2026-01-01T00:00:00.000Z" };
   await catalog.upsert(base);
-  assert.equal((await catalog.updateToken("e", "t1", { accessToken: "t2", expiresAt: 200 }))?.accessToken, "t2");
+  assert.equal((await catalog.updateToken(base, { accessToken: "t2", expiresAt: 200 }))?.accessToken, "t2");
   // A slower window renewing from t1 with an earlier expiry keeps the newer token.
-  assert.equal((await catalog.updateToken("e", "t1", { accessToken: "t2-late", expiresAt: 150 }))?.accessToken, "t2");
+  assert.equal((await catalog.updateToken(base, { accessToken: "t2-late", expiresAt: 150 }))?.accessToken, "t2");
+  // A late renewal of the old session never replaces a fresh key-bound re-pairing, even with a later expiry.
+  const repaired = { ...base, accessToken: "fresh", expiresAt: 300, addedAt: "2026-02-01T00:00:00.000Z" };
+  await catalog.upsert(repaired);
+  assert.equal(await catalog.updateToken(base, { accessToken: "old-session", expiresAt: 400 }), null);
+  assert.equal((await catalog.list())[0]!.accessToken, "fresh");
   const { auth: _auth, ...bearerPairing } = base;
   await catalog.upsert({ ...bearerPairing, accessToken: "bearer" });
-  assert.equal(await catalog.updateToken("e", "bearer", { accessToken: "x", expiresAt: 999 }), null, "a bearer pairing is never rewritten");
+  assert.equal(await catalog.updateToken({ ...base, accessToken: "bearer" }, { accessToken: "x", expiresAt: 999 }), null, "a bearer pairing is never rewritten");
   assert.equal((await catalog.list())[0]!.accessToken, "bearer");
-  assert.equal(await catalog.updateToken("missing", "t", { accessToken: "x", expiresAt: 1 }), null);
-  assert.ok(secrets.values.has(ENVIRONMENT_CATALOG_KEY));
+  assert.equal(await catalog.updateToken({ ...base, environmentId: "missing" }, { accessToken: "x", expiresAt: 1 }), null);
+});
+
+test("A catalog change that changes nothing is not written, so idle renewals never race other windows", async () => {
+  const secrets = memorySecrets(), catalog = new EnvironmentCatalog(secrets);
+  let writes = 0;
+  const store = secrets.store.bind(secrets);
+  secrets.store = async (key, value) => { writes += 1; await store(key, value); };
+  const record: RemoteEnvironmentRecord = { environmentId: "e", label: "E", httpBaseUrl: "https://e.example/", wsBaseUrl: "wss://e.example/", accessToken: "t1", expiresAt: 100, auth: "dpop", scopes: [], enabled: true, addedAt: "2026-01-01T00:00:00.000Z" };
+  await catalog.upsert(record);
+  await catalog.updateToken({ ...record, environmentId: "missing" }, { accessToken: "x", expiresAt: 1 });
+  await catalog.setEnabled("e", true);
+  assert.equal(writes, 1);
+});
+
+test("A key-bound record never falls back to a bearer token", () => {
+  assert.throws(() => recordAuth({ auth: "dpop", accessToken: "bound", expiresAt: null } as RemoteEnvironmentRecord, null), /sign-in key/);
 });
 
 /** Just enough of T3Client for the remote manager: records the auth each connection used. */
@@ -174,4 +194,31 @@ test("A proof refused for this computer's clock keeps the pairing and says why",
   await until(() => multi.remoteStatuses()[0]?.state === "error");
   assert.match(multi.remoteStatuses()[0]!.error ?? "", /clock/);
   await multi.dispose();
+});
+
+test("A refused proof (proxy rewriting the request, replay) keeps the pairing and retries; a refused session ends it", async () => {
+  const key = await loadOrCreateDeviceKey(memorySecrets());
+  for (const [dpopFailureReason, expected] of [["request_mismatch", /address of each request/], ["replay", /Retrying/], ["key_mismatch", null]] as const) {
+    const refused = { _tag: "EnvironmentAuthInvalidError", reason: "invalid_credential", dpopFailureReason };
+    const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
+      makeClient: () => { const client = new AuthRecordingClient(); client.connectError = refused; return client as never; },
+      reconnectDelayMs: 60_000, deviceKey: async () => key, renewToken: async () => { throw refused; },
+    });
+    await multi.setRemoteEnvironments([keyBound()]);
+    await until(() => ["error", "expired"].includes(multi.remoteStatuses()[0]?.state ?? ""));
+    const status = multi.remoteStatuses()[0]!;
+    if (expected) { assert.equal(status.state, "error", dpopFailureReason); assert.match(status.error ?? "", expected); }
+    else assert.equal(status.state, "expired", dpopFailureReason);
+    await multi.dispose();
+  }
+});
+
+test("Pairing explains a refused proof instead of blaming the link", async () => {
+  for (const [dpopFailureReason, expected] of [["time_window", /clock/], ["request_mismatch", /changes the address/], ["key_mismatch", /rejected/]] as const) {
+    await assert.rejects(pairRemoteEnvironment("https://box.example.ts.net/pair#token=ABCDEFGH2345", { deps: {
+      fetchDescriptor: async () => ({ ...descriptor, accessTokenRenewal: true }),
+      bootstrap: async () => session, now: () => 1,
+      bootstrapDpop: async () => { throw { _tag: "EnvironmentAuthInvalidError", reason: "invalid_credential", dpopFailureReason, status: 401 }; },
+    } }), expected);
+  }
 });

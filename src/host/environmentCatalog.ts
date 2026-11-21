@@ -117,11 +117,12 @@ export class EnvironmentCatalog {
    * Stores a renewed key-bound token. Another window may have renewed first; the later expiry wins,
    * and a record that was re-paired or removed meanwhile is left alone.
    */
-  async updateToken(environmentId: string, previousToken: string, next: { readonly accessToken: string; readonly expiresAt: number }): Promise<RemoteEnvironmentRecord | null> {
+  async updateToken(previous: Pick<RemoteEnvironmentRecord, "environmentId" | "accessToken" | "addedAt" | "httpBaseUrl">, next: { readonly accessToken: string; readonly expiresAt: number }): Promise<RemoteEnvironmentRecord | null> {
     let stored: RemoteEnvironmentRecord | null = null;
     await this.mutate((all) => all.map((e) => {
-      if (e.environmentId !== environmentId || e.auth !== "dpop") return e;
-      const newer = e.accessToken === previousToken || (e.expiresAt ?? 0) < next.expiresAt;
+      // Only the same pairing: a renewal of the old session must not replace a fresh re-pairing.
+      if (e.environmentId !== previous.environmentId || e.auth !== "dpop" || e.addedAt !== previous.addedAt || e.httpBaseUrl !== previous.httpBaseUrl) return e;
+      const newer = e.accessToken === previous.accessToken || (e.expiresAt ?? 0) < next.expiresAt;
       stored = newer ? { ...e, accessToken: next.accessToken, expiresAt: next.expiresAt } : e;
       return stored;
     }));
@@ -149,7 +150,10 @@ export class EnvironmentCatalog {
   /** Serialized within the process; each run starts from a fresh read. */
   private mutate(change: (all: ReadonlyArray<RemoteEnvironmentRecord>) => ReadonlyArray<RemoteEnvironmentRecord>): Promise<void> {
     const run = this.queue.then(async () => {
-      const next = change(await this.list());
+      const current = await this.list();
+      const next = change(current);
+      // Nothing changed (a renewal another window already stored, say): writing would only race other windows.
+      if (JSON.stringify(next) === JSON.stringify(current)) return;
       await this.secrets.store(ENVIRONMENT_CATALOG_KEY, JSON.stringify({ version: 1, environments: next }));
     });
     this.queue = run.catch(() => undefined); // a failed write must not wedge later mutations
@@ -204,14 +208,15 @@ const defaultDeps: EnvironmentPairingDeps = {
 };
 
 /** Finds an HTTP status / error tag anywhere in an error's cause chain. */
-const classify = (error: unknown): { status?: number; tag?: string } => {
-  const found: { status?: number; tag?: string } = {};
+const classify = (error: unknown): { status?: number; tag?: string; dpopFailureReason?: string } => {
+  const found: { status?: number; tag?: string; dpopFailureReason?: string } = {};
   const seen = new Set<unknown>();
   const visit = (value: unknown, depth: number): void => {
     if (typeof value !== "object" || value === null || seen.has(value) || depth > 6) return;
     seen.add(value);
-    const v = value as { status?: unknown; _tag?: unknown; error?: unknown; cause?: unknown };
+    const v = value as { status?: unknown; _tag?: unknown; error?: unknown; cause?: unknown; dpopFailureReason?: unknown };
     if (found.status === undefined && typeof v.status === "number") found.status = v.status;
+    if (found.dpopFailureReason === undefined && typeof v.dpopFailureReason === "string") found.dpopFailureReason = v.dpopFailureReason;
     if (found.tag === undefined && typeof v._tag === "string") found.tag = v._tag;
     visit(v.error, depth + 1);
     visit(v.cause, depth + 1);
@@ -270,7 +275,10 @@ export async function pairRemoteEnvironment(
   try {
     session = await (keyBound ? deps.bootstrapDpop! : deps.bootstrap)({ httpBaseUrl: target.httpBaseUrl, credential: target.credential });
   } catch (cause) {
-    const { status, tag } = classify(cause);
+    const { status, tag, dpopFailureReason } = classify(cause);
+    // A refused proof is not a bad link: a new link would fail the same way.
+    if (keyBound && dpopFailureReason === "time_window") throw new EnvironmentPairingError("This computer's clock is too far from that machine's. Correct the clock and pair again.");
+    if (keyBound && dpopFailureReason === "request_mismatch") throw new EnvironmentPairingError(`Something in front of ${base.host} changes the address of each request, so its sign-in check fails. Pair with its direct address or fix the proxy.`);
     if (status === 401 || status === 403 || (tag !== undefined && AUTH_TAGS.has(tag))) {
       throw new EnvironmentPairingError("The pairing link was rejected; it may be expired or already used. Create a new link in T3.");
     }

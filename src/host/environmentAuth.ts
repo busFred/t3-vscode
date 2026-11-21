@@ -33,7 +33,9 @@ export async function renewDpopToken(record: Pick<RemoteEnvironmentRecord, "http
 }
 
 /** How requests to a paired machine authenticate; key-bound records get the current token from `current`. */
-export const recordAuth = (record: RemoteEnvironmentRecord, key: DeviceKey | null, current?: () => Promise<AccessToken>): ConnectionAuth =>
-  record.auth === "dpop" && key
-    ? dpopAuth(key, current ?? (async () => ({ token: record.accessToken, expiresAt: record.expiresAt })))
-    : bearerAuth(record.accessToken);
+export function recordAuth(record: RemoteEnvironmentRecord, key: DeviceKey | null, current?: () => Promise<AccessToken>): ConnectionAuth {
+  if (record.auth !== "dpop") return bearerAuth(record.accessToken);
+  // A key-bound token must never travel as a bearer token.
+  if (!key) throw new Error("This computer's sign-in key for paired machines is unavailable.");
+  return dpopAuth(key, current ?? (async () => ({ token: record.accessToken, expiresAt: record.expiresAt })));
+}

@@ -25,8 +25,14 @@ import { splitMarkdownBlocks } from "../markdownBlocks";
 import { remarkEnableLeadingWhitespace, remarkKeepLeadingWhitespace } from "../../../vendor/shared/src/markdownLeadingWhitespace.ts";
 const EMPTY_ATTACHMENTS: ReadonlyArray<Pick<ChatAttachment, "id" | "name" | "mimeType" | "sizeBytes">> = [];
 const sanitizeSchema = { ...defaultSchema, tagNames: [...(defaultSchema.tagNames ?? []), "video", "audio", "source", "u"],
-  attributes: { ...defaultSchema.attributes, span: [...(defaultSchema.attributes?.span ?? []), "dataLeadingWhitespace"], code: [["className", /^language-./, "math-inline", "math-display"]], video: ["src", "controls", "poster"], audio: ["src", "controls"], source: ["src", "type"] },
+  attributes: { ...defaultSchema.attributes, code: [["className", /^language-./, "math-inline", "math-display"]], video: ["src", "controls", "poster"], audio: ["src", "controls"], source: ["src", "type"] },
   protocols: { ...defaultSchema.protocols, href: [...(defaultSchema.protocols?.href ?? []), "file", "t3-citation", "t3-context"], src: [...(defaultSchema.protocols?.src ?? []), "file", "data", "t3-context"] } };
+/**
+ * Only a sent user message keeps the marker for spaces typed at a line start. Those spans show but are
+ * neither selectable nor copied, so an assistant reply allowed to carry them could show one thing and
+ * copy another (for example a line that looks commented out but copies as a live command).
+ */
+const userSanitizeSchema = { ...sanitizeSchema, attributes: { ...sanitizeSchema.attributes, span: [...(defaultSchema.attributes?.span ?? []), "dataLeadingWhitespace"] } };
 type MarkdownScope = { readonly threadId: string; readonly assetSource: ChatAssetSource | undefined; readonly streaming: boolean; readonly inlineAttachment: (href: string | undefined) => ReactNode };
 const MarkdownScopeContext = createContext<MarkdownScope>({ threadId: "", assetSource: undefined, streaming: false, inlineAttachment: () => null });
 // Element overrides must keep stable component identities. Recreating them on every
@@ -135,7 +141,7 @@ function useThrottledTail(text: string, throttle: boolean): string {
 const USER_REMARK_PLUGINS = [remarkGfm, remarkEnableLeadingWhitespace, remarkKeepLeadingWhitespace, remarkMath];
 const REPLY_REMARK_PLUGINS = [remarkGfm, remarkMath];
 const MarkdownBlock = memo(function MarkdownBlock({ text, user }: { text: string; user: boolean }) {
-  return <ReactMarkdown remarkPlugins={user ? USER_REMARK_PLUGINS : REPLY_REMARK_PLUGINS} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeKatex, { strict: "ignore", trust: false, throwOnError: false }]]}
+  return <ReactMarkdown remarkPlugins={user ? USER_REMARK_PLUGINS : REPLY_REMARK_PLUGINS} rehypePlugins={[rehypeRaw, [rehypeSanitize, user ? userSanitizeSchema : sanitizeSchema], [rehypeKatex, { strict: "ignore", trust: false, throwOnError: false }]]}
     urlTransform={(url, key) => url.startsWith("file:") || url.startsWith("t3-citation:") || url.startsWith("t3-context:") || (key === "src" && /^data:(image|video|audio)\//i.test(url)) ? url : defaultUrlTransform(url)}
     components={components}>{text}</ReactMarkdown>;
 });

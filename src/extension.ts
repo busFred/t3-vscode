@@ -50,7 +50,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const deviceKey = () => (deviceKeyLoad ??= loadOrCreateDeviceKey(context.secrets).catch((cause: unknown) => { deviceKeyLoad = null; throw cause; }));
   const client = environments = new MultiEnvironmentClient(new T3Client(), {
     deviceKey,
-    renewToken: async (record) => catalog.updateToken(record.environmentId, record.accessToken, await renewDpopToken(record, await deviceKey())),
+    renewToken: async (record) => catalog.updateToken(record, await renewDpopToken(record, await deviceKey())),
   });
   const environmentControls = registerEnvironmentCommands({ catalog, client, deviceKey, localEnvironmentId: () => hostState?.snapshot().environment?.environmentId });
   const modelPreferences = new ModelPreferenceStore(context.globalState);

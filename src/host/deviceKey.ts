@@ -48,7 +48,8 @@ const importKey = async (jwk: webcrypto.JsonWebKey): Promise<DeviceKey> => {
  */
 export async function loadOrCreateDeviceKey(secrets: Pick<SecretBackend, "get" | "store">): Promise<DeviceKey> {
   const existing = parseStored(await secrets.get(DEVICE_KEY_STORAGE_KEY));
-  if (existing) return importKey(existing);
+  // A stored key that no longer imports signs nothing, so it is replaced like a missing one.
+  if (existing) { const key = await importKey(existing).catch(() => null); if (key) return key; }
   const pair = await webcrypto.subtle.generateKey(ALGORITHM, true, ["sign", "verify"]);
   const created = await webcrypto.subtle.exportKey("jwk", pair.privateKey);
   await secrets.store(DEVICE_KEY_STORAGE_KEY, JSON.stringify({ kty: created.kty, crv: created.crv, x: created.x, y: created.y, d: created.d }));
