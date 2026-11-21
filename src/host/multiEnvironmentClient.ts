@@ -9,7 +9,7 @@ import type {
 import * as ShellState from "@t3tools/client-runtime/state/shell";
 import { T3Client, type Subscription } from "./t3Client.js";
 import type { DiscoveredServer } from "./serverDiscovery.js";
-import type { IgnorableEnvironmentStatus, RemoteEnvironmentRecord } from "./environmentCatalog.js";
+import { pairingId, type IgnorableEnvironmentStatus, type RemoteEnvironmentRecord } from "./environmentCatalog.js";
 import type { RemoteConnectionState } from "../shared/environmentStatus.js";
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import * as Effect from "effect/Effect";
@@ -137,7 +137,7 @@ export class MultiEnvironmentClient {
       if (!record) { this.remotes.delete(id); await this.stopRemote(remote); continue; }
       // A renewed key-bound token (from this or another window) is the same session, so live sockets stay;
       // a new token after that session ended is a fresh pairing and reconnects.
-      const renewed = record.auth === "dpop" && remote.record.auth === "dpop" && remote.state !== "expired" && record.addedAt === remote.record.addedAt;
+      const renewed = record.auth === "dpop" && remote.record.auth === "dpop" && remote.state !== "expired" && pairingId(record) === pairingId(remote.record);
       const changed = (record.accessToken !== remote.record.accessToken && !renewed) || record.httpBaseUrl !== remote.record.httpBaseUrl || record.auth !== remote.record.auth;
       remote.record = record;
       if (!record.enabled) { await this.stopRemote(remote); remote.state = "disabled"; delete remote.error; }
@@ -159,12 +159,19 @@ export class MultiEnvironmentClient {
       const client = this.makeClient();
       remote.client = client;
       try {
-        if (remote.record.auth === "dpop") {
-          const key = await recordKey(remote.record);
+        // The attempt is bound to the pairing it started with: a re-pair or stop meanwhile ends it
+        // before it signs or sends anything for the newer pairing.
+        const record = remote.record;
+        if (record.auth === "dpop") {
+          const key = await recordKey(record);
+          if (!current()) { await client.disconnect().catch(() => undefined); return; }
           // Without its key the session cannot sign anything, so it asks to be paired again instead of retrying.
           if (!key) { await client.disconnect().catch(() => undefined); if (current()) this.keyBoundEnded(remote); return; }
-          await client.connect(remoteServer(remote.record), recordAuth(remote.record, key, () => this.currentToken(remote)));
-        } else await client.connect(remoteServer(remote.record), remote.record.accessToken);
+          await client.connect(remoteServer(record), recordAuth(record, key, async () => {
+            if (!current()) throw new Error("This connection attempt was replaced.");
+            return this.currentToken(remote);
+          }));
+        } else await client.connect(remoteServer(record), record.accessToken);
         if (!current()) { await client.disconnect(); return; }
         const shell = await client.snapshotShell();
         if (!current()) { await client.disconnect(); return; }
@@ -188,6 +195,8 @@ export class MultiEnvironmentClient {
       } catch (cause) {
         if (!current()) return;
         await client.disconnect().catch(() => undefined);
+        // Disabled, removed or re-paired while disconnecting: nothing more to do for this attempt.
+        if (!current()) return;
         // A key-bound session answers for itself: renewing either works (retry the connection) or the server refuses it.
         // A key-bound session answers for itself and never reaches the bearer check below, which would
         // send its token as a bearer token. A refused proof retries with its reason; otherwise renewing
@@ -241,13 +250,13 @@ export class MultiEnvironmentClient {
     // A renewal belongs to one pairing: one still running when the machine is paired again must not
     // put the old session's token on the new pairing.
     if (remote.renewing) return remote.renewing;
-    const pairing = remote.record.addedAt;
+    const pairing = pairingId(remote.record);
     const run: { promise: Promise<void> | null } = { promise: null };
     run.promise = (async () => {
       const stored = await renewToken(remote.record);
       // Stopped meanwhile (disabled, removed or restarted): nothing to apply.
       if (remote.renewing !== run.promise) throw new Error("This machine stopped while signing in again.");
-      if (remote.record.addedAt !== pairing) throw new Error("This machine was paired again.");
+      if (pairingId(remote.record) !== pairing) throw new Error("This machine was paired again.");
       if (!stored) throw new Error("This machine is no longer paired.");
       // Only the token changes: settings another window changed meanwhile (such as disabling) stay.
       remote.record = { ...remote.record, accessToken: stored.accessToken, expiresAt: stored.expiresAt }; remote.renewedAt = Date.now();

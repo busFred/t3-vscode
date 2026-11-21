@@ -53,7 +53,8 @@ test("side-chat commands use the active parent's settings and mentions carry a r
   await host.selectThread(child);
   host.saveComposerDraft(child, { text: "Side draft", contexts: [] }, undefined);
   await host.threadAction("first", "archive");
-  assert.ok(!host.snapshot().threads.some(thread => thread.id === child));
+  // Archived with its parent: never an active row (listed only beneath the archived parent, in Archive).
+  assert.ok(!host.snapshot().threads.some(thread => thread.id === child && !thread.archived));
   await host.threadAction("first", "unarchive");
   assert.equal((await host.restoreComposerDraft(child)).draft.text, "");
 });
@@ -125,4 +126,18 @@ test("a whitespace-only side-chat draft also keeps the side chat on close, as dr
   host.saveComposerDraft(empty, { text: "   ", contexts: [] }, undefined);
   await host.discardUnusedSideChat(empty);
   assert.ok(!client.commands.some(command => command.type === "thread.delete" && command.threadId === empty));
+});
+
+test("an ordinary running side chat is archived with its parent and nests beneath it once Archive is loaded", async t => {
+  const { host, client } = await viewsHarness(); t.after(() => host.dispose());
+  await host.selectThread("first");
+  seedSideChatParent(client);
+  const running = await host.startSideChat("first");
+  client.shell = { ...client.shell, threads: client.shell.threads.map(thread => thread.id === running ? { ...thread, activeRunId: "run-1" as never } : thread) };
+  await host.threadAction("first", "archive");
+  assert.equal(host.sideChatClosed(running), true, "only a side chat waiting on delegated tasks stays active");
+  await host.loadArchive();
+  const archived = host.snapshot().threads.filter(thread => thread.archived);
+  assert.ok(archived.some(thread => thread.id === "first"));
+  assert.equal(archived.find(thread => thread.id === running)?.parentThreadId, "first", "the archived side chat is listed beneath its archived parent");
 });

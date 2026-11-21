@@ -44,24 +44,34 @@ export interface SecretBackend {
 
 export const ENVIRONMENT_CATALOG_KEY = "t3-vscode.environments.v1";
 /**
+ * Key-bound pairings live under their own key. An older extension (another profile, or a window not
+ * yet reloaded) rewrites the v1 catalog with a parser that drops fields it does not know, which would
+ * strip a key-bound pairing's key; it never touches this key.
+ */
+export const KEY_BOUND_CATALOG_KEY = "t3-vscode.environments.keyBound.v1";
+/**
  * A key-bound pairing's renewed token lives in its own key, never in the catalog: a renewal then
  * cannot rewrite the shared catalog, so it can never bring back a machine another window removed.
  */
 export const ENVIRONMENT_TOKEN_KEY_PREFIX = "t3-vscode.environmentToken.v1.";
+/** A pairing's identity: when it was made and the key it signs with, which is unique to it. */
+export const pairingId = (record: Pick<RemoteEnvironmentRecord, "addedAt" | "dpopKey">) => `${record.addedAt}.${record.dpopKey?.x ?? ""}`;
 /** One key per pairing, so a late write for an earlier pairing of the machine never replaces a newer pairing's token. */
-const tokenKey = (record: Pick<RemoteEnvironmentRecord, "environmentId" | "addedAt">) => `${ENVIRONMENT_TOKEN_KEY_PREFIX}${record.environmentId}.${record.addedAt}`;
-interface StoredToken { readonly addedAt: string; readonly httpBaseUrl: string; readonly accessToken: string; readonly expiresAt: number }
+const tokenKey = (record: Pick<RemoteEnvironmentRecord, "environmentId" | "addedAt" | "dpopKey">) => `${ENVIRONMENT_TOKEN_KEY_PREFIX}${record.environmentId}.${pairingId(record)}`;
+interface StoredToken { readonly addedAt: string; readonly httpBaseUrl: string; readonly accessToken: string; readonly expiresAt: number; readonly pairing?: string }
 const parseToken = (raw: string | undefined): StoredToken | null => {
   if (!raw) return null;
   try {
     const t = JSON.parse(raw) as Record<string, unknown> | null;
     if (!t || !isString(t.addedAt) || !isString(t.httpBaseUrl) || !isString(t.accessToken) || !t.accessToken || typeof t.expiresAt !== "number" || !Number.isFinite(t.expiresAt)) return null;
-    return { addedAt: t.addedAt, httpBaseUrl: t.httpBaseUrl, accessToken: t.accessToken, expiresAt: t.expiresAt };
+    return { addedAt: t.addedAt, httpBaseUrl: t.httpBaseUrl, accessToken: t.accessToken, expiresAt: t.expiresAt, ...(isString(t.pairing) ? { pairing: t.pairing } : {}) };
   } catch { return null; }
 };
 /** The same pairing: a token stored for an earlier pairing of that machine does not apply. */
-const samePairing = (a: Pick<RemoteEnvironmentRecord, "addedAt" | "httpBaseUrl">, b: Pick<RemoteEnvironmentRecord, "addedAt" | "httpBaseUrl">) =>
-  a.addedAt === b.addedAt && a.httpBaseUrl === b.httpBaseUrl;
+const samePairing = (token: StoredToken, record: RemoteEnvironmentRecord) =>
+  token.pairing === pairingId(record) && token.httpBaseUrl === record.httpBaseUrl;
+const sameRecordPairing = (a: Pick<RemoteEnvironmentRecord, "addedAt" | "dpopKey" | "httpBaseUrl">, b: Pick<RemoteEnvironmentRecord, "addedAt" | "dpopKey" | "httpBaseUrl">) =>
+  pairingId(a) === pairingId(b) && a.httpBaseUrl === b.httpBaseUrl;
 
 const isString = (value: unknown): value is string => typeof value === "string";
 
@@ -86,6 +96,13 @@ const parseRecord = (raw: unknown): RemoteEnvironmentRecord | null => {
   };
 };
 
+/** One list from the two stored parts; a machine re-paired with a key-bound session supersedes its older bearer entry. */
+function merged([bearer, keyBound]: readonly [ReadonlyArray<RemoteEnvironmentRecord>, ReadonlyArray<RemoteEnvironmentRecord>]): RemoteEnvironmentRecord[] {
+  const bound = keyBound.filter((record) => record.auth === "dpop");
+  const ids = new Set(bound.map((record) => record.environmentId));
+  return [...bearer.filter((record) => !ids.has(record.environmentId)), ...bound];
+}
+
 export class EnvironmentCatalog {
   private readonly secrets: SecretBackend;
   private queue: Promise<unknown> = Promise.resolve();
@@ -103,9 +120,13 @@ export class EnvironmentCatalog {
     }));
   }
 
-  /** The catalog as stored, without renewed tokens, which never go back into it. */
-  private async stored(): Promise<ReadonlyArray<RemoteEnvironmentRecord>> {
-    const raw = await this.secrets.get(ENVIRONMENT_CATALOG_KEY);
+  /** The catalog as stored (bearer and key-bound parts), without renewed tokens, which never go back into it. */
+  private async stored(): Promise<ReadonlyArray<RemoteEnvironmentRecord>> { return merged(await this.parts()); }
+  private parts(): Promise<[RemoteEnvironmentRecord[], RemoteEnvironmentRecord[]]> {
+    return Promise.all([this.readPart(ENVIRONMENT_CATALOG_KEY), this.readPart(KEY_BOUND_CATALOG_KEY)]);
+  }
+  private async readPart(key: string): Promise<RemoteEnvironmentRecord[]> {
+    const raw = await this.secrets.get(key);
     if (!raw) return [];
     try {
       const parsed = JSON.parse(raw) as { environments?: unknown } | null;
@@ -130,7 +151,7 @@ export class EnvironmentCatalog {
     });
     // A new pairing of the machine leaves the previous pairing's renewed token behind.
     const previous = replaced as RemoteEnvironmentRecord | undefined;
-    if (previous && previous.addedAt !== record.addedAt) await this.secrets.delete(tokenKey(previous));
+    if (previous && pairingId(previous) !== pairingId(record)) await this.secrets.delete(tokenKey(previous));
   }
 
   async remove(environmentId: string): Promise<void> {
@@ -155,15 +176,15 @@ export class EnvironmentCatalog {
    * Stores a renewed key-bound token. Another window may have renewed first; the later expiry wins,
    * and a record that was re-paired or removed meanwhile is left alone.
    */
-  async updateToken(previous: Pick<RemoteEnvironmentRecord, "environmentId" | "accessToken" | "addedAt" | "httpBaseUrl">, next: { readonly accessToken: string; readonly expiresAt: number }): Promise<RemoteEnvironmentRecord | null> {
+  async updateToken(previous: Pick<RemoteEnvironmentRecord, "environmentId" | "accessToken" | "addedAt" | "httpBaseUrl" | "dpopKey">, next: { readonly accessToken: string; readonly expiresAt: number }): Promise<RemoteEnvironmentRecord | null> {
     const run = this.queue.then(async () => {
       // Only the same pairing: a renewal of the old session must not replace a fresh re-pairing,
       // and a machine that was removed is not stored again.
-      const record = (await this.list()).find((e) => e.environmentId === previous.environmentId && e.auth === "dpop" && samePairing(e, previous));
+      const record = (await this.list()).find((e) => e.environmentId === previous.environmentId && e.auth === "dpop" && sameRecordPairing(e, previous));
       if (!record) return null;
       // Another window already stored a later token for this session.
       if (record.accessToken !== previous.accessToken && (record.expiresAt ?? 0) >= next.expiresAt) return record;
-      await this.secrets.store(tokenKey(record), JSON.stringify({ addedAt: record.addedAt, httpBaseUrl: record.httpBaseUrl, accessToken: next.accessToken, expiresAt: next.expiresAt }));
+      await this.secrets.store(tokenKey(record), JSON.stringify({ addedAt: record.addedAt, pairing: pairingId(record), httpBaseUrl: record.httpBaseUrl, accessToken: next.accessToken, expiresAt: next.expiresAt }));
       return { ...record, accessToken: next.accessToken, expiresAt: next.expiresAt };
     });
     this.queue = run.catch(() => undefined);
@@ -184,18 +205,26 @@ export class EnvironmentCatalog {
 
   /** Fires for the catalog and stored renewed tokens only; VS Code also fires it for other windows/profiles. */
   onDidChange(listener: () => void): { dispose(): void } {
-    const sub = this.secrets.onDidChange((event) => { if (event.key === ENVIRONMENT_CATALOG_KEY || event.key.startsWith(ENVIRONMENT_TOKEN_KEY_PREFIX)) listener(); });
+    const sub = this.secrets.onDidChange((event) => { if (event.key === ENVIRONMENT_CATALOG_KEY || event.key === KEY_BOUND_CATALOG_KEY || event.key.startsWith(ENVIRONMENT_TOKEN_KEY_PREFIX)) listener(); });
     return { dispose: () => { sub.dispose(); } };
   }
 
   /** Serialized within the process; each run starts from a fresh read. */
   private mutate(change: (all: ReadonlyArray<RemoteEnvironmentRecord>) => ReadonlyArray<RemoteEnvironmentRecord>): Promise<void> {
     const run = this.queue.then(async () => {
-      const current = await this.stored();
-      const next = change(current);
-      // Nothing changed (a renewal another window already stored, say): writing would only race other windows.
-      if (JSON.stringify(next) === JSON.stringify(current)) return;
-      await this.secrets.store(ENVIRONMENT_CATALOG_KEY, JSON.stringify({ version: 1, environments: next }));
+      const [bearer, keyBound] = await this.parts();
+      const next = change(merged([bearer, keyBound]));
+      // Each part is written only when it differs from what is stored (a renewal another window already
+      // stored, say), so idle writes never race other windows; key-bound pairings never go into v1, and a
+      // bearer entry a key-bound pairing replaced leaves v1 with the next write.
+      const parts: ReadonlyArray<readonly [string, RemoteEnvironmentRecord[], RemoteEnvironmentRecord[]]> = [
+        [ENVIRONMENT_CATALOG_KEY, bearer, next.filter((record) => record.auth !== "dpop")],
+        [KEY_BOUND_CATALOG_KEY, keyBound, next.filter((record) => record.auth === "dpop")],
+      ];
+      for (const [key, stored, wanted] of parts) {
+        if (JSON.stringify(stored) === JSON.stringify(wanted)) continue;
+        await this.secrets.store(key, JSON.stringify({ version: 1, environments: wanted }));
+      }
     });
     this.queue = run.catch(() => undefined); // a failed write must not wedge later mutations
     return run;

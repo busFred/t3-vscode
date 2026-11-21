@@ -1352,7 +1352,8 @@ export class HostState {
       // The server keeps a side chat with running work active when its parent is archived; it stays
       // reachable even while the archived parent is not loaded. Archived side chats follow their parent.
       if (!parent || !visible.has(parent.id)) return !thread.archivedAt;
-      return (!parent.archivedAt || !thread.archivedAt) && environment(parent.id) === environment(thread.id);
+      // With its parent listed, a side chat nests beneath it in that parent's shelf, archived or not, as subagents do.
+      return environment(parent.id) === environment(thread.id);
     });
   }
   /** A side chat that is gone or archived, so its draft has nothing left to belong to. */

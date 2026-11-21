@@ -318,7 +318,7 @@ test("Renewed tokens never go back into the shared catalog", async () => {
   await catalog.upsert(record);
   await catalog.updateToken(record, { accessToken: "t2", expiresAt: 200 });
   await catalog.setEnabled(record.environmentId, false);
-  const stored = JSON.parse(secrets.values.get("t3-vscode.environments.v1")!) as { environments: Array<{ accessToken: string; enabled: boolean }> };
+  const stored = JSON.parse(secrets.values.get("t3-vscode.environments.keyBound.v1")!) as { environments: Array<{ accessToken: string; enabled: boolean }> };
   assert.equal(stored.environments[0]!.accessToken, "t1");
   assert.equal(stored.environments[0]!.enabled, false);
   assert.equal((await catalog.list())[0]!.accessToken, "t2");
@@ -375,4 +375,28 @@ test("Each pairing keeps its own renewed token, so a late write for an earlier p
   assert.equal((await catalog.list())[0]!.accessToken, "fresh-renewed");
   await catalog.remove(fresh.environmentId);
   assert.ok(![...secrets.values.keys()].some((key) => key.startsWith("t3-vscode.environmentToken.v1.")), "removal deletes the pairing's token");
+});
+
+test("An older extension rewriting the v1 catalog never strips a key-bound pairing", async () => {
+  const secrets = memorySecrets(), catalog = new EnvironmentCatalog(secrets);
+  const bearer: RemoteEnvironmentRecord = { environmentId: "old", label: "Old", httpBaseUrl: "https://old.example/", wsBaseUrl: "wss://old.example/", accessToken: "b", expiresAt: 1, scopes: [], enabled: true, addedAt: "2026-01-01T00:00:00.000Z" };
+  await catalog.upsert(bearer);
+  await catalog.upsert(keyBound());
+  assert.ok(!secrets.values.get("t3-vscode.environments.v1")!.includes("dpopKey"), "key-bound pairings never go into v1");
+  // A 0.3.14 window disables the old machine and rewrites v1 with the fields it knows.
+  secrets.values.set("t3-vscode.environments.v1", JSON.stringify({ version: 1, environments: [{ ...bearer, enabled: false }] }));
+  const list = await catalog.list();
+  assert.equal(list.find((record) => record.environmentId === "kb")?.auth, "dpop");
+  assert.ok(list.find((record) => record.environmentId === "kb")?.dpopKey);
+  assert.equal(list.find((record) => record.environmentId === "old")?.enabled, false);
+});
+
+test("A bearer entry replaced by a key-bound pairing does not come back when that pairing is removed", async () => {
+  const secrets = memorySecrets(), catalog = new EnvironmentCatalog(secrets);
+  const { auth: _a, dpopKey: _k, ...bearerFields } = keyBound();
+  await catalog.upsert({ ...bearerFields, accessToken: "bearer" });
+  await catalog.upsert(keyBound({ addedAt: "2026-05-01T00:00:00.000Z" }));
+  assert.equal((await catalog.list()).length, 1);
+  await catalog.remove("kb");
+  assert.deepEqual(await catalog.list(), []);
 });

@@ -20,7 +20,7 @@ The sidebar "…" menu also offers **T3 VSCode: Add Environment from Pairing Lin
 
 A machine running T3 Code 0.1.11 or later keeps this computer signed in while you use it: its pairing renews itself and only ends if the machine signs this computer out or it goes unused for 30 days. It then shows **Expired** with **Pair again** and stays in the list. If this computer's clock is off, or a proxy in front of the machine changes requests, it says so and keeps retrying instead.
 
-Older machines keep pairings that last a fixed 30 days and are not extended by use, so pair those again with a new link about monthly. If an older machine rejects this computer before the pairing expires, it is treated as revoked: it is removed from the list in every profile and a notification offers **Pair again**.
+A machine paired before it was updated to T3 Code 0.1.11 keeps its old kind of pairing until you pair it again with a new link. Older machines keep pairings that last a fixed 30 days and are not extended by use, so pair those again with a new link about monthly. If an older machine rejects this computer before the pairing expires, it is treated as revoked: it is removed from the list in every profile and a notification offers **Pair again**.
 
 Paired machines and their credentials are stored once in VS Code's secret storage and shared by every profile on this computer, so pair each machine only once.
 
