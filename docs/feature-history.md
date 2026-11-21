@@ -682,6 +682,7 @@ Session resources retain the current History selection for restoration. Opening 
 ### Side chats
 
 - v0.3.15 · Ported T3 Code 0.1.11 side chats for servers that advertise them. Start with `/side`, `/btw` or the thread menu. Side chats open beside the main conversation and fold its inherited history. Add a used side chat to the main composer from its tab or the `@` menu. Sessions nests side chats under their parent and shows when one needs input or approval.
+- v0.3.15 · Closing an unused side chat keeps it while its draft holds anything (T3 Code deletes it with the draft), as the extension does for other untouched chats. Archiving the main chat clears drafts only of side chats the server archived with it; one still running work stays visible and keeps its draft. In a side chat the message rail skips the folded main-chat history. `/side` after a **Replying to** chip starts a side chat that carries the reply, as in T3 Code.
 
 ### Subagent conversations
 
