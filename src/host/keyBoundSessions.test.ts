@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { computeDpopJwkThumbprint, verifyDpopProof } from "@t3tools/shared/dpop";
 import { v2ShellSnapshot } from "../../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
-import { createDpopProof, DEVICE_KEY_STORAGE_KEY, loadOrCreateDeviceKey } from "./deviceKey.js";
+import { createDeviceKey, createDpopProof, importDeviceKey } from "./deviceKey.js";
 import { authHeaders, bearerAuth, type ConnectionAuth } from "./connectionAuth.js";
 import { EnvironmentCatalog, ENVIRONMENT_CATALOG_KEY, pairRemoteEnvironment, type RemoteEnvironmentRecord, type SecretBackend } from "./environmentCatalog.js";
 import { recordAuth } from "./environmentAuth.js";
@@ -15,9 +15,10 @@ const memorySecrets = (): SecretBackend & { values: Map<string, string> } => {
   return { values, get: async (key) => values.get(key), store: async (key, value) => { values.set(key, value); }, delete: async (key) => { values.delete(key); }, onDidChange: () => ({ dispose() {} }) };
 };
 const seconds = () => Math.floor(Date.now() / 1000);
+const testKey = await createDeviceKey();
 
 test("Device-key proofs pass T3's own verifier, bound to method, URL, key and access token", async () => {
-  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const key = (await createDeviceKey()).key;
   const url = "https://box.example.ts.net/api/orchestration/threads/t1/history?cursor=abc";
   const proof = await createDpopProof(key, { method: "get", url, accessToken: "access-1" });
   const thumbprint = computeDpopJwkThumbprint(key.publicJwk);
@@ -25,25 +26,27 @@ test("Device-key proofs pass T3's own verifier, bound to method, URL, key and ac
   assert.equal(verifyDpopProof({ proof, method: "POST", url, nowEpochSeconds: seconds() }).ok, false, "method is signed");
   assert.equal(verifyDpopProof({ proof, method: "GET", url: "https://box.example.ts.net/api/other", nowEpochSeconds: seconds() }).ok, false, "URL is signed");
   assert.equal(verifyDpopProof({ proof, method: "GET", url, nowEpochSeconds: seconds(), expectedAccessToken: "access-2" }).ok, false, "token is bound");
-  const other = await loadOrCreateDeviceKey(memorySecrets());
+  const other = (await createDeviceKey()).key;
   assert.equal(verifyDpopProof({ proof, method: "GET", url, nowEpochSeconds: seconds(), expectedThumbprint: computeDpopJwkThumbprint(other.publicJwk) }).ok, false, "key is bound");
 });
 
-test("The device key is created once, shared through SecretStorage, and a damaged entry is replaced", async () => {
-  const secrets = memorySecrets();
-  const first = await loadOrCreateDeviceKey(secrets);
-  const second = await loadOrCreateDeviceKey(secrets);
-  assert.deepEqual(second.publicJwk, first.publicJwk, "a second window loads the same key");
-  const stored = JSON.parse(secrets.values.get(DEVICE_KEY_STORAGE_KEY)!) as Record<string, unknown>;
-  assert.deepEqual(Object.keys(stored).sort(), ["crv", "d", "kty", "x", "y"], "only the key itself is stored");
-  secrets.values.set(DEVICE_KEY_STORAGE_KEY, "{not json");
-  const replaced = await loadOrCreateDeviceKey(secrets);
-  assert.notDeepEqual(replaced.publicJwk, first.publicJwk);
+test("Each pairing has its own key, which survives storage and imports to the same public key", async () => {
+  const a = await createDeviceKey(), b = await createDeviceKey();
+  assert.notDeepEqual(a.key.publicJwk, b.key.publicJwk);
+  assert.deepEqual(Object.keys(a.stored).sort(), ["crv", "d", "kty", "x", "y"], "only the key itself is stored");
+  assert.deepEqual((await importDeviceKey(JSON.parse(JSON.stringify(a.stored)))).publicJwk, a.key.publicJwk);
+  const catalog = new EnvironmentCatalog(memorySecrets());
+  const record: RemoteEnvironmentRecord = { environmentId: "e", label: "E", httpBaseUrl: "https://e.example/", wsBaseUrl: "wss://e.example/", accessToken: "t", expiresAt: 1, auth: "dpop", dpopKey: a.stored, scopes: [], enabled: true, addedAt: "2026-01-01T00:00:00.000Z" };
+  await catalog.upsert(record);
+  assert.deepEqual((await catalog.list())[0]!.dpopKey, a.stored);
+  const { dpopKey: _key, ...keyless } = record;
+  await catalog.upsert(keyless);
+  assert.equal((await catalog.list())[0]!.auth, undefined, "a key-bound record without its key is not kept as key-bound");
 });
 
 test("Request headers: bearer for older pairings, DPoP token plus a fresh proof for key-bound ones", async () => {
   assert.deepEqual(await authHeaders(bearerAuth("tok"), "GET", "https://box.example/api/auth/session"), { authorization: "Bearer tok" });
-  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const key = (await createDeviceKey()).key;
   const auth = recordAuth({ auth: "dpop", accessToken: "bound", expiresAt: Date.now() + 3_600_000 } as RemoteEnvironmentRecord, key);
   const headers = await authHeaders(auth, "POST", "https://box.example/api/auth/pairing-token");
   assert.equal(headers.authorization, "DPoP bound");
@@ -57,7 +60,7 @@ test("Pairing binds the session to the device key only where the machine renews 
   const deps = (renewal: boolean) => ({
     fetchDescriptor: async () => ({ ...descriptor, ...(renewal ? { accessTokenRenewal: true } : {}) }),
     bootstrap: async () => { used.push("bearer"); return session; },
-    bootstrapDpop: async () => { used.push("dpop"); return session; },
+    bootstrapDpop: async () => { used.push("dpop"); return { ...session, dpopKey: testKey.stored }; },
     now: () => 1_000,
   });
   const bound = await pairRemoteEnvironment("https://box.example.ts.net/pair#token=ABCDEFGH2345", { deps: deps(true) });
@@ -72,7 +75,7 @@ test("Pairing binds the session to the device key only where the machine renews 
 
 test("A renewed token is stored only for the same pairing, unless another window stored a later one", async () => {
   const secrets = memorySecrets(), catalog = new EnvironmentCatalog(secrets);
-  const base: RemoteEnvironmentRecord = { environmentId: "e", label: "E", httpBaseUrl: "https://e.example/", wsBaseUrl: "wss://e.example/", accessToken: "t1", expiresAt: 100, auth: "dpop", scopes: [], enabled: true, addedAt: "2026-01-01T00:00:00.000Z" };
+  const base: RemoteEnvironmentRecord = { environmentId: "e", label: "E", httpBaseUrl: "https://e.example/", wsBaseUrl: "wss://e.example/", accessToken: "t1", expiresAt: 100, auth: "dpop", dpopKey: testKey.stored, scopes: [], enabled: true, addedAt: "2026-01-01T00:00:00.000Z" };
   await catalog.upsert(base);
   assert.equal((await catalog.updateToken(base, { accessToken: "t2", expiresAt: 200 }))?.accessToken, "t2");
   // A slower window renewing from t1 with an earlier expiry keeps the newer token.
@@ -82,7 +85,7 @@ test("A renewed token is stored only for the same pairing, unless another window
   await catalog.upsert(repaired);
   assert.equal(await catalog.updateToken(base, { accessToken: "old-session", expiresAt: 400 }), null);
   assert.equal((await catalog.list())[0]!.accessToken, "fresh");
-  const { auth: _auth, ...bearerPairing } = base;
+  const { auth: _auth, dpopKey: _dpopKey, ...bearerPairing } = base;
   await catalog.upsert({ ...bearerPairing, accessToken: "bearer" });
   assert.equal(await catalog.updateToken({ ...base, accessToken: "bearer" }, { accessToken: "x", expiresAt: 999 }), null, "a bearer pairing is never rewritten");
   assert.equal((await catalog.list())[0]!.accessToken, "bearer");
@@ -94,7 +97,7 @@ test("A catalog change that changes nothing is not written, so idle renewals nev
   let writes = 0;
   const store = secrets.store.bind(secrets);
   secrets.store = async (key, value) => { writes += 1; await store(key, value); };
-  const record: RemoteEnvironmentRecord = { environmentId: "e", label: "E", httpBaseUrl: "https://e.example/", wsBaseUrl: "wss://e.example/", accessToken: "t1", expiresAt: 100, auth: "dpop", scopes: [], enabled: true, addedAt: "2026-01-01T00:00:00.000Z" };
+  const record: RemoteEnvironmentRecord = { environmentId: "e", label: "E", httpBaseUrl: "https://e.example/", wsBaseUrl: "wss://e.example/", accessToken: "t1", expiresAt: 100, auth: "dpop", dpopKey: testKey.stored, scopes: [], enabled: true, addedAt: "2026-01-01T00:00:00.000Z" };
   await catalog.upsert(record);
   await catalog.updateToken({ ...record, environmentId: "missing" }, { accessToken: "x", expiresAt: 1 });
   await catalog.setEnabled("e", true);
@@ -120,7 +123,7 @@ class AuthRecordingClient {
 }
 const keyBound = (extra: Partial<RemoteEnvironmentRecord> = {}): RemoteEnvironmentRecord => ({
   environmentId: "kb", label: "Key-bound", httpBaseUrl: "https://kb.example/", wsBaseUrl: "wss://kb.example/", accessToken: "t1",
-  expiresAt: Date.now() + 3_600_000, auth: "dpop", scopes: [], enabled: true, addedAt: "2026-01-01T00:00:00.000Z", ...extra,
+  expiresAt: Date.now() + 3_600_000, auth: "dpop", dpopKey: testKey.stored, scopes: [], enabled: true, addedAt: "2026-01-01T00:00:00.000Z", ...extra,
 });
 const until = async (predicate: () => boolean) => {
   const deadline = Date.now() + 2000;
@@ -128,12 +131,12 @@ const until = async (predicate: () => boolean) => {
 };
 
 test("A key-bound machine connects with DPoP, renews an expired token first, and keeps its socket when another window renews", async () => {
-  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const key = (await createDeviceKey()).key;
   const clients: AuthRecordingClient[] = [];
   const renewed: string[] = [];
   const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
     makeClient: () => { const client = new AuthRecordingClient(); clients.push(client); return client as never; },
-    deviceKey: async () => key,
+   
     renewToken: async (record) => { renewed.push(record.accessToken); return { ...record, accessToken: `${record.accessToken}+`, expiresAt: Date.now() + 3_600_000 }; },
   });
   await multi.setRemoteEnvironments([keyBound({ expiresAt: Date.now() - 1 })]);
@@ -152,12 +155,12 @@ test("A key-bound machine connects with DPoP, renews an expired token first, and
 });
 
 test("A key-bound session the server refuses to renew stays listed as expired, not removed", async () => {
-  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const key = (await createDeviceKey()).key;
   const revoked: string[] = [];
   const refusal = { _tag: "EnvironmentAuthInvalidError", reason: "invalid_credential" };
   const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
     makeClient: () => { const client = new AuthRecordingClient(); client.connectError = refusal; return client as never; },
-    deviceKey: async () => key,
+   
     renewToken: async () => { throw refusal; },
   });
   multi.onRemoteRevoked = (record) => revoked.push(record.environmentId);
@@ -169,12 +172,12 @@ test("A key-bound session the server refuses to renew stays listed as expired, n
 });
 
 test("A network failure while renewing retries instead of ending the session", async () => {
-  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const key = (await createDeviceKey()).key;
   let attempts = 0;
   const clients: AuthRecordingClient[] = [];
   const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
     makeClient: () => { const client = new AuthRecordingClient(); clients.push(client); if (clients.length === 1) client.connectError = { status: 401 }; return client as never; },
-    reconnectDelayMs: 5, deviceKey: async () => key,
+    reconnectDelayMs: 5,
     renewToken: async (record) => { attempts += 1; if (attempts === 1) throw new Error("fetch failed"); return { ...record, expiresAt: Date.now() + 3_600_000 }; },
   });
   await multi.setRemoteEnvironments([keyBound({ expiresAt: Date.now() + 3_600_000 })]);
@@ -184,11 +187,11 @@ test("A network failure while renewing retries instead of ending the session", a
 });
 
 test("A proof refused for this computer's clock keeps the pairing and says why", async () => {
-  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const key = (await createDeviceKey()).key;
   const skew = { _tag: "EnvironmentAuthInvalidError", reason: "invalid_credential", dpopFailureReason: "time_window" };
   const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
     makeClient: () => { const client = new AuthRecordingClient(); client.connectError = skew; return client as never; },
-    reconnectDelayMs: 60_000, deviceKey: async () => key, renewToken: async () => { throw skew; },
+    reconnectDelayMs: 60_000, renewToken: async () => { throw skew; },
   });
   await multi.setRemoteEnvironments([keyBound()]);
   await until(() => multi.remoteStatuses()[0]?.state === "error");
@@ -197,12 +200,12 @@ test("A proof refused for this computer's clock keeps the pairing and says why",
 });
 
 test("A refused proof (proxy rewriting the request, replay) keeps the pairing and retries; a refused session ends it", async () => {
-  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const key = (await createDeviceKey()).key;
   for (const [dpopFailureReason, expected] of [["request_mismatch", /address of each request/], ["replay", /Retrying/], ["key_mismatch", null]] as const) {
     const refused = { _tag: "EnvironmentAuthInvalidError", reason: "invalid_credential", dpopFailureReason };
     const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
       makeClient: () => { const client = new AuthRecordingClient(); client.connectError = refused; return client as never; },
-      reconnectDelayMs: 60_000, deviceKey: async () => key, renewToken: async () => { throw refused; },
+      reconnectDelayMs: 60_000, renewToken: async () => { throw refused; },
     });
     await multi.setRemoteEnvironments([keyBound()]);
     await until(() => ["error", "expired"].includes(multi.remoteStatuses()[0]?.state ?? ""));
@@ -224,11 +227,11 @@ test("Pairing explains a refused proof instead of blaming the link", async () =>
 });
 
 test("A socket 401 right after a renewal retries; the key-bound token never goes to the bearer check", async () => {
-  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const key = (await createDeviceKey()).key;
   let checks = 0; const revoked: string[] = [];
   const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
     makeClient: () => { const client = new AuthRecordingClient(); client.connectError = { status: 401 }; return client as never; },
-    reconnectDelayMs: 60_000, deviceKey: async () => key,
+    reconnectDelayMs: 60_000,
     checkCredential: async () => { checks += 1; return false; },
     renewToken: async (record) => ({ ...record, accessToken: "renewed", expiresAt: Date.now() + 3_600_000 }),
   });
@@ -241,11 +244,11 @@ test("A socket 401 right after a renewal retries; the key-bound token never goes
 });
 
 test("Re-pairing a key-bound machine reconnects with the new session", async () => {
-  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const key = (await createDeviceKey()).key;
   const clients: AuthRecordingClient[] = [];
   const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
     makeClient: () => { const client = new AuthRecordingClient(); clients.push(client); return client as never; },
-    deviceKey: async () => key, renewToken: async (record) => record,
+    renewToken: async (record) => record,
   });
   await multi.setRemoteEnvironments([keyBound()]);
   await until(() => multi.remoteStatuses()[0]?.state === "connected");
@@ -253,4 +256,24 @@ test("Re-pairing a key-bound machine reconnects with the new session", async () 
   await until(() => clients.length === 2 && multi.remoteStatuses()[0]?.state === "connected");
   assert.equal((await (clients[1]!.auths[0] as ConnectionAuth).current()).token, "new-session");
   await multi.dispose();
+});
+
+test("A renewal racing a removal in another window never brings the machine back", async () => {
+  const secrets = memorySecrets();
+  const windowA = new EnvironmentCatalog(secrets), windowB = new EnvironmentCatalog(secrets);
+  const record = keyBound({ environmentId: "race", accessToken: "t1", expiresAt: 100 });
+  await windowA.upsert(record);
+  // Window A's renewal has already read the catalog when window B removes the machine.
+  const realGet = secrets.get.bind(secrets);
+  let release!: () => void; const paused = new Promise<void>((resolve) => { release = resolve; });
+  let reads = 0;
+  secrets.get = async (key) => { const value = await realGet(key); if (key.startsWith("t3-vscode.environments") && ++reads === 1) await paused; return value; };
+  const renewal = windowA.updateToken(record, { accessToken: "t2", expiresAt: 200 });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  secrets.get = realGet;
+  await windowB.remove("race");
+  release();
+  await renewal;
+  assert.deepEqual(await windowA.list(), [], "the catalog never got the machine back");
+  assert.deepEqual(await windowB.list(), []);
 });

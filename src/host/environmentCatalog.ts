@@ -10,6 +10,7 @@ import * as RemoteEnvironment from "@t3tools/client-runtime/environment";
 import { resolveRemotePairingTarget } from "@t3tools/shared/remote";
 import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/http";
+import { parseDeviceKey, type StoredDeviceKey } from "./deviceKey.js";
 
 export interface RemoteEnvironmentRecord {
   readonly environmentId: string;
@@ -21,6 +22,8 @@ export interface RemoteEnvironmentRecord {
   readonly expiresAt: number | null;
   /** "dpop": the session is bound to this device's key and renews itself (T3 Code 0.1.11+). Absent: a fixed-term bearer pairing. */
   readonly auth?: "dpop";
+  /** The key-bound session's own signing key (private JWK), stored with the pairing it belongs to. */
+  readonly dpopKey?: StoredDeviceKey;
   readonly scopes: ReadonlyArray<string>;
   readonly enabled: boolean;
   readonly addedAt: string;
@@ -40,6 +43,24 @@ export interface SecretBackend {
 }
 
 export const ENVIRONMENT_CATALOG_KEY = "t3-vscode.environments.v1";
+/**
+ * A key-bound pairing's renewed token lives in its own key, never in the catalog: a renewal then
+ * cannot rewrite the shared catalog, so it can never bring back a machine another window removed.
+ */
+export const ENVIRONMENT_TOKEN_KEY_PREFIX = "t3-vscode.environmentToken.v1.";
+const tokenKey = (environmentId: string) => `${ENVIRONMENT_TOKEN_KEY_PREFIX}${environmentId}`;
+interface StoredToken { readonly addedAt: string; readonly httpBaseUrl: string; readonly accessToken: string; readonly expiresAt: number }
+const parseToken = (raw: string | undefined): StoredToken | null => {
+  if (!raw) return null;
+  try {
+    const t = JSON.parse(raw) as Record<string, unknown> | null;
+    if (!t || !isString(t.addedAt) || !isString(t.httpBaseUrl) || !isString(t.accessToken) || !t.accessToken || typeof t.expiresAt !== "number" || !Number.isFinite(t.expiresAt)) return null;
+    return { addedAt: t.addedAt, httpBaseUrl: t.httpBaseUrl, accessToken: t.accessToken, expiresAt: t.expiresAt };
+  } catch { return null; }
+};
+/** The same pairing: a token stored for an earlier pairing of that machine does not apply. */
+const samePairing = (a: Pick<RemoteEnvironmentRecord, "addedAt" | "httpBaseUrl">, b: Pick<RemoteEnvironmentRecord, "addedAt" | "httpBaseUrl">) =>
+  a.addedAt === b.addedAt && a.httpBaseUrl === b.httpBaseUrl;
 
 const isString = (value: unknown): value is string => typeof value === "string";
 
@@ -56,7 +77,8 @@ const parseRecord = (raw: unknown): RemoteEnvironmentRecord | null => {
     environmentId: r.environmentId, label: r.label, httpBaseUrl: r.httpBaseUrl, wsBaseUrl: r.wsBaseUrl,
     accessToken: r.accessToken, expiresAt: r.expiresAt as number | null, scopes: [...r.scopes as string[]],
     enabled: r.enabled, addedAt: r.addedAt,
-    ...(r.auth === "dpop" ? { auth: "dpop" as const } : {}),
+    // A key-bound record without its key could only send its token unsigned, so it is not kept as key-bound.
+    ...(r.auth === "dpop" && parseDeviceKey(r.dpopKey) ? { auth: "dpop" as const, dpopKey: parseDeviceKey(r.dpopKey)! } : {}),
     ...(isString(r.serverVersion) ? { serverVersion: r.serverVersion } : {}),
     ...(IGNORABLE.has(r.ignoredStatus) ? { ignoredStatus: r.ignoredStatus as IgnorableEnvironmentStatus } : {}),
   };
@@ -83,7 +105,11 @@ export class EnvironmentCatalog {
         const record = parseRecord(entry);
         if (record && !seen.has(record.environmentId)) { seen.add(record.environmentId); out.push(record); }
       }
-      return out;
+      return Promise.all(out.map(async (record) => {
+        if (record.auth !== "dpop") return record;
+        const token = parseToken(await this.secrets.get(tokenKey(record.environmentId)));
+        return token && samePairing(token, record) && token.expiresAt > (record.expiresAt ?? 0) ? { ...record, accessToken: token.accessToken, expiresAt: token.expiresAt } : record;
+      }));
     } catch {
       return [];
     }
@@ -98,8 +124,9 @@ export class EnvironmentCatalog {
     });
   }
 
-  remove(environmentId: string): Promise<void> {
-    return this.mutate((all) => all.filter((e) => e.environmentId !== environmentId));
+  async remove(environmentId: string): Promise<void> {
+    await this.mutate((all) => all.filter((e) => e.environmentId !== environmentId));
+    await this.secrets.delete(tokenKey(environmentId));
   }
 
   /** Removes a pairing only while it still holds `accessToken`, so a fresh re-pair from another window survives. */
@@ -118,15 +145,18 @@ export class EnvironmentCatalog {
    * and a record that was re-paired or removed meanwhile is left alone.
    */
   async updateToken(previous: Pick<RemoteEnvironmentRecord, "environmentId" | "accessToken" | "addedAt" | "httpBaseUrl">, next: { readonly accessToken: string; readonly expiresAt: number }): Promise<RemoteEnvironmentRecord | null> {
-    let stored: RemoteEnvironmentRecord | null = null;
-    await this.mutate((all) => all.map((e) => {
-      // Only the same pairing: a renewal of the old session must not replace a fresh re-pairing.
-      if (e.environmentId !== previous.environmentId || e.auth !== "dpop" || e.addedAt !== previous.addedAt || e.httpBaseUrl !== previous.httpBaseUrl) return e;
-      const newer = e.accessToken === previous.accessToken || (e.expiresAt ?? 0) < next.expiresAt;
-      stored = newer ? { ...e, accessToken: next.accessToken, expiresAt: next.expiresAt } : e;
-      return stored;
-    }));
-    return stored;
+    const run = this.queue.then(async () => {
+      // Only the same pairing: a renewal of the old session must not replace a fresh re-pairing,
+      // and a machine that was removed is not stored again.
+      const record = (await this.list()).find((e) => e.environmentId === previous.environmentId && e.auth === "dpop" && samePairing(e, previous));
+      if (!record) return null;
+      // Another window already stored a later token for this session.
+      if (record.accessToken !== previous.accessToken && (record.expiresAt ?? 0) >= next.expiresAt) return record;
+      await this.secrets.store(tokenKey(record.environmentId), JSON.stringify({ addedAt: record.addedAt, httpBaseUrl: record.httpBaseUrl, accessToken: next.accessToken, expiresAt: next.expiresAt }));
+      return { ...record, accessToken: next.accessToken, expiresAt: next.expiresAt };
+    });
+    this.queue = run.catch(() => undefined);
+    return run;
   }
 
   setEnabled(environmentId: string, enabled: boolean): Promise<void> {
@@ -141,9 +171,9 @@ export class EnvironmentCatalog {
     }));
   }
 
-  /** Fires for this key only; VS Code also fires it for other windows/profiles. */
+  /** Fires for the catalog and stored renewed tokens only; VS Code also fires it for other windows/profiles. */
   onDidChange(listener: () => void): { dispose(): void } {
-    const sub = this.secrets.onDidChange((event) => { if (event.key === ENVIRONMENT_CATALOG_KEY) listener(); });
+    const sub = this.secrets.onDidChange((event) => { if (event.key === ENVIRONMENT_CATALOG_KEY || event.key.startsWith(ENVIRONMENT_TOKEN_KEY_PREFIX)) listener(); });
     return { dispose: () => { sub.dispose(); } };
   }
 
@@ -179,6 +209,8 @@ export interface RemoteBearerSession {
   readonly access_token: string;
   readonly expires_in: number;
   readonly scope?: string;
+  /** A key-bound session's signing key, to store with the pairing. */
+  readonly dpopKey?: StoredDeviceKey;
 }
 
 export interface EnvironmentPairingDeps {
@@ -292,7 +324,7 @@ export async function pairRemoteEnvironment(
     wsBaseUrl: target.wsBaseUrl,
     accessToken: session.access_token,
     expiresAt: deps.now() + session.expires_in * 1000,
-    ...(keyBound ? { auth: "dpop" as const } : {}),
+    ...(keyBound && session.dpopKey ? { auth: "dpop" as const, dpopKey: session.dpopKey } : {}),
     scopes: session.scope?.split(" ").filter((s) => s.length > 0) ?? [],
     enabled: true,
     addedAt: new Date(deps.now()).toISOString(),

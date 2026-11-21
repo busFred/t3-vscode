@@ -9,7 +9,7 @@ import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/http";
 import { bearerAuth, dpopAuth, type AccessToken, type ConnectionAuth } from "./connectionAuth.js";
-import { createDpopProof, type DeviceKey } from "./deviceKey.js";
+import { createDeviceKey, createDpopProof, importDeviceKey, type DeviceKey } from "./deviceKey.js";
 import type { RemoteBearerSession, RemoteEnvironmentRecord } from "./environmentCatalog.js";
 
 const CLIENT_METADATA = { label: "VS Code", deviceType: "desktop" } as const;
@@ -17,11 +17,17 @@ const tokenUrl = (httpBaseUrl: string) => new URL("/oauth/token", httpBaseUrl).t
 const runWithFetch = <A, E>(effect: Effect.Effect<A, E, any>): Promise<A> =>
   Effect.runPromise(Effect.provide(effect, FetchHttpClient.layer) as Effect.Effect<A, E>);
 
-/** Exchanges a pairing link's one-time credential for a session bound to `key`. */
-export const bootstrapDpopSession = (key: () => Promise<DeviceKey>) => async (input: { httpBaseUrl: string; credential: string }): Promise<RemoteBearerSession> => {
-  const dpopProof = await createDpopProof(await key(), { method: "POST", url: tokenUrl(input.httpBaseUrl) });
-  return runWithFetch(RemoteAuth.exchangeRemoteDpopAccessToken({ httpBaseUrl: input.httpBaseUrl, credential: input.credential, clientMetadata: CLIENT_METADATA, dpopProof }));
-};
+/** Exchanges a pairing link's one-time credential for a session bound to a new key, returned with the session to store with the pairing. */
+export async function bootstrapDpopSession(input: { httpBaseUrl: string; credential: string }): Promise<RemoteBearerSession> {
+  const { key, stored } = await createDeviceKey();
+  const dpopProof = await createDpopProof(key, { method: "POST", url: tokenUrl(input.httpBaseUrl) });
+  const session = await runWithFetch(RemoteAuth.exchangeRemoteDpopAccessToken({ httpBaseUrl: input.httpBaseUrl, credential: input.credential, clientMetadata: CLIENT_METADATA, dpopProof }));
+  return { ...session, dpopKey: stored };
+}
+
+/** The signing key of a key-bound pairing; null for a bearer pairing. */
+export const recordKey = (record: Pick<RemoteEnvironmentRecord, "auth" | "dpopKey">): Promise<DeviceKey | null> =>
+  record.auth === "dpop" && record.dpopKey ? importDeviceKey(record.dpopKey) : Promise.resolve(null);
 
 /** Renews a key-bound session's token. Fails with the server's error when the session is revoked or idled out. */
 export async function renewDpopToken(record: Pick<RemoteEnvironmentRecord, "httpBaseUrl" | "accessToken">, key: DeviceKey, now: () => number = Date.now): Promise<{ accessToken: string; expiresAt: number }> {

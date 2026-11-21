@@ -14,8 +14,7 @@ import type { RemoteConnectionState } from "../shared/environmentStatus.js";
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
 import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/http";
-import { recordAuth } from "./environmentAuth.js";
-import type { DeviceKey } from "./deviceKey.js";
+import { recordAuth, recordKey } from "./environmentAuth.js";
 
 export type { RemoteConnectionState };
 export interface RemoteEnvironmentStatus {
@@ -96,7 +95,6 @@ export class MultiEnvironmentClient {
   private readonly makeClient: () => RemoteClient;
   private readonly reconnectDelayMs: number;
   private readonly checkCredential: CredentialCheck;
-  private readonly deviceKey: (() => Promise<DeviceKey>) | undefined;
   private readonly renewToken: ((record: RemoteEnvironmentRecord) => Promise<RemoteEnvironmentRecord | null>) | undefined;
   private disposed = false;
   readonly primary: T3Client;
@@ -105,13 +103,13 @@ export class MultiEnvironmentClient {
   /** Fired when a remote rejects an unexpired credential: that machine revoked this client, so its entry should go. */
   onRemoteRevoked: ((record: RemoteEnvironmentRecord) => void) | null = null;
   /**
-   * `deviceKey` and `renewToken` serve key-bound pairings (T3 Code 0.1.11): the key signs every request,
-   * and `renewToken` renews the token and stores it, returning the stored record (null when it was removed).
+   * `renewToken` serves key-bound pairings (T3 Code 0.1.11), whose own key signs every request: it renews
+   * the token and stores it, returning the stored record (null when the pairing was removed or replaced).
    */
   constructor(primary: T3Client, options: { makeClient?: () => RemoteClient; reconnectDelayMs?: number; checkCredential?: CredentialCheck;
-    deviceKey?: () => Promise<DeviceKey>; renewToken?: (record: RemoteEnvironmentRecord) => Promise<RemoteEnvironmentRecord | null> } = {}) {
+    renewToken?: (record: RemoteEnvironmentRecord) => Promise<RemoteEnvironmentRecord | null> } = {}) {
     this.primary = primary; this.makeClient = options.makeClient ?? (() => new T3Client()); this.reconnectDelayMs = options.reconnectDelayMs ?? 2000;
-    this.deviceKey = options.deviceKey; this.renewToken = options.renewToken;
+    this.renewToken = options.renewToken;
     // The bearer session check must never see a key-bound token; such a record has no bearer answer.
     this.checkCredential = options.checkCredential ?? (async (record) => record.auth === "dpop" ? null : checkCredential(record));
   }
@@ -162,8 +160,8 @@ export class MultiEnvironmentClient {
       remote.client = client;
       try {
         if (remote.record.auth === "dpop") {
-          const key = this.deviceKey ? await this.deviceKey() : null;
-          if (!key) throw new Error("This computer's sign-in key for paired machines is unavailable.");
+          const key = await recordKey(remote.record);
+          if (!key) throw new Error("This pairing's sign-in key is unavailable. Pair the machine again.");
           await client.connect(remoteServer(remote.record), recordAuth(remote.record, key, () => this.currentToken(remote)));
         } else await client.connect(remoteServer(remote.record), remote.record.accessToken);
         if (!current()) { await client.disconnect(); return; }
