@@ -27,3 +27,8 @@ test("Valid provider IDs matching Object property names require an own preferenc
   const preferences = { constructor: { hiddenModels: ["sol"], modelOrder: ["luna"] } };
   assert.deepEqual(visibleProviderModels(provider, getProviderModelPreference(preferences, "constructor")).map((model) => model.slug), ["luna", "astra", "terra", "custom"]);
 });
+test("A model the server reports twice is listed once", () => {
+  const duplicated = { models: [...provider.models, { ...provider.models[0]! }] };
+  assert.deepEqual(orderedProviderModels(duplicated).map((model) => model.slug), ["sol", "astra", "luna", "terra", "custom"]);
+  assert.deepEqual(visibleProviderModels(duplicated).map((model) => model.slug), ["sol", "astra", "luna", "custom"]);
+});

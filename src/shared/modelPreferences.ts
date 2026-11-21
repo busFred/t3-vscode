@@ -16,7 +16,9 @@ export interface ModelPickerPreferences {
 export function orderedProviderModels(provider: Pick<ServerProvider, "models">, preferences?: ProviderModelPreference): ServerProviderModel[] {
   const ranks = new Map<string, number>();
   for (const slug of preferences?.modelOrder ?? []) if (!ranks.has(slug)) ranks.set(slug, ranks.size);
-  return [...provider.models].sort((left, right) => (ranks.get(left.slug) ?? Infinity) - (ranks.get(right.slug) ?? Infinity));
+  // A model a server reports twice is listed once (T3 0.1.11).
+  const unique = provider.models.filter((model, index) => provider.models.findIndex((other) => other.slug === model.slug) === index);
+  return unique.sort((left, right) => (ranks.get(left.slug) ?? Infinity) - (ranks.get(right.slug) ?? Infinity));
 }
 
 export function visibleProviderModels(provider: Pick<ServerProvider, "models">, preferences?: ProviderModelPreference, showLegacy = false): ServerProviderModel[] {
