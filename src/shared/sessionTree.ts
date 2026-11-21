@@ -12,7 +12,9 @@ export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: Read
   const byId = new Map(threads.map((thread) => [thread.id, thread]));
   const parentOf = (thread: ThreadSummary): ThreadSummary | undefined => {
     const parent = (thread.relationshipToParent === "subagent" || thread.relationshipToParent === "side-chat") && thread.parentThreadId ? byId.get(thread.parentThreadId) : undefined;
-    return parent && parent.id !== thread.id && (thread.remoteDelegation || parent.projectId === thread.projectId) ? parent : undefined;
+    if (!parent || parent.id === thread.id || !(thread.remoteDelegation || parent.projectId === thread.projectId)) return undefined;
+    // A side chat left active when its parent was archived stands alone, so a search for it keeps no empty archived parent row.
+    return thread.relationshipToParent === "side-chat" && !thread.archived && parent.archived ? undefined : parent;
   };
   const retained = new Set<string>();
   for (const match of matches) {
@@ -32,8 +34,7 @@ export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: Read
     const parentNode = !cyclic && parent ? nodes.get(parent.id) : undefined;
     // A side chat the server left active when its parent was archived (it has running work) is its own
     // active row rather than hidden or buried in Archive under that parent.
-    const strandedSideChat = thread.relationshipToParent === "side-chat" && !thread.archived && (!parentNode || !!parentNode.thread.archived);
-    if (parentNode && !strandedSideChat) parentNode.children.push(node);
+    if (parentNode) parentNode.children.push(node);
     else if (thread.relationshipToParent !== "subagent") roots.push(node);
   }
   for (const node of nodes.values()) {

@@ -323,3 +323,26 @@ test("Renewed tokens never go back into the shared catalog", async () => {
   assert.equal(stored.environments[0]!.enabled, false);
   assert.equal((await catalog.list())[0]!.accessToken, "t2");
 });
+
+test("The server's refusal right after a renewal ends the session at once", async () => {
+  const refused = { _tag: "EnvironmentAuthInvalidError", reason: "invalid_credential" };
+  let renewals = 0;
+  const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
+    makeClient: () => { const client = new AuthRecordingClient(); client.connectError = refused; return client as never; },
+    reconnectDelayMs: 60_000,
+    renewToken: async (record) => { renewals += 1; if (renewals === 1) return { ...record, accessToken: "renewed", expiresAt: Date.now() + 3_600_000 }; throw refused; },
+  });
+  await multi.setRemoteEnvironments([keyBound({ expiresAt: Date.now() - 1 })]); // the first renewal happens inside connect
+  await until(() => multi.remoteStatuses()[0]?.state === "expired");
+  assert.equal(renewals, 2, "the refusal got its own renewal to decide, despite the one moments before");
+  await multi.dispose();
+});
+
+test("A stored key that no longer imports shows Pair again instead of retrying", async () => {
+  const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
+    makeClient: () => new AuthRecordingClient() as never, renewToken: async (record) => record,
+  });
+  await multi.setRemoteEnvironments([keyBound({ dpopKey: { ...testKey.stored, x: "AAAA", d: "AAAA" } })]);
+  await until(() => multi.remoteStatuses()[0]?.state === "expired");
+  await multi.dispose();
+});

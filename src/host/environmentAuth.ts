@@ -27,7 +27,8 @@ export async function bootstrapDpopSession(input: { httpBaseUrl: string; credent
 
 /** The signing key of a key-bound pairing; null for a bearer pairing. */
 export const recordKey = (record: Pick<RemoteEnvironmentRecord, "auth" | "dpopKey">): Promise<DeviceKey | null> =>
-  record.auth === "dpop" && record.dpopKey ? importDeviceKey(record.dpopKey) : Promise.resolve(null);
+  // A stored key that no longer imports signs nothing either: the pairing shows Pair again instead of retrying.
+  record.auth === "dpop" && record.dpopKey ? importDeviceKey(record.dpopKey).catch(() => null) : Promise.resolve(null);
 
 /** Renews a key-bound session's token. Fails with the server's error when the session is revoked or idled out. */
 export async function renewDpopToken(record: Pick<RemoteEnvironmentRecord, "httpBaseUrl" | "accessToken">, key: DeviceKey, now: () => number = Date.now): Promise<{ accessToken: string; expiresAt: number }> {

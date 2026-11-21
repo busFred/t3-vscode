@@ -190,3 +190,11 @@ test("A side chat left active when its parent was archived is its own active row
   // An archived side chat still follows its archived parent.
   assert.deepEqual(ids(sessionShelves([thread("parent", { archived: true, settled: true }), side({ archived: true })]).archived), [["parent", [["side", []]]]]);
 });
+
+test("Searching for a stranded side chat keeps no empty archived parent row", () => {
+  const side = thread("side", { title: "needle", parentThreadId: "parent", relationshipToParent: "side-chat" });
+  const parent = thread("parent", { archived: true, settled: true });
+  const shelves = sessionShelves([parent, side], [side]);
+  assert.deepEqual(ids(shelves.active), [["side", []]]);
+  assert.deepEqual(ids(shelves.archived), []);
+});
