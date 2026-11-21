@@ -151,7 +151,9 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
   }
   async openSession(threadId: string, preview = false, sourceViewId?: string): Promise<string> {
     return this.enqueue(async () => {
-      const state = this.host.snapshot(sourceViewId);
+      // The source tab may have closed meanwhile (a side chat appears up to seconds after /side); fall back to the sidebar's view.
+      let state: ReturnType<typeof this.host.snapshot>;
+      try { state = this.host.snapshot(sourceViewId); } catch { state = this.host.snapshot(SIDEBAR_VIEW_ID); }
       const thread = state.threads.find(entry => entry.id === threadId);
       const parentId = thread?.relationshipToParent === "side-chat" ? thread.parentThreadId : null;
       await this.host.selectThread(threadId, SIDEBAR_VIEW_ID);
