@@ -207,9 +207,12 @@ select, input { color: inherit; background: var(--card); }
 .thread-dot.woke, .thread-outcome.woke { color: var(--warning); }
 .thread-snoozed { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: .625rem; color: var(--primary); }
 .markdown { font-size: 0.875rem; overflow-wrap: anywhere; line-height: 1.65; }
+.markdown:focus { outline: none; }
 .markdown > :first-child { margin-top: 0; }
 .markdown > :last-child { margin-bottom: 0; }
 .markdown p { margin: 0 0 6px; white-space: pre-wrap; }
+/* Spaces typed at a line start in a sent message: shown, but not selectable or copied. */
+.markdown [data-leading-whitespace] { white-space: pre-wrap; user-select: none; }
 .markdown h1, .markdown h2, .markdown h3 { font-weight: 600; margin: 18px 0 10px; line-height: 1.4; }
 .markdown h1 { font-size: 1.25rem; }.markdown h2 { font-size: 1.0625rem; }.markdown h3 { font-size: 0.875rem; }
 .markdown ul, .markdown ol { padding-left: 23px; margin: 8px 0 6px; }.markdown ul { list-style: disc; }.markdown ol { list-style: decimal; }

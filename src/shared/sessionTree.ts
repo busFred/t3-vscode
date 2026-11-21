@@ -67,9 +67,9 @@ export function threadIsWorking(thread: Pick<ThreadSummary, "status" | "activity
  * signal; `waitingOnSubagents` is a descendant-scan fallback (see `withSubagentWorkingState`
  * and the host-side transcript scan) for servers that predate the roster.
  */
-export function threadIsWaiting(thread: Pick<ThreadSummary, "status" | "activityRunStatus" | "waitingOnSubagents" | "backgroundWork"> & Partial<Pick<ThreadSummary, "archived" | "settled">>): boolean {
-  // A stale roster must not mask an archived or settled thread's own label.
-  return !thread.archived && !thread.settled && !threadIsWorking(thread) && (!!thread.backgroundWork?.holdsCompletion || !!thread.waitingOnSubagents);
+export function threadIsWaiting(thread: Pick<ThreadSummary, "status" | "activityRunStatus" | "waitingOnSubagents" | "backgroundWork"> & Partial<Pick<ThreadSummary, "archived" | "settled" | "unseen">>): boolean {
+  // A stale roster must not mask an archived or settled thread's own label, and a failed run is reported as Failed even while background work holds the thread (T3 0.1.11).
+  return !thread.archived && !thread.settled && thread.unseen !== "failed" && !threadIsWorking(thread) && (!!thread.backgroundWork?.holdsCompletion || !!thread.waitingOnSubagents);
 }
 
 /** A short, human description of what a Waiting thread is still waiting on. */

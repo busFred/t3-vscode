@@ -1,4 +1,4 @@
-import { stripRenderedAssistantQuotes } from "./assistantQuoteText.js";
+import { renderedMessageText } from "./assistantQuoteText.js";
 import { splitMessageReferences } from "./messageReferences.js";
 import type { TranscriptItem } from "./bridge.js";
 
@@ -24,7 +24,7 @@ export function messageExchanges(rows: ReadonlyArray<TranscriptItem>): MessageEx
     if (row.item.type === "user_message") {
       // Preview what the transcript shows, not the wire text: attached snapshots and readable quote
       // blocks are most of a referencing message and would crowd out the words the user typed.
-      const prompt = stripRenderedAssistantQuotes(splitMessageReferences(row.item.text).text);
+      const prompt = renderedMessageText(splitMessageReferences(row.item.text).text);
       exchanges.push({ key: row.key, rowIndex,
         prompt: prompt.trim() ? prompt : row.item.attachments.map((attachment) => attachment.name).join(", ") || "Attached message", sentAt: row.item.startedAt ?? null, response: null });
     }

@@ -18,9 +18,9 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.3.7 |
 | [Conversation search](#conversation-search) | Searches native thread titles and message snippets. | v0.0.1 | v0.1.22 |
 | [Find in session](#find-in-session) | Progressive message-text and full-history occurrence search, persistent filters and collapsible Above/Side results. | v0.1.13 | v0.3.7 |
-| [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.3.14 |
+| [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.3.15 |
 | [Link requests](#link-requests) | Review or decline requests to link environments. | v0.3.7 | v0.3.7 |
-| [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation, centred in the whole conversation; earlier pages load at the top. | v0.0.8 | v0.3.14 |
+| [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation, centred in the whole conversation; earlier pages load at the top. | v0.0.8 | v0.3.15 |
 | [Subagent conversations](#subagent-conversations) | Nested local and remote child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.11 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
 | [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.3.14 |
@@ -31,7 +31,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Attachment presentation](#attachment-presentation) | Draft and sent previews with local recovery after closure. | v0.0.1 | v0.1.23 |
 | [Clipboard paste and file picker](#clipboard-paste-and-file-picker) | Image paste uses selected words as its description; local uploads survive tab closure. | v0.0.8 | v0.3.2 |
 | [Streaming and progressive history](#streaming-and-progressive-history) | Streams replies, loads older history and keeps rows separate as rich content settles. | v0.0.1 | v0.3.8 |
-| [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.3.2 |
+| [Markdown and media](#markdown-and-media) | Formatted text, code, underline, tables, images, video and audio. | v0.0.1 | v0.3.15 |
 | [Collapsed activity](#collapsed-activity) | Timed thought/tool groups; settled rounds fold behind one toggle, keeping steer replies and answers visible. | v0.0.1 | v0.1.13 |
 | [MCP Apps](#mcp-apps) | Interactive MCP tool apps in the transcript. | v0.3.7 | v0.3.7 |
 | [Interactive HTML graphics](#interactive-html-graphics) | Displays T3's inline HTML visualizations and mockups. | v0.0.8 | v0.0.8 |
@@ -39,20 +39,20 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Two-column reading](#two-column-reading) | Removed in v0.1.10 after performance feedback. | v0.0.9 | v0.1.10 |
 | [Math rendering and copying](#math-rendering-and-copying) | Renders KaTeX with scrolling, floating previews and copy actions. | v0.0.8 | v0.0.9 |
 | [Models and provider instances](#models-and-provider-instances) | Server catalogs with per-instance visibility and drag ordering saved in VS Code. | v0.0.1 | v0.1.16 |
-| [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.1.16 |
+| [Model search and favorites](#model-search-and-favorites) | Searches visible models and saves favorites independently in VS Code. | v0.0.4 | v0.3.15 |
 | [Effort and permission controls](#effort-and-permission-controls) | Reasoning, Speed and Ultracode in the model picker; all four runtime modes in the composer. | v0.0.1 | v0.3.7 |
 | [Account usage](#account-usage) | Collapsed sidebar limits per provider, pooling or splitting hub accounts, refresh time and Status meters action. | v0.0.6 | v0.3.9 |
 | [Status bar meters](#status-bar-meters) | Shows pooled provider or per-account usage with configurable providers, accounts, windows and automatic refresh. | v0.0.7 | v0.3.7 |
 | [Shared refresh settings](#shared-refresh-settings) | Minute-based default and usage/worktree overrides, including fractional intervals. | v0.2.0 | v0.2.0 |
-| [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.0 |
+| [Native file links](#native-file-links) | Opens chat-linked files and ranges in VS Code's editor. | v0.0.1 | v0.3.15 |
 | [Editor references](#editor-references) | Inserts file ranges with checkout-aware labels and preserved source URIs. | v0.0.4 | v0.2.0 |
-| [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.3.14 |
+| [Assistant citations](#assistant-citations) | Inserts user and assistant message quotes at the prompt cursor with comments and source links. | v0.0.4 | v0.3.15 |
 | [Response forks](#response-forks) | One supported fork at the end of each settled assistant run. | v0.0.5 | v0.1.22 |
 | [Saved turn diffs](#saved-turn-diffs) | Shows agent-only response files, counts, the current checkpoint checkout branch and files merged in from a subagent checkout. | v0.0.6 | v0.3.0 |
 | [Revert and restore](#revert-and-restore) | "Edit from here" rewinds the conversation only; "Restore files to this point" is a separate, guarded extension-owned Git restore that keeps your edits where it can. | v0.2.2 | v0.3.0 |
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
-| [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.7 |
+| [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.15 |
 | [Remote environments](#remote-environments) | One Machines list separates Conversations and agent access; a green triangle marks missing repositories, with remote chat and cloning actions. | v0.3.0 | v0.3.10 |
 | [Managed policy](#managed-policy) | Shows the managing organization and applies server policy restrictions. | v0.3.7 | v0.3.7 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
@@ -561,6 +561,10 @@ Session resources retain the current History selection for restoration. Opening 
 
 ### Conversation status and notifications
 
+#### v0.3.15 — T3 Code 0.1.11 fixes
+
+- A thread whose run failed shows Failed rather than Waiting while background work still holds it (#38968).
+
 #### v0.3.14 — Stopping state and waiting on subagents
 
 - Stop shows "Stopping…" and ignores repeat clicks for that run (T3 Code 0.1.10, `cbc68c9dc1`),
@@ -635,6 +639,10 @@ Session resources retain the current History selection for restoration. Opening 
 - Validation: typecheck clean; 711/711 unit tests; `pnpm run build`. Live against an isolated T3 Code 0.1.6 server (temporary base directory and port) with GPT-6 Luna (low): `scripts/verify-host.ts` and `scripts/verify-scheduled-live.ts` pass. Fresh-context Opus regression review against `a6dc78e`: BLOCK (restoring a worktree Git no longer lists; Stop right after Send left the run held), both fixed in `8303223` with tests; re-review APPROVE. Its two non-blocking Stop fallbacks were then applied.
 
 ### Message navigation rail
+
+#### v0.3.15 — T3 Code 0.1.11 fixes
+
+- The hover preview shows a quoted text's words instead of its raw citation link (#38250).
 
 #### v0.3.14 — long jumps land on their message
 
@@ -1297,6 +1305,11 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Markdown and media
 
+#### v0.3.15 — T3 Code 0.1.11 fixes
+
+- Sent messages keep the spaces typed at the start of a line, including indented continuation lines and list content, instead of CommonMark dropping them (T3 Code 0.1.11, #38079). The spaces show but cannot be selected or copied; agent replies read as before.
+- Copying only some items of a numbered list keeps their numbers (3. 4.) instead of restarting at 1 (#39150).
+
 #### Unreleased — image context menu
 
 - Right-clicking a transcript image or image chip offers Copy image, Save image as…, Open in editor
@@ -1563,6 +1576,10 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Model search and favorites
 
+#### v0.3.15 — T3 Code 0.1.11 fixes
+
+- A model the server reports twice appears once in the picker and model management (#31590).
+
 #### v0.0.4
 
 - Add fuzzy model/provider search, favorite models and keyboard selection.
@@ -1795,6 +1812,10 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 
 ### Native file links
 
+#### v0.3.15 — T3 Code 0.1.11 fixes
+
+- A `~/` or `~\` file link opens from the home folder, not the thread folder (#38510).
+
 #### v0.0.1
 
 - Provide file-open actions from chat.
@@ -1850,6 +1871,10 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 - Accept whole-file references with no range or snapshot, so `@` menu picks and editor selections share one format.
 
 ### Assistant citations
+
+#### v0.3.15 — T3 Code 0.1.11 fixes
+
+- A citation jump moves focus to the cited response unless an input or the composer has focus (#37813).
 
 #### v0.3.14 — reply to a response
 
@@ -2027,6 +2052,10 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 ## Setup and settings
 
 ### Local connection and pairing
+
+#### v0.3.15 — T3 Code 0.1.11 fixes
+
+- A status listener that throws no longer stops a dropped paired machine from reconnecting (#39420).
 
 #### Unreleased — the native-undo harness follows the new setting scope
 

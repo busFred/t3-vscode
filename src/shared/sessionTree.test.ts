@@ -174,3 +174,9 @@ test("Session sorting uses last activity, natural titles, pinned precedence and 
   const invalid = thread("invalid", { lastActiveAt: "bad", updatedAt: "bad" });
   for (const order of ["date-asc", "date-desc"] as const) assert.equal(sessionTree([...threads, invalid], [...threads, invalid], order).at(-1)!.thread.id, "invalid");
 });
+
+test("A failed thread whose background work is still held reads as Failed, not Waiting", () => {
+  const held = thread("held", { status: "completed", activityRunStatus: null, backgroundWork: { holdsCompletion: true, subagents: 1 } as never });
+  assert.equal(threadIsWaiting(held), true);
+  assert.equal(threadIsWaiting({ ...held, unseen: "failed" }), false);
+});

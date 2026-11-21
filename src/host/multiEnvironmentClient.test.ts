@@ -578,3 +578,16 @@ test("Minting targets only the selected connected machine, never local fallback"
   await assert.rejects(r.multi.mintPeerPairingCodeOn("missing", "read-only"), /no longer paired/);
   assert.equal(r.primary.callsNamed("mintPeerPairingCode").length, 0);
 });
+
+test("A status listener that throws does not stop a closed remote from reconnecting", async () => {
+  const r = await rig({ reconnectDelayMs: 5 });
+  const first = await pair(r, "a", shell([project("p-a")], [thread("t-a", "p-a")], 1));
+  const second = new FakeClient(shell([project("p-a")], [thread("t-a", "p-a")], 2), "a2");
+  r.queue.push(second);
+  let threw = false;
+  r.multi.onRemoteStatus = () => { if (!threw) { threw = true; throw new Error("listener failed"); } };
+  first.close();
+  await until(() => r.multi.remoteStatuses()[0]?.state === "connected" && r.remotes.includes(second), "reconnected after a throwing listener");
+  assert.equal(threw, true);
+  await r.multi.disconnect();
+});

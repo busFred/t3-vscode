@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { TranscriptItem, WireTurnItem } from "./bridge.js";
 import { messageExchanges, exchangeAtRow, exchangeAtPointer, exchangeTimeLabel, resolveMessageNavigation } from "./messageNavigation.js";
+import { EnvironmentId, ThreadId, MessageId } from "@t3tools/contracts";
+import { serializeAssistantCitation } from "./messageCitations.js";
 import { finalResponseCheckpoints, transcriptRows, workSummary } from "./transcriptRows.js";
 const row = (key: string, type: string, text = key): TranscriptItem => ({ key, sourceThreadId: "thread", toolLabel: null, output: null, needsDetail: false,
   item: { id: key, type, status: "completed", text, attachments: [] } as unknown as WireTurnItem });
@@ -50,4 +52,11 @@ test("Preview times count calendar days: Today, Yesterday, N days ago for a week
   assert.equal(exchangeTimeLabel(new Date(2026, 9, 31, 9, 5).toISOString(), new Date(2026, 10, 2, 12).getTime(), date, time), "2 days ago 9:05");
   assert.equal(exchangeTimeLabel(null, now, date, time), "");
   assert.equal(exchangeTimeLabel("not a date", now, date, time), "");
+});
+
+test("A rail preview shows the quoted text of a citation, not its raw link", () => {
+  const link = serializeAssistantCitation({ version: 1, environmentId: EnvironmentId.make("env"), threadId: ThreadId.make("thread"), messageId: MessageId.make("message"), text: "the cited words", start: 0, end: 15, prefix: "", suffix: "" });
+  const [stop] = messageExchanges([row("quoted", "user_message", `Explain ${link}`)]);
+  assert.equal(stop!.prompt, "Explain the cited words");
+  assert.doesNotMatch(stop!.prompt, /t3-citation/);
 });
