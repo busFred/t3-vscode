@@ -5,7 +5,7 @@ import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
 import type { ThreadSummary } from "./bridge.js";
 import { contextIsReferenced, insertSideChatReference, removeContextReference, sideChatRecordsForMessage } from "./composerContext.js";
 import { sessionTree } from "./sessionTree.js";
-import { parseSideChatCommand, sideChatDisabledReason } from "./sideChats.js";
+import { parseSideChatCommand, sideChatBlockCode, sideChatBlockMessage, sideChatDisabledReason } from "./sideChats.js";
 
 test("side-chat parsing uses whole-message slash commands and aliases", () => {
   assert.deepEqual(parseSideChatCommand("  /SIDE  compare\npaths "), { prompt: "compare\npaths" });
@@ -56,4 +56,18 @@ test("a leading reply stays apart from the prompt, so /side after it still start
   assert.deepEqual(parseSideChatMessage("/btw why?"), { prompt: "why?" });
   assert.equal(parseSideChatMessage(`${token} plain reply`), null);
   assert.equal(parseSideChatMessage(`before ${token} /side x`), null, "only a leading reply is set apart");
+});
+
+test("A side chat block travels as a short code that maps back to the same sentences", () => {
+  const blocked = { capability: true, hasUserMessage: true };
+  assert.equal(sideChatBlockCode(blocked), null);
+  assert.equal(sideChatBlockMessage(null), null);
+  assert.equal(sideChatBlockCode({ ...blocked, sideChat: true }), "side-chat");
+  assert.equal(sideChatBlockCode({ ...blocked, subagent: true }), "subagent");
+  assert.equal(sideChatBlockCode({ ...blocked, capability: undefined }), "not-ready");
+  assert.equal(sideChatBlockCode({ ...blocked, capability: false }), "unsupported");
+  assert.equal(sideChatBlockCode({ ...blocked, hasUserMessage: false }), "no-message");
+  assert.equal(sideChatBlockCode({ ...blocked, worktreePending: true }), "worktree");
+  assert.equal(sideChatBlockMessage("unsupported"), "Update this environment's T3 Code server to use side chats.");
+  assert.equal(sideChatBlockMessage("side-chat"), "Side chats cannot start side chats.");
 });

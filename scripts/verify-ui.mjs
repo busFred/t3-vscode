@@ -1109,9 +1109,9 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   }
   const record = { version: 1, kind: "thread", contextId: "thread_side-one", threadId: "side-one", environmentId: "fixture", label: "Check preview tabs", title: "Check preview tabs" };
   const setup = ({ record, activeThreadId }) => {
-    const parent = { ...window.__state.threads[0], hasUserMessage: true, sideChatDisabledReason: null, sideChatAttention: "approval" };
+    const parent = { ...window.__state.threads[0], hasUserMessage: true, sideChatBlock: undefined, sideChatAttention: "approval" };
     const sideChat = { ...parent, id: record.threadId, title: record.title, parentThreadId: parent.id, relationshipToParent: "side-chat",
-      sideChatDisabledReason: "Side chats cannot start side chats.", pinned: false, sideChatAttention: undefined, pendingRuntimeRequest: { kind: "approval" } };
+      sideChatBlock: "side-chat", pinned: false, sideChatAttention: undefined, pendingRuntimeRequest: { kind: "approval" } };
     const oldSide = { ...sideChat, id: "side-two", title: "Compare draft recovery", pendingRuntimeRequest: undefined };
     const agent = { ...oldSide, id: "agent-one", title: "Check the bridge", relationshipToParent: "subagent" };
     const inherited = [window.__fixtures.user, window.__fixtures.assistant].map(row => ({ ...row, visibility: "inherited" }));

@@ -238,7 +238,7 @@ export function PendingRequests({ state }: { state: HostStateSnapshot }) {
   const toggle = (requestId: string) => setCollapsed((previous) => ({ ...previous, [requestId]: !previous[requestId] }));
   return <div className="pending-requests">
     {approval ? <ApprovalCard key={approval.requestId} approval={approval} pendingCount={state.pending.approvals.length} threadId={threadId} open={!collapsed[approval.requestId]} onToggle={() => toggle(approval.requestId)} /> : null}
-    {prompt ? <UserInput key={prompt.requestId} prompt={prompt} threadId={threadId} sideChatAvailable={state.threads.find(thread => thread.id === threadId)?.sideChatDisabledReason === null} open={!collapsed[prompt.requestId]} onToggle={() => toggle(prompt.requestId)} /> : null}
+    {prompt ? <UserInput key={prompt.requestId} prompt={prompt} threadId={threadId} sideChatAvailable={state.threads.find(thread => thread.id === threadId)?.sideChatBlock === undefined} open={!collapsed[prompt.requestId]} onToggle={() => toggle(prompt.requestId)} /> : null}
     {secret ? <SecretRequestCard key={secret.turnItemId} request={secret} threadId={threadId} open={!collapsed[secret.turnItemId]} onToggle={() => toggle(secret.turnItemId)} /> : null}
     {/* The conversation's own requests come first; a child's approval is someone else's turn. */}
     {(state.childRequests ?? []).map((request) => <ChildApprovalCard key={`${request.threadId}:${request.requestId}`} request={request} />)}

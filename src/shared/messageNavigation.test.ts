@@ -60,3 +60,10 @@ test("A rail preview shows the quoted text of a citation, not its raw link", () 
   assert.equal(stop!.prompt, "Explain the cited words");
   assert.doesNotMatch(stop!.prompt, /t3-citation/);
 });
+
+test("A side chat's rail leaves out the main-chat rows its transcript folds away", () => {
+  const inherited = (key: string, type: string): TranscriptItem => ({ ...row(key, type), visibility: "inherited" });
+  const rows = [inherited("old-prompt", "user_message"), inherited("old-answer", "assistant_message"), row("own", "user_message"), row("reply", "assistant_message", "Hi")];
+  assert.deepEqual(messageExchanges(rows).map(entry => entry.key), ["old-prompt", "own"]);
+  assert.deepEqual(messageExchanges(rows, { skipInherited: true }).map(entry => [entry.key, entry.rowIndex, entry.response]), [["own", 2, "Hi"]]);
+});

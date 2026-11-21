@@ -181,7 +181,8 @@ export interface ThreadSummary {
   readonly branch?: string | null;
   readonly parentThreadId?: string | null;
   readonly relationshipToParent?: "fork" | "subagent" | "side-chat" | null;
-  readonly sideChatDisabledReason?: string | null;
+  /** Why this thread cannot start a side chat; omitted when it can. The sentence comes from sideChatBlockMessage. */
+  readonly sideChatBlock?: "side-chat" | "subagent" | "not-ready" | "unsupported" | "no-message" | "worktree";
   readonly hasUserMessage?: boolean;
   readonly sideChatAttention?: "input" | "approval";
   readonly providerNativeSubagent?: boolean;

@@ -56,7 +56,7 @@ import * as Schema from "effect/Schema";
 import type { ChildRequestSummary, AddMachineTarget, MachineChoice, MachineClone, RemoteCheckouts, ThreadSummary, HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, SecretRequestAnswerParams, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch, RewindMarker, RestoreResult, RestorePreview } from "../shared/bridge.js";
 import { ATTACHMENT_ONLY_BOOTSTRAP_PROMPT, threadContextRecord } from "@t3tools/shared/composerContextReferences";
 import { orchestrationV2WorktreePending } from "@t3tools/shared/orchestrationV2ThreadError";
-import { parseSideChatMessage, sideChatDisabledReason } from "../shared/sideChats.js";
+import { parseSideChatMessage, sideChatBlockCode, sideChatBlockMessage, type SideChatBlock } from "../shared/sideChats.js";
 import { threadIsWorking } from "../shared/sessionTree.js";
 import { slashSuggestions } from "../shared/composerSuggestions.js";
 import { presentRunStop } from "@t3tools/client-runtime/state/thread-execution";
@@ -780,7 +780,10 @@ export class HostState {
   }
   private configForThread(id: string | undefined) { return this.client.configForThread ? this.client.configForThread(id) : this.client.config; }
   private sideChatReason(thread: OrchestrationV2ThreadShell | undefined, config = this.configForThread(thread?.id)): string | null {
-    return sideChatDisabledReason({
+    return sideChatBlockMessage(this.sideChatBlock(thread, config));
+  }
+  private sideChatBlock(thread: OrchestrationV2ThreadShell | undefined, config = this.configForThread(thread?.id)): SideChatBlock | null {
+    return sideChatBlockCode({
       sideChat: thread?.lineage.sideChat === true,
       subagent: thread?.lineage.relationshipToParent === "subagent" || thread?.delegatedFrom !== undefined,
       capability: config ? config.environment?.capabilities?.sideChats === true : undefined,
@@ -1300,6 +1303,8 @@ export class HostState {
     return key ? this.workspaceRoots().find(root => this.workspaceRemoteKeys.get(root)?.has(key)) : undefined;
   }
   /** A remote session names paths on its own machine; one inside its checkout opens the same file in this window's checkout. */
+  /** True when the thread lives on a paired machine, whose home folder and files are not this machine's. */
+  isRemoteThread(threadId: string | undefined): boolean { return !!this.remoteThread(threadId); }
   localPathForThread(threadId: string | undefined, path: string): string {
     if (!this.remoteThread(threadId)) return path;
     const thread = this.findThread(threadId), project = this.visibleProjects().find(item => item.id === thread?.projectId);
@@ -1829,10 +1834,11 @@ export class HostState {
     await step(() => dispatch({ type: "thread.fork", commandId: randomUUID(), createdBy: "user", creationSource: "web",
       sourceThreadId: parent.id, targetThreadId: id, sourcePoint: { type: "latest_stable" }, sideChat: true, title: "Side chat" }), "Could not start a side chat.");
     try {
+      // The live list usually has the fork already; fetch a full shell only while it does not, backing off.
       const deadline = Date.now() + 5000;
-      while (!this.findThread(id) && Date.now() < deadline) {
+      for (let wait = 100; !this.findThread(id) && Date.now() < deadline; wait = Math.min(wait * 2, 800)) {
         this.shell = await this.client.snapshotShell().catch(() => this.shell);
-        if (!this.findThread(id)) await new Promise(resolve => setTimeout(resolve, 100));
+        if (!this.findThread(id)) await new Promise(resolve => setTimeout(resolve, wait));
       }
       const child = this.findThread(id);
       if (!child) throw new Error("The side chat was created, but it did not reach this client.");
@@ -3111,6 +3117,7 @@ export class HostState {
         const pendingBackgroundTasks = thread.pendingBackgroundTasks ?? [];
         const remote = this.remoteThread(thread.id);
         const forceStop = this.forceStopRun(thread.id);
+        const sideChatBlock = this.sideChatBlock(thread);
         // Provider subagents have no runs of their own; their parent records whether they are still working.
         // App-owned subagents run their own threads, whose status already wins over a lagging parent record.
         const subagent = thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider" ? subagentActivity.get(thread.id) : undefined;
@@ -3174,7 +3181,7 @@ export class HostState {
           parentThreadId: thread.lineage.parentThreadId && visibleThreadIds.has(thread.lineage.parentThreadId) ? thread.lineage.parentThreadId : null,
           relationshipToParent: thread.lineage.sideChat === true ? "side-chat" : thread.lineage.relationshipToParent,
           hasUserMessage: this.hasUserMessage(thread),
-          sideChatDisabledReason: this.sideChatReason(thread),
+          ...(sideChatBlock ? { sideChatBlock } : {}),
           ...(sideChatAttention.has(thread.id) ? { sideChatAttention: sideChatAttention.get(thread.id)! } : {}),
           providerNativeSubagent: thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider",
           activityRunStatus: thread.activityRunStatus ?? null,

@@ -664,7 +664,7 @@ test("side chat capability and fork, first message, and reference use the parent
     threads: client.shell.threads.map(thread => thread.id === "remote-thread" ? { ...thread, latestUserMessageAt: v2ThreadShell.updatedAt } : thread) };
   client.shellHandler?.({ kind: "snapshot", snapshot: client.shell });
   await host.selectThread("remote-thread");
-  assert.equal(host.snapshot().threads.find(thread => thread.id === "remote-thread")?.sideChatDisabledReason, null);
+  assert.equal(host.snapshot().threads.find(thread => thread.id === "remote-thread")?.sideChatBlock, undefined);
   const id = await host.sendMessage("/side question on Studio", "remote-thread");
   assert.ok(id);
   assert.deepEqual(client.remoteCommands.map(({ environmentId, command }) => [environmentId, (command as { type: string }).type]),
