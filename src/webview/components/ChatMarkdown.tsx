@@ -22,9 +22,10 @@ import * as Schema from "effect/Schema";
 import { InlineAttachment } from "./InlineAttachment";
 import { previewEquation } from "./EquationPreview";
 import { splitMarkdownBlocks } from "../markdownBlocks";
+import { remarkEnableLeadingWhitespace, remarkKeepLeadingWhitespace } from "../../../vendor/shared/src/markdownLeadingWhitespace.ts";
 const EMPTY_ATTACHMENTS: ReadonlyArray<Pick<ChatAttachment, "id" | "name" | "mimeType" | "sizeBytes">> = [];
 const sanitizeSchema = { ...defaultSchema, tagNames: [...(defaultSchema.tagNames ?? []), "video", "audio", "source", "u"],
-  attributes: { ...defaultSchema.attributes, code: [["className", /^language-./, "math-inline", "math-display"]], video: ["src", "controls", "poster"], audio: ["src", "controls"], source: ["src", "type"] },
+  attributes: { ...defaultSchema.attributes, span: [...(defaultSchema.attributes?.span ?? []), "dataLeadingWhitespace"], code: [["className", /^language-./, "math-inline", "math-display"]], video: ["src", "controls", "poster"], audio: ["src", "controls"], source: ["src", "type"] },
   protocols: { ...defaultSchema.protocols, href: [...(defaultSchema.protocols?.href ?? []), "file", "t3-citation", "t3-context"], src: [...(defaultSchema.protocols?.src ?? []), "file", "data", "t3-context"] } };
 type MarkdownScope = { readonly threadId: string; readonly assetSource: ChatAssetSource | undefined; readonly streaming: boolean; readonly inlineAttachment: (href: string | undefined) => ReactNode };
 const MarkdownScopeContext = createContext<MarkdownScope>({ threadId: "", assetSource: undefined, streaming: false, inlineAttachment: () => null });
@@ -79,7 +80,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source,
   const blocks = useMemo(() => splitMarkdownBlocks(normalizeMathMarkdown(text)), [text]);
   const liveTail = blocks[blocks.length - 1] ?? "";
   const shownTail = useThrottledTail(liveTail, streaming === true && liveTail.length > TAIL_THROTTLE_BYTES);
-  return <MarkdownScopeContext.Provider value={scope}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}>{blocks.map((block, index) => <Fragment key={index}>{index ? "\n" : null}<MarkdownBlock text={index === blocks.length - 1 ? shownTail : block} /></Fragment>)}</div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
+  return <MarkdownScopeContext.Provider value={scope}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}>{blocks.map((block, index) => <Fragment key={index}>{index ? "\n" : null}<MarkdownBlock text={index === blocks.length - 1 ? shownTail : block} user={source?.author === "user"} /></Fragment>)}</div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
 });
 
 /** The response a sent message replies to (T3 0.1.10), whichever client sent it; opens that response like a quote's source. */
@@ -122,8 +123,11 @@ function useThrottledTail(text: string, throttle: boolean): string {
   return throttle ? shown : text;
 }
 
-const MarkdownBlock = memo(function MarkdownBlock({ text }: { text: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeKatex, { strict: "ignore", trust: false, throwOnError: false }]]}
+// Sent messages keep the spaces typed at the start of a line (T3 0.1.11); replies keep CommonMark's reading.
+const USER_REMARK_PLUGINS = [remarkGfm, remarkEnableLeadingWhitespace, remarkKeepLeadingWhitespace, remarkMath];
+const REPLY_REMARK_PLUGINS = [remarkGfm, remarkMath];
+const MarkdownBlock = memo(function MarkdownBlock({ text, user }: { text: string; user: boolean }) {
+  return <ReactMarkdown remarkPlugins={user ? USER_REMARK_PLUGINS : REPLY_REMARK_PLUGINS} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeKatex, { strict: "ignore", trust: false, throwOnError: false }]]}
     urlTransform={(url, key) => url.startsWith("file:") || url.startsWith("t3-citation:") || url.startsWith("t3-context:") || (key === "src" && /^data:(image|video|audio)\//i.test(url)) ? url : defaultUrlTransform(url)}
     components={components}>{text}</ReactMarkdown>;
 });

@@ -3,6 +3,8 @@ import { collapseBlankLines, escapeMarkdownText } from "../shared/selectionMarkd
 /** Serialize only the selected rendered fragment; no hidden controls or unrelated message text. */
 export function selectionMarkdown(range: Range, source: HTMLElement): string {
   let fragment: Node = range.cloneContents();
+  // Indentation typed at a line start only shows; copied, it would turn lines into code.
+  for (const indentation of (fragment as DocumentFragment).querySelectorAll("[data-leading-whitespace]")) indentation.remove();
   let ancestor = range.commonAncestorContainer.nodeType === Node.TEXT_NODE ? range.commonAncestorContainer.parentElement : range.commonAncestorContainer as Element;
   // cloneContents omits a partially selected enclosing bold/link/code element.
   while (ancestor && ancestor !== source && source.contains(ancestor)) {
