@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.15 — Release
+
+- Synced the bundled T3 Code packages with the latest upstream release (v0.1.11). The server floor is unchanged (0.1.5).
+- Side chats (T3 Code 0.1.11): ask a side question without derailing the conversation. Start one with `/side` or `/btw` (the text after it becomes the question) or **Start side chat** in the thread menu. It opens in its own tab beside the main chat, with the main chat's history folded into one row. **Add to main chat**, or `@` in the main chat, attaches it to your next message. Side chats are listed under their conversation in Sessions, before Subagents, and a parent shows when one needs your input. Offered only when the machine's T3 Code server supports side chats.
+- Paired machines running T3 Code 0.1.11 or later renew this computer's sign-in while you use them, instead of needing a new pairing link every 30 days. The session is bound to a key kept in VS Code's secret storage. A machine that signs this computer out, or one left unused for 30 days, shows **Pair again**. Older machines and the local server work as before.
+- The thread menu (⌄ in a chat's header) now opens under its button instead of far to the left.
+- The **Replying to** chip keeps its icon and text on one line.
+- Fixes from T3 Code 0.1.11:
+  - Spaces typed at the start of a line show in sent messages.
+  - `~/` file links open from your home folder.
+  - Jumping to a citation moves keyboard focus to it.
+  - Reconnecting to a paired machine keeps retrying even if a status update fails.
+  - A model a server lists twice appears once.
+  - Message-rail previews show quoted text instead of raw markup.
+  - A failed run shows Failed instead of Waiting.
+  - Copying items from the middle of a numbered list keeps their numbers.
+
 ## 0.3.14 — Release
 
 - Synced the bundled T3 Code packages with the latest upstream release (v0.1.10). The server floor is unchanged (0.1.5).

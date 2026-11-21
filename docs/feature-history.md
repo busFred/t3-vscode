@@ -12,7 +12,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Scheduled task management](#scheduled-task-management) | Machine-grouped project/session task lists, once and webhook schedules, and independent editor tabs. | v0.1.16 | v0.3.10 |
 | [Workspace scope](#workspace-scope) | Project-wide sessions and tasks across main and linked checkout windows. | v0.0.2 | v0.3.0 |
 | [Independent chat views](#independent-chat-views) | Independent tab drafts with local recovery for text, references and attachments. | v0.0.2 | v0.2.2 |
-| [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | v0.3.7 |
+| [Conversation management](#conversation-management) | Rename or regenerate titles, pin, snooze, duplicate, copy details, mark unread, set auto-settle, archive, restore and delete conversations. | v0.0.1 | v0.3.15 |
 | [Pull requests on conversations](#pull-requests-on-conversations) | Linked change requests, checks, review guides and sign-in. | v0.3.7 | v0.3.7 |
 | [Guest sharing](#guest-sharing) | Guest links and owner review of guest messages. | v0.3.7 | v0.3.7 |
 | [Settled and Archive](#settled-and-archive) | Separate collapsible lists for settled and archived conversations. | v0.0.6 | v0.3.7 |
@@ -54,7 +54,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation tab titles](#conversation-tab-titles) | Names editor tabs after their active conversations. | v0.0.2 | v0.0.8 |
 | [Open Web UI](#open-web-ui) | Opens the current conversation in the system default browser. | v0.0.7 | v0.1.10 |
 | [Local connection and pairing](#local-connection-and-pairing) | Discovers and pairs with a local server, supports Windows CLI launchers and reports the failed connection stage. | v0.0.1 | v0.3.15 |
-| [Remote environments](#remote-environments) | One Machines list separates Conversations and agent access; a green triangle marks missing repositories, with remote chat and cloning actions. | v0.3.0 | v0.3.10 |
+| [Remote environments](#remote-environments) | One Machines list separates Conversations and agent access; a green triangle marks missing repositories, with remote chat and cloning actions. | v0.3.0 | v0.3.15 |
 | [Managed policy](#managed-policy) | Shows the managing organization and applies server policy restrictions. | v0.3.7 | v0.3.7 |
 | [Missing-server setup](#missing-server-setup) | Guides first connection, distinguishes failures and opens Sessions directly; background service is optional. | v0.0.1 | v0.1.13 |
 | [Settings organization](#settings-organization) | Groups native settings into Appearance, Reading, Usage, Refresh and Connection. | v0.0.9 | v0.2.0 |
@@ -384,6 +384,10 @@ Session resources retain the current History selection for restoration. Opening 
 - Fix Ctrl/Cmd+C copying nothing when the conversation is opened as an editor tab instead of the sidebar. No listener, keybinding or CSS in this extension explained the difference; VS Code's own editor-tab webview panels do not forward the native copy keystroke to the OS clipboard the way the sidebar view does. Added an explicit capture-phase handler in `AssistantSelectionMenu` that, on Ctrl/Cmd+C with a non-collapsed selection inside the transcript and no input/textarea/editable field focused, copies `selection.toString()` through the existing `copyText` bridge action and prevents the default. Runs on both surfaces; harmless where native copy already works.
 
 ### Conversation management
+
+#### v0.3.15 — thread menu placement
+
+- The header's thread menu opens with its right edge under its button. It used to reserve 160px beside itself for submenus and so opened far to the left; submenus already float and flip to whichever side fits.
 
 #### Unreleased — copy a shareable thread link
 
@@ -1880,6 +1884,7 @@ Native Date Format and Time Format settings use dropdowns only: seven short-date
 #### v0.3.15 — T3 Code 0.1.11 fixes
 
 - A citation jump moves focus to the cited response unless an input or the composer has focus (#37813).
+- The **Replying to** chip keeps its icon and text on one line; only the text truncates.
 
 #### v0.3.14 — reply to a response
 
@@ -2137,6 +2142,13 @@ The selected-text context menu fits its labels instead of reserving a 190px mini
 - Keep local discovery through the T3 home unchanged. Add pairing of other machines by link; see [Remote environments](#remote-environments).
 
 ### Remote environments
+
+#### v0.3.15 — paired machines renew their sign-in
+
+- Port T3 Code 0.1.11 key-bound pairing (pingdotgg/t3code #37980, #37990, #39399). A machine that advertises `accessTokenRenewal` binds a pairing-link session to this computer's P-256 key (RFC 9449 DPoP); each request carries a fresh proof and the one-hour token renews before it expires, so a machine in use never needs pairing again. Older machines keep the 30-day bearer pairing; the local server keeps its CLI pairing.
+- One key per installation in VS Code SecretStorage, shared by every window. The server renews a session in place, so two windows renewing at once both succeed; the catalog keeps the later expiry. A renewed token keeps live connections.
+- A key-bound session ends only when its machine refuses the renewal (revoked, or unused for 30 days). The two look the same here, so the machine stays listed as expired with **Pair again** instead of being removed. Renewing sessions show no pairing-expiry warning.
+- Validation: unit tests check proofs with T3's own `verifyDpopProof`, key storage, pairing choice, catalog updates and renewal/refusal/retry; live against an isolated T3 Code 0.1.11 server (`/tmp` home, OS-assigned port): DPoP pairing, socket connect, renewal twice from one token, refusal for another key, a key-bound token refused as bearer, and an authenticated history request.
 
 #### v0.3.8
 
