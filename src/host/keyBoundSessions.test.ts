@@ -134,7 +134,7 @@ test("A key-bound machine connects with DPoP, renews an expired token first, and
 test("A key-bound session the server refuses to renew stays listed as expired, not removed", async () => {
   const key = await loadOrCreateDeviceKey(memorySecrets());
   const revoked: string[] = [];
-  const refusal = { _tag: "EnvironmentAuthInvalidError", reason: "authentication" };
+  const refusal = { _tag: "EnvironmentAuthInvalidError", reason: "invalid_credential" };
   const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
     makeClient: () => { const client = new AuthRecordingClient(); client.connectError = refusal; return client as never; },
     deviceKey: async () => key,
@@ -160,5 +160,18 @@ test("A network failure while renewing retries instead of ending the session", a
   await multi.setRemoteEnvironments([keyBound({ expiresAt: Date.now() + 3_600_000 })]);
   await until(() => multi.remoteStatuses()[0]?.state === "connected");
   assert.ok(clients.length >= 2, "reconnected after the failed renewal");
+  await multi.dispose();
+});
+
+test("A proof refused for this computer's clock keeps the pairing and says why", async () => {
+  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const skew = { _tag: "EnvironmentAuthInvalidError", reason: "invalid_credential", dpopFailureReason: "time_window" };
+  const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
+    makeClient: () => { const client = new AuthRecordingClient(); client.connectError = skew; return client as never; },
+    reconnectDelayMs: 60_000, deviceKey: async () => key, renewToken: async () => { throw skew; },
+  });
+  await multi.setRemoteEnvironments([keyBound()]);
+  await until(() => multi.remoteStatuses()[0]?.state === "error");
+  assert.match(multi.remoteStatuses()[0]!.error ?? "", /clock/);
   await multi.dispose();
 });

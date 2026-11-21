@@ -1,4 +1,23 @@
-export { parseSideChatCommand } from "@t3tools/shared/composerTrigger";
+import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { parseSideChatCommand } from "@t3tools/shared/composerTrigger";
+export { parseSideChatCommand };
+
+/**
+ * Where the typed prompt starts. A "Replying to" chip leads the text with its token, while T3 keeps
+ * the reply apart from the prompt, so the prompt starts after that token and its space.
+ */
+export function promptStart(text: string): number {
+  const reply = collectComposerContextReferences(text).find((reference) => reference.kind === "response" && reference.start === 0);
+  return reply ? reply.end + (text[reply.end] === " " ? 1 : 0) : 0;
+}
+
+/** `/side` or `/btw` as the prompt, after any leading reply, which then leads the side chat's message as in T3. */
+export function parseSideChatMessage(text: string): { prompt: string } | null {
+  const start = promptStart(text);
+  const side = parseSideChatCommand(text.slice(start));
+  if (!side) return null;
+  return { prompt: start ? `${text.slice(0, start).trimEnd()} ${side.prompt}` : side.prompt };
+}
 
 export function sideChatDisabledReason(input: {
   sideChat?: boolean;

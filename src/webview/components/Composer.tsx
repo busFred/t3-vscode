@@ -13,6 +13,7 @@ import { applyClaudePromptEffortPrefix, getProviderOptionCurrentValue, isClaudeU
 import { effortDescriptor, effortOptionLabel, isPremiumSpeed, speedChoiceLabel, speedControl, ultracodeOption } from "../../shared/modelOptions";
 import { ModelPicker } from "./ModelPicker";
 import { AUTO_COMPOSER_CEILING, ComposerResize, MIN_COMPOSER_HEIGHT, clampComposerHeight } from "./ComposerResize";
+import { promptStart } from "../../shared/sideChats";
 import { detectComposerTrigger } from "../../shared/composerSuggestions";
 import { replaceTextRange } from "@t3tools/shared/composerTrigger";
 import { useBridgeQuery } from "../useBridgeQuery";
@@ -210,7 +211,7 @@ export function Composer({ state, onEditCitation, onUsage, onSelectionChange: no
   const queryKind = trigger?.kind;
   const canSuggest = queryKind === "path" || queryKind === "slash-command" || queryKind === "skill";
   const triggerKey = canSuggest && trigger ? `${draftKey}:${state.draft.projectId ?? state.draft.workspaceRoot}:${selection?.instanceId}:${trigger.kind}:${trigger.rangeStart}:${trigger.query}` : null;
-  const suggestions = useBridgeQuery<ReadonlyArray<ComposerSuggestion>>("composerSuggestions", { kind: queryKind, query: trigger?.query ?? "", atPromptStart: trigger?.rangeStart === 0 }, triggerKey);
+  const suggestions = useBridgeQuery<ReadonlyArray<ComposerSuggestion>>("composerSuggestions", { kind: queryKind, query: trigger?.query ?? "", atPromptStart: trigger !== null && trigger.rangeStart === promptStart(text) }, triggerKey);
   const items = suggestions.data ?? [];
   const suggestionsOpen = triggerKey !== null && triggerKey !== dismissedTrigger && !disabled;
   const highlighted = Math.min(suggestionIndex, Math.max(0, items.length - 1));

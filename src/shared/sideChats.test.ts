@@ -45,3 +45,15 @@ test("a side-chat mention replaces the trigger and only sends records that remai
   assert.ok(contextIsReferenced(inserted.text, inserted.contexts[0]!));
   assert.deepEqual(sideChatRecordsForMessage(removeContextReference(inserted.text, inserted.contexts[0]!), inserted.contexts), []);
 });
+
+test("a leading reply stays apart from the prompt, so /side after it still starts a side chat and keeps the reply", async () => {
+  const { formatComposerContextReference } = await import("@t3tools/shared/composerContextReferences");
+  const { parseSideChatMessage, promptStart } = await import("./sideChats.js");
+  const token = formatComposerContextReference({ kind: "response", contextId: "response_message-one" as never, label: "The core chat is ready." });
+  assert.equal(promptStart(`${token} /side why?`), token.length + 1);
+  assert.equal(promptStart("/side why?"), 0);
+  assert.deepEqual(parseSideChatMessage(`${token} /side why?`), { prompt: `${token} why?` });
+  assert.deepEqual(parseSideChatMessage("/btw why?"), { prompt: "why?" });
+  assert.equal(parseSideChatMessage(`${token} plain reply`), null);
+  assert.equal(parseSideChatMessage(`before ${token} /side x`), null, "only a leading reply is set apart");
+});

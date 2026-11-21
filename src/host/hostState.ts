@@ -56,7 +56,7 @@ import * as Schema from "effect/Schema";
 import type { ChildRequestSummary, AddMachineTarget, MachineChoice, MachineClone, RemoteCheckouts, ThreadSummary, HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, SecretRequestAnswerParams, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch, RewindMarker, RestoreResult, RestorePreview } from "../shared/bridge.js";
 import { ATTACHMENT_ONLY_BOOTSTRAP_PROMPT, threadContextRecord } from "@t3tools/shared/composerContextReferences";
 import { orchestrationV2WorktreePending } from "@t3tools/shared/orchestrationV2ThreadError";
-import { parseSideChatCommand, sideChatDisabledReason } from "../shared/sideChats.js";
+import { parseSideChatMessage, sideChatDisabledReason } from "../shared/sideChats.js";
 import { threadIsWorking } from "../shared/sessionTree.js";
 import { slashSuggestions } from "../shared/composerSuggestions.js";
 import { presentRunStop } from "@t3tools/client-runtime/state/thread-execution";
@@ -1659,7 +1659,7 @@ export class HostState {
         return upload.attachment;
       });
       const limitError = getProviderAttachmentLimitError(attachments); if (limitError) throw new Error(limitError);
-      const side = parseSideChatCommand(text);
+      const side = parseSideChatMessage(text);
       const parent = this.findThread(targetThreadId);
       if (fromQuestion) {
         const projection = parent && this.threads.get(parent.id)?.projection;
@@ -2914,7 +2914,7 @@ export class HostState {
       } else if (action === "cancel") await this.client.dispatch({ ...command, type: "queued-run.cancel", runId: entry.run.id });
       else if (action === "edit") {
         if (!text?.trim()) throw new Error("Enter a queued message.");
-        if (parseSideChatCommand(text)) throw new Error("A queued message can't move to a side chat. Remove /side or /btw to save it.");
+        if (parseSideChatMessage(text)) throw new Error("A queued message can't move to a side chat. Remove /side or /btw to save it.");
         await this.client.dispatch({ ...command, type: "queued-run.edit", runId: entry.run.id, text, ...(entry.context ? { context: entry.context } : {}) });
       } else if (action === "reorder") {
         if (workflow.queuedRuns.length < 2) throw new Error("This provider cannot reorder queued messages.");
