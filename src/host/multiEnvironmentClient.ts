@@ -37,7 +37,7 @@ interface Remote {
   record: RemoteEnvironmentRecord; client: RemoteClient | null; shell: OrchestrationV2ShellSnapshot | null;
   subscription: Subscription | null; state: RemoteConnectionState; error?: string; retry: ReturnType<typeof setTimeout> | null; attempts: number; generation: number;
   /** Key-bound sessions only: the next renewal, and the one in flight so concurrent callers share it. */
-  renewal?: ReturnType<typeof setTimeout> | null; renewing?: Promise<void> | null; renewedAt?: number;
+  renewal?: ReturnType<typeof setTimeout> | null; renewing?: Promise<void> | null; renewedAt?: number | undefined;
 }
 /** Renew a key-bound token this long before it expires, and retry a failed renewal this often. */
 const RENEW_BEFORE_MS = 5 * 60_000, RENEW_RETRY_MS = 60_000, TOKEN_SKEW_MS = 60_000, RENEW_JITTER_MS = 20_000;
@@ -138,7 +138,7 @@ export class MultiEnvironmentClient {
       if (!record) { this.remotes.delete(id); await this.stopRemote(remote); continue; }
       // A renewed key-bound token (from this or another window) is the same session, so live sockets stay;
       // a new token after that session ended is a fresh pairing and reconnects.
-      const renewed = record.auth === "dpop" && remote.record.auth === "dpop" && remote.state !== "expired";
+      const renewed = record.auth === "dpop" && remote.record.auth === "dpop" && remote.state !== "expired" && record.addedAt === remote.record.addedAt;
       const changed = (record.accessToken !== remote.record.accessToken && !renewed) || record.httpBaseUrl !== remote.record.httpBaseUrl || record.auth !== remote.record.auth;
       remote.record = record;
       if (!record.enabled) { await this.stopRemote(remote); remote.state = "disabled"; delete remote.error; }
@@ -189,12 +189,19 @@ export class MultiEnvironmentClient {
         if (!current()) return;
         await client.disconnect().catch(() => undefined);
         // A key-bound session answers for itself: renewing either works (retry the connection) or the server refuses it.
-        // A token renewed moments ago is not the problem (a proxy guarding only the socket, say), so that is a plain retry.
-        if (remote.record.auth === "dpop" && authFailure(cause) && Date.now() - (remote.renewedAt ?? 0) > RENEW_BEFORE_MS) {
-          const refused = await this.renew(remote).then(() => null, refusal);
-          if (!current()) return;
-          if (refused === "ended") { this.keyBoundEnded(remote); return; }
-          if (refused) { await this.remoteClosed(remote, generation, PROOF_REFUSED[refused]); return; }
+        // A key-bound session answers for itself and never reaches the bearer check below, which would
+        // send its token as a bearer token. A refused proof retries with its reason; otherwise renewing
+        // tells whether the session is gone, unless the token was renewed moments ago (a proxy guarding
+        // only the socket, say), which is a plain retry.
+        if (remote.record.auth === "dpop") {
+          const proof = authFailure(cause) ? refusal(cause) : null;
+          if (proof && proof !== "ended") { await this.remoteClosed(remote, generation, PROOF_REFUSED[proof]); return; }
+          if (authFailure(cause) && Date.now() - (remote.renewedAt ?? 0) > RENEW_BEFORE_MS) {
+            const refused = await this.renew(remote).then(() => null, refusal);
+            if (!current()) return;
+            if (refused === "ended") { this.keyBoundEnded(remote); return; }
+            if (refused) { await this.remoteClosed(remote, generation, PROOF_REFUSED[refused]); return; }
+          }
         }
         // Only the T3 server's own "not signed in" ends a pairing; a bare 401 from a proxy keeps retrying.
         else if (authFailure(cause) && await this.checkCredential(remote.record).catch(() => null) === false) {
@@ -284,7 +291,7 @@ export class MultiEnvironmentClient {
     remote.generation += 1;
     if (remote.retry) clearTimeout(remote.retry);
     if (remote.renewal) clearTimeout(remote.renewal);
-    remote.retry = null; remote.renewal = null;
+    remote.retry = null; remote.renewal = null; remote.renewedAt = undefined;
     const { subscription, client } = remote;
     remote.subscription = null; remote.client = null; remote.shell = null;
     if (client) { client.onClose = null; client.onConfig = null; }

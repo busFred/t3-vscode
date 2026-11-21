@@ -222,3 +222,35 @@ test("Pairing explains a refused proof instead of blaming the link", async () =>
     } }), expected);
   }
 });
+
+test("A socket 401 right after a renewal retries; the key-bound token never goes to the bearer check", async () => {
+  const key = await loadOrCreateDeviceKey(memorySecrets());
+  let checks = 0; const revoked: string[] = [];
+  const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
+    makeClient: () => { const client = new AuthRecordingClient(); client.connectError = { status: 401 }; return client as never; },
+    reconnectDelayMs: 60_000, deviceKey: async () => key,
+    checkCredential: async () => { checks += 1; return false; },
+    renewToken: async (record) => ({ ...record, accessToken: "renewed", expiresAt: Date.now() + 3_600_000 }),
+  });
+  multi.onRemoteRevoked = (record) => revoked.push(record.environmentId);
+  await multi.setRemoteEnvironments([keyBound({ expiresAt: Date.now() - 1 })]); // renews inside connect
+  await until(() => multi.remoteStatuses()[0]?.state === "error");
+  assert.equal(checks, 0, "no bearer session check for a key-bound pairing");
+  assert.deepEqual(revoked, []);
+  await multi.dispose();
+});
+
+test("Re-pairing a key-bound machine reconnects with the new session", async () => {
+  const key = await loadOrCreateDeviceKey(memorySecrets());
+  const clients: AuthRecordingClient[] = [];
+  const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
+    makeClient: () => { const client = new AuthRecordingClient(); clients.push(client); return client as never; },
+    deviceKey: async () => key, renewToken: async (record) => record,
+  });
+  await multi.setRemoteEnvironments([keyBound()]);
+  await until(() => multi.remoteStatuses()[0]?.state === "connected");
+  await multi.setRemoteEnvironments([keyBound({ accessToken: "new-session", addedAt: "2026-03-01T00:00:00.000Z" })]);
+  await until(() => clients.length === 2 && multi.remoteStatuses()[0]?.state === "connected");
+  assert.equal((await (clients[1]!.auths[0] as ConnectionAuth).current()).token, "new-session");
+  await multi.dispose();
+});
