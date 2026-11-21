@@ -10,6 +10,8 @@ export const provider: ServerProvider = { instanceId: ProviderInstanceId.make("k
 export const server = { origin: "http://audit.invalid", descriptor: { environmentId: "audit", label: "Audit" } } as DiscoveredServer;
 export const credentials = { get: async () => ({ origin: server.origin, environmentId: server.descriptor.environmentId, accessToken: "fake", expiresAt: Date.now() + 100_000, scopes: [] }), save: async () => {}, clear: async () => {} };
 export class FakeTransport implements HostTransport {
+  /** Side chats the test marks as waiting on delegated tasks, which T3 Code leaves active when their parent is archived. */
+  readonly waitingOnDelegatedTasks = new Set<string>();
   pullRequestRequest: HostTransport["pullRequestRequest"] = async () => { throw new Error("No pull request fixture."); };
   listPeerLinks?: NonNullable<HostTransport["listPeerLinks"]>;
   mintPeerPairingCodeOn?: NonNullable<HostTransport["mintPeerPairingCodeOn"]>;
@@ -170,9 +172,10 @@ export class FakeTransport implements HostTransport {
       this.shellHandler?.({ kind: "snapshot", snapshot: this.shell });
     }
     if (command.type === "thread.archive") {
-      // As T3 Code 0.1.11: archiving cascades to the thread's side chats, except one still running work.
+      // As T3 Code 0.1.11: archiving cascades to the thread's side chats (stopping any run), except one
+      // still waiting on delegated tasks, which stays active.
       const moving = new Set([command.threadId, ...this.shell.threads.filter((thread) => thread.lineage.sideChat === true
-        && thread.lineage.parentThreadId === command.threadId && !thread.activeRunId).map((thread) => thread.id)]);
+        && thread.lineage.parentThreadId === command.threadId && !this.waitingOnDelegatedTasks.has(thread.id)).map((thread) => thread.id)]);
       const moved = this.shell.threads.filter((thread) => moving.has(thread.id));
       this.shell = { ...this.shell, threads: this.shell.threads.filter((thread) => !moving.has(thread.id)) };
       this.archive = { ...this.archive, threads: [...this.archive.threads, ...moved.map((thread) => ({ ...thread, archivedAt: v2Now }))] };

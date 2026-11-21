@@ -106,8 +106,8 @@ test("archiving the main chat keeps the draft and visibility of a side chat the 
   const busy = await host.startSideChat("first");
   const idle = await host.startSideChat("first");
   for (const id of [busy, idle]) { await host.selectThread(id); host.saveComposerDraft(id, { text: `draft ${id}`, contexts: [] }, undefined); }
-  // A side chat still running work is not archived with its parent (T3 Code 0.1.11).
-  client.shell = { ...client.shell, threads: client.shell.threads.map(thread => thread.id === busy ? { ...thread, activeRunId: "run-busy" as never } : thread) };
+  // A side chat waiting on delegated tasks is not archived with its parent (T3 Code 0.1.11); an ordinary one is.
+  client.waitingOnDelegatedTasks.add(busy);
   await host.threadAction("first", "archive");
   assert.ok(host.snapshot().threads.some(thread => thread.id === busy), "the active side chat stays reachable");
   assert.equal((await host.restoreComposerDraft(busy)).draft.text, `draft ${busy}`);

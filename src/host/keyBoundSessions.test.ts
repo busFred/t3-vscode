@@ -346,3 +346,33 @@ test("A stored key that no longer imports shows Pair again instead of retrying",
   await until(() => multi.remoteStatuses()[0]?.state === "expired");
   await multi.dispose();
 });
+
+test("A renewal finishing after the machine was disabled changes only the token, never re-enabling it", async () => {
+  let release!: () => void; const pending = new Promise<void>((resolve) => { release = resolve; });
+  const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
+    makeClient: () => new AuthRecordingClient() as never,
+    renewToken: async (record) => { await pending; return { ...record, enabled: true, accessToken: "renewed", expiresAt: Date.now() + 3_600_000 }; },
+  });
+  void multi.setRemoteEnvironments([keyBound({ expiresAt: Date.now() - 1 })]); // renewal held inside connect
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await multi.setRemoteEnvironments([keyBound({ expiresAt: Date.now() - 1, enabled: false })]);
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const status = multi.remoteStatuses()[0]!;
+  assert.equal(status.enabled, false);
+  assert.equal(status.state, "disabled");
+  await multi.dispose();
+});
+
+test("Each pairing keeps its own renewed token, so a late write for an earlier pairing never hides a newer one", async () => {
+  const secrets = memorySecrets(), catalog = new EnvironmentCatalog(secrets);
+  const old = keyBound({ accessToken: "old", expiresAt: 100, addedAt: "2026-01-01T00:00:00.000Z" });
+  const fresh = keyBound({ accessToken: "fresh", expiresAt: 100, addedAt: "2026-02-01T00:00:00.000Z" });
+  await catalog.upsert(fresh);
+  await catalog.updateToken(fresh, { accessToken: "fresh-renewed", expiresAt: 300 });
+  // A late renewal of the old pairing writes after the re-pair: it is not even the current pairing, so nothing is stored.
+  await catalog.updateToken(old, { accessToken: "old-renewed", expiresAt: 400 });
+  assert.equal((await catalog.list())[0]!.accessToken, "fresh-renewed");
+  await catalog.remove(fresh.environmentId);
+  assert.ok(![...secrets.values.keys()].some((key) => key.startsWith("t3-vscode.environmentToken.v1.")), "removal deletes the pairing's token");
+});

@@ -48,7 +48,8 @@ export const ENVIRONMENT_CATALOG_KEY = "t3-vscode.environments.v1";
  * cannot rewrite the shared catalog, so it can never bring back a machine another window removed.
  */
 export const ENVIRONMENT_TOKEN_KEY_PREFIX = "t3-vscode.environmentToken.v1.";
-const tokenKey = (environmentId: string) => `${ENVIRONMENT_TOKEN_KEY_PREFIX}${environmentId}`;
+/** One key per pairing, so a late write for an earlier pairing of the machine never replaces a newer pairing's token. */
+const tokenKey = (record: Pick<RemoteEnvironmentRecord, "environmentId" | "addedAt">) => `${ENVIRONMENT_TOKEN_KEY_PREFIX}${record.environmentId}.${record.addedAt}`;
 interface StoredToken { readonly addedAt: string; readonly httpBaseUrl: string; readonly accessToken: string; readonly expiresAt: number }
 const parseToken = (raw: string | undefined): StoredToken | null => {
   if (!raw) return null;
@@ -97,7 +98,7 @@ export class EnvironmentCatalog {
   async list(): Promise<ReadonlyArray<RemoteEnvironmentRecord>> {
     return Promise.all((await this.stored()).map(async (record) => {
       if (record.auth !== "dpop") return record;
-      const token = parseToken(await this.secrets.get(tokenKey(record.environmentId)));
+      const token = parseToken(await this.secrets.get(tokenKey(record)));
       return token && samePairing(token, record) && token.expiresAt > (record.expiresAt ?? 0) ? { ...record, accessToken: token.accessToken, expiresAt: token.expiresAt } : record;
     }));
   }
@@ -121,18 +122,22 @@ export class EnvironmentCatalog {
     }
   }
 
-  upsert(record: RemoteEnvironmentRecord): Promise<void> {
-    return this.mutate((all) => {
-      const next = all.some((e) => e.environmentId === record.environmentId)
-        ? all.map((e) => (e.environmentId === record.environmentId ? record : e))
-        : [...all, record];
-      return next;
+  async upsert(record: RemoteEnvironmentRecord): Promise<void> {
+    let replaced: RemoteEnvironmentRecord | undefined;
+    await this.mutate((all) => {
+      replaced = all.find((e) => e.environmentId === record.environmentId);
+      return replaced ? all.map((e) => (e.environmentId === record.environmentId ? record : e)) : [...all, record];
     });
+    // A new pairing of the machine leaves the previous pairing's renewed token behind.
+    const previous = replaced as RemoteEnvironmentRecord | undefined;
+    if (previous && previous.addedAt !== record.addedAt) await this.secrets.delete(tokenKey(previous));
   }
 
   async remove(environmentId: string): Promise<void> {
-    await this.mutate((all) => all.filter((e) => e.environmentId !== environmentId));
-    await this.secrets.delete(tokenKey(environmentId));
+    let removed: RemoteEnvironmentRecord | undefined;
+    await this.mutate((all) => { removed = all.find((e) => e.environmentId === environmentId); return all.filter((e) => e.environmentId !== environmentId); });
+    const record = removed as RemoteEnvironmentRecord | undefined;
+    if (record) await this.secrets.delete(tokenKey(record));
   }
 
   /** Removes a pairing only while it still holds `accessToken`, so a fresh re-pair from another window survives. */
@@ -158,7 +163,7 @@ export class EnvironmentCatalog {
       if (!record) return null;
       // Another window already stored a later token for this session.
       if (record.accessToken !== previous.accessToken && (record.expiresAt ?? 0) >= next.expiresAt) return record;
-      await this.secrets.store(tokenKey(record.environmentId), JSON.stringify({ addedAt: record.addedAt, httpBaseUrl: record.httpBaseUrl, accessToken: next.accessToken, expiresAt: next.expiresAt }));
+      await this.secrets.store(tokenKey(record), JSON.stringify({ addedAt: record.addedAt, httpBaseUrl: record.httpBaseUrl, accessToken: next.accessToken, expiresAt: next.expiresAt }));
       return { ...record, accessToken: next.accessToken, expiresAt: next.expiresAt };
     });
     this.queue = run.catch(() => undefined);

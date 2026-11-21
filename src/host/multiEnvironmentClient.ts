@@ -240,13 +240,20 @@ export class MultiEnvironmentClient {
     if (!renewToken) return Promise.reject(new Error("This computer cannot renew its sign-in to paired machines."));
     // A renewal belongs to one pairing: one still running when the machine is paired again must not
     // put the old session's token on the new pairing.
+    if (remote.renewing) return remote.renewing;
     const pairing = remote.record.addedAt;
-    const renewing = remote.renewing ??= (async () => {
+    const run: { promise: Promise<void> | null } = { promise: null };
+    run.promise = (async () => {
       const stored = await renewToken(remote.record);
+      // Stopped meanwhile (disabled, removed or restarted): nothing to apply.
+      if (remote.renewing !== run.promise) throw new Error("This machine stopped while signing in again.");
       if (remote.record.addedAt !== pairing) throw new Error("This machine was paired again.");
       if (!stored) throw new Error("This machine is no longer paired.");
-      remote.record = stored; remote.renewedAt = Date.now();
-    })().finally(() => { if (remote.renewing === renewing) remote.renewing = null; });
+      // Only the token changes: settings another window changed meanwhile (such as disabling) stay.
+      remote.record = { ...remote.record, accessToken: stored.accessToken, expiresAt: stored.expiresAt }; remote.renewedAt = Date.now();
+    })().finally(() => { if (remote.renewing === run.promise) remote.renewing = null; });
+    remote.renewing = run.promise;
+    const renewing = run.promise;
     return renewing;
   }
   /** Keeps a connected key-bound session alive: the server only moves its 30-day window when the token renews. */
