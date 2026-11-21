@@ -346,7 +346,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     setSticky(heading ? heading.getBoundingClientRect().bottom <= viewport.getBoundingClientRect().top : rows.findIndex(row => row.rows.some(item => item.key === activeHeader)) < firstVisible.current);
   }, [working, activeHeader, rows]);
   useEffect(() => { const frame = requestAnimationFrame(updateSticky); return () => cancelAnimationFrame(frame); }, [updateSticky]);
-  const exchanges = useMemo(() => messageExchanges(transcript), [transcript]);
+  const exchanges = useMemo(() => messageExchanges(transcript, { skipInherited: isSideChat }), [transcript, isSideChat]);
   const [viewedKey, setViewedKey] = useState<string | null>(null);
   const [atEnd, setAtEnd] = useState(true); const [followEnd, setFollowEnd] = useState(true);
   const [navigationNotice, setNavigationNotice] = useState<string | null>(null);
@@ -499,11 +499,13 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     const observer = new ResizeObserver(measure); observer.observe(viewport); observer.observe(conversation);
     return () => { observer.disconnect(); host.remove(); };
   }, [viewport, placement]);
+  // Only a side chat's folded history reads the find / citation target, so other rows keep a stable renderer.
+  const revealInherited = useMemo(() => isSideChat && transcript.some(row => row.visibility === "inherited"
+    && ((citationTarget && row.item.type === "assistant_message" && row.item.messageId === citationTarget.messageId) || (searchTarget && row.key === searchTarget.rowKey))),
+  [isSideChat, transcript, citationTarget, searchTarget]);
   const renderItem = useCallback(function renderRow({ item }: { item: DisplayRow }) {
     if (item.inheritedHistory) {
-      const revealInherited = (citationTarget && item.rows.some(row => row.item.type === "assistant_message" && row.item.messageId === citationTarget.messageId))
-        || (searchTarget && item.rows.some(row => row.key === searchTarget.rowKey));
-      const open = historyOpen || !!revealInherited;
+      const open = historyOpen || revealInherited;
       const count = item.rows.filter(row => row.item.type === "user_message" || row.item.type === "assistant_message").length;
       return <section className="timeline-row work-group"><button type="button" className="work-group-toggle" aria-expanded={open} onClick={() => setHistoryOpen(open => !open)}>
         <ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /><span>{count} earlier {count === 1 ? "message" : "messages"} from the main chat</span>
@@ -517,7 +519,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
       {item.fold ? <RoundFold steps={item.fold} rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : isWorkItem(first) ? <WorkGroup rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : <TurnItem row={first} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} />}
       {finalAnswer?.item.type === "assistant_message" ? <div className="response-actions response-end"><CopyButton text={finalAnswer.item.text} /><ForkButton row={finalAnswer} threadId={id ?? ""} /><ReplyButton row={finalAnswer} /><MessageTimestamp value={finalAnswer.item.startedAt} /></div> : null}
     </div>;
-  }, [id, state.environment?.environmentId, boundaries, working, activeRun, runStatus, historyOpen, citationTarget, searchTarget]);
+  }, [id, state.environment?.environmentId, boundaries, working, activeRun, runStatus, historyOpen, revealInherited]);
   const header = <div className="timeline-header">{state.history.hasMore || state.history.error ? <button className="btn" disabled={state.history.loading} onClick={() => { void run("loadHistory", { threadId: id }); }}>{state.history.loading ? "Loading…" : state.history.error ? "Retry loading earlier messages" : "Load earlier messages"}</button> : null}{state.history.error ? <p className="turn-error">{state.history.error}</p> : null}</div>;
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source message…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading && !working)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;

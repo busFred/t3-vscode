@@ -19,18 +19,34 @@ export function parseSideChatMessage(text: string): { prompt: string } | null {
   return { prompt: start ? `${text.slice(0, start).trimEnd()} ${side.prompt}` : side.prompt };
 }
 
-export function sideChatDisabledReason(input: {
+/** Why a thread cannot start a side chat, as a short code that travels in every thread summary. */
+export type SideChatBlock = "side-chat" | "subagent" | "not-ready" | "unsupported" | "no-message" | "worktree";
+const BLOCK_MESSAGES: Record<SideChatBlock, string> = {
+  "side-chat": "Side chats cannot start side chats.",
+  subagent: "Subagent threads cannot start side chats.",
+  "not-ready": "Side chats are not ready yet. Try again in a moment.",
+  unsupported: "Update this environment's T3 Code server to use side chats.",
+  "no-message": "Side chats start after the first message.",
+  worktree: "Available once the thread's worktree is set up.",
+};
+export function sideChatBlockMessage(block: SideChatBlock | null | undefined): string | null { return block ? BLOCK_MESSAGES[block] : null; }
+
+export function sideChatBlockCode(input: {
   sideChat?: boolean;
   subagent?: boolean;
   capability: boolean | undefined;
   hasUserMessage: boolean;
   worktreePending?: boolean;
-}): string | null {
-  if (input.sideChat) return "Side chats cannot start side chats.";
-  if (input.subagent) return "Subagent threads cannot start side chats.";
-  if (input.capability === undefined) return "Side chats are not ready yet. Try again in a moment.";
-  if (!input.capability) return "Update this environment's T3 Code server to use side chats.";
-  if (!input.hasUserMessage) return "Side chats start after the first message.";
-  if (input.worktreePending) return "Available once the thread's worktree is set up.";
+}): SideChatBlock | null {
+  if (input.sideChat) return "side-chat";
+  if (input.subagent) return "subagent";
+  if (input.capability === undefined) return "not-ready";
+  if (!input.capability) return "unsupported";
+  if (!input.hasUserMessage) return "no-message";
+  if (input.worktreePending) return "worktree";
   return null;
+}
+
+export function sideChatDisabledReason(input: Parameters<typeof sideChatBlockCode>[0]): string | null {
+  return sideChatBlockMessage(sideChatBlockCode(input));
 }

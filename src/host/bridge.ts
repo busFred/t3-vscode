@@ -511,7 +511,7 @@ export class BridgeHandler {
           const threadId = typeof params.threadId === "string" ? params.threadId : this.hostState.snapshot(viewId).activeThreadId ?? undefined;
           if (typeof params.path === "string") {
             // A workspace image resolves exactly as a chat file link does, so it cannot name a path a link could not.
-            const link = resolveChatFileLink(params.path, this.hostState.workspaceForThread(threadId));
+            const link = resolveChatFileLink(params.path, this.hostState.workspaceForThread(threadId), this.hostState.isRemoteThread(threadId) ? null : undefined);
             await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(this.hostState.localPathForThread(threadId, link.path)));
             break;
           }
@@ -546,7 +546,7 @@ export class BridgeHandler {
   private async openLink(href: string, threadId?: string): Promise<void> {
     const vscode = await import("vscode");
     if (/^https?:\/\//i.test(href)) { await vscode.env.openExternal(vscode.Uri.parse(href)); return; }
-    const link = resolveChatFileLink(href, this.hostState.workspaceForThread(threadId));
+    const link = resolveChatFileLink(href, this.hostState.workspaceForThread(threadId), this.hostState.isRemoteThread(threadId) ? null : undefined);
     const target = { ...link, path: this.hostState.localPathForThread(threadId, link.path) };
     const uri = vscode.Uri.file(target.path);
     // The @ menu offers directories beside files, and a directory has no document to show. A link

@@ -255,6 +255,10 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
   await page.getByRole("button", { name: "Cancel reply", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector(".composer-chip"));
   await expected("Before reply.");
+  // Cancelling the reply is one edit too: one undo brings the chip back, one redo cancels it again.
+  await message.focus();
+  await message.press("Control+z"); await expected(typedReply); await page.locator(".reply-chip").waitFor();
+  await message.press("Control+y"); await expected("Before reply."); await page.locator(".reply-chip").waitFor({ state: "hidden" });
   await serveVersion(fixtureVersion, 83);
   const restoredConfig = client.config as { environment?: unknown };
   if (fixtureEnvironment === undefined) delete restoredConfig.environment; else restoredConfig.environment = fixtureEnvironment;
@@ -336,6 +340,14 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
       assert.ok((await message.inputValue()).length < before.length, "Earlier typing remains undoable");
       await message.press("Control+y"); await expected(before);
       await message.press("Control+Shift+z"); await expected(inserted);
+      // Removing the chip is one edit: one undo restores it, one redo removes it again.
+      await remove.click();
+      await remove.waitFor({ state: "hidden" });
+      const removed = await message.inputValue();
+      assert.ok(!/t3-context:\/\/v1\/thread\//.test(removed), "removing the chip removes its reference");
+      await message.focus();
+      await message.press("Control+z"); await expected(inserted); await remove.waitFor();
+      await message.press("Control+y"); await expected(removed); await remove.waitFor({ state: "hidden" });
     };
     await verifySideInsertion("Before side chat.", async () => {
       await sideChat.getByRole("button", { name: "Add to main chat" }).click();

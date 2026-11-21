@@ -18,9 +18,11 @@ export interface MessageExchange {
 /** One stop per prompt, paired with the last response before the next prompt.
  * Derived from T3's timelineMinimapItems, adapted to the extension's typed rows.
  * Keep source text untouched; only the hovered preview needs compacting. */
-export function messageExchanges(rows: ReadonlyArray<TranscriptItem>): MessageExchange[] {
+export function messageExchanges(rows: ReadonlyArray<TranscriptItem>, options: { skipInherited?: boolean } = {}): MessageExchange[] {
   const exchanges: MessageExchange[] = [];
   for (const [rowIndex, row] of rows.entries()) {
+    // A side chat folds the main chat's rows into one row that has no stop to jump to (T3 skips them too).
+    if (options.skipInherited && row.visibility === "inherited") continue;
     if (row.item.type === "user_message") {
       // Preview what the transcript shows, not the wire text: attached snapshots and readable quote
       // blocks are most of a referencing message and would crowd out the words the user typed.

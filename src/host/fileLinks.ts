@@ -13,12 +13,12 @@ export interface ChatFileLink {
   readonly endColumn?: number;
 }
 
-/** `~/x` and `~\x` are in the home folder, not under the thread folder (T3 0.1.11). */
-function expandHome(path: string, home: string): string {
-  return path === "~" || path.startsWith("~/") || path.startsWith("~\\") ? join(home, path.slice(2)) : path;
+/** `~/x` and `~\x` are in the home folder, not under the thread folder (T3 0.1.11). A null home (a thread on another machine) leaves them alone: this machine's home is the wrong one. */
+function expandHome(path: string, home: string | null): string {
+  return home !== null && (path === "~" || path.startsWith("~/") || path.startsWith("~\\")) ? join(home, path.slice(2)) : path;
 }
 
-export function resolveChatFileLink(href: string, cwd: string | null, home: string = homedir()): ChatFileLink {
+export function resolveChatFileLink(href: string, cwd: string | null, home: string | null = homedir()): ChatFileLink {
   const normalized = normalizeMarkdownLinkDestination(href);
   const source = splitMarkdownLinkSearchAndHash(normalized);
   const path = /^file:/i.test(source.path) ? fileURLToPath(source.path) : safeDecodeURIComponent(source.path);

@@ -21,3 +21,8 @@ test("~/ and ~\\ links open from the home folder, not the thread folder", () => 
   assert.equal(resolveChatFileLink("~/a.md", null, "/home/me").path, "/home/me/a.md");
   assert.equal(resolveChatFileLink("~other/a.md", "/tmp/workspace", "/home/me").path, "/tmp/workspace/~other/a.md");
 });
+
+test("~/ links on a remote machine's thread are not expanded against this machine's home", () => {
+  assert.equal(resolveChatFileLink("~/a.md", "/srv/work", null).path, "/srv/work/~/a.md");
+  assert.throws(() => resolveChatFileLink("~/a.md", null, null));
+});
