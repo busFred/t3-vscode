@@ -1,5 +1,6 @@
 /** Resolve chat file links once in the host; locations stay one-based until VS Code opens them. */
-import { isAbsolute, resolve } from "node:path";
+import { homedir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { normalizeMarkdownLinkDestination, safeDecodeURIComponent, splitMarkdownLinkSearchAndHash } from "@t3tools/shared/markdownLinks";
 import { splitFilePathPosition } from "@t3tools/shared/fileLinks";
@@ -12,12 +13,18 @@ export interface ChatFileLink {
   readonly endColumn?: number;
 }
 
-export function resolveChatFileLink(href: string, cwd: string | null): ChatFileLink {
+/** `~/x` and `~\x` are in the home folder, not under the thread folder (T3 0.1.11). */
+function expandHome(path: string, home: string): string {
+  return path === "~" || path.startsWith("~/") || path.startsWith("~\\") ? join(home, path.slice(2)) : path;
+}
+
+export function resolveChatFileLink(href: string, cwd: string | null, home: string = homedir()): ChatFileLink {
   const normalized = normalizeMarkdownLinkDestination(href);
   const source = splitMarkdownLinkSearchAndHash(normalized);
   const path = /^file:/i.test(source.path) ? fileURLToPath(source.path) : safeDecodeURIComponent(source.path);
   const hash = safeDecodeURIComponent(source.hash);
-  const position = splitFilePathPosition(path, hash);
+  const split = splitFilePathPosition(path, hash);
+  const position = { ...split, path: expandHome(split.path, home) };
   if (!position.path || (/^[a-z][a-z\d+.-]*:/i.test(position.path) && !isAbsolute(position.path))) throw new Error("Unsupported link type.");
   if (!isAbsolute(position.path) && !cwd) throw new Error("This thread has no workspace for relative file links.");
   const range = /^#L(\d+)(?:C(\d+))?-L(\d+)(?:C(\d+))?$/i.exec(hash);
