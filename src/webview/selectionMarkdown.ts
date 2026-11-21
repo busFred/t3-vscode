@@ -8,7 +8,13 @@ export function selectionMarkdown(range: Range, source: HTMLElement): string {
   let ancestor = range.commonAncestorContainer.nodeType === Node.TEXT_NODE ? range.commonAncestorContainer.parentElement : range.commonAncestorContainer as Element;
   // cloneContents omits a partially selected enclosing bold/link/code element.
   while (ancestor && ancestor !== source && source.contains(ancestor)) {
-    const wrapper = ancestor.cloneNode(false); wrapper.appendChild(fragment); fragment = wrapper; ancestor = ancestor.parentElement;
+    const wrapper = ancestor.cloneNode(false);
+    // Items copied from inside a numbered list keep their numbers rather than restarting at 1 (T3 0.1.11).
+    if (ancestor.tagName === "OL") {
+      const first = [...ancestor.children].findIndex((child) => child.tagName === "LI" && range.intersectsNode(child));
+      if (first > 0) (wrapper as Element).setAttribute("start", String(Number(ancestor.getAttribute("start") ?? 1) + first));
+    }
+    wrapper.appendChild(fragment); fragment = wrapper; ancestor = ancestor.parentElement;
   }
   // Tracks whether the next emitted character sits at the start of a markdown line, so `#`/`-`/`+`/`N.`
   // are only escaped where they would otherwise read as a block marker. Mutated in document order as
