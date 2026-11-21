@@ -30,8 +30,11 @@ export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: Read
     let ancestor = parent; const seen = new Set([thread.id]); let cyclic = false;
     while (ancestor) { if (seen.has(ancestor.id)) { cyclic = true; break; } seen.add(ancestor.id); ancestor = parentOf(ancestor); }
     const parentNode = !cyclic && parent ? nodes.get(parent.id) : undefined;
-    if (parentNode) parentNode.children.push(node);
-    else if (thread.relationshipToParent !== "subagent" && thread.relationshipToParent !== "side-chat") roots.push(node);
+    // A side chat the server left active when its parent was archived (it has running work) is its own
+    // active row rather than hidden or buried in Archive under that parent.
+    const strandedSideChat = thread.relationshipToParent === "side-chat" && !thread.archived && (!parentNode || !!parentNode.thread.archived);
+    if (parentNode && !strandedSideChat) parentNode.children.push(node);
+    else if (thread.relationshipToParent !== "subagent") roots.push(node);
   }
   for (const node of nodes.values()) {
     node.children.sort((a, b) => Number(b.thread.relationshipToParent === "side-chat") - Number(a.thread.relationshipToParent === "side-chat"));

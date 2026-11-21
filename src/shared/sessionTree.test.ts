@@ -180,3 +180,13 @@ test("A failed thread whose background work is still held reads as Failed, not W
   assert.equal(threadIsWaiting(held), true);
   assert.equal(threadIsWaiting({ ...held, unseen: "failed" }), false);
 });
+
+test("A side chat left active when its parent was archived is its own active row, loaded parent or not", () => {
+  const side = (fields: Partial<ThreadSummary> = {}) => thread("side", { parentThreadId: "parent", relationshipToParent: "side-chat", ...fields });
+  assert.deepEqual(ids(sessionTree([side({ parentThreadId: null })])), [["side", []]], "parent not loaded");
+  const shelves = sessionShelves([thread("parent", { archived: true, settled: true }), side()]);
+  assert.deepEqual(ids(shelves.active), [["side", []]]);
+  assert.deepEqual(ids(shelves.archived), [["parent", []]]);
+  // An archived side chat still follows its archived parent.
+  assert.deepEqual(ids(sessionShelves([thread("parent", { archived: true, settled: true }), side({ archived: true })]).archived), [["parent", [["side", []]]]]);
+});

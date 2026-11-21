@@ -77,8 +77,9 @@ const parseRecord = (raw: unknown): RemoteEnvironmentRecord | null => {
     environmentId: r.environmentId, label: r.label, httpBaseUrl: r.httpBaseUrl, wsBaseUrl: r.wsBaseUrl,
     accessToken: r.accessToken, expiresAt: r.expiresAt as number | null, scopes: [...r.scopes as string[]],
     enabled: r.enabled, addedAt: r.addedAt,
-    // A key-bound record without its key could only send its token unsigned, so it is not kept as key-bound.
-    ...(r.auth === "dpop" && parseDeviceKey(r.dpopKey) ? { auth: "dpop" as const, dpopKey: parseDeviceKey(r.dpopKey)! } : {}),
+    // A key-bound record stays key-bound even if its key is unreadable: its token must never travel as a
+    // bearer token, so such a pairing asks to be paired again instead.
+    ...(r.auth === "dpop" ? { auth: "dpop" as const, ...(parseDeviceKey(r.dpopKey) ? { dpopKey: parseDeviceKey(r.dpopKey)! } : {}) } : {}),
     ...(isString(r.serverVersion) ? { serverVersion: r.serverVersion } : {}),
     ...(IGNORABLE.has(r.ignoredStatus) ? { ignoredStatus: r.ignoredStatus as IgnorableEnvironmentStatus } : {}),
   };
@@ -316,6 +317,7 @@ export async function pairRemoteEnvironment(
     }
     throw new EnvironmentPairingError(`Could not complete pairing with ${base.host}. Check the link and try again.`);
   }
+  if (keyBound && !session.dpopKey) throw new EnvironmentPairingError(`Could not complete pairing with ${base.host}. Check the link and try again.`);
 
   return {
     environmentId: descriptor.environmentId,
@@ -324,7 +326,7 @@ export async function pairRemoteEnvironment(
     wsBaseUrl: target.wsBaseUrl,
     accessToken: session.access_token,
     expiresAt: deps.now() + session.expires_in * 1000,
-    ...(keyBound && session.dpopKey ? { auth: "dpop" as const, dpopKey: session.dpopKey } : {}),
+    ...(keyBound ? { auth: "dpop" as const, dpopKey: session.dpopKey! } : {}),
     scopes: session.scope?.split(" ").filter((s) => s.length > 0) ?? [],
     enabled: true,
     addedAt: new Date(deps.now()).toISOString(),

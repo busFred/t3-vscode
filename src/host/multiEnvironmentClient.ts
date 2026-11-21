@@ -161,7 +161,8 @@ export class MultiEnvironmentClient {
       try {
         if (remote.record.auth === "dpop") {
           const key = await recordKey(remote.record);
-          if (!key) throw new Error("This pairing's sign-in key is unavailable. Pair the machine again.");
+          // Without its key the session cannot sign anything, so it asks to be paired again instead of retrying.
+          if (!key) { await client.disconnect().catch(() => undefined); this.keyBoundEnded(remote); return; }
           await client.connect(remoteServer(remote.record), recordAuth(remote.record, key, () => this.currentToken(remote)));
         } else await client.connect(remoteServer(remote.record), remote.record.accessToken);
         if (!current()) { await client.disconnect(); return; }
@@ -195,7 +196,8 @@ export class MultiEnvironmentClient {
         if (remote.record.auth === "dpop") {
           const proof = authFailure(cause) ? refusal(cause) : null;
           if (proof && proof !== "ended") { await this.remoteClosed(remote, generation, PROOF_REFUSED[proof]); return; }
-          if (authFailure(cause) && Date.now() - (remote.renewedAt ?? 0) > RENEW_BEFORE_MS) {
+          // The server's own refusal always gets a renewal to decide; only an untyped 401 right after one is a plain retry.
+          if (authFailure(cause) && (proof === "ended" || Date.now() - (remote.renewedAt ?? 0) > RENEW_BEFORE_MS)) {
             const refused = await this.renew(remote).then(() => null, refusal);
             if (!current()) return;
             if (refused === "ended") { this.keyBoundEnded(remote); return; }

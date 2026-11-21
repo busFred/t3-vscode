@@ -41,7 +41,9 @@ test("Each pairing has its own key, which survives storage and imports to the sa
   assert.deepEqual((await catalog.list())[0]!.dpopKey, a.stored);
   const { dpopKey: _key, ...keyless } = record;
   await catalog.upsert(keyless);
-  assert.equal((await catalog.list())[0]!.auth, undefined, "a key-bound record without its key is not kept as key-bound");
+  const kept = (await catalog.list())[0]!;
+  assert.equal(kept.auth, "dpop", "a key-bound record without its key stays key-bound, so its token is never sent as bearer");
+  assert.equal(kept.dpopKey, undefined);
 });
 
 test("Request headers: bearer for older pairings, DPoP token plus a fresh proof for key-bound ones", async () => {
@@ -276,4 +278,17 @@ test("A renewal racing a removal in another window never brings the machine back
   await renewal;
   assert.deepEqual(await windowA.list(), [], "the catalog never got the machine back");
   assert.deepEqual(await windowB.list(), []);
+});
+
+test("A key-bound pairing whose key is unreadable asks to be paired again and never connects as bearer", async () => {
+  const clients: AuthRecordingClient[] = [];
+  const multi = new MultiEnvironmentClient(new AuthRecordingClient() as unknown as T3Client, {
+    makeClient: () => { const client = new AuthRecordingClient(); clients.push(client); return client as never; },
+    renewToken: async (record) => record,
+  });
+  const { dpopKey: _key, ...keyless } = keyBound();
+  await multi.setRemoteEnvironments([keyless]);
+  await until(() => multi.remoteStatuses()[0]?.state === "expired");
+  assert.ok(clients.every((client) => client.auths.length === 0), "nothing was sent");
+  await multi.dispose();
 });

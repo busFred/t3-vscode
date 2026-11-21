@@ -33,7 +33,8 @@ test("side chats are children, before subagents, while ordinary forks remain roo
   const roots = sessionTree([agent, side, parent, fork], [agent, side, fork], "title-asc");
   assert.deepEqual(roots.map(node => node.thread.id), ["fork", "parent"]);
   assert.deepEqual(roots[1]!.children.map(node => node.thread.id), ["side", "agent"]);
-  assert.deepEqual(sessionTree([side]), []);
+  // Without its parent in the list (archived and not loaded) a side chat is its own row rather than hidden.
+  assert.deepEqual(sessionTree([side]).map(node => node.thread.id), ["side"]);
 });
 
 test("a side-chat mention replaces the trigger and only sends records that remain referenced", () => {
