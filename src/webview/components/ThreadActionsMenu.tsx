@@ -20,7 +20,7 @@ const ICON = 14;
 const levelButtons = (menu: HTMLElement | null) => [...(menu?.querySelectorAll<HTMLButtonElement>(":scope > .menu-entry > button:not(:disabled)") ?? [])];
 
 /** The same actions are available from a history row and an editor header. */
-export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: { readonly thread: ThreadSummary; readonly workspaceRoot?: string | undefined; readonly position: { x: number; y: number }; readonly onClose: () => void }) {
+export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: { readonly thread: ThreadSummary; readonly workspaceRoot?: string | undefined; readonly position: { x: number; y: number; readonly alignRight?: boolean }; readonly onClose: () => void }) {
   const [tagEditing, setTagEditing] = useState(false);
   const [tagText, setTagText] = useState("");
   const [tagError, setTagError] = useState("");
@@ -38,10 +38,11 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     element.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
     return () => { if ((document.activeElement === document.body || element.contains(document.activeElement) || submenu.current?.contains(document.activeElement)) && previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, [position]);
-  // Reserve room to the side before opening, so hovering never moves the parent.
+  // A header button anchors the menu's right edge under itself; a pointer anchors its left edge.
+  // Submenus float and flip to whichever side fits, so no room is reserved beside the menu.
   useLayoutEffect(() => {
     const box = menu.current?.getBoundingClientRect();
-    if (box) setLocation({ x: Math.max(6, Math.min(position.x, innerWidth - box.width - Math.min(160, (innerWidth - 12) / 2) - 6)), y: Math.max(6, Math.min(position.y, innerHeight - box.height - 6)) });
+    if (box) setLocation({ x: Math.max(6, Math.min(position.alignRight ? position.x - box.width : position.x, innerWidth - box.width - 6)), y: Math.max(6, Math.min(position.y, innerHeight - box.height - 6)) });
   }, [position]);
   // A submenu opens beside its item, on whichever side fits.
   useLayoutEffect(() => {

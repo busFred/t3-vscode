@@ -45,7 +45,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
   const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
   const closeFind = useCallback(() => { setFindOpen(false); setSearchTarget(null); setSearchOptions(null); }, []);
   useEffect(() => { setFindOpen(false); setSearchTarget(null); setSearchOptions(null); setHistoryOpen(false); setScheduledOpen(false); }, [state.activeThreadId]);
-  const [threadMenu, setThreadMenu] = useState<{ x: number; y: number } | null>(null);
+  const [threadMenu, setThreadMenu] = useState<{ x: number; y: number; alignRight?: boolean } | null>(null);
   const closeThreadMenu = useCallback(() => setThreadMenu(null), []);
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const composerSelection = useRef<TextSelection | undefined>(undefined);
@@ -105,7 +105,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
         <button ref={historyAnchor} className="icon-button" aria-label="History" title="History — switch conversation in this tab" aria-expanded={historyOpen} aria-controls={historyOpen ? "session-history" : undefined} onClick={() => { setHistoryOpen(!historyOpen); setThreadMenu(null); }}><HistoryIcon size={15} /></button>
         <button className="icon-button" aria-label="Open New Chat in Editor Tab" title="Open New Chat in Editor Tab" disabled={creating} onClick={() => { setCreating(true); setHistoryOpen(false); void run("newChatTab").finally(() => setCreating(false)); }}><PlusIcon size={15} /></button>
         <button className="icon-button" aria-label="Open Web UI" title="Open current conversation in your default browser" onClick={() => { void run("openWebUi"); }}><GlobeIcon size={15} /></button>
-        {thread ? <button className="icon-button" aria-label="Thread actions" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); setThreadMenu(threadMenu ? null : { x: box.right - 190, y: box.bottom + 5 }); }}><ChevronDownIcon size={14} /></button> : null}
+        {thread ? <button className="icon-button" aria-label="Thread actions" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); setThreadMenu(threadMenu ? null : { x: box.right, y: box.bottom + 5, alignRight: true }); }}><ChevronDownIcon size={14} /></button> : null}
       </header>
       {scheduledOpen && thread ? <div className="chat-scheduled-drawer"><ScheduledTaskList state={state} projectId={thread.projectId} originThreadId={thread.id} onClose={() => setScheduledOpen(false)} /></div> : null}
       {historyOpen && historyAnchor.current ? <SessionHistory state={state} anchor={historyAnchor.current} onClose={closeHistory} /> : null}

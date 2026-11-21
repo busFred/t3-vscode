@@ -329,7 +329,10 @@ body.vscode-high-contrast .session-tree-row:has(> .thread.active), body.vscode-h
 .reply-reference svg { flex: none; }
 .reply-reference-who { flex: none; font-weight: 600; }
 .reply-reference-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.reply-chip .context-label svg { vertical-align: -2px; }
+/* Icon and text share one line; only the text truncates. */
+.reply-chip .context-label { display: inline-flex; align-items: center; gap: 4px; }
+.reply-chip .context-label > svg { flex: none; }
+.reply-chip .context-label-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* An attached editor reference of a sent message: one row per reference, expanded on click. */
 .message-references { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
