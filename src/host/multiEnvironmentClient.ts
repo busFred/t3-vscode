@@ -65,6 +65,7 @@ const PROOF_REFUSED = {
   proxy: "Something in front of that machine changes the address of each request, so its sign-in check fails. Connect to it directly or fix the proxy.",
   proof: "That machine refused this computer's sign-in proof. Retrying.",
 } as const;
+const KEY_UNREADABLE = "This computer's sign-in key for that machine is unreadable. Pair it again with a new link.";
 const KEY_BOUND_ENDED = "This machine signed this computer out, or it went unused for 30 days. Pair it again with a new link.";
 // Connection errors can quote the socket URL; never surface its ticket or token.
 const describeError = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause)).replace(/([?&#](?:wsTicket|token|access_token|dpop)=)[^&#\s]+/gi, "$1…");
@@ -166,7 +167,7 @@ export class MultiEnvironmentClient {
           const key = await recordKey(record);
           if (!current()) { await client.disconnect().catch(() => undefined); return; }
           // Without its key the session cannot sign anything, so it asks to be paired again instead of retrying.
-          if (!key) { await client.disconnect().catch(() => undefined); if (current()) this.keyBoundEnded(remote); return; }
+          if (!key) { await client.disconnect().catch(() => undefined); if (current()) this.keyBoundEnded(remote, KEY_UNREADABLE); return; }
           await client.connect(remoteServer(record), recordAuth(record, key, async () => {
             if (!current()) throw new Error("This connection attempt was replaced.");
             return this.currentToken(remote);
@@ -232,10 +233,10 @@ export class MultiEnvironmentClient {
    * A key-bound session that will not renew was revoked or went unused past its window; the two look
    * the same from here, so the machine stays listed with "Pair again" instead of being removed.
    */
-  private keyBoundEnded(remote: Remote): void {
+  private keyBoundEnded(remote: Remote, reason: string = KEY_BOUND_ENDED): void {
     if (remote.renewal) clearTimeout(remote.renewal);
     remote.renewal = null;
-    remote.client = null; remote.shell = null; remote.state = "expired"; remote.error = KEY_BOUND_ENDED;
+    remote.client = null; remote.shell = null; remote.state = "expired"; remote.error = reason;
     this.emitMerged(); this.onRemoteStatus?.();
   }
   /** The token to present now, renewed first when it is about to expire. */
@@ -251,18 +252,18 @@ export class MultiEnvironmentClient {
     // put the old session's token on the new pairing.
     if (remote.renewing) return remote.renewing;
     const pairing = pairingId(remote.record);
-    const run: { promise: Promise<void> | null } = { promise: null };
-    run.promise = (async () => {
+    let renewing: Promise<void>;
+    const run = async () => {
       const stored = await renewToken(remote.record);
       // Stopped meanwhile (disabled, removed or restarted): nothing to apply.
-      if (remote.renewing !== run.promise) throw new Error("This machine stopped while signing in again.");
+      if (remote.renewing !== renewing) throw new Error("This machine stopped while signing in again.");
       if (pairingId(remote.record) !== pairing) throw new Error("This machine was paired again.");
       if (!stored) throw new Error("This machine is no longer paired.");
       // Only the token changes: settings another window changed meanwhile (such as disabling) stay.
       remote.record = { ...remote.record, accessToken: stored.accessToken, expiresAt: stored.expiresAt }; remote.renewedAt = Date.now();
-    })().finally(() => { if (remote.renewing === run.promise) remote.renewing = null; });
-    remote.renewing = run.promise;
-    const renewing = run.promise;
+    };
+    renewing = run().finally(() => { if (remote.renewing === renewing) remote.renewing = null; });
+    remote.renewing = renewing;
     return renewing;
   }
   /** Keeps a connected key-bound session alive: the server only moves its 30-day window when the token renews. */

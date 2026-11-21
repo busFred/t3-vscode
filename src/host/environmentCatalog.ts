@@ -163,13 +163,14 @@ export class EnvironmentCatalog {
 
   /** Removes a pairing only while it still holds `accessToken`, so a fresh re-pair from another window survives. */
   async removeIfToken(environmentId: string, accessToken: string): Promise<boolean> {
-    let removed = false;
+    let removed: RemoteEnvironmentRecord | undefined;
     await this.mutate((all) => {
-      const next = all.filter((e) => e.environmentId !== environmentId || e.accessToken !== accessToken);
-      removed = next.length !== all.length;
-      return next;
+      removed = all.find((e) => e.environmentId === environmentId && e.accessToken === accessToken);
+      return removed ? all.filter((e) => e !== removed) : all;
     });
-    return removed;
+    const record = removed as RemoteEnvironmentRecord | undefined;
+    if (record) await this.secrets.delete(tokenKey(record));
+    return !!record;
   }
 
   /**

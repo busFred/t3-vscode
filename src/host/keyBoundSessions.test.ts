@@ -400,3 +400,18 @@ test("A bearer entry replaced by a key-bound pairing does not come back when tha
   await catalog.remove("kb");
   assert.deepEqual(await catalog.list(), []);
 });
+
+test("Re-pairing deletes the earlier pairing's renewed token and keeps the new one's", async () => {
+  const secrets = memorySecrets(), catalog = new EnvironmentCatalog(secrets);
+  const second = await createDeviceKey();
+  const old = keyBound({ accessToken: "old", expiresAt: 100, addedAt: "2026-01-01T00:00:00.000Z" });
+  await catalog.upsert(old);
+  await catalog.updateToken(old, { accessToken: "old-renewed", expiresAt: 200 });
+  const tokenKeys = () => [...secrets.values.keys()].filter((key) => key.startsWith("t3-vscode.environmentToken.v1."));
+  assert.equal(tokenKeys().length, 1);
+  const fresh = keyBound({ accessToken: "fresh", expiresAt: 100, addedAt: "2026-02-01T00:00:00.000Z", dpopKey: second.stored });
+  await catalog.upsert(fresh);
+  assert.deepEqual(tokenKeys(), [], "the old pairing's token entry is gone");
+  await catalog.updateToken(fresh, { accessToken: "fresh-renewed", expiresAt: 300 });
+  assert.equal((await catalog.list())[0]!.accessToken, "fresh-renewed");
+});

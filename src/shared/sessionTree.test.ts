@@ -206,3 +206,11 @@ test("An archived side chat without its parent stays out of the list; side chats
   assert.deepEqual(filterThreadListTags([parent, side], ["work"]).map(entry => entry.id), ["parent", "side"]);
   assert.deepEqual(filterThreadListTags([parent, side], ["other"]).map(entry => entry.id), []);
 });
+
+test("A side chat left active under an archived parent uses its own tags, as it stands alone", async () => {
+  const { filterThreadListTags } = await import("./threadListTags.js");
+  const parent = thread("parent", { archived: true, settled: true, tags: ["old"] });
+  const side = thread("side", { parentThreadId: "parent", relationshipToParent: "side-chat", tags: ["work"] });
+  assert.deepEqual(filterThreadListTags([parent, side], ["work"]).map(entry => entry.id), ["side"]);
+  assert.deepEqual(filterThreadListTags([parent, side], ["old"]).map(entry => entry.id), ["parent"]);
+});
