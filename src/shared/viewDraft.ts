@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { AssistantCitation, ChatAttachment, ComposerContextId, ResponseContextRecord } from "@t3tools/contracts";
+import { AssistantCitation, ChatAttachment, ComposerContextId, ResponseContextRecord, ThreadContextRecord } from "@t3tools/contracts";
 import type { ComposerContext } from "./composerContext.js";
 import { isObject } from "./bridge.js";
 import type { DraftAttachment } from "./composerAttachments.js";
@@ -17,6 +17,7 @@ export function parseDraftTransfer(raw: unknown, expectedKey: string, allowPendi
   const contexts = raw.draft.contexts.map((context): ComposerContext => {
     if (!isObject(context)) throw new Error("Invalid draft context.");
     // Decoded against the contract, so a draft cannot carry a reply the server would refuse or silently drop.
+    if (context.type === "thread") return { type: "thread", record: Schema.decodeUnknownSync(ThreadContextRecord)(context.record) };
     if (context.type === "response") return { type: "response", record: Schema.decodeUnknownSync(ResponseContextRecord)(context.record) };
     if (context.type === "assistant") return { type: "assistant", citation: { ...Schema.decodeUnknownSync(AssistantCitation)(context.citation), ...(isObject(context.citation) && context.citation.author === "user" ? { author: "user" as const } : {}) }, ...(context.contextId !== undefined ? { contextId: Schema.decodeUnknownSync(ComposerContextId)(context.contextId) } : {}) };
     const position = (raw: unknown) => isObject(raw) && Number.isInteger(raw.line) && Number(raw.line) > 0 && Number.isInteger(raw.column) && Number(raw.column) > 0;

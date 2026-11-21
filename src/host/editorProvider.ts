@@ -57,7 +57,7 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
     if (uri && panel && vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.isPreview && tab.input instanceof vscode.TabInputCustom && tab.input.uri.toString() === uri.toString()))) await vscode.commands.executeCommand("vscode.openWith", uri, "t3.session", { preview: false, preserveFocus: true, viewColumn: panel.viewColumn });
   }
   closeTaskTab(id: string): void { if (this.taskRequests.has(id)) this.panels.get(id)?.dispose(); }
-  private async openResource(request: { threadId?: string; task?: ScheduledTaskEditorRequest }, preview: boolean): Promise<string> {
+  private async openResource(request: { threadId?: string; task?: ScheduledTaskEditorRequest }, preview: boolean, column = vscode.ViewColumn.Active): Promise<string> {
     if (request.task) for (const [id, task] of this.taskRequests) {
       if (task.projectId !== request.task.projectId || task.taskId !== request.task.taskId || task.originThreadId !== request.task.originThreadId) continue;
       if (!preview) await this.keepTab(id);
@@ -67,7 +67,7 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
     // tab, and reuse by its current session/task above instead of an obsolete URI.
     const identity = request.threadId ?? request.task?.taskId ?? "new-task";
     const uri = vscode.Uri.from({ scheme: "t3-session", authority: createHash("sha256").update(this.host.snapshot().home).digest("hex").slice(0, 16), path: `/${encodeURIComponent(identity)}/${crypto.randomUUID()}`, query: JSON.stringify(request) });
-    await vscode.commands.executeCommand("vscode.openWith", uri, "t3.session", { preview, preserveFocus: preview, viewColumn: vscode.ViewColumn.Active });
+    await vscode.commands.executeCommand("vscode.openWith", uri, "t3.session", { preview, preserveFocus: preview, viewColumn: column });
     return [...this.editorUris].find(([, value]) => value.toString() === uri.toString())?.[0] ?? "";
   }
   private readonly panels = new Map<string, vscode.WebviewPanel>();
@@ -149,15 +149,30 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
       throw cause;
     }
   }
-  async openSession(threadId: string, preview = false): Promise<string> {
+  async openSession(threadId: string, preview = false, sourceViewId?: string): Promise<string> {
     return this.enqueue(async () => {
+      const state = this.host.snapshot(sourceViewId);
+      const thread = state.threads.find(entry => entry.id === threadId);
+      const parentId = thread?.relationshipToParent === "side-chat" ? thread.parentThreadId : null;
       await this.host.selectThread(threadId, SIDEBAR_VIEW_ID);
-      for (const [id, panel] of this.panels) if (!this.taskRequests.has(id) && this.host.snapshot(id).activeThreadId === threadId) {
-        if (!preview) await this.keepTab(id);
-        panel.reveal(panel.viewColumn, preview); this.registry.focus(id); return id;
+      const existing = await this.revealSession(threadId, preview, sourceViewId);
+      if (existing) return existing;
+      if (parentId) {
+        // Beside is relative to the active editor group. Activate the parent even from Sessions.
+        if (!await this.revealSession(parentId, false, sourceViewId)) await this.openResource({ threadId: parentId }, false);
       }
-      return this.openResource({ threadId }, preview);
+      return this.openResource({ threadId }, preview && !parentId, parentId ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active);
     });
+  }
+  private async revealSession(threadId: string, preview: boolean, preferredViewId?: string): Promise<string | undefined> {
+    const matches = (id: string) => !this.taskRequests.has(id) && this.host.viewTitle(id).activeThreadId === threadId;
+    const id = preferredViewId && this.panels.has(preferredViewId) && matches(preferredViewId)
+      ? preferredViewId : [...this.panels.keys()].find(matches);
+    if (!id) return;
+    const panel = this.panels.get(id)!;
+    if (!preview) await this.keepTab(id);
+    panel.reveal(panel.viewColumn, preview); this.registry.focus(id);
+    return id;
   }
   async insertReference(reference: FileReference): Promise<void> {
     const focusedId = this.registry.focusedViewId;
@@ -197,10 +212,17 @@ export class T3WebviewProvider implements vscode.WebviewViewProvider, vscode.Cus
     // A conversation counts as read only while its tab is on screen.
     this.host.setViewVisible(id, panel.visible); this.registry.setVisible(id, panel.visible);
     panel.onDidChangeViewState(({ webviewPanel }) => { if (webviewPanel.active) this.registry.focus(id); this.host.setViewVisible(id, webviewPanel.visible); this.registry.setVisible(id, webviewPanel.visible); });
+    const initialThreadId = this.host.viewTitle(id).activeThreadId;
     panel.onDidDispose(() => {
+      const activeThreadId = this.host.viewTitle(id).activeThreadId;
       this.host.setViewVisible(id, false);
       this.registry.remove(id); this.panels.delete(id); this.editorUris.delete(id); this.taskRequests.delete(id);
-      void this.host.removeView(id).catch((cause) => vscode.window.showErrorMessage(String(cause)));
+      void this.host.removeView(id).then(async () => {
+        for (const threadId of new Set([initialThreadId, activeThreadId])) {
+          if (threadId && ![...this.panels.keys()].some(other => this.host.viewTitle(other).activeThreadId === threadId))
+            await this.host.discardUnusedSideChat(threadId);
+        }
+      }).catch((cause) => vscode.window.showErrorMessage(String(cause)));
     });
   }
 

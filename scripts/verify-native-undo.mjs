@@ -43,7 +43,7 @@ export async function verifyNativeUndo(options) {
 async function verifyUndo({ home, workbench, sidebar, findWebview, runCommand }) {
   await sidebar.wait('document.querySelector(".dedicated-sessions")', 60_000);
   // Click a webview element for real; the target frame is found by matching its on-screen size.
-  const click = async (view, selector) => {
+  const click = async (view, selector, group = "left") => {
     await workbench.bringToFront();
     await view.evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'nearest',inline:'nearest'})`);
     // Revealing an Electron webview updates its compositor hit-test region asynchronously.
@@ -55,7 +55,8 @@ async function verifyUndo({ home, workbench, sidebar, findWebview, runCommand })
       return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden'
         && document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === element;
     }).map(element => { const box = element.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height }; }));
-    const frame = frames.find((box) => Math.abs(box.width - inner.w) < 2 && Math.abs(box.height - inner.h) < 2); assert.ok(frame, `webview frame for ${selector}`);
+    const candidates = frames.filter(box => Math.abs(box.width - inner.w) < 2 && Math.abs(box.height - inner.h) < 2).sort((a, b) => a.x - b.x);
+    const frame = group === "right" ? candidates.at(-1) : candidates[0]; assert.ok(frame, `webview frame for ${selector}`);
     await workbench.mouse.click(frame.x + inner.x, frame.y + inner.y);
   };
   const instrument = (view) => view.evaluate(`(() => { window.__undoLog = [];
@@ -270,6 +271,33 @@ async function verifyUndo({ home, workbench, sidebar, findWebview, runCommand })
       await click(view, replyButton);
       await view.wait(`/^\\[[^\\]]*\\]\\(t3-context:\\/\\/v1\\/response\\/[^)]+\\) /.test(document.querySelector('${message}').value) && document.querySelector('.reply-chip')`);
     });
+    // The parent fixture uses the isolated cheap test model. Send once so the child is attachable.
+    const prompt = "/side Reply with OK.";
+    await reset(view, prompt);
+    await click(view, 'button[aria-label="Send message"]');
+    const side = await findWebview("panel");
+    const add = `button[title="Adds this side chat to the main thread's next message."]`;
+    await side.wait(`document.querySelector(${JSON.stringify(add)})?.disabled === false`, 45_000);
+    const sideId = await side.evaluate('document.querySelector(".chat-main").dataset.threadId');
+    // The parent group may have moved when VS Code created the beside group. Use its real editor tab to focus it.
+    const parentTitle = await view.evaluate('document.querySelector(".chat-heading strong").textContent');
+    const parentTab = workbench.locator('.tab').filter({ has: workbench.locator('.label-name').filter({ hasText: parentTitle }) }).first();
+    await parentTab.click();
+    await scenario(view, `${label}: Add to main chat`, async () => {
+      await click(side, add, "right");
+      await view.wait(`document.querySelector('button[aria-label="Remove side chat reference"]') && document.activeElement === document.querySelector('${message}')`);
+    });
+    await scenario(view, `${label}: side-chat @ mention`, async () => {
+      const option = `[role="option"][data-side-chat-id="${sideId}"]`;
+      await view.wait(`document.querySelector(${JSON.stringify(option)})`);
+      await click(view, option);
+      await view.wait(`document.querySelector('button[aria-label="Remove side chat reference"]') && document.activeElement === document.querySelector('${message}')`);
+    }, "Before @");
+    const sideTitle = await side.evaluate('document.querySelector(".chat-heading strong").textContent');
+    const sideTab = workbench.locator('.tab').filter({ has: workbench.locator('.label-name').filter({ hasText: sideTitle }) }).last();
+    await sideTab.hover();
+    await sideTab.locator('.tab-actions .action-label[aria-label^="Close"]').click();
+    await parentTab.click();
     await scenario(view, `${label}: editor reference / hidden tab`, async () => {
       await writeFile(join(home, 'workspace/undo-reference.ts'), 'const undoReference = 1;\n');
       await openReferenceFile();

@@ -9,13 +9,17 @@ import type { ComposerSuggestion, ThreadSummary } from "./bridge.js";
  * the local /model action in the same list, so the shared detector is used unchanged.
  */
 export { detectComposerTrigger } from "@t3tools/shared/composerTrigger";
-export function slashSuggestions(provider: ServerProvider | undefined, cwd: string | null, query: string, atPromptStart: boolean): ComposerSuggestion[] {
+export function slashSuggestions(provider: ServerProvider | undefined, cwd: string | null, query: string, atPromptStart: boolean, sideChats = false): ComposerSuggestion[] {
   const skills = provider ? getProviderSkillsForSlashMenu(resolveProviderSkillsForCwd(provider, cwd), true) : [];
   const commands = provider ? getProviderSlashCommandsForSlashMenu(resolveProviderSlashCommandsForCwd(provider, cwd), skills) : [];
   const items: ComposerSuggestion[] = [
     { id: "model", kind: "model", value: "", label: "/model", description: "Switch response model for this thread" },
     { id: "usage", kind: "usage", value: "", label: "/usage-limits", description: "Show this provider's usage limits" },
-    ...(atPromptStart ? commands.filter((command) => command.name !== "model" && command.name !== "usage-limits").map((command) => ({ id: `command:${command.name}`, kind: "command" as const, value: `/${command.name} `, label: `/${command.name}`, description: command.description ?? command.input?.hint ?? "Run provider command" })) : []),
+    ...(atPromptStart && sideChats ? [
+      { id: "side", kind: "command" as const, value: "/side ", label: "/side", description: "Ask a side question in a new side chat" },
+      { id: "btw", kind: "command" as const, value: "/btw ", label: "/btw", description: "Same as /side" },
+    ] : []),
+    ...(atPromptStart ? commands.filter((command) => command.name !== "model" && command.name !== "usage-limits" && command.name !== "side" && command.name !== "btw").map((command) => ({ id: `command:${command.name}`, kind: "command" as const, value: `/${command.name} `, label: `/${command.name}`, description: command.description ?? command.input?.hint ?? "Run provider command" })) : []),
     ...skills.map((skill) => ({ id: `skill:${skill.name}`, kind: "skill" as const, value: `$${skill.name} `, label: `/skill:${skill.name}`, description: skill.shortDescription ?? skill.description ?? (skill.scope ? `${skill.scope} skill` : "") })),
   ];
   const normalized = normalizeSearchQuery(query, { trimLeadingPattern: /^\/+/ });

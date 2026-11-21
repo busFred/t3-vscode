@@ -3,6 +3,7 @@
  * quoted citation, a reply to a response, a question answer carried over when Stop cancels its question, and an unrelated
  * host-state snapshot (contextUsage) arriving mid-typing. */
 import assert from "node:assert/strict";
+import { pathToFileURL } from "node:url";
 import type { Page } from "playwright-core";
 import type { HostState } from "../src/host/hostState.js";
 import { publishText, type FakeTransport } from "../src/host/testing/fakeTransport.js";
@@ -10,7 +11,7 @@ import * as Schema from "effect/Schema";
 import { OrchestrationV2RuntimeRequest, OrchestrationV2TurnItem, RunId } from "@t3tools/contracts";
 import { v2Now } from "../vendor/client-runtime/src/state/orchestrationV2TestFixtures.ts";
 
-export async function verifyComposerUndo(page: Page, host: HostState, client: FakeTransport, viewId: string, selectAssistantText: (page: Page, text: string) => Promise<unknown>) {
+export async function verifyComposerUndo(page: Page, host: HostState, client: FakeTransport, viewId: string, selectAssistantText: (page: Page, text: string) => Promise<unknown>, sideChat?: Page) {
   const message = page.getByRole("textbox", { name: "Message", exact: true });
   const threadId = host.snapshot(viewId).activeThreadId;
   assert.ok(threadId, "verifyComposerUndo requires an active thread");
@@ -319,6 +320,38 @@ export async function verifyComposerUndo(page: Page, host: HostState, client: Fa
   publishText(client, threadId, `Live **reply** in ${threadId} conversation\n\nInline \`value\`.\n\n\`\`\`ts\nconst value = 42;\n\`\`\``, 103);
   // "Live reply in" is already on screen, so wait for the streamed chunks to go: a late snapshot would otherwise re-render later checks mid-step.
   await page.waitForFunction(() => document.body.textContent?.includes("Live reply in") && !document.body.textContent.includes("streamed chunk"));
+  if (sideChat) {
+    const verifySideInsertion = async (before: string, insert: () => Promise<void>) => {
+      await reset(""); await message.focus(); await message.pressSequentially(before);
+      await expected(before);
+      await insert();
+      const remove = page.getByRole("button", { name: "Remove side chat reference" });
+      await remove.waitFor(); await focused();
+      const inserted = await message.inputValue();
+      assert.match(inserted, /t3-context:\/\/v1\/thread\//);
+      await message.press("Control+z"); await expected(before); await remove.waitFor({ state: "hidden" });
+      await message.press("Control+y"); await expected(inserted); await remove.waitFor();
+      await message.press("Control+z"); await expected(before);
+      await message.press("Control+z");
+      assert.ok((await message.inputValue()).length < before.length, "Earlier typing remains undoable");
+      await message.press("Control+y"); await expected(before);
+      await message.press("Control+Shift+z"); await expected(inserted);
+    };
+    await verifySideInsertion("Before side chat.", async () => {
+      await sideChat.getByRole("button", { name: "Add to main chat" }).click();
+    });
+    await verifySideInsertion("Before @side", async () => {
+      await page.getByRole("option", { name: /^Side chat Side chat/ }).click();
+    });
+    console.log("PASS: Add to main chat and @ side-chat mentions each undo and redo in one native textarea edit.");
+  }
   await reset(original);
   console.log("PASS: native undo for typing, picked files, nested native paste, first/repeated quotes, a first reply and a reply after typing, a carried question answer, a mid-typing host snapshot, a suggested prompt and a failed send.");
+}
+
+
+// The standalone command uses the deterministic host and browser shared by verify-views.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.argv.push("--composer-undo-only");
+  void import("./verify-views.js");
 }

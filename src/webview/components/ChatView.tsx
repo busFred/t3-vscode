@@ -2,7 +2,7 @@ import { ConversationPullRequest } from "./ConversationPullRequest";
 import { GuestShareIndicator, GuestPendingMessages } from "./GuestShareControls";
 import type { SessionSearchOptions } from "../../shared/sessionSearch";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDownIcon, GlobeIcon, BotIcon, ArrowLeftIcon, SearchIcon, HistoryIcon, PlusIcon, CalendarClockIcon, WandSparklesIcon } from "lucide-react";
+import { ChevronDownIcon, GlobeIcon, BotIcon, ArrowLeftIcon, MessagesSquareIcon, CornerDownLeftIcon, SearchIcon, HistoryIcon, PlusIcon, CalendarClockIcon, WandSparklesIcon } from "lucide-react";
 import type { HostStateSnapshot } from "../../shared/bridge";
 import { useActions } from "../actions";
 import { Composer } from "./Composer";
@@ -86,7 +86,7 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
     window.addEventListener("t3-open-citation", open); return () => window.removeEventListener("t3-open-citation", open);
   }, [run, state.activeThreadId, state.environment?.environmentId]);
   const thread = state.threads.find((item) => item.id === state.activeThreadId);
-  const parent = thread?.relationshipToParent === "subagent" ? state.threads.find((entry) => entry.id === thread.parentThreadId) : undefined;
+  const parent = (thread?.relationshipToParent === "subagent" || thread?.relationshipToParent === "side-chat") ? state.threads.find((entry) => entry.id === thread.parentThreadId) : undefined;
   const project = state.projects.find((item) => item.id === (thread?.projectId ?? state.draft.projectId));
   return <div className="chat-view" onKeyDownCapture={(event) => { if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "f" && thread) { event.preventDefault(); event.stopPropagation(); setHistoryOpen(false); setFindOpen(true); } }}>
     <main className="chat-main" data-reading-layout="one" data-thread-id={state.activeThreadId ?? ""} onPointerDown={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }} onFocusCapture={(event) => { if ((event.target as Element).closest(".composer-box")) setCitationTarget(null); }}>
@@ -115,6 +115,10 @@ export function ChatView({ state }: { readonly state: HostStateSnapshot }) {
       <div className="chat-conversation" key="conversation">
       <TurnAnnouncer state={state} />
       {thread?.relationshipToParent === "subagent" ? <div className="subagent-parent-bar">{parent ? <button className="subagent-parent-link" onClick={() => { void run("selectThread", { threadId: parent.id }); }}><ArrowLeftIcon size={12} /><BotIcon size={12} /><span>Subagent of · {parent.title || "Untitled"}</span></button> : <span>Subagent conversation · parent unavailable in this workspace</span>}</div> : null}
+      {thread?.relationshipToParent === "side-chat" ? <div className="subagent-parent-bar">
+        {parent ? <button className="subagent-parent-link" onClick={() => { void run("openSessionTab", { threadId: parent.id }); }}><ArrowLeftIcon size={12} /><MessagesSquareIcon size={12} /><span>Side chat of · {parent.title || "Untitled"}</span></button> : null}
+        <button className="subagent-parent-link" disabled={!parent || !thread.hasUserMessage || thread.archived} title="Adds this side chat to the main thread's next message." onClick={() => { void run("addSideChatContext", { threadId: thread.id }); }}><CornerDownLeftIcon size={12} /><span>Add to main chat</span></button>
+      </div> : null}
       <TranscriptView state={state} onViewport={setViewport} citationTarget={citationTarget} searchTarget={findOpen ? searchTarget : null} searchOptions={findOpen ? searchOptions : null} onNavigate={() => { setCitationTarget(null); setSearchTarget(null); }} />
       <AssistantSelectionMenu key={`${state.environment?.environmentId}:${state.activeThreadId}`} viewport={viewport} onQuote={openComment} />
       {thread ? <GuestPendingMessages key={thread.id} thread={thread} /> : null}

@@ -1,5 +1,5 @@
 import type { AssistantCitation } from "./messageCitations.js";
-import { ComposerContextId, ResponseContextRecord, type OrchestrationMessageContext } from "@t3tools/contracts";
+import { ComposerContextId, ResponseContextRecord, type OrchestrationMessageContext, type ThreadContextRecord } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { collectAssistantCitations, serializeAssistantCitation } from "./messageCitations.js";
 import { collectComposerContextReferences, formatComposerContextReference, replaceComposerContextReferences, sanitizeComposerContextLabel, toKindScopedComposerContextId } from "@t3tools/shared/composerContextReferences";
@@ -20,7 +20,24 @@ export interface FileReference {
 export interface AssistantQuoteContext { readonly type: "assistant"; readonly citation: AssistantCitation; readonly contextId?: string }
 /** A reply to an earlier assistant response (T3 0.1.10). Its draft token is already the wire form, so sending only attaches `record`. */
 export interface ResponseReplyContext { readonly type: "response"; readonly record: ResponseContextRecord }
-export type ComposerContext = FileReference | AssistantQuoteContext | ResponseReplyContext;
+export type ComposerContext = FileReference | AssistantQuoteContext | ResponseReplyContext | { readonly type: "thread"; readonly record: ThreadContextRecord };
+
+export function insertSideChatReference(text: string, contexts: ReadonlyArray<ComposerContext>, record: ThreadContextRecord, selection: TextSelection) {
+  const token = formatComposerContextReference({ kind: "thread", contextId: record.contextId, label: record.label });
+  const prefix = selection.start > 0 && !/\s/.test(text[selection.start - 1] ?? "") ? " " : "";
+  const inserted = insertComposerReferenceText(text, `${prefix}${token} `, selection);
+  return { ...inserted, contexts: [...contexts.filter((context) => context.type !== "thread" || context.record.contextId !== record.contextId), { type: "thread" as const, record }] };
+}
+
+export function sideChatRecordsForMessage(text: string, contexts: ReadonlyArray<ComposerContext>): ThreadContextRecord[] {
+  const ids = new Set(collectComposerContextReferences(text).flatMap(reference => reference.kind === "thread" ? [reference.contextId] : []));
+  return contexts.flatMap(context => context.type === "thread" && ids.delete(context.record.contextId) ? [context.record] : []);
+}
+export function messageContextWithSideChats(context: OrchestrationMessageContext | undefined, text: string, records: ReadonlyArray<ThreadContextRecord>): OrchestrationMessageContext | undefined {
+  const taken = new Set(context?.records.map(record => record.contextId));
+  const threads = sideChatRecordsForMessage(text, records.map(record => ({ type: "thread", record }))).filter(record => !taken.has(record.contextId));
+  return threads.length ? { ...(context ?? { version: 1 }), records: [...(context?.records ?? []), ...threads] } : context;
+}
 export interface InsertReferenceEvent { readonly draftKey: string; readonly reference: FileReference }
 
 /** Draft-only quote references keep their payload out of the input; sending expands them to T3's portable citation format. `contexts` lets the new quote count the ones already in the draft; unknown tokens in `text` count as distinct. */
@@ -159,7 +176,7 @@ export function syncAssistantQuoteLabels(text: string, contexts: ReadonlyArray<C
   } };
 }
 export function contextIsReferenced(text: string, context: ComposerContext): boolean {
-  if (context.type === "response") return collectComposerContextReferences(text).some((reference) => reference.kind === "response" && reference.contextId === context.record.contextId);
+  if (context.type === "response" || context.type === "thread") return collectComposerContextReferences(text).some((reference) => reference.kind === context.type && reference.contextId === context.record.contextId);
   if (context.type === "file") return !context.inlineText || fileReferenceOccurrences(text, [context]).length > 0;
   return context.type !== "assistant" || !context.contextId || collectComposerContextReferences(text).some((reference) => reference.kind === "assistant-quote" && reference.contextId === context.contextId);
 }
@@ -168,9 +185,9 @@ export function removeContextReference(text: string, context: ComposerContext): 
     for (const match of fileReferenceOccurrences(text, [context]).reverse()) text = text.slice(0, match.start) + text.slice(match.end);
     return text;
   }
-  if (context.type === "response") {
+  if (context.type === "response" || context.type === "thread") {
     // The space the reply was inserted with goes too, so the message does not start with one.
-    const tokens = collectComposerContextReferences(text).filter((reference) => reference.kind === "response" && reference.contextId === context.record.contextId);
+    const tokens = collectComposerContextReferences(text).filter((reference) => reference.kind === context.type && reference.contextId === context.record.contextId);
     for (const token of tokens.reverse()) text = text.slice(0, token.start) + text.slice(token.end + (text[token.end] === " " ? 1 : 0));
     return text;
   }
@@ -233,7 +250,7 @@ export function formatComposerMessage(text: string, contexts: ReadonlyArray<Comp
   });
   return [inlineText.trim(), ...contexts.map((context) => {
     // A reply's token is already its wire form; its record travels as message context.
-    if (context.type === "response") return "";
+    if (context.type === "response" || context.type === "thread") return "";
     if (context.type === "assistant") {
       if (context.contextId && !used.has(context.contextId)) return "";
       // Retain T3's clickable source for chip-only legacy quotes, and the readable quote/comment for every provider/server version.

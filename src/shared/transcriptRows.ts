@@ -14,6 +14,13 @@ export interface DisplayRow {
   readonly key: string; readonly rows: ReadonlyArray<TranscriptItem>; readonly firstIndex: number;
   /** Set on a round fold: the display rows it hides, rendered as they would be unfolded once opened. */
   readonly fold?: ReadonlyArray<DisplayRow>;
+  readonly inheritedHistory?: ReadonlyArray<DisplayRow>;
+}
+export function foldSideChatHistory(rows: DisplayRow[]): DisplayRow[] {
+  const inherited = rows.filter(row => row.rows.every(item => item.visibility === "inherited"));
+  if (!inherited.length) return rows;
+  return [{ key: "side-chat-history", rows: inherited.flatMap(row => row.rows), firstIndex: inherited[0]!.firstIndex, inheritedHistory: inherited },
+    ...rows.filter(row => row.rows.some(item => item.visibility !== "inherited"))];
 }
 export function isWorkItem(row: TranscriptItem): boolean {
   switch (row.item.type) {
@@ -28,7 +35,7 @@ export function transcriptRows(items: ReadonlyArray<TranscriptItem>): DisplayRow
   let work: TranscriptItem[] | null = null;
   for (const [index, item] of items.entries()) {
     if (isWorkItem(item)) {
-      if (work && work[0]!.sourceThreadId === item.sourceThreadId && work[0]!.item.runId === item.item.runId) work.push(item);
+      if (work && work[0]!.visibility === item.visibility && work[0]!.sourceThreadId === item.sourceThreadId && work[0]!.item.runId === item.item.runId) work.push(item);
       else { work = [item]; rows.push({ key: item.key, rows: work, firstIndex: index }); }
     } else { work = null; rows.push({ key: item.key, rows: [item], firstIndex: index }); }
   }

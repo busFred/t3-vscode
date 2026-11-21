@@ -21,6 +21,7 @@ The published v0.1.16 includes selected-text image descriptions, local model man
 | [Conversation status and notifications](#conversation-status-and-notifications) | Immediate accepted-send status, pinned Working header and input notifications. | v0.0.1 | v0.3.15 |
 | [Link requests](#link-requests) | Review or decline requests to link environments. | v0.3.7 | v0.3.7 |
 | [Message navigation rail](#message-navigation-rail) | Previews (with send time) and jumps between exchanges in the current conversation, centred in the whole conversation; earlier pages load at the top. | v0.0.8 | v0.3.15 |
+| [Side chats](#side-chats) | Side questions in editor tabs beside the main conversation, with composer references and nested Sessions rows. | v0.3.15 | v0.3.15 |
 | [Subagent conversations](#subagent-conversations) | Nested local and remote child conversations in Sessions and Worktrees with a route back to the parent. | v0.0.1 | v0.3.11 |
 | [Untouched chat cleanup](#untouched-chat-cleanup) | Removes untouched root/worktree chats while retaining drafts and setup attempts for retry. | v0.0.8 | v0.2.0 |
 | [Compact composer](#compact-composer) | Permanent toolbar and checkout choice beside permissions inside the message box; native undo/redo in every chat tab. | v0.0.1 | v0.3.14 |
@@ -673,6 +674,10 @@ Session resources retain the current History selection for restoration. Opening 
 
 - Centre the rail in the whole conversation, not just the transcript above the composer. Wide views centre the composer column, so the rail now runs past it to 44 px above the bottom edge. Where the composer runs underneath the rail (narrow views), the rail stays centred above it. The rail is drawn in the conversation area rather than inside the scrolling transcript.
 - Load earlier messages on their own once the reader scrolls or wheels up to the top (within half a view), and keep loading while a short page leaves the reader there. Only the reader's own input starts this, so opening a conversation loads nothing extra. The header button and the rail's ⌃ stay for retries after an error.
+
+### Side chats
+
+- v0.3.15 · Ported T3 Code 0.1.11 side chats for servers that advertise them. Start with `/side`, `/btw` or the thread menu. Side chats open beside the main conversation and fold its inherited history. Add a used side chat to the main composer from its tab or the `@` menu. Sessions nests side chats under their parent and shows when one needs input or approval.
 
 ### Subagent conversations
 

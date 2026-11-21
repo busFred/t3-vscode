@@ -6,6 +6,7 @@ import { type ComponentProps, type KeyboardEvent, useEffect, useLayoutEffect, us
 import type { ThreadPendingApproval, ThreadPendingUserInput } from "@t3tools/client-runtime/state/thread-requests";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import type { ChildRequestSummary, HostStateSnapshot, PendingSecretRequest } from "../../shared/bridge";
+import { parseSideChatCommand } from "../../shared/sideChats";
 import { useActions } from "../actions";
 import { useBridgeQuery } from "../useBridgeQuery";
 import { ComposerPendingApprovalPanel } from "./t3/ComposerPendingApprovalPanel";
@@ -58,7 +59,7 @@ function collapseOnEscape(event: KeyboardEvent<HTMLElement>, open: boolean, onTo
   onToggle();
 }
 
-function UserInput({ prompt, threadId, open, onToggle }: { prompt: ThreadPendingUserInput; threadId: string; open: boolean; onToggle: () => void }) {
+function UserInput({ prompt, threadId, sideChatAvailable, open, onToggle }: { prompt: ThreadPendingUserInput; threadId: string; sideChatAvailable: boolean; open: boolean; onToggle: () => void }) {
   const run = useActions();
   const card = useRef<HTMLFormElement>(null);
   const wasOpen = useRef(open);
@@ -67,10 +68,18 @@ function UserInput({ prompt, threadId, open, onToggle }: { prompt: ThreadPending
   useEffect(() => { rememberQuestionAnswers(threadId, prompt.requestId, drafts); }, [threadId, prompt.requestId, drafts]);
   const [busy, setBusy] = useState(false);
   const disabled = busy || prompt.responseCapability === "not_resumable";
-  const valid = prompt.questions.every(question => question.required === false || resolvePendingUserInputAnswer(question, drafts[question.id]) !== null);
+  // The question card has its own input. Unavailable side-chat commands remain literal answers.
+  const sideQuestion = sideChatAvailable ? prompt.questions.find(question => parseSideChatCommand(drafts[question.id]?.customAnswer ?? "")) : undefined;
+  const valid = !!sideQuestion || prompt.questions.every(question => question.required === false || resolvePendingUserInputAnswer(question, drafts[question.id]) !== null);
   const submit = () => {
     if (!valid || disabled) return;
     setBusy(true);
+    if (sideQuestion) {
+      void run("sendMessage", { threadId, text: drafts[sideQuestion.id]?.customAnswer, fromQuestion: true }).then(ok => {
+        if (ok) setDrafts(previous => ({ ...previous, [sideQuestion.id]: setPendingUserInputCustomAnswer(sideQuestion, previous[sideQuestion.id], "") }));
+      }).finally(() => setBusy(false));
+      return;
+    }
     // Forgotten before sending, so a Stop that lands while the answer is in flight cannot also copy it into the composer;
     // remembered again if the send fails, since the answer is then still the person's only copy.
     forgetQuestionAnswers(threadId, prompt.requestId);
@@ -229,7 +238,7 @@ export function PendingRequests({ state }: { state: HostStateSnapshot }) {
   const toggle = (requestId: string) => setCollapsed((previous) => ({ ...previous, [requestId]: !previous[requestId] }));
   return <div className="pending-requests">
     {approval ? <ApprovalCard key={approval.requestId} approval={approval} pendingCount={state.pending.approvals.length} threadId={threadId} open={!collapsed[approval.requestId]} onToggle={() => toggle(approval.requestId)} /> : null}
-    {prompt ? <UserInput key={prompt.requestId} prompt={prompt} threadId={threadId} open={!collapsed[prompt.requestId]} onToggle={() => toggle(prompt.requestId)} /> : null}
+    {prompt ? <UserInput key={prompt.requestId} prompt={prompt} threadId={threadId} sideChatAvailable={state.threads.find(thread => thread.id === threadId)?.sideChatDisabledReason === null} open={!collapsed[prompt.requestId]} onToggle={() => toggle(prompt.requestId)} /> : null}
     {secret ? <SecretRequestCard key={secret.turnItemId} request={secret} threadId={threadId} open={!collapsed[secret.turnItemId]} onToggle={() => toggle(secret.turnItemId)} /> : null}
     {/* The conversation's own requests come first; a child's approval is someone else's turn. */}
     {(state.childRequests ?? []).map((request) => <ChildApprovalCard key={`${request.threadId}:${request.requestId}`} request={request} />)}

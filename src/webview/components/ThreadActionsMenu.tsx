@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import { GuestShareDialog } from "./GuestShareControls";
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AlarmClockIcon, ArchiveIcon, CheckIcon, ChevronRightIcon, CopyIcon, CopyPlusIcon, MailIcon, PencilIcon, PinIcon, RotateCcwIcon, TimerIcon, Trash2Icon, WandSparklesIcon } from "lucide-react";
+import { AlarmClockIcon, ArchiveIcon, CheckIcon, ChevronRightIcon, CopyIcon, CopyPlusIcon, MessagesSquareIcon, MailIcon, PencilIcon, PinIcon, RotateCcwIcon, TimerIcon, Trash2Icon, WandSparklesIcon } from "lucide-react";
 import { resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
 import type { ThreadSummary } from "../../shared/bridge";
 import { useActions } from "../actions";
@@ -97,6 +97,9 @@ export function ThreadActionsMenu({ thread, workspaceRoot, position, onClose }: 
     { kind: "action", key: "rename", label: "Rename thread", icon: <PencilIcon size={ICON} />, run: () => choose("rename") },
     ...(thread.canRegenerateTitle ? [{ kind: "action" as const, key: "title", label: thread.titleRegenerating ? "Stop regenerating title" : "Regenerate title", icon: <WandSparklesIcon size={ICON} />, run: () => choose(thread.titleRegenerating ? "stop-title-regeneration" : "regenerate-title") }] : []),
     ...(!thread.providerNativeSubagent ? [{ kind: "action" as const, key: "duplicate", label: "Duplicate thread", icon: <CopyPlusIcon size={ICON} />, disabled: Boolean(thread.activeRunId), title: thread.activeRunId ? "Wait for the current response to finish" : undefined, run: () => choose("duplicate") }] : []),
+    ...(!thread.archived && thread.sideChatDisabledReason !== undefined ? [{ kind: "action" as const, key: "start-side-chat",
+      label: "Start side chat", icon: <MessagesSquareIcon size={ICON} />, disabled: thread.sideChatDisabledReason !== null,
+      title: thread.sideChatDisabledReason ?? "Ask a side question while this thread keeps working.", run: () => choose("start-side-chat") }] : []),
     ...(thread.canMarkUnread ? [{ kind: "action" as const, key: "unread", label: "Mark unread", icon: <MailIcon size={ICON} />, run: () => choose("mark-unread") }] : []),
     ...(thread.autoSettle !== undefined ? [{ kind: "submenu" as const, key: "auto-settle", label: "Auto-settle", icon: <TimerIcon size={ICON} />, items: [
       { kind: "action" as const, key: "on", label: "Enabled", checked: thread.autoSettle, run: () => choose("auto-settle-on") },

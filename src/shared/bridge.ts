@@ -28,7 +28,7 @@ export const Methods = {
   searchSession: "searchSession", cancelSessionSearch: "cancelSessionSearch", revealSessionMatch: "revealSessionMatch",
   sessionSearchPreviews: "sessionSearchPreviews", setSearchPreferences: "setSearchPreferences",
   restoreComposerDraft: "restoreComposerDraft", saveComposerDraft: "saveComposerDraft", chatAsset: "chatAsset", mcpAppRequest: "mcpAppRequest", composerState: "composerState", pickAttachments: "pickAttachments", uploadAttachment: "uploadAttachment", releaseAttachment: "releaseAttachment",
-  getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage",
+  getState: "getState", loadArchive: "loadArchive", selectThread: "selectThread", sendMessage: "sendMessage", addSideChatContext: "addSideChatContext",
   newThread: "newThread", newChatTab: "newChatTab", chooseProject: "chooseProject", chooseMachine: "chooseMachine", startClone: "startClone", cloneToMachine: "cloneToMachine", machineCloneAction: "machineCloneAction", cloneAction: "cloneAction", listCopyableFiles: "listCopyableFiles", startPairing: "startPairing", reconnect: "reconnect",
   setModel: "setModel", setModelOption: "setModelOption", toggleFavoriteModel: "toggleFavoriteModel", setModelVisibility: "setModelVisibility", moveModel: "moveModel", reorderModel: "reorderModel", setModes: "setModes", openSettings: "openSettings", focusView: "focusView", interrupt: "interrupt", forceStop: "forceStop",
   respondToRequest: "respondToRequest", answerSecretRequest: "answerSecretRequest", answerLinkRequest: "answerLinkRequest", refreshPeerLinks: "refreshPeerLinks", addMachine: "addMachine", linkPeer: "linkPeer", unlinkPeer: "unlinkPeer", dismissRequest: "dismissRequest",
@@ -43,7 +43,7 @@ export const Methods = {
 export type RpcMethod = (typeof Methods)[keyof typeof Methods];
 export interface RpcMessage { readonly id: string; readonly method: RpcMethod; readonly params?: unknown }
 export interface RpcResult { readonly id: string; readonly result?: unknown; readonly error?: string }
-export const Events = { showTaskManager: "showTaskManager", editScheduledTask: "editScheduledTask", stateChanged: "stateChanged", showNavigation: "showNavigation", showUsage: "showUsage", insertReference: "insertReference", openInTab: "openInTab", initializeDraft: "initializeDraft" } as const;
+export const Events = { showTaskManager: "showTaskManager", editScheduledTask: "editScheduledTask", stateChanged: "stateChanged", showNavigation: "showNavigation", showUsage: "showUsage", insertReference: "insertReference", insertSideChatContext: "insertSideChatContext", discardSideChatDrafts: "discardSideChatDrafts", openInTab: "openInTab", initializeDraft: "initializeDraft" } as const;
 export type BridgeEvent = (typeof Events)[keyof typeof Events];
 
 export interface ModelSelection {
@@ -180,7 +180,10 @@ export interface ThreadSummary {
   readonly pendingRuntimeRequest?: { readonly id: string; readonly kind: string; readonly createdAt: string } | null;
   readonly branch?: string | null;
   readonly parentThreadId?: string | null;
-  readonly relationshipToParent?: "fork" | "subagent" | null;
+  readonly relationshipToParent?: "fork" | "subagent" | "side-chat" | null;
+  readonly sideChatDisabledReason?: string | null;
+  readonly hasUserMessage?: boolean;
+  readonly sideChatAttention?: "input" | "approval";
   readonly providerNativeSubagent?: boolean;
   readonly activityRunStatus?: string | null;
   /** Set when the thread itself is idle but a visible descendant subagent is still working. */
@@ -204,6 +207,7 @@ export interface ComposerSuggestion {
   readonly value: string;
   /** Absolute `file://` URL for path suggestions, so the renderer can bind one as a file reference. */
   readonly uri?: string;
+  readonly threadContext?: import("@t3tools/contracts").ThreadContextRecord;
 }
 export interface ConversationQueue {
   readonly activeRunId: string | null;

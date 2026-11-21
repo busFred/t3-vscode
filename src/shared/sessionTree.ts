@@ -11,7 +11,7 @@ export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: Read
   matches = threads.filter(thread => matchingIds.has(thread.id) || (!!thread.readOnlyHint && !!thread.parentThreadId && matchingIds.has(thread.parentThreadId)));
   const byId = new Map(threads.map((thread) => [thread.id, thread]));
   const parentOf = (thread: ThreadSummary): ThreadSummary | undefined => {
-    const parent = thread.relationshipToParent === "subagent" && thread.parentThreadId ? byId.get(thread.parentThreadId) : undefined;
+    const parent = (thread.relationshipToParent === "subagent" || thread.relationshipToParent === "side-chat") && thread.parentThreadId ? byId.get(thread.parentThreadId) : undefined;
     return parent && parent.id !== thread.id && (thread.remoteDelegation || parent.projectId === thread.projectId) ? parent : undefined;
   };
   const retained = new Set<string>();
@@ -31,7 +31,10 @@ export function sessionTree(threads: ReadonlyArray<ThreadSummary>, matches: Read
     while (ancestor) { if (seen.has(ancestor.id)) { cyclic = true; break; } seen.add(ancestor.id); ancestor = parentOf(ancestor); }
     const parentNode = !cyclic && parent ? nodes.get(parent.id) : undefined;
     if (parentNode) parentNode.children.push(node);
-    else if (thread.relationshipToParent !== "subagent") roots.push(node);
+    else if (thread.relationshipToParent !== "subagent" && thread.relationshipToParent !== "side-chat") roots.push(node);
+  }
+  for (const node of nodes.values()) {
+    node.children.sort((a, b) => Number(b.thread.relationshipToParent === "side-chat") - Number(a.thread.relationshipToParent === "side-chat"));
   }
   return roots;
 }

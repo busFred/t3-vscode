@@ -15,8 +15,8 @@ import { MermaidVisual } from "./MermaidVisual";
 import { CodeBlock } from "./CodeBlock";
 import { codeBlockLanguage } from "../../shared/codeBlock";
 import type { ChatAssetSource } from "../../shared/chatVisuals";
-import { OrchestrationMessageContext, type ChatAttachment, type ResponseContextRecord } from "@t3tools/contracts";
-import { ReplyIcon } from "lucide-react";
+import { OrchestrationMessageContext, type ChatAttachment, type ResponseContextRecord, type ThreadContextRecord } from "@t3tools/contracts";
+import { ReplyIcon, MessagesSquareIcon } from "lucide-react";
 import { parseComposerContextHref } from "@t3tools/shared/composerContextReferences";
 import * as Schema from "effect/Schema";
 import { InlineAttachment } from "./InlineAttachment";
@@ -73,6 +73,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source,
     const reference = href ? parseComposerContextHref(href) : null;
     const record = reference ? parsedContext?.records.find((record) => record.contextId === reference.contextId && record.kind === reference.kind) : undefined;
     const attachment = record && "attachmentId" in record && typeof record.attachmentId === "string" ? attachments.find((attachment) => attachment.id === record.attachmentId) : undefined;
+    if (record?.kind === "thread" && "threadId" in record) return <SideChatReference record={record as ThreadContextRecord} />;
     if (record?.kind === "response" && "citation" in record) return <ResponseReplyReference record={record as ResponseContextRecord} />;
     return attachment ? <InlineAttachment attachment={attachment} threadId={threadId} source={assetSource} /> : null;
   }, [parsedContext, attachments, threadId, assetSource]);
@@ -82,6 +83,13 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, threadId, source,
   const shownTail = useThrottledTail(liveTail, streaming === true && liveTail.length > TAIL_THROTTLE_BYTES);
   return <MarkdownScopeContext.Provider value={scope}><AssistantCitationNumbersContext.Provider value={citationNumbers}><div className="markdown" tabIndex={source ? -1 : undefined} data-citation-author={source?.author} data-assistant-citation-source={source?.messageId} data-assistant-citation-environment={source?.environmentId} data-assistant-citation-thread={source?.threadId}>{blocks.map((block, index) => <Fragment key={index}>{index ? "\n" : null}<MarkdownBlock text={index === blocks.length - 1 ? shownTail : block} user={source?.author === "user"} /></Fragment>)}</div></AssistantCitationNumbersContext.Provider></MarkdownScopeContext.Provider>;
 });
+
+function SideChatReference({ record }: { readonly record: ThreadContextRecord }) {
+  const run = useActions();
+  return <button type="button" className="reply-reference" title={record.title} onClick={() => { void run("openSessionTab", { threadId: record.threadId, environmentId: record.environmentId }); }}>
+    <MessagesSquareIcon size={12} aria-hidden="true" /><span className="reply-reference-who">Side chat:</span><span className="reply-reference-text">{record.title}</span>
+  </button>;
+}
 
 /** The response a sent message replies to (T3 0.1.10), whichever client sent it; opens that response like a quote's source. */
 function ResponseReplyReference({ record }: { readonly record: ResponseContextRecord }) {

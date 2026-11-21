@@ -14,9 +14,9 @@ import { WorktreeCoordinator, parseWorktreeChoice, type WorktreeTransport, type 
 import { repositoryIdentity, repositoryRemoteKeys, worktreeChanges, applyWorktreeFiles, currentBranch } from "./worktreeGit.js";
 import type { WorktreeChoice, WorktreeSummary } from "../shared/worktrees.js";
 import { DEFAULT_REFRESH_INTERVAL_MINUTES, refreshIntervalMs } from "../shared/refreshSettings.js";
-import { messageContextWithReplies, RESPONSE_OPENING_MAX_CHARS, type FileReference } from "../shared/composerContext.js";
+import { messageContextWithSideChats, messageContextWithReplies, RESPONSE_OPENING_MAX_CHARS, type FileReference } from "../shared/composerContext.js";
 import { RESPONSE_REPLY_MINIMUM_SERVER_VERSION, responseRepliesSupported } from "../shared/serverVersion.js";
-import type { ResponseContextRecord } from "@t3tools/contracts";
+import type { OrchestrationMessageContext, ResponseContextRecord, ThreadContextRecord } from "@t3tools/contracts";
 import { resolveDateFormat, resolveTimeFormat, type DateFormat, type TimeFormat } from "../shared/timeFormat.js";
 import { ComposerDraftStore, type StoredComposerDraft } from "./composerDraftStore.js";
 import type { ViewDraft } from "../shared/viewDraft.js";
@@ -54,6 +54,10 @@ import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import type { ChildRequestSummary, AddMachineTarget, MachineChoice, MachineClone, RemoteCheckouts, ThreadSummary, HostStateSnapshot, HostPhase, ModelSelection, TranscriptItem, RequestResponse, SecretRequestAnswerParams, ConversationDraft, ProjectSelection, ProjectSummary, FavoriteModel, ComposerSuggestion, ThreadSearchMatch, RewindMarker, RestoreResult, RestorePreview } from "../shared/bridge.js";
+import { ATTACHMENT_ONLY_BOOTSTRAP_PROMPT, threadContextRecord } from "@t3tools/shared/composerContextReferences";
+import { orchestrationV2WorktreePending } from "@t3tools/shared/orchestrationV2ThreadError";
+import { parseSideChatCommand, sideChatDisabledReason } from "../shared/sideChats.js";
+import { threadIsWorking } from "../shared/sessionTree.js";
 import { slashSuggestions } from "../shared/composerSuggestions.js";
 import { presentRunStop } from "@t3tools/client-runtime/state/thread-execution";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
@@ -775,6 +779,34 @@ export class HostState {
     if (remote) throw new Error(`${action} is not available for sessions on ${remote.label} yet.`);
   }
   private configForThread(id: string | undefined) { return this.client.configForThread ? this.client.configForThread(id) : this.client.config; }
+  private sideChatReason(thread: OrchestrationV2ThreadShell | undefined, config = this.configForThread(thread?.id)): string | null {
+    return sideChatDisabledReason({
+      sideChat: thread?.lineage.sideChat === true,
+      subagent: thread?.lineage.relationshipToParent === "subagent" || thread?.delegatedFrom !== undefined,
+      capability: config ? config.environment?.capabilities?.sideChats === true : undefined,
+      hasUserMessage: !!thread && this.hasUserMessage(thread),
+      worktreePending: !!thread && orchestrationV2WorktreePending(thread.worktreePath, this.threads.get(thread.id)?.projection?.runs ?? []),
+    });
+  }
+  private hasUserMessage(thread: OrchestrationV2ThreadShell): boolean {
+    return thread.latestUserMessageAt != null || this.acceptedMessages.has(thread.id)
+      || this.threads.get(thread.id)?.projection?.visibleTurnItems.some(row => row.visibility === "local" && row.item.type === "user_message") === true;
+  }
+  private sideChatsOf(id: string): OrchestrationV2ThreadShell[] {
+    const environmentId = this.attachmentEnvironment(id);
+    return this.allThreads().filter(thread => thread.lineage.sideChat === true && thread.lineage.parentThreadId === id
+      && this.attachmentEnvironment(thread.id) === environmentId && !thread.deletedAt);
+  }
+  sideChatContext(viewId: string, id: string): { draftKey: string; record: ThreadContextRecord } {
+    const view = this.requireView(viewId), side = this.requireThread(id);
+    const parent = side.lineage.parentThreadId && this.findThread(side.lineage.parentThreadId);
+    const environmentId = this.attachmentEnvironment(id);
+    if (view.activeThreadId !== id || side.lineage.sideChat !== true || !this.hasUserMessage(side) || side.archivedAt
+        || !parent || parent.archivedAt || !environmentId || this.attachmentEnvironment(parent.id) !== environmentId) {
+      throw new Error("This side chat is not available to add to the main chat.");
+    }
+    return { draftKey: parent.id, record: threadContextRecord({ environmentId: EnvironmentId.make(environmentId), threadId: side.id }, side.title) };
+  }
   /** Older servers omit the capability, so the action stays hidden rather than failing. */
   private canRegenerateTitle(id: string): boolean { return this.configForThread(id)?.environment?.capabilities?.threadTitleRegeneration === true; }
   private supports(id: string, capability: "threadForceStop" | "threadSnooze" | "threadVisitedTracking" | "threadAutoSettleOptOut"): boolean { return this.configForThread(id)?.environment?.capabilities?.[capability] === true; }
@@ -800,7 +832,7 @@ export class HostState {
         const request = kind === "user_input" ? "user_input" : "approval";
         let parentId = child.delegatedFrom?.threadId ?? child.lineage.parentThreadId;
         if (child.lineage.sideChat === true) {
-          if (parentId !== null && requests.get(parentId) !== "approval") requests.set(parentId, request);
+          if (!child.archivedAt && parentId !== null && requests.get(parentId) !== "approval") requests.set(parentId, request);
           continue;
         }
         const live = child.activityRunStatus !== undefined ? child.activityRunStatus !== null : ["preparing", "starting", "running", "waiting"].includes(child.status);
@@ -924,7 +956,10 @@ export class HostState {
     // Local durability must not depend on the server staying connected between input and save.
     if (!this.client.connected && !known) throw new Error("Reconnect to T3 before opening this draft.");
     if (threadId !== "new") {
-      if (this.client.connected) this.requireThread(threadId);
+      if (this.client.connected) {
+        const thread = this.requireThread(threadId);
+        if (thread.lineage.sideChat === true && thread.archivedAt) return;
+      }
       if (draft.text || draft.contexts.length || draft.attachments?.length) this.emptyThreads.delete(threadId);
     }
     const record = known ?? this.composerDrafts.claim(this.draftScope(), threadId, viewId), owner = `draft:${record.id}`;
@@ -1287,7 +1322,7 @@ export class HostState {
     const link = (parent: string, child: string) => { const list = children.get(parent) ?? []; list.push(child); children.set(parent, list); };
     // A delegated conversation may use a different repository on the paired machine.
     for (const thread of all) {
-      const lineageParent = thread.lineage.relationshipToParent === "subagent" && thread.lineage.parentThreadId ? byId.get(thread.lineage.parentThreadId) : undefined;
+      const lineageParent = (thread.lineage.relationshipToParent === "subagent" || thread.lineage.sideChat === true) && thread.lineage.parentThreadId ? byId.get(thread.lineage.parentThreadId) : undefined;
       if (lineageParent && lineageParent.projectId === thread.projectId && environment(lineageParent.id) === environment(thread.id)) link(lineageParent.id, thread.id);
       const from = thread.delegatedFrom;
       if (from && byId.has(from.threadId) && environment(from.threadId) === from.environmentId) link(from.threadId, thread.id);
@@ -1305,7 +1340,12 @@ export class HostState {
       visible.add(id);
       stack.push(...children.get(id) ?? []);
     }
-    return all.filter(thread => visible.has(thread.id));
+    return all.filter(thread => {
+      if (!visible.has(thread.id)) return false;
+      if (thread.lineage.sideChat !== true) return true;
+      const parent = thread.lineage.parentThreadId && byId.get(thread.lineage.parentThreadId);
+      return !!parent && visible.has(parent.id) && !parent.archivedAt && environment(parent.id) === environment(thread.id);
+    });
   }
   private findThread(id: string | undefined): OrchestrationV2ThreadShell | undefined {
     if (!this.derived) return this.visibleThreads().find((thread) => thread.id === id);
@@ -1608,7 +1648,7 @@ export class HostState {
     if (!this.views.has(viewId)) await this.cleanupEmptyThread(id);
     return id;
   }
-  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID, mode = "auto", attachmentIds: ReadonlyArray<string> = [], attachmentReferences: ReadonlyArray<AttachmentReference> = [], responseRecords: ReadonlyArray<ResponseContextRecord> = []): Promise<void> {
+  sendMessage(text: string, targetThreadId?: string, viewId = SIDEBAR_VIEW_ID, mode = "auto", attachmentIds: ReadonlyArray<string> = [], attachmentReferences: ReadonlyArray<AttachmentReference> = [], responseRecords: ReadonlyArray<ResponseContextRecord> = [], threadRecords: ReadonlyArray<ThreadContextRecord> = [], fromQuestion = false): Promise<string | void> {
     return this.enqueue(async () => {
       this.requireView(viewId);
       if (!["auto", "queue", "steer"].includes(mode)) throw new Error("Unknown message delivery mode.");
@@ -1619,10 +1659,25 @@ export class HostState {
         return upload.attachment;
       });
       const limitError = getProviderAttachmentLimitError(attachments); if (limitError) throw new Error(limitError);
-      const context = messageContextWithReplies(attachmentMessageContext(text, attachments, attachmentReferences), text, responseRecords);
+      const side = parseSideChatCommand(text);
+      const parent = this.findThread(targetThreadId);
+      if (fromQuestion) {
+        const projection = parent && this.threads.get(parent.id)?.projection;
+        if (!side || targetThreadId !== this.requireView(viewId).activeThreadId || !projection || !derivePendingThreadRequests(projection).userInputs.length)
+          throw new Error("This side question is no longer available.");
+      }
+      if (side) {
+        const reason = this.sideChatReason(parent, parent ? this.configForThread(parent.id) : this.draftConfig(this.requireView(viewId)));
+        if (reason || !parent) throw new Error(reason ?? "Side chats start after the first message.");
+        text = side.prompt;
+      }
+      const context = messageContextWithSideChats(messageContextWithReplies(attachmentMessageContext(text, attachments, attachmentReferences), text, responseRecords), text, threadRecords);
+      if (context?.records.some(record => record.kind === "thread" && "threadId" in record
+        && (!parent || !this.sideChatsOf(parent.id).some(child => child.id === record.threadId && !child.archivedAt && this.hasUserMessage(child))
+          || record.environmentId !== this.attachmentEnvironment(parent.id)))) throw new Error("Only this conversation's side chats can be attached.");
       const replying = !!context?.records.some((record) => record.kind === "response");
       if (replying && !targetThreadId) throw new Error("A reply can only be sent in the conversation it replies to.");
-      if (!text.trim() && !attachments.length) throw new Error("Enter a message or attach a file.");
+      if (!side && !text.trim() && !attachments.length) throw new Error("Enter a message or attach a file.");
       const machine = targetThreadId ? undefined : this.draftMachine(this.requireView(viewId));
       if (machine) { await this.launchOnMachine(machine, text, attachments, context, viewId, attachmentIds); return; }
       const id = targetThreadId ?? await this.createThread(undefined, viewId, false);
@@ -1654,6 +1709,11 @@ export class HostState {
       if (thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") throw new Error("This subagent conversation is controlled by its provider. Return to the parent conversation to send instructions.");
       view.sending = true; this.emit();
       try {
+        if (side) {
+          const created = await this.createSideChat(thread, text.trim() || attachments.length ? { text, attachments, context } : undefined);
+          if (!fromQuestion) await this.completeSentDraft(attachmentIds, id, viewId);
+          return created;
+        }
         // A remote session's checkout is on its own machine; its server prepares the workspace.
         const local = !this.remoteThread(id);
         const choice = view.workspaceChoice ?? this.conversationDraft(view).workspace;
@@ -1735,6 +1795,80 @@ export class HostState {
       }
       if (this.findThread(result.threadId) && this.views.get(viewId) === view) { view.activeThreadId = result.threadId; if (view.chatActive) view.chatThreadId = result.threadId; await this.syncThreadSubscriptions(); }
     } finally { view.sending = false; this.emit(); }
+  }
+  startSideChat(id: string, viewId = SIDEBAR_VIEW_ID): Promise<string> {
+    return this.enqueue(async () => {
+      this.requireView(viewId);
+      return this.createSideChat(this.requireThread(id));
+    });
+  }
+  private async clearSideChatDraft(id: string): Promise<void> {
+    for (const record of this.composerDrafts.clearThread(this.draftScope(), id)) {
+      for (const attachmentId of record.attachmentIds) await this.releaseAttachment(attachmentId, `draft:${record.id}`);
+    }
+  }
+  private async createSideChat(parent: OrchestrationV2ThreadShell, message?: {
+    text: string;
+    attachments: ReadonlyArray<ChatAttachment>;
+    context: OrchestrationMessageContext | undefined;
+  }): Promise<string> {
+    const reason = this.sideChatReason(parent);
+    if (reason || parent.archivedAt) throw new Error(reason ?? "Restore this thread before starting a side chat.");
+    const modeDenial = managedRuntimeModeDenial(this.configForThread(parent.id)?.managedPolicy, parent.runtimeMode);
+    if (modeDenial) throw new Error(modeDenial);
+    const remote = this.remoteThread(parent.id);
+    const calls = remote ? this.client.environmentCalls?.(remote.environmentId) : this.client;
+    if (!calls?.dispatch) throw new Error("Could not start a side chat.");
+    const dispatch = calls.dispatch.bind(calls);
+    const id = randomUUID();
+    const discard = () => dispatch({ type: "thread.delete", commandId: randomUUID(), threadId: id, onlyIfUnused: true }).catch(() => {});
+    const step = async <T>(operation: () => Promise<T>, fallback: string): Promise<T> => {
+      try { return await operation(); }
+      catch (cause) { throw new Error(cause instanceof Error && cause.message ? cause.message : fallback); }
+    };
+    await step(() => dispatch({ type: "thread.fork", commandId: randomUUID(), createdBy: "user", creationSource: "web",
+      sourceThreadId: parent.id, targetThreadId: id, sourcePoint: { type: "latest_stable" }, sideChat: true, title: "Side chat" }), "Could not start a side chat.");
+    try {
+      const deadline = Date.now() + 5000;
+      while (!this.findThread(id) && Date.now() < deadline) {
+        this.shell = await this.client.snapshotShell().catch(() => this.shell);
+        if (!this.findThread(id)) await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      const child = this.findThread(id);
+      if (!child) throw new Error("The side chat was created, but it did not reach this client.");
+      if (child.runtimeMode !== parent.runtimeMode)
+        await step(() => dispatch({ type: "thread.runtime-mode.set", commandId: randomUUID(), threadId: id, runtimeMode: parent.runtimeMode }), "Could not set the side chat's permission mode.");
+      if (child.interactionMode !== "default")
+        await step(() => dispatch({ type: "thread.interaction-mode.set", commandId: randomUUID(), threadId: id, interactionMode: "default" }), "Could not set the side chat's interaction mode.");
+      if (message) {
+        const messageId = randomUUID();
+        await step(() => dispatch({ type: "message.dispatch", commandId: randomUUID(), threadId: id, messageId,
+          createdBy: "user", creationSource: "web", text: message.text || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
+          attachments: message.attachments, ...(message.context ? { context: message.context } : {}),
+          modelSelection: parent.modelSelection, titleSeed: deriveThreadTitleSeed(message), deliveryIntent: "auto",
+          dispatchMode: { type: "start_immediately" } }), "Could not send the side chat message.");
+        this.acceptedMessages.set(id, { messageId, startedAt: new Date().toISOString() });
+      } else if (JSON.stringify(child.modelSelection) !== JSON.stringify(parent.modelSelection)) {
+        await step(() => dispatch({ type: "thread.model-selection.set", commandId: randomUUID(), threadId: id, modelSelection: parent.modelSelection }), "Could not set the side chat's model.");
+      }
+      this.emit();
+      return id;
+    } catch (cause) {
+      await discard();
+      this.shell = await this.client.snapshotShell().catch(() => this.shell);
+      this.emit();
+      throw cause;
+    }
+  }
+  discardUnusedSideChat(id: string): Promise<void> {
+    return this.enqueue(async () => {
+      const thread = this.findThread(id);
+      if (thread?.lineage.sideChat !== true || thread.archivedAt || this.hasUserMessage(thread)) return;
+      await this.client.dispatch({ type: "thread.delete", commandId: randomUUID(), threadId: id, onlyIfUnused: true });
+      this.shell = await this.client.snapshotShell();
+      if (!this.findThread(id)) await this.clearSideChatDraft(id);
+      await this.reconcileViews();
+    });
   }
   private async completeSentDraft(attachmentIds: ReadonlyArray<string>, draftKey: string, owner: string): Promise<void> {
     for (const id of attachmentIds) { const upload = this.uploads.get(id); if (upload) upload.sent = true; }
@@ -2338,7 +2472,11 @@ export class HostState {
         if (thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider") throw new Error("This subagent conversation is controlled by its provider.");
         await this.client.dispatch({ type: "thread.metadata.update", commandId: randomUUID(), threadId: id, regenerateTitle: action === "regenerate-title" });
       } else if (["archive", "unarchive", "pin", "unpin", "delete", "settle", "unsettle"].includes(action)) {
+        const closing = action === "archive" || action === "delete";
+        const sideChatIds = closing ? this.sideChatsOf(id).map(child => child.id) : [];
+        if (closing && this.requireThread(id).lineage.sideChat === true) sideChatIds.push(ThreadId.make(id));
         await this.client.dispatch({ type: `thread.${action}`, commandId: randomUUID(), threadId: id, ...(action === "unsettle" ? { reason: "user" } : {}) });
+        for (const childId of sideChatIds) await this.clearSideChatDraft(childId);
       } else if (action === "snooze" || action === "unsnooze") {
         if (!this.supports(id, "threadSnooze")) throw new Error("This T3 server cannot snooze threads. Update T3 Code, then retry.");
         if (action === "unsnooze") await this.client.dispatch({ type: "thread.unsnooze", commandId: randomUUID(), threadId: id, reason: "user" });
@@ -2646,18 +2784,29 @@ export class HostState {
     const cwd = machine ? thread?.worktreePath ?? chosen ?? this.visibleProjects().find((project) => project.id === (thread?.projectId ?? draft.projectId))?.workspaceRoot ?? null : this.referenceRoot(viewId) ?? draft.workspaceRoot;
     const selection = thread?.modelSelection ?? draft.modelSelection;
     const instanceId = selection?.instanceId;
+    const sideChats: ComposerSuggestion[] = kind === "path" && thread && !thread.archivedAt && this.sideChatReason(thread) === null
+      ? this.sideChatsOf(thread.id).filter(child => !child.archivedAt && this.hasUserMessage(child) && child.title.toLowerCase().includes(query.trim().toLowerCase()))
+        .sort((a, b) => DateTime.toEpochMillis(b.updatedAt) - DateTime.toEpochMillis(a.updatedAt))
+        .slice(0, 10).map(child => {
+          const minutes = Math.max(0, Math.floor((Date.now() - DateTime.toEpochMillis(child.updatedAt)) / 60_000));
+          const time = minutes < 1 ? "just now" : minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
+          const environmentId = EnvironmentId.make(this.attachmentEnvironment(child.id)!);
+          const working = threadIsWorking({ status: child.status, activityRunStatus: child.activityRunStatus ?? null }) || this.acceptedMessages.has(child.id);
+          return { id: `thread:${child.id}`, kind: "thread", label: child.title, description: `Side chat · ${working ? "Working" : time}`,
+            value: child.id, threadContext: threadContextRecord({ environmentId, threadId: child.id }, child.title) };
+        }) : [];
     if (kind === "path" && machine) {
-      if (!cwd || !remote) return [];
-      const result = await remote.searchPaths(cwd, query);
+      if (!cwd || !remote) return sideChats;
+      const result = await remote.searchPaths(cwd, query).catch(error => { if (!sideChats.length) throw error; return { entries: [] }; });
       this.requireView(viewId);
       // Repository-relative paths mean the same file on that machine; links still open the local copy when there is one.
-      return result.entries.map(entry => {
+      return [...sideChats, ...result.entries.map(entry => {
         const path = resolve(cwd, entry.path), uri = pathToFileURL(path).toString(), value = entry.path.replaceAll("\\", "/");
         return { id: `path:${entry.kind}:${machine}:${path}`, kind: entry.kind, value, uri, label: basename(entry.path), description: value.includes("/") ? value.slice(0, value.lastIndexOf("/")) : "" };
-      }).slice(0, 100);
+      })].slice(0, 100);
     }
     if (kind === "path") {
-      if (!cwd) return [];
+      if (!cwd) return sideChats;
       const projectId = thread?.projectId ?? draft.projectId;
       const projectRoot = this.visibleProjects().find(p => p.id === projectId)?.workspaceRoot;
       const common = projectRoot ? this.repositoryIdentities.get(this.pathIdentity(projectRoot)) : undefined;
@@ -2667,13 +2816,13 @@ export class HostState {
       const results = await Promise.allSettled(roots.map(async root => ({ root, result: await this.client.searchPaths(root, query) })));
       this.requireView(viewId);
       const available = results.flatMap(result => result.status === "fulfilled" ? [result.value] : []);
-      if (!available.length && results[0]?.status === "rejected") throw results[0].reason;
+      if (!sideChats.length && !available.length && results[0]?.status === "rejected") throw results[0].reason;
       // Each absolute URI identifies its source checkout even when two files share a name.
-      return available.flatMap(({ root, result }) => result.entries.map(entry => {
+      return [...sideChats, ...available.flatMap(({ root, result }) => result.entries.map(entry => {
         const path = resolve(root, entry.path), uri = pathToFileURL(path).toString();
         const value = this.referenceForView({ type: "file", path, uri, label: entry.path }, viewId).label;
         return { id: `path:${entry.kind}:${path}`, kind: entry.kind, value, uri, label: basename(entry.path), description: value.includes("/") ? value.slice(0, value.lastIndexOf("/")) : "" };
-      })).slice(0, 100);
+      }))].slice(0, 100);
     }
     if (kind !== "slash-command" && kind !== "skill") throw new Error("Unknown composer trigger.");
     const config = () => machine ? this.client.configForEnvironment?.(machine) ?? null : this.client.config;
@@ -2687,7 +2836,7 @@ export class HostState {
       provider = config()?.providers.find((provider) => provider.instanceId === instanceId);
     }
     this.requireView(viewId);
-    const items = slashSuggestions(provider, cwd, kind === "skill" ? `skill:${query}` : query, atPromptStart);
+    const items = slashSuggestions(provider, cwd, kind === "skill" ? `skill:${query}` : query, atPromptStart, this.sideChatReason(thread) === null);
     return kind === "skill" ? items.filter((item) => item.kind === "skill") : items;
   }
   async refreshUsage(instanceId?: string): Promise<void> { await this.client.refreshProviders(instanceId); this.emit(); }
@@ -2765,6 +2914,7 @@ export class HostState {
       } else if (action === "cancel") await this.client.dispatch({ ...command, type: "queued-run.cancel", runId: entry.run.id });
       else if (action === "edit") {
         if (!text?.trim()) throw new Error("Enter a queued message.");
+        if (parseSideChatCommand(text)) throw new Error("A queued message can't move to a side chat. Remove /side or /btw to save it.");
         await this.client.dispatch({ ...command, type: "queued-run.edit", runId: entry.run.id, text, ...(entry.context ? { context: entry.context } : {}) });
       } else if (action === "reorder") {
         if (workflow.queuedRuns.length < 2) throw new Error("This provider cannot reorder queued messages.");
@@ -2941,8 +3091,16 @@ export class HostState {
     readonly hiddenKeys: ReturnType<typeof hiddenThreadKeys>;
     readonly subagentActivity: ReturnType<HostState["subagentActivity"]>;
   }): HostStateSnapshot["threads"] {
-    const { now, visibleThreadIds, environmentOf, stopTargets, delegatedChildren, descriptor, hiddenKeys, subagentActivity } = context;
     if (this.emitThreads) return this.emitThreads;
+    const { now, visibleThreadIds, environmentOf, stopTargets, delegatedChildren, descriptor, hiddenKeys, subagentActivity } = context;
+    const sideChatAttention = new Map<string, "input" | "approval">();
+    for (const child of threads) {
+      const parentId = child.lineage.parentThreadId;
+      const kind = child.pendingRuntimeRequest?.kind;
+      if (child.lineage.sideChat !== true || child.archivedAt || !parentId || !kind || kind === "auth_refresh") continue;
+      if (sideChatAttention.get(parentId) !== "approval") sideChatAttention.set(parentId, kind === "user_input" ? "input" : "approval");
+    }
+
           const built = withSubagentWorkingState(threads.map((thread) => {
         // visibleTurnItems lags each thread's own settled record (#the subagent's child thread
         // settles before the parent's turn item stops showing "Running"), so the roster above
@@ -3012,9 +3170,12 @@ export class HostState {
           settled: thread.settledOverride === "settled", searchTerms: threadPullRequestSearchTerms(thread),
           ...this.attention(thread, now),
           branch: thread.branch, worktreePath: thread.worktreePath,
-          canChooseWorkspace: !thread.activeRunId && (this.emptyThreads.has(thread.id) || thread.itemCount === 0) && !thread.archivedAt,
+          canChooseWorkspace: thread.lineage.sideChat !== true && !thread.activeRunId && (this.emptyThreads.has(thread.id) || thread.itemCount === 0) && !thread.archivedAt,
           parentThreadId: thread.lineage.parentThreadId && visibleThreadIds.has(thread.lineage.parentThreadId) ? thread.lineage.parentThreadId : null,
-          relationshipToParent: thread.lineage.relationshipToParent,
+          relationshipToParent: thread.lineage.sideChat === true ? "side-chat" : thread.lineage.relationshipToParent,
+          hasUserMessage: this.hasUserMessage(thread),
+          sideChatDisabledReason: this.sideChatReason(thread),
+          ...(sideChatAttention.has(thread.id) ? { sideChatAttention: sideChatAttention.get(thread.id)! } : {}),
           providerNativeSubagent: thread.lineage.relationshipToParent === "subagent" && thread.creationSource === "provider",
           activityRunStatus: thread.activityRunStatus ?? null,
           ...(hasRunningSubagentItem ? { waitingOnSubagents: true } : {}),

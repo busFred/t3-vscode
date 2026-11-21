@@ -56,6 +56,16 @@ function mockBridge() {
   window.acquireVsCodeApi = () => ({ getState: () => null, setState: () => {}, postMessage: (request) => {
     window.__requests.push(request);
     const params = request.params ?? {};
+    if (window.__sideChatFixture && request.method === "composerSuggestions") {
+      const { record } = window.__sideChatFixture;
+      const result = params.kind === "path" ? [{ id: "side", kind: "thread", label: record.title, value: record.threadId, description: "Side chat · Working", threadContext: record }]
+        : params.kind === "slash-command" ? [{ id: "side", kind: "command", label: "/side", value: "/side ", description: "Ask a side question in a new side chat" }, { id: "btw", kind: "command", label: "/btw", value: "/btw ", description: "Same as /side" }] : [];
+      window.postMessage({ id: request.id, result }, "*"); return;
+    }
+    if (window.__sideChatFixture && request.method === "addSideChatContext") {
+      window.__sideChatFixture.onAdd();
+      window.postMessage({ id: request.id, result: true }, "*"); return;
+    }
     if (request.method === "restoreComposerDraft") { setTimeout(() => window.postMessage({ id: request.id, result: { draft: window.__drafts[params.draftKey]?.draft ?? { text: "", contexts: [] }, selection: window.__drafts[params.draftKey]?.selection } }, '*'), window.__restoreDelay ?? 0); return; }
     // Replies with a value rather than a state, as a dialog outcome would; the view must keep its state.
     if (request.method === "saveImage") { window.postMessage({ id: request.id, result: true }, '*'); return; }
@@ -1089,6 +1099,90 @@ Escaped delimiters \(\alpha+\beta\) and \[\int_0^1 x^2\,dx=\frac{1}{3}\].`;
   assert.equal(restoreSeen.disabled, false, "Restoring a draft key (a new chat's first send) must hold the field read-only, never toggle `disabled`, which clears a live textarea's undo stack");
   assert.equal(restoreSeen.readOnly, true, 'The restoring state must actually occur, or this check proves nothing');
   console.log('PASS: restoring a never-seen draft key holds the composer read-only and never disables it (protected native undo)');
+  const previewUrl = `http://127.0.0.1:${server.address().port}`;
+  const main = await browser.newPage({ viewport: { width: 920, height: 820 } });
+  const side = await browser.newPage({ viewport: { width: 680, height: 820 } });
+  for (const screen of [main, side]) {
+    screen.on("pageerror", error => errors.push(error.message));
+    await screen.goto(previewUrl);
+    await screen.getByRole("textbox", { name: "Message", exact: true }).waitFor();
+  }
+  const record = { version: 1, kind: "thread", contextId: "thread_side-one", threadId: "side-one", environmentId: "fixture", label: "Check preview tabs", title: "Check preview tabs" };
+  const setup = ({ record, activeThreadId }) => {
+    const parent = { ...window.__state.threads[0], hasUserMessage: true, sideChatDisabledReason: null, sideChatAttention: "approval" };
+    const sideChat = { ...parent, id: record.threadId, title: record.title, parentThreadId: parent.id, relationshipToParent: "side-chat",
+      sideChatDisabledReason: "Side chats cannot start side chats.", pinned: false, sideChatAttention: undefined, pendingRuntimeRequest: { kind: "approval" } };
+    const oldSide = { ...sideChat, id: "side-two", title: "Compare draft recovery", pendingRuntimeRequest: undefined };
+    const agent = { ...oldSide, id: "agent-one", title: "Check the bridge", relationshipToParent: "subagent" };
+    const inherited = [window.__fixtures.user, window.__fixtures.assistant].map(row => ({ ...row, visibility: "inherited" }));
+    const local = { ...window.__fixtures.user, key: "side-question", sourceThreadId: sideChat.id,
+      item: { ...window.__fixtures.user.item, id: "side-question", threadId: sideChat.id, text: "How do preview tabs work beside the main chat?" } };
+    window.__sideChatFixture = { record, onAdd: () => {} };
+    window.__replace({ threads: [parent, sideChat, oldSide, agent], activeThreadId,
+      transcript: activeThreadId === sideChat.id ? [...inherited, local] : inherited, archiveLoaded: true });
+  };
+  await main.evaluate(setup, { record, activeThreadId: "thread-one" });
+  await side.evaluate(setup, { record, activeThreadId: record.threadId });
+  const history = side.getByRole("button", { name: "2 earlier messages from the main chat" });
+  await side.getByRole("button", { name: /Side chat of · Migrate/ }).waitFor();
+  await history.waitFor();
+  assert.equal(await history.getAttribute("aria-expanded"), "false");
+  await side.screenshot({ path: `${evidence}/side-chat-tab.png` });
+  await history.click();
+  await side.getByText("Migrate the T3 chat experience into VS Code.", { exact: true }).waitFor();
+  await side.getByRole("button", { name: "Add to main chat" }).click();
+  await side.waitForFunction(() => window.__requests.some(request => request.method === "addSideChatContext"));
+  // Forward the resulting event to the parent page as the editor provider does.
+  const mainMessage = main.getByRole("textbox", { name: "Message", exact: true });
+  await main.getByRole("button", { name: "Thread actions", exact: true }).click();
+  const start = main.getByRole("menuitem", { name: "Start side chat" });
+  assert.equal(await start.getAttribute("title"), "Ask a side question while this thread keeps working.");
+  assert.equal(await start.evaluate(element => element.parentElement.previousElementSibling?.textContent), "Duplicate thread");
+  await main.keyboard.press("Escape");
+  await mainMessage.pressSequentially("/");
+  await main.getByRole("option", { name: /\/side Ask a side question/ }).waitFor();
+  await main.getByRole("option", { name: /\/btw Same as/ }).waitFor();
+  await mainMessage.fill("");
+  await mainMessage.pressSequentially("Use this");
+  await main.evaluate(record => window.postMessage({ event: "insertSideChatContext", data: { draftKey: "thread-one", record } }, "*"), record);
+  const chip = main.getByRole("button", { name: "Side chat: Check preview tabs", exact: true });
+  await chip.waitFor();
+  const inserted = await mainMessage.inputValue();
+  assert.match(inserted, /t3-context:\/\/v1\/thread\//);
+  await main.screenshot({ path: `${evidence}/side-chat-chip.png` });
+  await mainMessage.press("Control+z");
+  assert.equal(await mainMessage.inputValue(), "Use this");
+  await chip.waitFor({ state: "hidden" });
+  await mainMessage.press("Control+y");
+  assert.equal(await mainMessage.inputValue(), inserted);
+  await chip.waitFor();
+  await main.getByRole("button", { name: "Send message", exact: true }).click();
+  await main.waitForFunction(record => window.__requests.some(request => request.method === "sendMessage" && request.params.threadRecords?.[0]?.contextId === record.contextId), record);
+  await mainMessage.fill("");
+  await mainMessage.pressSequentially("Read @check");
+  const mention = main.getByRole("option", { name: /Check preview tabs Side chat · Working/ });
+  await mention.waitFor();
+  await main.screenshot({ path: `${evidence}/side-chat-mentions.png` });
+  await mention.click();
+  const mentioned = await mainMessage.inputValue();
+  await mainMessage.press("Control+z");
+  assert.equal(await mainMessage.inputValue(), "Read @check");
+  await mainMessage.press("Control+y");
+  assert.equal(await mainMessage.inputValue(), mentioned);
+  await main.evaluate(record => {
+    const sent = window.__fixtures.user;
+    window.__replace({ transcript: [{ ...sent, item: { ...sent.item, text: `Read [${record.title}](t3-context://v1/thread/${record.contextId})`, context: { version: 1, records: [record] } } }] });
+  }, record);
+  await main.locator(".reply-reference").filter({ hasText: "Check preview tabs" }).waitFor();
+  await main.setViewportSize({ width: 420, height: 820 });
+  await main.evaluate(() => { document.body.dataset.surface = "sidebar"; window.__replace({}); });
+  await main.getByRole("button", { name: "Expand session of Migrate the T3 chat experience" }).click();
+  await main.getByText("Side chat needs approval", { exact: true }).waitFor();
+  const groups = await main.locator(".session-expanded-groups > details > summary").evaluateAll(entries => entries.slice(0, 3).map(entry => entry.firstChild.textContent));
+  assert.deepEqual(groups, ["Side chats", "Subagents", "Scheduled tasks"]);
+  await main.getByRole("button", { name: "Check preview tabs", exact: true }).waitFor();
+  await main.screenshot({ path: `${evidence}/side-chat-sessions.png` });
+  console.log("PASS: side-chat tab and inherited fold, side-chat slash menu, Add to main chat and @ mention undo/redo, sent reference, and Sessions grouping and approval badge.");
   assert.deepEqual(errors, []);
   console.log("PASS: configurable instant message rail, pagination, virtualized jumps, streaming read position, nested subagents/live hover cards/parent return, native frame bridge, interactive HTML, images, Mermaid, KaTeX and equation copying; markdown, collapsed work groups, tool details, diff, model catalog, modes, send, approvals, questions, narrow navigation, themes, virtualization, projectless first message, draft controls, folder selection, empty model catalog");
   console.log(`Screenshots: ${evidence}`);

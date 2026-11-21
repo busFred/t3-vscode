@@ -1,7 +1,7 @@
 import { LinkRequestCard } from "./LinkRequestCard";
 import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
 import { McpAppFrame } from "./McpAppFrame";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList, type LegendListRef, type OnViewableItemsChangedInfo } from "@legendapp/list/react";
 import type { AssistantCitation } from "../../shared/messageCitations.js";
 import { BrainIcon, CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, PencilIcon, GitForkIcon, GlobeIcon, SearchIcon, TerminalIcon, Undo2Icon, WrenchIcon, ArrowRightLeftIcon, KeyRoundIcon, MinusIcon, XIcon, ReplyIcon } from "lucide-react";
@@ -28,7 +28,7 @@ import { TurnChanges } from "./TurnChanges";
 import { MessageNavigator, type RailFrame } from "./MessageNavigator";
 import { messageExchanges } from "../../shared/messageNavigation";
 import { runStatusLabel } from "../../shared/waitingOnSubagents";
-import { finalResponseCheckpoints, foldSettledRounds, transcriptRows, workSummary, workElapsed, responseBoundaries, isWorkItem, type DisplayRow } from "../../shared/transcriptRows";
+import { finalResponseCheckpoints, foldSettledRounds, foldSideChatHistory, transcriptRows, workSummary, workElapsed, responseBoundaries, isWorkItem, type DisplayRow } from "../../shared/transcriptRows";
 import { renderedMessageText, stripRenderedAssistantQuotes } from "../../shared/assistantQuoteText";
 import { splitMessageReferences } from "../../shared/messageReferences";
 import { MessageReferences } from "./MessageReferences";
@@ -294,6 +294,9 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   }, [state.providers]);
   const boundaries = useMemo(() => responseBoundaries(transcript), [transcript]);
   const thread = state.threads.find(thread => thread.id === id);
+  const isSideChat = thread?.relationshipToParent === "side-chat";
+  const [historyOpen, setHistoryOpen] = useState(false);
+  useEffect(() => setHistoryOpen(false), [id]);
   const activeRun = thread?.activeRunId ?? state.queue?.activeRunId ?? (state.acknowledgedWorking ? state.transcript.find(row => row.item.type === "user_message" && row.item.messageId === state.acknowledgedWorking?.messageId)?.item.runId : null);
   const working = !!(activeRun || state.acknowledgedWorking);
   // Reply attaches a record an older server would drop silently, so it shows only for a machine known to keep it.
@@ -325,14 +328,15 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
   const foldCache = useRef(new Map<string, DisplayRow>());
   const rows = useMemo(() => {
     const next = new Map<string, DisplayRow>();
-    const result = foldSettledRounds(baseRows, activeRun).map((row) => {
+    const folded = foldSettledRounds(baseRows, activeRun);
+    const result = (isSideChat ? foldSideChatHistory(folded) : folded).map((row) => {
       if (!row.fold) return row;
       const previous = foldCache.current.get(row.key);
       const stable = previous?.fold && previous.fold.length === row.fold.length && previous.fold.every((step, index) => step === row.fold![index]) ? previous : row;
       next.set(row.key, stable); return stable;
     });
     foldCache.current = next; return result;
-  }, [baseRows, activeRun]);
+  }, [baseRows, activeRun, isSideChat]);
   const container = useRef<HTMLDivElement | null>(null), firstVisible = useRef(0);
   const [sticky, setSticky] = useState(false);
   const updateSticky = useCallback(() => {
@@ -495,7 +499,16 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
     const observer = new ResizeObserver(measure); observer.observe(viewport); observer.observe(conversation);
     return () => { observer.disconnect(); host.remove(); };
   }, [viewport, placement]);
-  const renderItem = useCallback(({ item }: { item: DisplayRow }) => {
+  const renderItem = useCallback(function renderRow({ item }: { item: DisplayRow }) {
+    if (item.inheritedHistory) {
+      const revealInherited = (citationTarget && item.rows.some(row => row.item.type === "assistant_message" && row.item.messageId === citationTarget.messageId))
+        || (searchTarget && item.rows.some(row => row.key === searchTarget.rowKey));
+      const open = historyOpen || !!revealInherited;
+      const count = item.rows.filter(row => row.item.type === "user_message" || row.item.type === "assistant_message").length;
+      return <section className="timeline-row work-group"><button type="button" className="work-group-toggle" aria-expanded={open} onClick={() => setHistoryOpen(open => !open)}>
+        <ChevronRightIcon size={13} className={open ? "rotate-90" : ""} /><span>{count} earlier {count === 1 ? "message" : "messages"} from the main chat</span>
+      </button>{open ? <div className="work-group-items">{item.inheritedHistory.map(row => <Fragment key={row.key}>{renderRow({ item: row })}</Fragment>)}</div> : null}</section>;
+    }
     const first = item.rows[0]!, last = item.rows.at(-1)!;
     const boundary = first.item.runId ? boundaries.get(`${first.sourceThreadId}:${first.item.runId}`) : undefined;
     const finalAnswer = boundary?.last === last.key && boundary.answer?.canFork ? boundary.answer : undefined;
@@ -504,7 +517,7 @@ export function TranscriptView({ state, onViewport, citationTarget, searchTarget
       {item.fold ? <RoundFold steps={item.fold} rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : isWorkItem(first) ? <WorkGroup rows={item.rows} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} /> : <TurnItem row={first} threadId={id ?? ""} environmentId={state.environment?.environmentId ?? ""} />}
       {finalAnswer?.item.type === "assistant_message" ? <div className="response-actions response-end"><CopyButton text={finalAnswer.item.text} /><ForkButton row={finalAnswer} threadId={id ?? ""} /><ReplyButton row={finalAnswer} /><MessageTimestamp value={finalAnswer.item.startedAt} /></div> : null}
     </div>;
-  }, [id, state.environment?.environmentId, boundaries, working, activeRun, runStatus]);
+  }, [id, state.environment?.environmentId, boundaries, working, activeRun, runStatus, historyOpen, citationTarget, searchTarget]);
   const header = <div className="timeline-header">{state.history.hasMore || state.history.error ? <button className="btn" disabled={state.history.loading} onClick={() => { void run("loadHistory", { threadId: id }); }}>{state.history.loading ? "Loading…" : state.history.error ? "Retry loading earlier messages" : "Load earlier messages"}</button> : null}{state.history.error ? <p className="turn-error">{state.history.error}</p> : null}</div>;
   if (!state.transcript.length && citationTarget && citationTarget.threadId === id) return <div className="chat-empty"><p role="status">{citationNotice ?? "Opening the source message…"}</p></div>;
   if (!id || (!state.transcript.length && !state.threadLoading && !working)) return <div className="chat-empty"><T3VSCodeIcon className="empty-wordmark" /><h1>What would you like to build?</h1><p>Start a conversation with an agent, or open a thread from your projects.</p></div>;
