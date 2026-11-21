@@ -8,9 +8,7 @@ overrides:
   effect: 4.1.3
 
 patchedDependencies:
-  '@legendapp/list@3.3.5':
-    hash: 5de1e981072a37b59dfa8d4fe241f9c802257d1ab21d44e809cbc73b8c0bbfe9
-    path: patches/@legendapp__list@3.3.5.patch
+  '@legendapp/list@3.3.5': 5de1e981072a37b59dfa8d4fe241f9c802257d1ab21d44e809cbc73b8c0bbfe9
 
 importers:
 
@@ -134,6 +132,9 @@ importers:
       '@t3tools/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@t3tools/issue-tracker-linear':
+        specifier: workspace:*
+        version: link:../issue-tracker-linear
       '@t3tools/provider-acp-registry':
         specifier: workspace:*
         version: link:../provider-acp-registry
@@ -176,6 +177,9 @@ importers:
       effect:
         specifier: 4.1.3
         version: 4.1.3
+      gt-i18n:
+        specifier: 1.0.40
+        version: 1.0.40
       jszip:
         specifier: 3.10.1
         version: 3.10.1
@@ -200,6 +204,12 @@ importers:
       effect:
         specifier: 4.1.3
         version: 4.1.3
+
+  vendor/issue-tracker-linear:
+    dependencies:
+      '@t3tools/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   vendor/provider-acp-registry:
     dependencies:
@@ -353,6 +363,9 @@ importers:
       get-east-asian-width:
         specifier: ^1.6.0
         version: 1.7.0
+      gt-i18n:
+        specifier: 1.0.40
+        version: 1.0.40
       mdast-util-directive:
         specifier: 3.1.0
         version: 3.1.0
@@ -818,6 +831,15 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@generaltranslation/api@0.5.6':
+    resolution: {integrity: sha512-rPcqH7BomEIRQKX6oyOagfqrfHddi3EcOkgWC/dgs2qSRhkoZYcpn68RWCr3ZFnmCMib7uDtSR9v8BjUI7AZLQ==}
+
+  '@generaltranslation/format@0.1.9':
+    resolution: {integrity: sha512-GwXbdajc7pIBsnrxVXE4PqjBHRwgKef4GyauH7CLaXSormRLU8G58ahqfwmQRL6ie1xt5KMMb6UAekdj1i9Sxg==}
+
+  '@generaltranslation/icu@0.1.2':
+    resolution: {integrity: sha512-2A0txUrZdAWAc42N58/PtoWv7vNB0U1Iyl+nDzf7RSswLHPMsonp7OmPnSraQgkoRSVSlueARVQK4T+zanWsyA==}
+
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
 
@@ -950,6 +972,10 @@ packages:
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@2.4.0':
+    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
+    engines: {node: '>= 20.19.0'}
 
   '@oxc-project/types@0.152.0':
     resolution: {integrity: sha512-oM/5rLBm2tPkg0iBgkH/FOeR3PCDpY19GTgAZjMFM8h9WI9VW7cLgzp6nwtarYKmovavIQZ+Fe/RKX/8C8O/Rw==}
@@ -2220,6 +2246,9 @@ packages:
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
 
+  generaltranslation@9.5.9:
+    resolution: {integrity: sha512-/R/MvEEiB+Us/fj/YfuSTfhvzUfmvFpiHxGx2f+C6Wv0O875T0yJI3RLGDopqZVbnKPimog9eXofJL7W0SOxJg==}
+
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
@@ -2249,6 +2278,9 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
+
+  gt-i18n@1.0.40:
+    resolution: {integrity: sha512-EbDhYhtyUrZI4iBSWpe1AMRoYrmEn52/hnVG6NAqVhVvY85t15JCJWMdVOkDoB1TRVH9nbSzAttaYwcv0LF3KQ==}
 
   hachure-fill@0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
@@ -3564,6 +3596,14 @@ snapshots:
   '@esbuild/win32-x64@0.25.12':
     optional: true
 
+  '@generaltranslation/api@0.5.6': {}
+
+  '@generaltranslation/format@0.1.9':
+    dependencies:
+      '@generaltranslation/icu': 0.1.2
+
+  '@generaltranslation/icu@0.1.2': {}
+
   '@iconify/types@2.0.0': {}
 
   '@iconify/utils@3.1.7':
@@ -3661,6 +3701,8 @@ snapshots:
       '@noble/hashes': 1.8.0
 
   '@noble/hashes@1.8.0': {}
+
+  '@noble/hashes@2.4.0': {}
 
   '@oxc-project/types@0.152.0': {}
 
@@ -4742,6 +4784,13 @@ snapshots:
 
   function-bind@1.1.2: {}
 
+  generaltranslation@9.5.9:
+    dependencies:
+      '@generaltranslation/api': 0.5.6
+      '@generaltranslation/format': 0.1.9
+      '@generaltranslation/icu': 0.1.2
+      '@noble/hashes': 2.4.0
+
   gensync@1.0.0-beta.2: {}
 
   get-east-asian-width@1.7.0: {}
@@ -4775,6 +4824,11 @@ snapshots:
   gopd@1.2.0: {}
 
   graceful-fs@4.2.11: {}
+
+  gt-i18n@1.0.40:
+    dependencies:
+      '@generaltranslation/format': 0.1.9
+      generaltranslation: 9.5.9
 
   hachure-fill@0.5.2: {}
 

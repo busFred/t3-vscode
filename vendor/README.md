@@ -3,8 +3,8 @@
 Source copied (src only) from the T3 Code repo:
 
 - **Upstream:** <https://github.com/pingdotgg/t3code>
-- **Git sha:** `7d32075e37` (tag `v0.1.10`, 2026-11-16, upstream version 0.1.10)
-- **Previous pin:** `24e77473ecf41bc1f7142529c7911c1c1aae1d76` (tag `v0.1.9`, 2026-11-11, 0.1.9)
+- **Git sha:** `59651c1761` (tag `v0.1.11`, 2026-11-20, upstream version 0.1.11)
+- **Previous pin:** `7d32075e37` (tag `v0.1.10`, 2026-11-16, 0.1.10)
 
 ## What is here
 
@@ -16,13 +16,15 @@ Source copied (src only) from the T3 Code repo:
 | `@t3tools/provider-*` (9 packages) | `packages/provider-*` | `vendor/provider-*` | client halves only |
 | `@t3tools/source-control-*` (9 packages) | `packages/source-control-*` | `vendor/source-control-*` | `shared/` halves and the registry only |
 | `@t3tools/secret-provider-*` (3 packages) | `packages/secret-provider-*` | `vendor/secret-provider-*` | `shared/` definitions and the registry only |
+| `@t3tools/issue-tracker-linear` | `packages/issue-tracker-linear` | `vendor/issue-tracker-linear` | `shared/issueUrl.ts` only |
 
 Since 0.1.x, `client-runtime` imports provider and source-control packages.
 Only the client-side modules it reaches are vendored: the files reachable from
 `@t3tools/provider-*/client`, `@t3tools/provider-core/modelShortName`,
 `@t3tools/source-control-definitions/registry`,
 `@t3tools/secret-provider-definitions/registry` and
-`@t3tools/source-control-core/shared/{definition,threadPullRequests}`.
+`@t3tools/source-control-core/shared/{definition,threadPullRequests}` and
+`@t3tools/issue-tracker-linear/shared/issueUrl`.
 
 0.1.9 added two closure packages: `source-control-cursor-origin` (reached from
 `source-control-definitions/registry`) and `secret-provider-definitions` with its
@@ -32,6 +34,14 @@ Only the client-side modules it reaches are vendored: the files reachable from
 `remark-gfm`, `remark-parse` and `unified` to `client-runtime` and
 `get-east-asian-width` and `micromark-util-decode-string` to `shared`, and moved
 `@pierre/diffs` to 1.7.0-beta.4.
+0.1.11 added one closure package, `issue-tracker-linear` (reached from
+`client-runtime/src/issueLinks.ts`), and the runtime dependency `gt-i18n` in
+`client-runtime` and `shared`. `gt-i18n` `msg()` returns the English text unchanged
+when it has no variables or context, and appends an encoded suffix otherwise; resolve
+those with `mFallback` (the default `resolve` argument of the `*Copy` helpers).
+Upstream moved translatable text out of `usageLimits.ts` into `usageLimitsCopy.ts`, so
+the extension imports `collectLimitNotices`, `formatDuration` and `formatResetsIn`
+from `@t3tools/shared/usageLimitsCopy`.
 `scripts/vendor-closure.mjs` computes that file set; its only external
 dependency is Effect. Their package.json files are trimmed to `name`, `version`,
 `type`, the reached `exports` and the dependencies those files import.
@@ -97,7 +107,8 @@ LIST=1 node scripts/vendor-closure.mjs "$UPSTREAM/packages" \
   @t3tools/provider-{acp-registry,cursor,fx,grok,kiro,muse,opencode,pi}/client \
   @t3tools/source-control-definitions/registry \
   @t3tools/secret-provider-definitions/registry \
-  @t3tools/source-control-core/shared/definition @t3tools/source-control-core/shared/threadPullRequests
+  @t3tools/source-control-core/shared/definition @t3tools/source-control-core/shared/threadPullRequests \
+  @t3tools/issue-tracker-linear/shared/issueUrl
 ```
 
 Add any new `@t3tools/*` entry the client-runtime starts importing to the
@@ -124,7 +135,8 @@ closure command. Then re-apply by hand (not scripted):
    `ScheduledTask` keeps unknown fields and an opaque `schedule`, and the upsert
    input, fixed-time and interval schedules keep unknown fields. Newer schedules
    stay visible and unedited fields survive a save.
-   `src/host/scheduledTasks.test.ts` covers it.
+   `src/host/scheduledTasks.test.ts` covers it. The rsync overwrites this file even
+   though upstream did not change it: restore it with `git checkout HEAD -- vendor/contracts/src/scheduledTask.ts`.
 7. Preserve the `send` parameter annotations in `client-runtime/src/rpc/session.ts`
    (the `Effect.map((protocol) => ...)` wrapper). Upstream typechecks with
    `@effect/tsgo`, which infers those parameters from the spread `protocol`;

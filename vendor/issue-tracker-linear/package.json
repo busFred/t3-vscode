@@ -1,0 +1,14 @@
+{
+  "name": "@t3tools/issue-tracker-linear",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./shared/issueUrl": {
+      "types": "./src/shared/issueUrl.ts",
+      "import": "./src/shared/issueUrl.ts"
+    }
+  },
+  "dependencies": {
+    "@t3tools/contracts": "workspace:*"
+  }
+}

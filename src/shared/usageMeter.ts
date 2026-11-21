@@ -1,4 +1,4 @@
-import { formatDuration } from "@t3tools/shared/usageLimits";
+import { formatDuration } from "@t3tools/shared/usageLimitsCopy";
 
 /**
  * `3d 20h`: the meter's value line carries its reset as a suffix, where the sentence

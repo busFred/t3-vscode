@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
-import { formatResetsIn, remainingPercent } from "@t3tools/shared/usageLimits";
+import { remainingPercent } from "@t3tools/shared/usageLimits";
+import { formatResetsIn } from "@t3tools/shared/usageLimitsCopy";
 import type { HostStateSnapshot } from "../shared/bridge.js";
 import { explicitLegacyUsageSeconds, resolveRefreshSettings, type RefreshSettings } from "../shared/refreshSettings.js";
 import { UsageRefreshScheduler } from "../shared/usageRefresh.js";

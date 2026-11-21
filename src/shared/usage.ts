@@ -1,5 +1,6 @@
 import type { EnvironmentId, ServerProvider } from "@t3tools/contracts";
-import { collectLimitAccounts, collectLimitNotices, collectLimitPools, remainingPercent, type LimitAccount, type LimitPoolWindow, type LimitPresentations } from "@t3tools/shared/usageLimits";
+import { collectLimitAccounts, collectLimitPools, remainingPercent, type LimitAccount, type LimitPoolWindow, type LimitPresentations } from "@t3tools/shared/usageLimits";
+import { collectLimitNotices } from "@t3tools/shared/usageLimitsCopy";
 import type { HostStateSnapshot } from "./bridge.js";
 
 export type ProviderBrand = "codex" | "claude" | "kimi" | "other";
