@@ -415,3 +415,25 @@ test("Re-pairing deletes the earlier pairing's renewed token and keeps the new o
   await catalog.updateToken(fresh, { accessToken: "fresh-renewed", expiresAt: 300 });
   assert.equal((await catalog.list())[0]!.accessToken, "fresh-renewed");
 });
+
+test("Catalog parts are written so no in-between state loses a moved machine or revives a removed one", async () => {
+  const secrets = memorySecrets(), catalog = new EnvironmentCatalog(secrets);
+  const order: string[] = [];
+  const store = secrets.store.bind(secrets);
+  secrets.store = async (key, value) => { if (key.startsWith("t3-vscode.environments")) order.push(key); await store(key, value); };
+  const { auth: _a, dpopKey: _k, ...bearerFields } = keyBound();
+  await catalog.upsert({ ...bearerFields, accessToken: "bearer" });
+  order.length = 0;
+  await catalog.upsert(keyBound({ addedAt: "2026-06-01T00:00:00.000Z" }));
+  assert.deepEqual(order, ["t3-vscode.environments.keyBound.v1", "t3-vscode.environments.v1"], "the gaining part is written first");
+});
+
+test("A key-bound record left in v1 by an earlier build moves to its own key on the next change", async () => {
+  const secrets = memorySecrets(), catalog = new EnvironmentCatalog(secrets);
+  secrets.values.set("t3-vscode.environments.v1", JSON.stringify({ version: 1, environments: [keyBound()] }));
+  assert.equal((await catalog.list())[0]?.auth, "dpop");
+  await catalog.setEnabled("kb", false);
+  assert.ok(!secrets.values.get("t3-vscode.environments.v1")!.includes("dpopKey"));
+  assert.equal((await catalog.list())[0]?.enabled, false);
+  assert.ok(secrets.values.get("t3-vscode.environments.keyBound.v1")!.includes("dpopKey"));
+});

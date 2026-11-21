@@ -139,7 +139,8 @@ export class MultiEnvironmentClient {
       // A renewed key-bound token (from this or another window) is the same session, so live sockets stay;
       // a new token after that session ended is a fresh pairing and reconnects.
       const renewed = record.auth === "dpop" && remote.record.auth === "dpop" && remote.state !== "expired" && pairingId(record) === pairingId(remote.record);
-      const changed = (record.accessToken !== remote.record.accessToken && !renewed) || record.httpBaseUrl !== remote.record.httpBaseUrl || record.auth !== remote.record.auth;
+      const changed = (record.accessToken !== remote.record.accessToken && !renewed) || record.httpBaseUrl !== remote.record.httpBaseUrl || record.auth !== remote.record.auth
+        || (record.auth === "dpop" && pairingId(record) !== pairingId(remote.record));
       remote.record = record;
       if (!record.enabled) { await this.stopRemote(remote); remote.state = "disabled"; delete remote.error; }
       else if (changed || remote.state === "disabled") { await this.stopRemote(remote); this.startRemote(remote); }

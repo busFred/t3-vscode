@@ -1,8 +1,10 @@
 /**
  * Remote environment catalog: other machines' T3 servers the user paired via
- * a pairing link. The whole catalog (tokens included) lives in ONE
- * SecretStorage key — SecretStorage is shared across VS Code profiles and
- * windows, so every mutation re-reads, applies, writes (last write wins).
+ * a pairing link. Bearer pairings live in the v1 SecretStorage key, key-bound
+ * pairings (with their signing keys) in their own key, and each key-bound
+ * pairing's renewed token in a per-pairing key. SecretStorage is shared across
+ * VS Code profiles and windows, so every mutation re-reads, applies, writes
+ * (last write wins).
  */
 
 import * as RemoteAuth from "@t3tools/client-runtime/authorization";
@@ -222,7 +224,11 @@ export class EnvironmentCatalog {
         [ENVIRONMENT_CATALOG_KEY, bearer, next.filter((record) => record.auth !== "dpop")],
         [KEY_BOUND_CATALOG_KEY, keyBound, next.filter((record) => record.auth === "dpop")],
       ];
-      for (const [key, stored, wanted] of parts) {
+      // A part that gains a machine is written first, then v1, then the key-bound part, so every state in
+      // between (another window reading, or a failed second write) reads as the old list or the new one:
+      // a moved machine is never missing, and a removed one never comes back from a stale bearer entry.
+      const gains = ([, stored, wanted]: (typeof parts)[number]) => wanted.some((record) => !stored.some((old) => old.environmentId === record.environmentId));
+      for (const [key, stored, wanted] of [...parts.filter(gains), ...parts.filter((part) => !gains(part))]) {
         if (JSON.stringify(stored) === JSON.stringify(wanted)) continue;
         await this.secrets.store(key, JSON.stringify({ version: 1, environments: wanted }));
       }
